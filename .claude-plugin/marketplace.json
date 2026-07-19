@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "terylon",
+  "description": "Terylon — internal Claude Code plugin marketplace. Role-based plugins for development on top of Azure DevOps.",
+  "owner": {
+    "name": "Vít Janeček",
+    "email": "vit.janecek@outlook.com"
+  },
+  "allowCrossMarketplaceDependenciesOn": ["claude-plugins-official"],
+  "plugins": [
+    {
+      "name": "terylon-git",
+      "source": "./plugins/terylon-git",
+      "description": "Git-only foundation — worktree isolation, the review engine, and the multi-lens code reviewer. No forge, no MCP server; works in any git repository.",
+      "category": "general",
+      "keywords": ["git", "worktree", "code-review", "diff", "shared"]
+    },
+    {
+      "name": "terylon-devops",
+      "source": "./plugins/terylon-devops",
+      "description": "Azure DevOps layer — ADO mechanics, PR review and description, comment handling. Adds the forge transport on top of terylon-git.",
+      "category": "general",
+      "keywords": ["azure-devops", "pull-request", "code-review", "shared"]
+    },
+    {
+      "name": "terylon-product",
+      "source": "./plugins/terylon-product",
+      "description": "Product owner / PM — authoring User Stories grounded in the codebase and Feature specifications with a UX section. Requires terylon-devops.",
+      "category": "role",
+      "keywords": ["product", "user-story", "feature-spec", "ux", "azure-devops"]
+    },
+    {
+      "name": "terylon-dev",
+      "source": "./plugins/terylon-dev",
+      "description": "Developer pipeline — from a user story to implemented, tested code through plan → build (TDD) → finish, with an autonomous leader agent and parallel review lenses. Requires terylon-git, terylon-devops and superpowers.",
+      "category": "role",
+      "keywords": ["developer", "pipeline", "tdd", "planning", "orchestration", "azure-devops"]
+    }
+  ]
+}
