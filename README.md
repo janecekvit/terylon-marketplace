@@ -1,20 +1,80 @@
-# Introduction 
-TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
+# Terylon Marketplace
 
-# Getting Started
-TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
-1.	Installation process
-2.	Software dependencies
-3.	Latest releases
-4.	API references
+Internal Claude Code plugin marketplace for the development workflow on top of Azure DevOps.
 
-# Build and Test
-TODO: Describe and show how to build your code and run the tests. 
+## Plugins
 
-# Contribute
-TODO: Explain how other users and developers can contribute to make your code better. 
+| Plugin | Audience | Dependencies |
+|---|---|---|
+| `terylon-git` | any git repository — worktree isolation, review engine, code reviewer | none |
+| `terylon-devops` | Azure DevOps — ADO mechanics, PR review and description | `terylon-git` |
+| `terylon-product` | product owner / PM — user stories, Feature specs | `terylon-devops` |
+| `terylon-dev` | developers — plan → build (TDD) → finish | `terylon-git`, `terylon-devops`, `superpowers` |
 
-If you want to learn more about creating good readme files then refer the following [guidelines](https://docs.microsoft.com/en-us/azure/devops/repos/git/create-a-readme?view=azure-devops). You can also seek inspiration from the below readme files:
-- [ASP.NET Core](https://github.com/aspnet/Home)
-- [Visual Studio Code](https://github.com/Microsoft/vscode)
-- [Chakra Core](https://github.com/Microsoft/ChakraCore)
+`terylon-git` is deliberately forge-agnostic: it needs git and nothing else, so a repository hosted anywhere can use the worktree and review machinery without pulling in an ADO MCP server it has no use for. `terylon-devops` adds that layer on top.
+
+Every slug carries the `terylon-` prefix. The prefix is intentionally redundant with the `@terylon` marketplace suffix — thanks to it, typing `/terylon` makes autocomplete show commands from all plugins in one filtered list.
+
+Plugins are **not inherited**. Sharing works through `dependencies` in `plugin.json`: both `terylon-product` and `terylon-dev` declare `terylon-devops`, which is therefore installed automatically.
+
+## Setup in a consuming repo
+
+Into `.claude/settings.json` of the product repo (commit it — it is shared with the team):
+
+```json
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "extraKnownMarketplaces": {
+    "terylon": {
+      "source": {
+        "source": "git",
+        "url": "https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace",
+        "ref": "main"
+      },
+      "autoUpdate": true
+    }
+  },
+  "enabledPlugins": {
+    "terylon-devops@terylon": true,
+    "terylon-dev@terylon": true
+  }
+}
+```
+
+> **Why `"source": "git"`?** The client schema `extraKnownMarketplaces.<name>.source.source` accepts `"git"` for ordinary git remotes. `"git-subdir"` is a different schema, used in `marketplace.json#plugins[].source` to declare the sources of individual plugins — the client rejects it.
+>
+> `autoUpdate: true` is a sibling of `source` (not nested inside it) and tells Claude Code to refresh the marketplace in the background.
+
+`terylon-dev` additionally requires the `claude-plugins-official` marketplace to be enabled, because of the `superpowers` plugin.
+
+## Local marketplace development
+
+When testing from a feature branch, override `ref` in your **local** `.claude/settings.local.json` (gitignored — never commit it):
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "terylon": {
+      "source": {
+        "source": "git",
+        "url": "https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace",
+        "ref": "feat/<your-branch>"
+      },
+      "autoUpdate": true
+    }
+  }
+}
+```
+
+## Authentication (Azure DevOps)
+
+- **Manual install / update:** Claude Code uses the existing git credential helper — both `git-credential-manager` (Entra ID) and a PAT in `~/.git-credentials` work.
+- **Automatic background update:** Azure DevOps has no documented equivalent of `GITHUB_TOKEN`. Use a git-level credential helper, or stay on `ref: main` and run `/plugin marketplace update` manually.
+
+## Versioning
+
+Every `plugin.json` carries a `version`. A consumer receives an update **only** when that field changes — a push to `main` without a bump is a no-op for consumers.
+
+---
+
+> Plugin authors: directory conventions, versioning and the engine/transport pattern are described in `plugins/CLAUDE.md`.

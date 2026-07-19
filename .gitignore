@@ -1,0 +1,16 @@
+# Working artifacts from brainstorming / planning — local, not distributed
+docs/superpowers/
+
+# Isolated worktrees created by the create-workspace skill
+.worktrees/
+
+# Local settings override — used to point the marketplace at a feature branch
+# during development. Never commit it; settings.json is the shared one.
+.claude/settings.local.json
+
+# OS / editor
+Thumbs.db
+.DS_Store
+.vs/
+.vscode/
+*.user
