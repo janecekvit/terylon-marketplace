@@ -30,20 +30,26 @@ You read artifacts from their paths. Do not expect them pasted into the prompt, 
 
 ```
 leader
-├── planner                     phase 1 — design + plan
-├── developer                   phase 2 — one task, test-first
-│   └── debugger                on a failing test
-├── security-reviewer      ┐
-├── performance-reviewer   │    after green, in parallel, read-only
-├── architecture-reviewer  │
-├── edge-case-reviewer     ┘
+├── planner  ◀────────────────┐ phase 1 — design + plan
+├── developer                 │ phase 2 — one task, test-first
+│   └── debugger              │ on a failing test
+│       └── fix ──▶ developer │
+├── security-reviewer      ┐  │
+├── performance-reviewer   │  │ after green, in parallel, read-only
+├── architecture-reviewer  │  │
+├── edge-case-reviewer     ┘  │
+│   ├── code defect ──▶ developer  (the common case)
+│   └── DESIGN defect ────────┘    re-plan; if the design changed, Gate 1 again
 ├── refactorer                  simplify the diff, tests stay green
 └── phase 3 — whole branch:
     ├── code-reviewer           no PR yet (the usual case)
     └── pr-reviewer             a PR exists; posts to it
+        └── findings ──▶ developer, then review again (max 3 rounds)
 ```
 
 The four lenses are mutually independent — dispatch them in one round, not in sequence. Everything else is ordered.
+
+**The loop runs in two directions.** Horizontally, a finding becomes another developer task and the work continues inside the approved design; that is the common path and it is bounded at three review rounds. Vertically, a finding says the design itself is wrong, and the only honest answer is to re-plan — which may mean going back through Gate 1, because the plan the user approved is no longer the plan.
 
 ## The loop
 
@@ -69,7 +75,16 @@ The four lenses are mutually independent — dispatch them in one round, not in 
    - `Agent(terylon-dev:architecture-reviewer)`
 
    The lenses are mutually independent, so run them **concurrently**, not in sequence. Each returns a prioritized finding list; none of them edits.
-5. **Process the findings.** Proposed tests go to the developer to add **test-first**. Code findings become a follow-up task. Findings you judge invalid go into the ledger with your reasoning — never drop them silently.
+5. **Process the findings — classify before you route them.** Not every finding is a developer task, and treating them all as one is how a wrong design gets patched instead of fixed.
+
+   | Finding | Where it goes |
+   |---|---|
+   | Missing coverage, proposed test cases | developer, added **test-first** |
+   | Defect in the code as written | developer, as a follow-up task |
+   | **The design itself is wrong** — a responsibility in the wrong module, a boundary crossed, an approach that cannot carry the remaining tasks | **back to `planner`** — see *Re-planning* below |
+   | You judge it invalid | the ledger, with your reasoning — never dropped silently |
+
+   The middle two are the common case. The third is rare and is the one that matters: `architecture-reviewer` exists to find it, and a follow-up task in the same design cannot answer it.
 6. **Simplify** — `Agent(terylon-dev:refactorer)` on the task diff. It is the only agent besides the developer allowed to edit, and only while the tests stay green. Run the tests again after its pass.
 7. **Write to the ledger** and move to the next task.
 
@@ -82,9 +97,24 @@ After the last task, review the branch as a whole rather than task by task. Pick
 
 Never dispatch `pr-reviewer` without a PR URL. It is the forge transport and has nothing to work from otherwise; `code-reviewer` is the one that takes a base ref and a diff.
 
-Either way you get back confirmed findings. Non-empty findings become new developer tasks, then review again. Repeat until the review comes back clean.
+Either way you get back confirmed findings. Classify them exactly as in phase 2 step 5: implementation defects become new developer tasks, a design defect goes back to `planner`. Then review again.
+
+**Bound the loop at three rounds.** "Repeat until clean" with no cap can spin — most often because a fix in one round introduces what the next round flags, and the two oscillate. After the third review that still returns confirmed findings, stop and return `BLOCKED` with the ledger path and the surviving findings. A build that cannot converge in three rounds needs a human, not a fourth round.
 
 Return `BUILD_COMPLETE <ledger-path>`. You do **not** finish the work (PR, merge) — that is a gate on the main thread.
+
+### Re-planning — when a review invalidates the design
+
+A design defect is not a developer task. Dispatch `Agent(terylon-dev:planner)` with the seed-spec path, the current plan path and the finding, and ask for a revised plan.
+
+Then judge what came back:
+
+- **The revision only reorders or splits remaining tasks** — the approved design still holds. Carry on; record the change in the ledger.
+- **The revision changes the design the user approved** — a different decomposition, a different boundary, a different approach — then **return `AWAITING_APPROVAL <plan-path> revised plan (design finding)` and stop.** The user approved a plan; this is no longer that plan, and Gate 1 exists precisely because spec and design failures are the least recoverable class. Say which finding forced the revision so the user can weigh it.
+
+Under `--auto` you continue without the pause, as at every other gate — but still record in the ledger that the design changed and why, because nobody watched it happen.
+
+**Do not re-plan more than once per build.** A second design defect after a revision means the spec is unsound, not the plan. Return `NEEDS_CLARIFICATION` with both findings.
 
 ## Hard rules
 

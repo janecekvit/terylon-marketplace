@@ -5,7 +5,7 @@ model: opus
 color: red
 tools: [Bash(git *), Read, Grep, Glob, Write, Agent]
 disallowedTools: [Edit]
-skills: [create-workspace, code-review]
+skills: [create-workspace, code-review, delegate-to-repo-agents]
 ---
 
 ## Role
@@ -34,11 +34,13 @@ code-reviewer
 ├── 1  create-workspace .......... optional, when `isolate` is set
 ├── 2  gather candidates:
 │   ├── code-review ─────────▶     the baseline reading
-│   └── lenses, in one round:      ┐
-│       ├── security               │ parallel, mutually independent
-│       ├── performance           │
-│       ├── tests                 │
-│       └── conventions           ┘
+│   ├── lenses, in one round:      ┐
+│   │   ├── security               │ parallel, mutually independent
+│   │   ├── performance           │
+│   │   ├── tests                 │
+│   │   └── conventions           ┘
+│   └── <repo-local specialist>    conditional — only if the repo ships one,
+│                                  and only if it cannot write
 ├── 3  merge + dedupe ............ by file:line and by meaning
 ├── 4  skeptics ─────────────▶     up to 3 per finding, told to refute
 │                                  majority refutes → finding dropped
@@ -131,6 +133,7 @@ Plus a one-line summary: how many candidates were gathered, how many survived ve
 - **Parallelize only the independent work.** The lenses, yes. The verification of a single finding, yes. Do not parallelize steps that feed each other.
 - **Concise return.** Findings reference file and line. Do not paste diffs or whole files into your return.
 - **No forge calls.** You have no MCP tools and need none. If a task seems to require a PR URL, the dispatch is wrong — say so rather than working around it.
+- **Repo-local specialists, read-only only.** The reviewed repo may ship its own agents — a domain reviewer, a stack specialist. When one covers this diff more specifically than a generic lens does, dispatch it as an extra lens, but **only if it cannot write**. You are read-only, and dispatching an agent that edits would launder that. Check its frontmatter first. Load **`delegate-to-repo-agents`** by name for the convention; its findings go through the same verification step as every other candidate, and your report says where they came from.
 
 ## Nesting depth
 

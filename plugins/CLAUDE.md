@@ -226,7 +226,7 @@ For ADO mechanics, `ado-mcp` (terylon-devops) is the canonical engine: it owns a
 
 | Plugin | Skills | Agents |
 |---|---|---|
-| `terylon-git` | `create-workspace`, `code-review` | `code-reviewer` |
+| `terylon-git` | `create-workspace`, `code-review`, `delegate-to-repo-agents` | `code-reviewer` |
 | `terylon-devops` | `ado-mcp`, `review-pr`, `write-pr-description`, `address-pr-comments` | `pr-reviewer` |
 | `terylon-product` | `create-user-story`, `create-feature` | — |
 | `terylon-dev` | `develop` | `leader`, `planner`, `developer`, `debugger`, `refactorer`, `security-reviewer`, `performance-reviewer`, `architecture-reviewer`, `edge-case-reviewer` |
@@ -240,17 +240,24 @@ develop (skill, main thread — holds the gates)
 └── leader
     ├── planner
     ├── developer ──▶ debugger  (on a failing test)
+    │   └── <repo-local specialist>    conditional — only if the repo ships one
     ├── security-reviewer  ┐
     ├── performance-reviewer│ parallel, read-only
     ├── architecture-reviewer
     ├── edge-case-reviewer ┘
+    │   └── <repo-local specialist>    conditional — read-only agents only
     ├── refactorer
     └── whole-branch review:
         ├── code-reviewer   (no PR — the usual case)
+        │   └── <repo-local specialist>    conditional — read-only agents only
         └── pr-reviewer ──▶ code-reviewer  (a PR exists)
 ```
 
+The `<repo-local specialist>` branches are **not ours**. A target repository may ship its own agents — a stack-specific implementer, a domain reviewer — and a persona dispatches one when it covers the technology more specifically than a generic persona can. Most repositories ship none, and the branch simply does not occur. The convention lives in the `delegate-to-repo-agents` skill in `terylon-git`, loaded by name; the load-bearing rule is that a **read-only persona may only dispatch a read-only agent**, since delegating past `disallowedTools` would launder the restriction.
+
 `develop` is a skill rather than an agent because only the main thread can prompt the user. Everything below it is dispatched and reports back.
+
+Given several work items, `develop` runs this chain once per item with the leaders **concurrent** — one seed-spec, worktree and branch each. The shape does not change; it multiplies. Gates stay on the main thread and are hosted as each leader returns, which is also why every question has to name its work item.
 
 A new plugin is added only when at least one real skill exists for it.
 
