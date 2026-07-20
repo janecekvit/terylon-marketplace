@@ -4,6 +4,8 @@ These rules apply to **every** git operation in this repository. They override d
 
 > **Enforcement:** these rules are layered with `.claude/settings.json` (`permissions.deny`) and a `PreToolUse` hook at `.claude/hooks/git-guard.js`. The hook refuses **any push targeting `main`, from any branch** — otherwise a feature branch could run `git push origin HEAD:main` and bypass the pull request — plus force pushes without per-operation consent. While HEAD is on `main` it additionally refuses `Edit`/`Write` and `git commit`. The rules below remain the source of truth and model context; the hook is defence in depth.
 >
+> The hook resolves the branch from the directory the operation targets — the worktree holding the edited file, or `git -C <path>` when given — not from `CLAUDE_PROJECT_DIR`. That variable keeps pointing at the original checkout, so reading it made the guard see `main` and refuse every write inside a linked worktree that was correctly on a feature branch.
+>
 > The hook is Node.js, chosen for startup latency — it runs on every tool call. See `.claude/rules/scripting.md`.
 
 ## Hard rules

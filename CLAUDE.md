@@ -75,3 +75,4 @@ In short:
 - Work happens on a feature branch; `main` is reached only through a PR. Enforced by `.claude/hooks/git-guard.js`.
 - Every commit requires explicit user consent.
 - Skills are referenced **by name**, never by an `@` path or a `../` import.
+- **Anything with a shape is drawn, not described** — an ASCII diagram for a call chain or dependency, a table for cases and what each selects. Prose is interpretable and these documents are read as instructions; structure removes the room. Applies to what the repo generates too, not only to what it commits.

@@ -74,6 +74,19 @@ Native tooling manages placement, branch creation, and cleanup; running raw `git
 alongside it creates state the harness can't see. Do **not** run `git worktree add` when a native
 tool is available.
 
+**The native tool owns the branch name.** Pass it the name from Step 1, but expect it to normalize
+that name to its own scheme — `feat/<slug>` may come back as `worktree-feat+<slug>`, because a tool
+that encodes the branch into a directory name cannot keep a `/` in it.
+
+**Take the name it returns and do not rename the branch.** Renaming desynchronizes the harness from
+git: the tool still tracks the worktree under the name it created, so cleanup, and any later
+`ExitWorktree`, operate on a branch that no longer exists. That is the same failure the paragraph
+above warns about, arriving one step later.
+
+The `feat/<slug>` convention therefore binds **Step 2b**, where the name is ours to choose. Under a
+native tool, report the actual branch (Step 4) and rename at the end if it matters — after the
+worktree is merged and gone, when nothing is tracking it any more.
+
 ### Step 2b — Git worktree fallback
 
 Only when no native tool is available.
@@ -114,10 +127,14 @@ default in large repositories. Never run a full baseline test suite unless expli
 Print:
 
 ```
-Workspace ready: .worktrees/<slug>  (under the repo root)
+Workspace ready: <path>  (as reported by the tool that created it)
 Branch: <branch>  (base: <base-ref>)
-Open it: cd .worktrees/<slug>  (or use git -C .worktrees/<slug> — see Common mistakes)
+Open it: git -C <path>  (see Common mistakes on cwd-reset)
 ```
+
+Report the **actual** branch and path, not the ones from Step 1 — under a native tool (Step 2a) both
+may differ from what was requested. A report that echoes the request instead of the result is how a
+normalized branch name goes unnoticed until cleanup fails.
 
 ## Common mistakes
 
@@ -128,6 +145,10 @@ Open it: cd .worktrees/<slug>  (or use git -C .worktrees/<slug> — see Common m
   absolute machine path or rely on a persisted `cd`.
 - **Fighting native tooling:** never run `git worktree add` when a native worktree tool exists
   (Step 2a) — it creates state the harness can't track.
+- **Renaming the branch a native tool created:** the normalized name (`worktree-feat+<slug>`) looks
+  wrong against the `feat/<slug>` convention, and renaming it to match is the obvious next move. It
+  is also the one that breaks cleanup — the tool still tracks the old name. Report the real name and
+  leave it alone; the convention binds Step 2b, not Step 2a.
 - **Nesting:** never create a worktree when Step 0 detected existing isolation — report and stop.
 - **Skipping the ignore check:** the project-local `.worktrees/` must be gitignored **before**
   creating it, or its contents pollute `git status`.

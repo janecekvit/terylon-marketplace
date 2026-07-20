@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "terylon-dev",
-  "version": "1.0.4",
+  "version": "1.1.4",
   "description": "Developer pipeline — from a user story to implemented, tested code through plan → build (TDD) → finish, with an autonomous leader agent and parallel review lenses. Requires terylon-git, terylon-devops and superpowers.",
   "author": {
     "name": "Vít Janeček",

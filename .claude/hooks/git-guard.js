@@ -23,6 +23,12 @@
  * expansion, aliases, a script that pushes) still gets through, which is why
  * .claude/settings.json carries the same rules in permissions.deny.
  *
+ * The branch is resolved from the directory the operation actually targets, not
+ * from CLAUDE_PROJECT_DIR. That variable keeps pointing at the original checkout
+ * even when the session works inside a linked worktree, so reading it made the
+ * guard see `main` and refuse every Edit/Write in a worktree that was correctly
+ * on a feature branch — blocking the very isolation create-workspace sets up.
+ *
  * Protocol: stdin carries JSON { tool_name, tool_input, ... }.
  *   Allow = exit 0 with no stdout.
  *   Deny  = exit 0 with a JSON payload on stdout whose
@@ -33,6 +39,7 @@
 
 const { execSync } = require("node:child_process");
 const fileSystem = require("node:fs");
+const path = require("node:path");
 
 /**
  * Match `main` only as a whole refspec token, never as a fragment of a longer
@@ -54,6 +61,17 @@ const PUSH_EVERYTHING_FLAGS = new Set(["--all", "--mirror"]);
  */
 const GIT_OPTIONS_WITH_VALUE = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"]);
 
+/**
+ * The subset of those that point git at a different repository. Each one moves
+ * the operation somewhere other than the shell's own directory, so each one
+ * moves the branch the guard must ask about. Capturing only `-C` left
+ * `git --git-dir <main>/.git commit` free to land on main from a worktree.
+ */
+const GIT_OPTIONS_THAT_REDIRECT = new Set(["-C", "--git-dir", "--work-tree"]);
+
+/** Bound on the upward walk to an existing ancestor — a cycle must not spin here. */
+const MAXIMUM_ANCESTOR_WALK_DEPTH = 64;
+
 const FILE_WRITING_TOOLS = ["Edit", "Write"];
 
 /**
@@ -66,18 +84,26 @@ function splitIntoInvocations(command)
 }
 
 /**
- * Tokenize one invocation and, if it is a git command, return its subcommand and
- * the arguments that follow. Returns null when the invocation is not git at all.
+ * Tokenize one invocation and, if it is a git command, return its subcommand, the
+ * arguments that follow, and the directory it redirects to when it names one.
+ * Returns null when the invocation is not git at all.
  *
  * Strips leading `VAR=value` assignments and the global git options that consume
  * the next token, so `GIT_DIR=x git -C /repo push origin main` still resolves to
  * the subcommand `push`.
+ *
+ * The redirecting options are kept rather than merely skipped: `git -C <worktree>
+ * commit` operates on that worktree's branch, so the guard must ask that
+ * directory and not the shell's. Both the separated (`-C <path>`) and joined
+ * (`--git-dir=<path>`) spellings are captured — skipping either leaves a
+ * redirection the guard cannot see.
  */
 function parseGitInvocation(invocation)
 {
     // Quotes carry no meaning for us — `"main"` and `main` are the same refspec.
     const tokens = invocation.trim().split(/\s+/).map(token => token.replace(/^["']|["']$/g, "")).filter(Boolean);
     let index = 0;
+    let explicitDirectory = null;
 
     while (index < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[index]))
     {
@@ -93,8 +119,20 @@ function parseGitInvocation(invocation)
 
     while (index < tokens.length && tokens[index].startsWith("-"))
     {
-        if (GIT_OPTIONS_WITH_VALUE.has(tokens[index]))
+        const joinedMatch = tokens[index].match(/^(--[a-z-]+)=(.*)$/);
+
+        if (joinedMatch !== null && GIT_OPTIONS_THAT_REDIRECT.has(joinedMatch[1]))
         {
+            explicitDirectory = joinedMatch[2] || explicitDirectory;
+            index++;
+        }
+        else if (GIT_OPTIONS_WITH_VALUE.has(tokens[index]))
+        {
+            if (GIT_OPTIONS_THAT_REDIRECT.has(tokens[index]))
+            {
+                explicitDirectory = tokens[index + 1] || explicitDirectory;
+            }
+
             index += 2;
         }
         else
@@ -108,7 +146,60 @@ function parseGitInvocation(invocation)
         return null;
     }
 
-    return { subcommand: tokens[index], args: tokens.slice(index + 1) };
+    return { subcommand: tokens[index], args: tokens.slice(index + 1), directory: explicitDirectory };
+}
+
+/**
+ * Walk the invocations of one shell command in order and return the git ones,
+ * each tagged with the directory it will actually run in.
+ *
+ * Order matters because `cd` persists: in `cd <main-checkout> && git commit`, the
+ * commit lands on main even though the shell started in a worktree. Reading the
+ * payload's cwd alone answers for where the command *began*, not where each
+ * invocation *runs*, and a guard that trusts a directory the operation has
+ * already left is not guarding it.
+ *
+ * `pushd`/`popd` are not tracked; they would need a directory stack, and nothing
+ * in this repo's workflows uses them. A `cd` whose target cannot be determined
+ * clears the running directory, so resolution falls back rather than trusting a
+ * stale one.
+ */
+function parseCommandChain(command, startDirectory)
+{
+    const gitInvocations = [];
+    let runningDirectory = startDirectory;
+
+    for (const invocation of splitIntoInvocations(command))
+    {
+        const tokens = invocation.trim().split(/\s+/).map(token => token.replace(/^["']|["']$/g, "")).filter(Boolean);
+
+        if (tokens[0] === "cd")
+        {
+            const target = tokens[1];
+
+            runningDirectory = target
+                ? path.resolve(runningDirectory || process.cwd(), target)
+                : null;
+
+            continue;
+        }
+
+        const parsed = parseGitInvocation(invocation);
+
+        if (parsed === null)
+        {
+            continue;
+        }
+
+        gitInvocations.push(
+        {
+            subcommand: parsed.subcommand,
+            args: parsed.args,
+            directory: parsed.directory || runningDirectory,
+        });
+    }
+
+    return gitInvocations;
 }
 
 function readStandardInput()
@@ -142,25 +233,108 @@ function parsePayload(rawInput)
     }
 }
 
-function getCurrentBranch()
+/**
+ * Walk up from `startDirectory` to the nearest directory that exists. A Write can
+ * name a file in a directory that is not there yet; asking git about a path that
+ * does not exist yields nothing, and a guard that answers "no branch" is a guard
+ * that lets the write through.
+ *
+ * The ancestor is not guaranteed to be in the same worktree — under the default
+ * `.worktrees/<slug>` layout, walking far enough up leaves the worktree and
+ * reaches the main checkout. That direction is safe: it reports `main` and the
+ * write is refused. The unsafe direction would be reporting a feature branch for
+ * an operation on main, which walking upward cannot produce.
+ *
+ * A relative path is anchored to `baseDirectory` (the shell's own cwd), never to
+ * wherever this hook process happens to be running.
+ */
+function nearestExistingDirectory(startDirectory, baseDirectory)
 {
-    const projectDirectory = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+    let directory = path.resolve(baseDirectory || process.cwd(), startDirectory);
+
+    for (let depth = 0; depth < MAXIMUM_ANCESTOR_WALK_DEPTH; depth++)
+    {
+        if (fileSystem.existsSync(directory))
+        {
+            return directory;
+        }
+
+        const parent = path.dirname(directory);
+
+        if (parent === directory)
+        {
+            return null;
+        }
+
+        directory = parent;
+    }
+
+    return null;
+}
+
+/** Branch lookups are memoized per directory — both guards may ask for the same one. */
+const branchCache = new Map();
+
+function getCurrentBranch(directory, baseDirectory)
+{
+    const resolvedDirectory = nearestExistingDirectory(directory || baseDirectory || process.cwd(), baseDirectory);
+
+    if (resolvedDirectory === null)
+    {
+        return null;
+    }
+
+    if (branchCache.has(resolvedDirectory))
+    {
+        return branchCache.get(resolvedDirectory);
+    }
+
+    let branch = null;
 
     try
     {
         const branchOutput = execSync("git symbolic-ref --short HEAD",
         {
             stdio: ["ignore", "pipe", "ignore"],
-            cwd: projectDirectory,
+            cwd: resolvedDirectory,
         });
 
-        return branchOutput.toString().trim();
+        branch = branchOutput.toString().trim();
     }
     catch
     {
         // Detached HEAD, or not a git repository at all.
-        return null;
+        branch = null;
     }
+
+    branchCache.set(resolvedDirectory, branch);
+
+    return branch;
+}
+
+/**
+ * The directory whose branch governs this tool call.
+ *
+ * Edit/Write are governed by the worktree holding the target file. Bash is
+ * governed by `git -C <path>` when given, otherwise by the shell's own cwd as
+ * reported in the payload. CLAUDE_PROJECT_DIR is the last resort only: it names
+ * the original checkout, which is the wrong answer inside a linked worktree.
+ */
+function resolveGoverningDirectory(toolInput, payloadWorkingDirectory, explicitDirectory)
+{
+    if (explicitDirectory)
+    {
+        return explicitDirectory;
+    }
+
+    const filePath = toolInput.file_path;
+
+    if (typeof filePath === "string" && filePath.length > 0)
+    {
+        return path.dirname(filePath);
+    }
+
+    return payloadWorkingDirectory || process.env.CLAUDE_PROJECT_DIR || process.cwd();
 }
 
 function denyWithReason(reason)
@@ -187,10 +361,12 @@ if (payload === null)
 }
 
 const toolName = payload.tool_name || "";
-const toolCommand = String((payload.tool_input || {}).command || "");
+const toolInput = payload.tool_input || {};
+const toolCommand = String(toolInput.command || "");
+const payloadWorkingDirectory = typeof payload.cwd === "string" ? payload.cwd : null;
 
 const gitInvocations = toolName === "Bash"
-    ? splitIntoInvocations(toolCommand).map(parseGitInvocation).filter(Boolean)
+    ? parseCommandChain(toolCommand, payloadWorkingDirectory)
     : [];
 
 // ---------------------------------------------------------------------------
@@ -211,9 +387,14 @@ for (const invocation of gitInvocations.filter(candidate => candidate.subcommand
     // on main that is a push to main. Treated as targeting main to stay safe.
     const noRefspecGiven = refspecs.length <= 1;
 
+    const pushDirectory = resolveGoverningDirectory(toolInput, payloadWorkingDirectory, invocation.directory);
+
+    // `git push origin HEAD` names no branch either — on main it is a push to main.
+    const pushesHead = refspecs.some(refspec => refspec === "HEAD" || refspec === "+HEAD");
+
     if (refspecs.some(refspec => MAIN_REFSPEC_PATTERN.test(refspec))
         || flags.some(flag => PUSH_EVERYTHING_FLAGS.has(flag))
-        || (noRefspecGiven && getCurrentBranch() === "main"))
+        || ((noRefspecGiven || pushesHead) && getCurrentBranch(pushDirectory, payloadWorkingDirectory) === "main"))
     {
         denyWithReason(
             "Refuse to push to main — main is reached only through a pull request " +
@@ -245,9 +426,21 @@ if (!isFileWritingTool && !isGitCommit)
     process.exit(0);
 }
 
-const currentBranch = getCurrentBranch();
+// EVERY commit in the chain is checked, not just the first. Reading only the
+// first meant `git -C <worktree> commit && git commit` was governed by the
+// worktree alone while the second commit landed on main — and a `-C` pointing
+// nowhere disarmed the guard just as well. Guard 1 loops for the same reason.
+const governingDirectories = isFileWritingTool
+    ? [resolveGoverningDirectory(toolInput, payloadWorkingDirectory, null)]
+    : gitInvocations
+        .filter(invocation => invocation.subcommand === "commit")
+        .map(invocation => resolveGoverningDirectory(toolInput, payloadWorkingDirectory, invocation.directory));
 
-if (currentBranch !== "main")
+const landsOnMain = governingDirectories.some(
+    directory => getCurrentBranch(directory, payloadWorkingDirectory) === "main"
+);
+
+if (!landsOnMain)
 {
     process.exit(0);
 }

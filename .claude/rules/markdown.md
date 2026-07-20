@@ -44,8 +44,20 @@ description: Use when <trigger>  # triggering conditions, never the internal wor
 allowed-tools: Read, Grep, Glob  # skills only
 tools: [Read, Grep, Glob, Agent] # agents only
 disallowedTools: [Edit, Write]   # agents only — read-only lenses need this
+skills: [<name>, …]              # agents only — skills this agent may load, by name
 ---
 ```
+
+**`skills:` declares, the prose says when.** The field lists the skills an agent may load, by name and across plugin boundaries — `code-reviewer` in `terylon-git` lists `code-review`, and `pr-reviewer` in `terylon-devops` lists `create-workspace` from another plugin. Declaring a skill there does **not** mean the agent uses it on every run: `create-workspace` is listed on `code-reviewer` but only used when `isolate` is set.
+
+So the two carry different halves and both are needed:
+
+| Where | Carries |
+|---|---|
+| `skills:` frontmatter | that the agent may load it at all |
+| The agent's prose | when to load it, and what it must not do |
+
+Declaring without prose leaves an agent holding a skill it has no reason to open. Prose without the declaration relies on the name resolving anyway. **A safety constraint belongs in the prose regardless** — inline and short, where it cannot be missed if the skill is never loaded. The procedure can live in the skill; the boundary cannot.
 
 **Never set `disable-model-invocation`.** It hides the skill from being loaded by name, which breaks the engine/transport pattern this repo is built on: `ado-mcp` and `code-review` exist to be called by other skills, and a hidden engine cannot be called at all. A skill that is mainly for other skills says so in its prose instead.
 
@@ -63,7 +75,13 @@ disallowedTools: [Edit, Write]   # agents only — read-only lenses need this
 
 ## Show structure, do not describe it
 
-Whenever a document explains **what calls what**, **what depends on what**, or **which case picks which branch**, draw it. A reader who has to reconstruct a shape from three paragraphs of prose will reconstruct it wrong.
+**Whenever something has a shape, draw it.** A call chain, a dependency graph, a set of cases and what each one selects, a state machine, a pipeline, a comparison across several options, a layout, a sequence of steps with branches — all of these are clearer as an ASCII diagram or a table than as prose, and none of them should be left as prose when a diagram or table would carry them. A reader who has to reconstruct a shape from three paragraphs will reconstruct it wrong.
+
+This is not a stylistic preference. Prose is **interpretable**; a table is not. "Patch within a branch, minor on a new one" reads as a guideline someone can weigh against how big the change feels — the same rule as a table keyed on the condition leaves nothing to weigh. That matters more here than in most repositories, because these documents are read as instructions by a model, and an instruction that can be interpreted eventually will be. Structure removes the room.
+
+The rule holds for what this repo **generates** as well as for what it commits: pull request descriptions, work items, review findings, and answers in a session. Wherever there is a shape and the target renders markdown, draw it.
+
+Two limits. A diagram that is wrong is worse than prose, because it is believed — see *Keep them true* below. And a table with one row is a sentence wearing a costume; use one when there are cases, not to decorate a single fact.
 
 ### Tables for decisions and enumerable facts
 

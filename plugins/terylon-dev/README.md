@@ -6,6 +6,40 @@ Developer pipeline: from a user story (a link to an Azure DevOps work item or a 
 
 Developers who want a complete gated loop: clarify the story, plan it against the real codebase, build it test-first task by task, and close the PR.
 
+## Dispatch chain
+
+```
+develop (skill, main thread — the only place that can ask the user)
+├── Gate 0  intake ....................... asks
+├── create-workspace .................... from terylon-git (unless --here)
+└── leader ─────────────────────────────▶ owns the loop, returns at each gate
+    ├── planner ──▶ Explore              design + TDD plan
+    │   └── AWAITING_APPROVAL ▶ Gate 1   plan approval (--dry-run stops here)
+    ├── developer ──▶ debugger           per task, test-first (on a failing test)
+    │   └── <repo-local specialist>      conditional — see below
+    ├── security-reviewer     ┐
+    ├── performance-reviewer  │ one round, parallel, read-only
+    ├── architecture-reviewer │
+    ├── edge-case-reviewer    ┘
+    │   └── <repo-local specialist>      conditional — read-only agents only
+    ├── refactorer                       simplify while tests stay green
+    └── whole-branch review:
+        ├── code-reviewer                no PR yet — the usual case
+        │   └── code defect ──▶ developer, then review again (max 3 rounds)
+        └── pr-reviewer ──▶ code-reviewer  a PR exists; findings land on it
+                                         ▲
+                              Gate 3 ────┘  PR / finish ... asks
+                                            └── /code-review ultra   offered, never launched
+```
+
+Two feedback edges are easy to miss. A **code defect** found by a review goes back to `developer` and the branch is reviewed again, bounded at three rounds so a fix that provokes the next finding cannot oscillate forever. A **design defect** — the wrong boundary, a responsibility in the wrong module — goes back to `planner` instead, and if the revised plan differs from the one the user approved it returns through Gate 1, because that is no longer the plan they saw.
+
+At Gate 3 the skill may **offer** `/code-review ultra`, the harness's heavier multi-agent review, when the diff is large or security-sensitive. It cannot run it: that command is user-triggered and billed, and no skill or agent can invoke it.
+
+With several items the whole chain runs **once per item, concurrently** — one seed-spec, worktree, branch and `leader` each. The shape does not change; it multiplies. Gates stay on the main thread and are hosted as each leader returns.
+
+The `<repo-local specialist>` branches are **not part of this plugin**. A target repository may ship its own agents — a stack-specific implementer, a domain reviewer — and a persona dispatches one when it covers the technology more specifically than a generic persona can. Most repositories ship none and the branch never occurs. The convention is the `delegate-to-repo-agents` skill in `terylon-git`; its load-bearing rule is that a **read-only persona may only dispatch a read-only agent**, because delegating past `disallowedTools` would launder the restriction.
+
 ## What it contains
 
 **Skill:**
@@ -21,6 +55,8 @@ Developers who want a complete gated loop: clarify the story, plan it against th
 - **`refactorer`** — once the tests are green it goes through the diff for simplification, reuse and consistency.
 - **`edge-case-reviewer`**, **`security-reviewer`**, **`performance-reviewer`**, **`architecture-reviewer`** — read-only review lenses running in parallel, each with its own angle. They propose, they do not edit.
 
+Every persona here is **generic by design** — that is what lets the same pipeline run over any repository. Where the target repo ships an agent that knows the stack better, the persona delegates to it rather than approximating it, under the `delegate-to-repo-agents` convention from `terylon-git`. The persona keeps ownership: it verifies what returns, its report names the delegation, and its own return values are unchanged.
+
 ## Reuse
 
 The plugin is deliberately thin. The build phase **runs** `superpowers:subagent-driven-development` (its controller loop, ledger and final review); it further uses `writing-plans`, `test-driven-development`, `requesting-code-review` and `finishing-a-development-branch`, plus the built-in one-shot agents `Explore` and `Plan`. Isolation goes through `create-workspace` from `terylon-git`. Only the orchestration, the personas and the Azure DevOps wiring are its own.
@@ -28,7 +64,7 @@ The plugin is deliberately thin. The build phase **runs** `superpowers:subagent-
 ## Dependencies
 
 - **`terylon-devops`** — the `ado` MCP server, the `ado-mcp` engine, `review-pr`, `write-pr-description`. Installed automatically.
-- **`terylon-git`** — `create-workspace`, `code-review`, and the `code-reviewer` agent that `leader` dispatches for the whole-branch review. Declared directly rather than relied on transitively, because `leader` uses it whether or not a pull request is in play.
+- **`terylon-git`** — `create-workspace`, `code-review`, `delegate-to-repo-agents`, and the `code-reviewer` agent that `leader` dispatches for the whole-branch review. Declared directly rather than relied on transitively, because `leader` uses it whether or not a pull request is in play.
 - **`superpowers`** from the `claude-plugins-official` marketplace — reused skills. Requires that marketplace to be enabled.
 
 ## Setup
@@ -55,9 +91,11 @@ The plugin is deliberately thin. The build phase **runs** `superpowers:subagent-
 ## Usage
 
 ```
-/terylon-dev:develop <ADO-URL | "description"> [--auto | --dry-run] [--here]
+/terylon-dev:develop <item> [<item> …] [--auto | --dry-run] [--here]
 ```
 
 - `--dry-run` — stops after the plan is approved (a plan, no code)
 - `--auto` — skips the pauses at the gates; `leader` runs the whole loop on its own. The git rules still apply.
 - `--here` — stay in the current checkout instead of an isolated worktree
+
+**Several items fan out.** An item is an ADO work item URL or a prose description; prose items are separated by `---` on its own line, and prose without a separator is one item however many bullets it contains. Up to ten, with a confirmation above five. Each gets its own seed-spec, worktree and `leader`, and the leaders run concurrently. Intake still happens one item at a time — it is interactive — but from there the builds proceed in parallel, and each leader's gate is hosted the moment it returns rather than at a barrier. Every question names the work item it belongs to, because with several builds live an unlabelled question gets answered against the wrong story. Worktrees stop being optional at that point, so `--here` is refused with more than one item.
