@@ -125,6 +125,26 @@ defeats the purpose of a checklist. Even items you have already verified locally
 `- [ ]` — the reviewer ticks them after re-verifying on the PR. If you need to record
 "already done by author", write it in prose elsewhere, not as a checklist item.
 
+**Carry across any tick you find; never regenerate over one.** Something may have ticked
+items since this description was last written — a reviewer by hand, or a skill that
+executed the plan and holds the exemption `ado-mcp` describes. Rewriting the region as
+fresh `- [ ]` would erase that, and ADO keeps no revision history for a description, so it
+cannot be recovered.
+
+When the existing region carries `- [X]` items, or headings grouping items by how they
+were checked, **preserve them**: match your regenerated items against the ones already
+there, keep the state of every item that survives, and say in the chat summary which ticks
+you carried and which items were new. When you cannot match an item confidently, keep the
+old line rather than replacing it — a stale line the author can delete beats a verified
+result silently reset.
+
+You do not need to know what produced a tick, and should not try to tell. Anything already
+in the region was put there by someone; your job is to regenerate the plan without
+destroying it.
+
+The prohibition above still binds *you*: you generate a plan, and generating is not
+executing, however sure you feel about an item.
+
 **Do NOT hard-wrap lines inside the generated description.** ADO's PR-description renderer
 treats every source line break as a visible line break (not a markdown soft wrap as
 GitHub does), so wrapping a paragraph at 72 / 80 chars produces choppy short lines in the
@@ -194,10 +214,12 @@ region plus anything preserved around it. Over the limit the call fails validati
 reaching ADO (`too_big`) and writes nothing, so measure before calling:
 
 ```bash
-wc -c <<'DESCRIPTION'
+wc -m <<'DESCRIPTION'
 <the located-or-appended description from step 7>
 DESCRIPTION
 ```
+
+**`-m`, not `-c`.** The cap counts characters; `-c` counts bytes, and a description carrying arrows, dashes and emoji measures longer in bytes than it is. Trimming against the byte count cuts material that would have fitted.
 
 Over 4000, cut from the generated body — never from content you did not write. Drop whole
 sections rather than trimming every bullet; a reviewer gets more from four complete sections

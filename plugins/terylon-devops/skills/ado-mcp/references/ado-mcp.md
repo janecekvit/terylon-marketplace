@@ -608,7 +608,11 @@ The footer is, as a **placeholder template only**:
 Applies to every write (PR threads, PR descriptions, WI comments):
 
 - **Never hard-wrap** paragraphs or bullets. Azure DevOps renders line breaks verbatim, so a hard-wrapped paragraph shows mid-sentence breaks. Let lines run long; break only at real paragraph boundaries.
-- **Checklists use unchecked `- [ ]` only.** Never emit `- [x]`.
+- **Checklists use unchecked `- [ ]` only.** Never emit `- [x]`. The reason is that ADO renders a pre-checked box as a static tick the reader cannot untick, so a box checked on the author's say-so is both a claim nobody verified and one nobody can withdraw.
+
+  **One carve-out, and it is narrow.** A skill that **executed** the item may write `- [X]`, on five conditions: it ran the thing rather than reading about it, the run **passed**, what it ran **bears on that item** rather than merely passing nearby, the evidence is posted where a reader can check it, and any item it could not execute stays `- [ ]`. The exemption belongs to whichever skill meets all five, not to any named one — an allowlist would go stale the moment a second skill qualified. A skill claiming it states the five conditions in its own steps, and those steps govern: this is the summary, and a summary that drifts looser than what it summarises is worse than none. The third condition is the one that gets skipped: a green suite that never touches the behaviour under test satisfies "it ran" and proves nothing. The rule above still binds every skill that *generates* a checklist — `write-pr-description`, `create-user-story`, `review-pr` — because generating is not executing, however sure the author feels.
+
+  **A generator must not erase a tick it finds.** Regenerating a checklist over one that a verification pass has ticked destroys the evidence and cannot be undone, since ADO keeps no revision history for a description. Carry the existing state across the regeneration, or leave the section alone and say so.
 
 ---
 

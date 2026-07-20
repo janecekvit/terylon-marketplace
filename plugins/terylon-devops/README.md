@@ -16,6 +16,7 @@ Everyone working on top of Azure DevOps — directly for the PR workflow, indire
 
 - **`review-pr`** — review a PR and post the findings as inline suggestion blocks or PR-wide threads
 - **`write-pr-description`** — a PR description from the branch diff
+- **`update-pr-checklist`** — reads a pull request's test plan out of the description and writes results back into it: the plan rewritten into labelled groups, plus one evidence thread. It checks nothing and holds no `Agent` — a caller supplies the outcome, normally the `tester` agent from `terylon-test`. The last gate before the write is its own: an item is ticked only if the outcome shows it executed, passed, and covered by something bearing on it.
 - **`address-pr-comments`** — apply reviewer comments from your own PR locally
 
 **Agent:**

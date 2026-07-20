@@ -21,7 +21,7 @@ develop (skill, main thread — the only place that can ask the user)
     ├── performance-reviewer  │ one round, parallel, read-only
     ├── architecture-reviewer │
     ├── edge-case-reviewer    ┘
-    │   └── <repo-local specialist>      conditional — read-only agents only
+    │   └── <repo-local specialist>      conditional; capability gate below
     ├── refactorer                       simplify while tests stay green
     └── whole-branch review:
         ├── code-reviewer                no PR yet — the usual case
@@ -38,7 +38,7 @@ At Gate 3 the skill may **offer** `/code-review ultra`, the harness's heavier mu
 
 With several items the whole chain runs **once per item, concurrently** — one seed-spec, worktree, branch and `leader` each. The shape does not change; it multiplies. Gates stay on the main thread and are hosted as each leader returns.
 
-The `<repo-local specialist>` branches are **not part of this plugin**. A target repository may ship its own agents — a stack-specific implementer, a domain reviewer — and a persona dispatches one when it covers the technology more specifically than a generic persona can. Most repositories ship none and the branch never occurs. The convention is the `delegate-to-repo-agents` skill in `terylon-git`; its load-bearing rule is that a **read-only persona may only dispatch a read-only agent**, because delegating past `disallowedTools` would launder the restriction.
+The `<repo-local specialist>` branches are **not part of this plugin**. A target repository may ship its own agents — a stack-specific implementer, a domain reviewer — and a persona dispatches one when it covers the technology more specifically than a generic persona can. Most repositories ship none and the branch never occurs. The convention is the `delegate-to-repo-agents` skill in `terylon-git`; its load-bearing rule is a **capability test**: may the candidate change the files under examination? `Edit`, `Write` and **unrestricted `Bash`** all mean yes, so `disallowedTools` alone settles nothing.
 
 ## What it contains
 

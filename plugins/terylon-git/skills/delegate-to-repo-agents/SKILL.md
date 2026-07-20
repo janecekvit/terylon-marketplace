@@ -62,7 +62,24 @@ Do **not** delegate when:
 
 **A read-only persona must never dispatch an agent that can write.**
 
-The four review lenses, `debugger` and `code-reviewer` carry `disallowedTools: [Edit, Write]` for a reason: they report, and something else decides what to do about it. Dispatching a writing agent would launder that restriction — the edits would land, made by a persona whose whole contract says it does not edit.
+These personas **report, and something else decides**. That is the property the gate protects, and dispatching an agent that can change the work would launder it — the edits would land, made on behalf of a persona whose whole contract says it does not edit.
+
+### The test is a capability, and every shorthand for it is wrong
+
+Do not ask whether the candidate is "read-only", whether it "cannot write", or whether its frontmatter matches yours. **Ask what it can do to the files under examination.**
+
+| The candidate holds | Can it change the work? |
+|---|---|
+| `Edit`, `Write`, `NotebookEdit` | **yes** — disqualified |
+| **`Bash` unrestricted** | **yes** — `sed -i`, a redirect, `git checkout` all rewrite files. Disqualified, whatever `disallowedTools` says |
+| `Bash(git log*)` or similarly scoped | only as far as the scope allows — read the scope, not the word `Bash` |
+| `Read`, `Grep`, `Glob` | no |
+
+Each shorthand fails in the same direction — **permissively**. An agent declaring `disallowedTools: [Edit, Write]` and holding plain `Bash` passes all three shorthands and can still overwrite the file you are reviewing. That combination is common, because it is what an agent needs to run a test.
+
+The converse also matters: an agent holding `Write` **for its own report file** is not thereby licensed to rewrite what it examines. Capability against the work under examination is the question; the tool list is only evidence about it.
+
+**Some of this repo's own personas fail this test**, and they are not the exception that softens it. `tester`, `debugger` and `code-reviewer` all hold unrestricted `Bash`. What binds them is a written contract — `shared/side-effects.md`, `git status --porcelain` before and after — and **not** their frontmatter. A repo-local agent you know nothing about carries no such contract, so for a candidate the capability test is all you have.
 
 Before dispatching, read the candidate's frontmatter and check its `tools` / `disallowedTools`. If it can write and you cannot, **do not dispatch it**. Describe what you would have asked it to do as a finding instead, and let the persona that is allowed to edit act on it.
 
