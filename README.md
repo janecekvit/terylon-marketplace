@@ -10,6 +10,7 @@ Internal Claude Code plugin marketplace for the development workflow on top of A
 | `terylon-devops` | Azure DevOps — ADO mechanics, PR review and description | `terylon-git` |
 | `terylon-product` | product owner / PM — user stories, Feature specs | `terylon-devops` |
 | `terylon-dev` | developers — plan → build (TDD) → finish | `terylon-git`, `terylon-devops`, `superpowers` |
+| `terylon-test` | anyone holding a checklist — verifies a test plan against the artifact | `terylon-devops` |
 
 `terylon-git` is deliberately forge-agnostic: it needs git and nothing else, so a repository hosted anywhere can use the worktree and review machinery without pulling in an ADO MCP server it has no use for. `terylon-devops` adds that layer on top.
 

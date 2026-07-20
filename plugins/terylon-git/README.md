@@ -14,7 +14,7 @@ Anyone working in a git repository. Directly for local review and worktree isola
 
 - **`create-workspace`** — an isolated git worktree on a new branch. Detects existing isolation first (never nests), prefers any native worktree tooling the environment exposes, and falls back to `git worktree add` into a project-local `.worktrees/`. The base branch is detected from the repo, never hard-coded.
 - **`code-review`** — the review engine. Local mode walks a priority chain (working tree → staged → branch vs. detected base); sub-skill mode takes an explicit scope and returns structured YAML findings. It carries the judgment and writes nowhere.
-- **`delegate-to-repo-agents`** — the convention for using agents the *target* repository ships. The Terylon personas are generic by design; a repo may carry a stack-specific implementer or a domain reviewer that knows more. This says how to find one, when delegating beats doing the work yourself, and what the delegation may not break — chiefly that a read-only persona may only dispatch a read-only agent. Loaded by name by the personas in this plugin and in `terylon-dev`; not a user command.
+- **`delegate-to-repo-agents`** — the convention for using agents the *target* repository ships. The Terylon personas are generic by design; a repo may carry a stack-specific implementer or a domain reviewer that knows more. This says how to find one, when delegating beats doing the work yourself, and what the delegation may not break — chiefly a capability test: may the candidate change the files under examination? `Edit`, `Write` and unrestricted `Bash` all mean yes. Loaded by name by the personas in this plugin and in `terylon-dev`; not a user command.
 
 **Agent:**
 

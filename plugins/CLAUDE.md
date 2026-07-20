@@ -219,6 +219,7 @@ For ADO mechanics, `ado-mcp` (terylon-devops) is the canonical engine: it owns a
 | `terylon-devops` | Azure DevOps layer — everyone on ADO | `terylon-git` |
 | `terylon-product` | product owner / PM | `terylon-devops` |
 | `terylon-dev` | developers | `terylon-git`, `terylon-devops`, `superpowers` |
+| `terylon-test` | anyone holding a checklist that decides something | `terylon-devops` |
 
 `terylon-product` reaches `terylon-git` transitively through `terylon-devops`. `terylon-dev` declares it directly, because `leader` dispatches `code-reviewer` whether or not Azure DevOps is in play.
 
@@ -227,9 +228,10 @@ For ADO mechanics, `ado-mcp` (terylon-devops) is the canonical engine: it owns a
 | Plugin | Skills | Agents |
 |---|---|---|
 | `terylon-git` | `create-workspace`, `code-review`, `delegate-to-repo-agents` | `code-reviewer` |
-| `terylon-devops` | `ado-mcp`, `review-pr`, `write-pr-description`, `address-pr-comments` | `pr-reviewer` |
+| `terylon-devops` | `ado-mcp`, `review-pr`, `write-pr-description`, `address-pr-comments`, `update-pr-checklist` | `pr-reviewer` |
 | `terylon-product` | `create-user-story`, `create-feature` | — |
 | `terylon-dev` | `develop` | `leader`, `planner`, `developer`, `debugger`, `refactorer`, `security-reviewer`, `performance-reviewer`, `architecture-reviewer`, `edge-case-reviewer` |
+| `terylon-test` | `verify-test-plan`, `run-build-and-tests`, `run-ui-flows` | `tester` |
 
 The boundary between the first two is the forge: everything in `terylon-git` needs git and nothing more, everything in `terylon-devops` touches Azure DevOps. That is why the review pipeline is split — `code-review` and `code-reviewer` are local, `review-pr` and `pr-reviewer` carry the findings to ADO.
 
@@ -240,24 +242,43 @@ develop (skill, main thread — holds the gates)
 └── leader
     ├── planner
     ├── developer ──▶ debugger  (on a failing test)
-    │   └── <repo-local specialist>    conditional — only if the repo ships one
+    │   └── <repo-local specialist>    conditional; capability gate below
     ├── security-reviewer  ┐
     ├── performance-reviewer│ parallel, read-only
     ├── architecture-reviewer
     ├── edge-case-reviewer ┘
-    │   └── <repo-local specialist>    conditional — read-only agents only
+    │   └── <repo-local specialist>    conditional; capability gate below
     ├── refactorer
     └── whole-branch review:
         ├── code-reviewer   (no PR — the usual case)
-        │   └── <repo-local specialist>    conditional — read-only agents only
+        │   └── <repo-local specialist>    conditional; capability gate below
         └── pr-reviewer ──▶ code-reviewer  (a PR exists)
 ```
 
-The `<repo-local specialist>` branches are **not ours**. A target repository may ship its own agents — a stack-specific implementer, a domain reviewer — and a persona dispatches one when it covers the technology more specifically than a generic persona can. Most repositories ship none, and the branch simply does not occur. The convention lives in the `delegate-to-repo-agents` skill in `terylon-git`, loaded by name; the load-bearing rule is that a **read-only persona may only dispatch a read-only agent**, since delegating past `disallowedTools` would launder the restriction.
+The `<repo-local specialist>` branches are **not ours**. A target repository may ship its own agents — a stack-specific implementer, a domain reviewer — and a persona dispatches one when it covers the technology more specifically than a generic persona can. Most repositories ship none, and the branch simply does not occur. The convention lives in the `delegate-to-repo-agents` skill in `terylon-git`, loaded by name, and **the gate is a capability test**: may the candidate change the files under examination? `Edit`, `Write` and **unrestricted `Bash`** all mean yes — `sed -i` rewrites a file as surely as `Edit` does — so `disallowedTools: [Edit, Write]` alone settles nothing. Every shorthand for this rule fails in the same direction, permissively; the skill states the test and the shorthands are not repeated here on purpose.
 
 `develop` is a skill rather than an agent because only the main thread can prompt the user. Everything below it is dispatched and reports back.
 
 Given several work items, `develop` runs this chain once per item with the leaders **concurrent** — one seed-spec, worktree and branch each. The shape does not change; it multiplies. Gates stay on the main thread and are hosted as each leader returns, which is also why every question has to name its work item.
+
+`terylon-test` runs after all of it, on the claims rather than the code:
+
+```
+tester (terylon-test — drives the run)
+├── update-pr-checklist (read) ....... terylon-devops; the test plan out of the PR
+├── verify-test-plan ................. engine: triage, routing, evidence
+│   └── per-claim subagents           one round; claims are independent
+│       ├── run-build-and-tests       the project's build and suite — a shell is enough
+│       ├── run-ui-flows              the interface, through browser automation
+│       └── <repo-local specialist>   conditional; capability gate below
+└── update-pr-checklist (write) ...... terylon-devops; the thread, then the rewritten plan
+```
+
+Azure DevOps appears only at the ends. `update-pr-checklist` lives in `terylon-devops` because it needs ADO and nothing else does — it reads the plan and writes the answer, and it holds no `Agent`, so the verification cannot happen in its context. The agent that drives sits **above** it, which is the one place this differs from the review pipeline: `code-reviewer` is below `pr-reviewer`, so there the transport dispatches; here the caller does.
+
+The two executors are the **execution layer**. They run the artifact and report facts — commands, exit statuses, case names, observed state — while the engine keeps the judgment about what a result means. `run-ui-flows` is separate purely because of its dependency class: a checklist walker that needs only a shell must not drag in a browser stack, so the plugin ships no `.mcp.json` for it and reports the capability as absent instead.
+
+It exists because the review chain above verifies the *diff* while the test plan verifies the *claims about it*, and nothing was checking the second. A tick nobody exercised reads exactly like one that was earned.
 
 A new plugin is added only when at least one real skill exists for it.
 

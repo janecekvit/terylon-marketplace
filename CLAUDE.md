@@ -20,14 +20,15 @@ Internal Claude Code plugin marketplace distributed into product repositories th
 ```
 terylon-git                       git only — no forge, no MCP server
 ├── terylon-devops                + Azure DevOps
-│   └── terylon-product           + user stories, Feature specs
+│   ├── terylon-product           + user stories, Feature specs
+│   └── terylon-test              + verifying a test plan against the artifact
 └── terylon-dev                   + the build pipeline
     └── superpowers               (claude-plugins-official)
 ```
 
 `terylon-dev` declares `terylon-git` directly as well as through `terylon-devops`, because its `leader` dispatches `code-reviewer` whether or not Azure DevOps is in play.
 
-The boundary between the first two is the forge: everything in `terylon-git` needs git and nothing more. That is why the review pipeline is split — `code-review` and `code-reviewer` are local, `review-pr` and `pr-reviewer` carry the findings to ADO.
+The boundary between the first two is the forge: everything in `terylon-git` needs git and nothing more. That is why the review pipeline is split — `code-review` and `code-reviewer` are local, `review-pr` and `pr-reviewer` carry the findings to ADO. `terylon-test` splits on the same seam: `verify-test-plan` needs a shell and a repository, `update-pr-checklist` needs Azure DevOps and so lives in `terylon-devops` with the rest of it.
 
 Component layout and the full dispatch chain: `plugins/CLAUDE.md`.
 
