@@ -1,8 +1,11 @@
-# Working artifacts from brainstorming / planning — local, not distributed
+# Working artifacts — local, not distributed
+# docs/terylon/ is the terylon working tree (intake, specs, plans, ledgers);
+# docs/superpowers/ is the superpowers scratch area when those skills run directly.
+docs/terylon/
 docs/superpowers/
 
-# Isolated worktrees created by the create-workspace skill
-.worktrees/
+# Isolated worktrees — created by the create-workspace skill and by native worktree tooling
+.claude/worktrees/
 
 # Local settings override — used to point the marketplace at a feature branch
 # during development. Never commit it; settings.json is the shared one.

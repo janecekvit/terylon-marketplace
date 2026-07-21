@@ -63,7 +63,7 @@ It defaults the branch to `feat/<slug>` and detects the base branch from the rep
 
 Isolation matters when the review must apply **the reviewed branch's own conventions** — its `CLAUDE.md` and any repo-local rule files — rather than whatever your current checkout happens to carry. Read those files from the worktree at review time.
 
-The shell working directory resets to the repo root after each command, so refer to the worktree by its repo-root-relative path and run git with `git -C .worktrees/<slug> …`. Never hard-code an absolute machine path.
+The shell working directory resets to the repo root after each command, so refer to the worktree by its repo-root-relative path and run git with `git -C .claude/worktrees/<slug> …`. Never hard-code an absolute machine path.
 
 ### Step 2 — Candidate gathering (the fan-out)
 

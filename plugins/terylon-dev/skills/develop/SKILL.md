@@ -17,7 +17,7 @@ It is a **skill and not an agent** for two reasons: it carries the slash command
 ## Usage
 
 ```
-/terylon-dev:develop <item> [<item> …] [--auto | --dry-run] [--here]
+/terylon-dev:develop <item> [<item> …] [--auto | --dry-run] [--here] [--no-downgrade]
 ```
 
 An `<item>` is either an **Azure DevOps work item URL** (`dev.azure.com/{org}/{project}/_workitems/edit/<id>`), which is fetched and turned into a seed-spec, or a **prose description**, which becomes the seed directly.
@@ -27,6 +27,7 @@ An `<item>` is either an **Azure DevOps work item URL** (`dev.azure.com/{org}/{p
 - `--dry-run` — stop after Gate 1 (plan only, no code).
 - `--auto` — skip the *pauses* at the gates; `leader` runs the loop on its own. The git rules still hold.
 - `--here` — stay in the current checkout instead of an isolated worktree. Use only when you are already on the intended feature branch.
+- `--no-downgrade` — turn off the spend-reactive downgrade. `leader` never lowers effort or model for spend; every agent runs at full tier. Use it when you want maximum quality regardless of cost. Without it, `leader` proposes a downgrade at a spend threshold (and, under `--auto`, applies it); `--no-downgrade` wins if combined with `--auto`.
 
 ## Prerequisites
 
@@ -75,12 +76,19 @@ Returns are handled **as they arrive**, not at a barrier. Waiting for the slowes
 
 ### 1. Route
 
-Classify the request first:
+Classify the request first — three routes, and the classification decides which gates run:
 
-- **Trivial one-line edit** (an obvious, single-file, low-risk change) → skip planning, go straight to the build hop with a one-task plan. Gate 1 is skipped **only** on this route.
-- **Anything non-trivial** → the full chain below.
+| Route | When | Planner | Gate 1 |
+|---|---|---|---|
+| **Trivial** | an obvious, single-file, low-risk edit | skip | **skip** |
+| **Documentation** | a change with **nothing to execute** — prose, config, or instructions across `SKILL.md` / agent / rule / `README` files; no runtime behaviour and no test surface | skip | **keep** |
+| **Full chain** | anything with code to write and test | run | keep |
 
-**Say which route you took and why, in one line, before acting on it.** The trivial route skips the plan gate, so a misclassification silently removes the run's only checkpoint — and the user finds out from what never arrives, not from anything the run said. Announcing it costs a line and makes the skip contestable.
+- **Trivial** → skip planning, go straight to the build hop with a one-task plan.
+- **Documentation** → skip the **planner**: the seed-spec is the plan, because a planner drawing a design and a test-first plan for work with nothing to run buys a plan longer than the documents it edits. Make the edits directly, then hold **Gate 1 over the complete diff** (not a planner's plan) before anything is committed, and still run the phase-3 whole-branch review (`code-reviewer`) afterwards. Gate 1 stays because changing the instructions the pipeline itself obeys is exactly the kind of change that needs a human's eyes.
+- **Full chain** → the full pipeline below.
+
+**Say which route you took and why, in one line, before acting on it.** Two of the three routes change which gates run — the trivial route drops Gate 1, the documentation route drops the planner — so a misclassification silently removes a checkpoint or spends the pipeline's most expensive tier on work with nothing to test. The user finds out from what never arrives, not from anything the run said. Announcing it costs a line and makes the choice contestable.
 
 **Several work items fan out.** Each gets its own seed-spec, its own worktree, and its own `leader`, and the leaders run concurrently — see *Fan-out* below. Never take the first item and drop the rest.
 
@@ -114,10 +122,24 @@ URLs and prose blocks may be mixed in one invocation.
 
 #### Per item
 
-- **ADO URL:** fetch the work item via the `fetch-work-item` recipe from the `ado-mcp` engine and write a seed-spec to `docs/superpowers/intake/<slug>-seed.md` — title, description, acceptance criteria, links.
+- **ADO URL:** fetch the work item via the `fetch-work-item` recipe from the `ado-mcp` engine and write a seed-spec to `docs/terylon/intake/<slug>-seed.md` — title, description, acceptance criteria, links.
 - **Prose description:** write the prose to that same file as the seed.
 
 Derive `<slug>` from the item's topic and keep it consistent through the run. **Slugs must be unique across the run** — two items whose topics slugify the same way would share a seed-spec, which silently merges two builds into one. Disambiguate with the work item id (`<slug>-116`) or an ordinal, and say that you did.
+
+#### Artifact layout
+
+Every run's working files live under `docs/terylon/` — the terylon-owned working tree, gitignored (local, not distributed). This is terylon's own directory, not the superpowers scratch area:
+
+```text
+docs/terylon/
+├── intake/      <slug>-seed.md        the approved seed-spec (this skill)
+├── specs/       <slug>-grounding.md   the one-per-work-item grounding map (planner)
+│                <slug>-design.md      the design (planner)
+├── plans/       <slug>.md             the implementation plan (planner)
+├── ledgers/     <slug>-ledger.md      leader loop state
+└── monitoring/  <session>-tokens.md   per-run token spend (measure-token-spend, Gate 3)
+```
 
 ### 3. Gate 0 — interactive intake
 
@@ -127,13 +149,13 @@ Result: the **approved seed-spec**, the input contract for `leader`.
 
 ### 4. Workspace
 
-By default, ensure an isolated worktree: invoke **`create-workspace "<slug>"`** (from `terylon-git`, loaded by name). It branches `feat/<slug>` off the detected integration branch into `.worktrees/<slug>`, and no-ops when you are already inside an isolated worktree.
+By default, ensure an isolated worktree: invoke **`create-workspace "<slug>"`** (from `terylon-git`, loaded by name). It branches `feat/<slug>` off the detected integration branch into `.claude/worktrees/<slug>`, and no-ops when you are already inside an isolated worktree.
 
 `--here` skips this step. Do not hand-roll your own isolation.
 
 ### 5. Dispatch `leader`
 
-Dispatch **`Agent(terylon-dev:leader)`** with **paths** — seed-spec, ledger, the `--auto` flag. Never send file contents in the prompt.
+Dispatch **`Agent(terylon-dev:leader)`** with **paths** — seed-spec, ledger, the `--auto` flag, and the `--no-downgrade` flag if set. Never send file contents in the prompt.
 
 Handle the return:
 
@@ -141,10 +163,17 @@ Handle the return:
 |---|---|
 | `NEEDS_CLARIFICATION <questions>` | Put them to the user via `AskUserQuestion` (one at a time), write the answers into the seed-spec, re-dispatch `leader`. |
 | `AWAITING_APPROVAL <path> <what>` | **Gate 1** — show the user the artifact's contents and wait for approval or edits. Once approved, re-dispatch `leader` with the approved artifact. This can arrive **mid-build**, not only after the first plan: a review finding that invalidates the design sends `leader` back to `planner`, and a materially changed plan returns here rather than proceeding on a plan the user never saw. Say which finding forced it. |
+| `AWAITING_APPROVAL <ledger> reduce effort/model` | **Spend gate** — `leader` proposes lowering effort/model because the run's spend crossed the threshold. Show the user the proposed change and the number that triggered it, and ask yes/no. On yes, re-dispatch `leader` with the downgrade in effect; on no, re-dispatch to continue at the current tier. Never appears under `--no-downgrade`, and under `--auto` `leader` applies it without returning here. |
 | `BUILD_COMPLETE <ledger>` | Continue to step 6. |
 | `BLOCKED <reason>` | Show the reason to the user and ask how to proceed. |
 
 **Gate 1 is the highest-leverage gate** — spec and design failures are the largest and least recoverable class. Do not move past it without genuine approval. `--dry-run` **stops here**.
+
+#### Batch answers before re-dispatching
+
+A `leader` **resume replays a growing transcript** — `leader` carries the session's worst cache-write ratio for exactly this reason, because each continuation rewrites everything before it. **The cost is per resume, not per answer.** So when a return needs several answers — every question in a `NEEDS_CLARIFICATION`, every edit at a Gate — ask them one message at a time as the tools require, but **fold all the answers into the seed-spec and re-dispatch `leader` once.** Never re-dispatch after each single ruling.
+
+This is orthogonal to the fan-out rule below: across *different* work items you host each gate as it arrives and never barrier; within *one* leader's return you batch the answers it asked for before resuming it.
 
 ### 6. Gate 3 — finish
 
@@ -155,6 +184,10 @@ Invoke **`superpowers:finishing-a-development-branch`**. For an Azure DevOps PR:
 3. Generate the PR body with **`write-pr-description`** (from `terylon-devops`).
 
 **Require explicit consent before every commit, push, and PR** — consent for one operation is not consent for the next. **Never merge to the default branch yourself.** `--auto` may skip the *pause*, not these rules.
+
+#### Report the run's token spend
+
+After the build completes, invoke **`measure-token-spend`** (from `terylon-metrics`, loaded by name) for the current session and write its report to `docs/terylon/monitoring/<session>-tokens.md`, surfacing the per-tier summary in one line. It reads the run's transcripts **off-context**, so the report costs almost nothing to produce. This is the monitoring that lets the next change be judged against a number rather than an impression — the point of aiming the pipeline's spend in the first place. It runs under `--auto` too; there is nothing to consent to, since it only reads.
 
 #### Offering the deeper review
 
@@ -177,7 +210,7 @@ More than one work item runs the whole chain once per item, with the leaders con
 
 ### State is per item, all the way down
 
-Every item carries its own `<slug>`, and every path derives from it — `docs/superpowers/intake/<slug>-seed.md`, its ledger, its worktree, its branch. Two runs must never share a seed-spec or a ledger; that is how an answer meant for one story ends up steering another.
+Every item carries its own `<slug>`, and every path derives from it — `docs/terylon/intake/<slug>-seed.md`, its ledger at `docs/terylon/ledgers/<slug>-ledger.md`, its worktree, its branch. Two runs must never share a seed-spec or a ledger; that is how an answer meant for one story ends up steering another.
 
 ### Sequential intakes, concurrent builds
 
@@ -215,6 +248,9 @@ The same goes for every status line, plan, and finding you surface: say which it
 - **Hand-rolled isolation.** Use `create-workspace`, or `--here`.
 - **Committing to the default branch.** Never.
 - **Over-decomposing trivial work.** A genuine one-line change takes the trivial route.
+- **Running the full chain on documentation.** A change with nothing to execute takes the documentation route: no planner, Gate 1 falls on the diff. A planner's plan for doc work is longer than the docs it edits.
+- **Re-dispatching a leader once per answer.** A resume rewrites the whole transcript, so the cost is per resume. Gather every answer a return needs and re-dispatch once.
+- **Downgrading without consent.** Outside `--auto`, `leader` proposes a spend downgrade and waits at the spend gate; it never lowers effort or model on its own. Under `--no-downgrade` it never proposes one at all.
 - **Taking the first work item and dropping the rest.** Several items fan out; they are not a queue you may silently truncate.
 - **Splitting a prose item on its bullets.** Only `---` splits. `implement the uploader with: retry, backoff, logging` is one story whose scope happens to be a list.
 - **Merging items across a `---`.** The separator is the user's statement of intent, not a hint to weigh against how related the items look.
@@ -235,3 +271,7 @@ The same goes for every status line, plan, and finding you surface: say which it
 7. **Fan-out returns stream:** with one item's plan ready while the other is still planning, Gate 1 for the ready one is hosted immediately rather than after both finish.
 8. **`--here` with two items is refused**, not run.
 9. **Decomposition:** three prose blocks separated by `---` yield three items; one prose block containing a three-bullet list yields **one**; a mix of two URLs and one prose block yields three. The count is stated before any workspace is created. Eleven items are refused with a batching proposal; six draw a confirmation first.
+10. **Documentation route:** a change touching only `SKILL.md` / agent / rule / `README` files takes the documentation route — no `planner`, no `design.md`/`plan.md`, Gate 1 falls on the diff, and the phase-3 `code-reviewer` still runs. The route is announced. A three-document change does not produce a plan longer than the documents.
+11. **Batched resume:** a single leader return that raises several questions is answered in full and re-dispatched **once**, not re-dispatched after each answer.
+12. **Token-spend report:** at Gate 3 the run invokes `measure-token-spend` (from `terylon-metrics`) and writes `docs/terylon/monitoring/<session>-tokens.md` with per-tier and per-agent totals, so a follow-up run can be judged against a number.
+13. **Spend gate:** past the downgrade threshold without `--auto` or `--no-downgrade`, `leader` returns `AWAITING_APPROVAL … reduce effort/model` and lowers no tier until the user says yes; under `--auto` it applies and records the downgrade; under `--no-downgrade` it never proposes one.

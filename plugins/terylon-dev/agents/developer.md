@@ -15,7 +15,7 @@ You are dispatched at depth 1 by the main-thread orchestrator's SDD loop. You ru
 
 ### Input contract
 
-- **Input:** a task brief from the SDD dispatch — the single plan task to implement (goal + in-scope files + acceptance criteria as test cases), the plan/spec paths for reference, and a **report-file path** the controller wants the full write-up at.
+- **Input:** a task brief from the SDD dispatch — the single plan task to implement (goal + in-scope files + acceptance criteria as test cases), the plan/spec and **grounding-map** paths for reference, and a **report-file path** the controller wants the full write-up at.
 - **Reference, don't re-derive:** the plan and spec are durable file artifacts. Read them at their paths; do not expect them pasted into the brief, and do not paste them back.
 
 ---
@@ -30,7 +30,7 @@ Follow the `test-driven-development` skill. For the one task in your brief:
 4. **Commit.** Commit the task's change per the Git workflow rules below.
 5. **Self-review.** Re-read your own diff against the acceptance criteria and the target repo conventions before reporting.
 
-Use `Agent(Explore)` (built-in, read-only, one-shot) to understand unfamiliar code, existing patterns, and integration points **before** editing. Parallelize Explore only across genuinely independent areas; keep coupled code edits sequential. Returns from Explore are consumed by you, not the user — keep them for grounding, do not paste them into your report.
+**Read the grounding map first.** Your brief cites a grounding map (`docs/terylon/specs/<slug>-grounding.md`) — the codebase reading the planner did **once** for the whole work item: files, modules, patterns, integration points, test conventions. Read it before anything else. Dispatch `Agent(Explore)` (built-in, read-only, one-shot) **only for what the map does not cover** — an area your task touches that it never mapped — and say in your report why the map was insufficient. A build of N tasks must not spawn N `Explore` agents over the same codebase; the map exists so it does not. Parallelize Explore only across genuinely independent areas; keep coupled code edits sequential. Returns are yours for grounding — do not paste them into your report.
 
 ---
 

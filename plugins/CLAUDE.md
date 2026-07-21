@@ -216,18 +216,22 @@ For ADO mechanics, `ado-mcp` (terylon-devops) is the canonical engine: it owns a
 | Slug | Audience | Dependencies |
 |---|---|---|
 | `terylon-git` | any git repository — no forge, no MCP server | none |
+| `terylon-metrics` | any repository wanting to measure a Claude Code run | none |
 | `terylon-devops` | Azure DevOps layer — everyone on ADO | `terylon-git` |
 | `terylon-product` | product owner / PM | `terylon-devops` |
-| `terylon-dev` | developers | `terylon-git`, `terylon-devops`, `superpowers` |
+| `terylon-dev` | developers | `terylon-git`, `terylon-devops`, `terylon-metrics`, `superpowers` |
 | `terylon-test` | anyone holding a checklist that decides something | `terylon-devops` |
 
 `terylon-product` reaches `terylon-git` transitively through `terylon-devops`. `terylon-dev` declares it directly, because `leader` dispatches `code-reviewer` whether or not Azure DevOps is in play.
+
+`terylon-metrics` is the second dependency-free leaf beside `terylon-git`: it needs neither git nor a forge, only a shell and the local session transcripts. `terylon-dev` declares it so `develop` can report a run's token spend at Gate 3 via `measure-token-spend`; any repository can also enable it alone.
 
 ### What lives where
 
 | Plugin | Skills | Agents |
 |---|---|---|
 | `terylon-git` | `create-workspace`, `code-review`, `delegate-to-repo-agents` | `code-reviewer` |
+| `terylon-metrics` | `measure-token-spend` | — |
 | `terylon-devops` | `ado-mcp`, `review-pr`, `write-pr-description`, `address-pr-comments`, `update-pr-checklist` | `pr-reviewer` |
 | `terylon-product` | `create-user-story`, `create-feature` | — |
 | `terylon-dev` | `develop` | `leader`, `planner`, `developer`, `debugger`, `refactorer`, `security-reviewer`, `performance-reviewer`, `architecture-reviewer`, `edge-case-reviewer` |

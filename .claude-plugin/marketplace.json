@@ -24,6 +24,19 @@
       ]
     },
     {
+      "name": "terylon-metrics",
+      "source": "./plugins/terylon-metrics",
+      "description": "Claude Code run metrics — per-agent, per-tier token-spend measurement read from a session's own transcripts. No git, forge, or MCP dependency.",
+      "category": "general",
+      "keywords": [
+        "claude-code",
+        "metrics",
+        "tokens",
+        "measurement",
+        "observability"
+      ]
+    },
+    {
       "name": "terylon-devops",
       "source": "./plugins/terylon-devops",
       "description": "Azure DevOps layer — ADO mechanics, PR review and description, comment handling. Adds the forge transport on top of terylon-git.",
@@ -51,7 +64,7 @@
     {
       "name": "terylon-dev",
       "source": "./plugins/terylon-dev",
-      "description": "Developer pipeline — from a user story to implemented, tested code through plan → build (TDD) → finish, with an autonomous leader agent and parallel review lenses. Requires terylon-git, terylon-devops and superpowers.",
+      "description": "Developer pipeline — from a user story to implemented, tested code through plan → build (TDD) → finish, with an autonomous leader agent and parallel review lenses. Requires terylon-git, terylon-devops, terylon-metrics and superpowers.",
       "category": "role",
       "keywords": [
         "developer",
