@@ -240,7 +240,7 @@ function parsePayload(rawInput)
  * that lets the write through.
  *
  * The ancestor is not guaranteed to be in the same worktree — under the default
- * `.worktrees/<slug>` layout, walking far enough up leaves the worktree and
+ * `.claude/worktrees/<slug>` layout, walking far enough up leaves the worktree and
  * reaches the main checkout. That direction is safe: it reports `main` and the
  * write is refused. The unsafe direction would be reporting a feature branch for
  * an operation on main, which walking upward cannot produce.

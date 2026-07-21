@@ -65,6 +65,7 @@ The plugin is deliberately thin. The build phase **runs** `superpowers:subagent-
 
 - **`terylon-devops`** — the `ado` MCP server, the `ado-mcp` engine, `review-pr`, `write-pr-description`. Installed automatically.
 - **`terylon-git`** — `create-workspace`, `code-review`, `delegate-to-repo-agents`, and the `code-reviewer` agent that `leader` dispatches for the whole-branch review. Declared directly rather than relied on transitively, because `leader` uses it whether or not a pull request is in play.
+- **`terylon-metrics`** — the `measure-token-spend` skill that `develop` invokes at Gate 3 to report the run's token spend. A dependency-free leaf, declared so it installs automatically.
 - **`superpowers`** from the `claude-plugins-official` marketplace — reused skills. Requires that marketplace to be enabled.
 
 ## Setup

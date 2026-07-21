@@ -3,7 +3,7 @@ name: create-workspace
 description: >-
   Use when starting feature work that needs isolation from the current checkout — creates an
   isolated git worktree on a new branch (Terylon `feat/<name>` convention, project-local
-  `.worktrees/`), or detects existing isolation / native worktree tooling first. Self-contained;
+  `.claude/worktrees/`), or detects existing isolation / native worktree tooling first. Self-contained;
   pure git, no external dependencies.
 allowed-tools: Bash(git *), Read, Grep, Glob
 ---
@@ -12,7 +12,7 @@ allowed-tools: Bash(git *), Read, Grep, Glob
 
 Ensures feature work happens in an **isolated git worktree** on a new branch instead of in the
 current checkout. It detects existing isolation, prefers any native worktree tooling, and falls
-back to `git worktree add` into a project-local `.worktrees/` directory — then optionally runs
+back to `git worktree add` into a project-local `.claude/worktrees/` directory — then optionally runs
 setup and reports where to work. This skill is **self-contained**: it depends on nothing but git,
 so it works in any Terylon product repo regardless of whether the superpowers plugin is installed.
 It is inspired by the superpowers `using-git-worktrees` skill but reimplements the create flow with
@@ -27,7 +27,7 @@ Terylon conventions (the `feat/<name>` branch prefix) and the Claude-Code cwd-re
 - `<name>` — **required**. Feature/workspace name; sanitized to a slug for the branch and directory.
 - `--branch=<branch>` — override the branch name. Default: `feat/<slug>` (the Terylon convention).
 - `--from=<base-ref>` — base ref to branch from. Default: the detected integration branch (see Step 1).
-- `--into=<dir>` — parent directory for the worktree. Default: `.worktrees`.
+- `--into=<dir>` — parent directory for the worktree. Default: `.claude/worktrees`.
 - `--setup` — run the repo's dependency setup after creating the worktree. Default: skip (no setup).
 
 ## Workflow
@@ -55,7 +55,7 @@ Rules:
 
 - `<name>` → sanitize to a slug (lowercase, non-alphanumerics → `-`).
 - **Branch:** `--branch` if given, else `feat/<slug>`.
-- **Worktree path:** (`--into` or `.worktrees`) + `/<slug>`.
+- **Worktree path:** (`--into` or `.claude/worktrees`) + `/<slug>`.
 - **Base ref:** `--from` if given, else detect the repo's integration branch:
 
 ```bash
@@ -89,26 +89,26 @@ worktree is merged and gone, when nothing is tracking it any more.
 
 ### Step 2b — Git worktree fallback
 
-Only when no native tool is available.
+Only when no native tool is available. The fallback places worktrees under **`.claude/worktrees/`** — the same root native worktree tooling (Step 2a) uses, so a repo lands its worktrees in one place regardless of which path created them.
 
-- **Ignore safety (project-local only):** verify `.worktrees/` is ignored before creating anything:
+- **Ignore safety (project-local only):** verify `.claude/worktrees/` is ignored before creating anything:
 
   ```bash
-  git check-ignore -q .worktrees/ 2>/dev/null
+  git check-ignore -q .claude/worktrees/ 2>/dev/null
   ```
 
-  **The trailing slash matters.** A `.gitignore` entry of `.worktrees/` matches directories only, so
-  `git check-ignore .worktrees` (no slash) reports *not ignored* even when the entry is present —
+  **The trailing slash matters.** A `.gitignore` entry of `.claude/worktrees/` matches directories only, so
+  `git check-ignore .claude/worktrees` (no slash) reports *not ignored* even when the entry is present —
   and the skill would then offer to add a line that is already there.
 
-  If it is **not** ignored: add `.worktrees/` to `.gitignore`, then commit that change. **Commit
+  If it is **not** ignored: add `.claude/worktrees/` to `.gitignore`, then commit that change. **Commit
   caveat:** committing requires the user's explicit consent — surface the `.gitignore` change and
   ask for the go-ahead rather than committing silently.
 
 - **Create the worktree:**
 
   ```bash
-  git worktree add .worktrees/<slug> -b <branch> <base-ref>
+  git worktree add .claude/worktrees/<slug> -b <branch> <base-ref>
   ```
 
 - **Permission / sandbox fallback:** if `git worktree add` fails with a permission/sandbox error,
@@ -140,8 +140,8 @@ normalized branch name goes unnoticed until cleanup fails.
 
 - **cwd-reset:** in Claude Code the shell working directory is reset to the repo root (where Claude
   Code launches) after each command, so `cd <worktree>` **does not persist** across Claude Code tool
-  calls. The worktree lives under the repo root at `.worktrees/<slug>`, so refer to it by that
-  **repo-root-relative** path and run git with `git -C .worktrees/<slug>` — never hardcode an
+  calls. The worktree lives under the repo root at `.claude/worktrees/<slug>`, so refer to it by that
+  **repo-root-relative** path and run git with `git -C .claude/worktrees/<slug>` — never hardcode an
   absolute machine path or rely on a persisted `cd`.
 - **Fighting native tooling:** never run `git worktree add` when a native worktree tool exists
   (Step 2a) — it creates state the harness can't track.
@@ -150,20 +150,20 @@ normalized branch name goes unnoticed until cleanup fails.
   is also the one that breaks cleanup — the tool still tracks the old name. Report the real name and
   leave it alone; the convention binds Step 2b, not Step 2a.
 - **Nesting:** never create a worktree when Step 0 detected existing isolation — report and stop.
-- **Skipping the ignore check:** the project-local `.worktrees/` must be gitignored **before**
+- **Skipping the ignore check:** the project-local `.claude/worktrees/` must be gitignored **before**
   creating it, or its contents pollute `git status`.
 - **Forced setup:** don't run a full build or baseline test suite in large repositories unless
   `--setup` is passed or the user asks.
 
 ## Verification
 
-- **Normal checkout create:** in a normal checkout, the skill creates `.worktrees/<slug>` on branch
+- **Normal checkout create:** in a normal checkout, the skill creates `.claude/worktrees/<slug>` on branch
   `feat/<slug>` from the detected base; `git worktree list` shows the new worktree.
 - **Already-isolated detection:** run from inside an existing linked worktree → the skill detects
   isolation (Step 0) and stops without creating a nested worktree.
-- **Ignore safety:** in a repo where `.worktrees/` is not yet ignored, the skill adds it to
+- **Ignore safety:** in a repo where `.claude/worktrees/` is not yet ignored, the skill adds it to
   `.gitignore` and surfaces the change for commit (does not commit silently). Verify the check
-  itself with `git check-ignore -q .worktrees/` in a repo that *does* ignore it — it must exit 0.
+  itself with `git check-ignore -q .claude/worktrees/` in a repo that *does* ignore it — it must exit 0.
   Without the trailing slash it exits 1 even when the entry is present, which is the failure this
   check is written to avoid.
 - **Flags honored:** `--branch`, `--from`, `--into` are respected; without `--setup`, no dependency

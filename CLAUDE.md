@@ -10,7 +10,7 @@ Internal Claude Code plugin marketplace distributed into product repositories th
 /.claude-plugin/marketplace.json   root manifest
 /plugins/<slug>/                   one directory per plugin
 /plugins/CLAUDE.md                 authoring conventions — read before editing a plugin
-/docs/superpowers/                 working spec and plans (gitignored)
+/docs/terylon/                     terylon working tree: intake, specs, plans, ledgers (gitignored)
 ```
 
 **All of `/plugins` is the distribution boundary.** Anything inside is consumed by other repos; anything outside stays local.
@@ -23,10 +23,13 @@ terylon-git                       git only — no forge, no MCP server
 │   ├── terylon-product           + user stories, Feature specs
 │   └── terylon-test              + verifying a test plan against the artifact
 └── terylon-dev                   + the build pipeline
+    ├── terylon-metrics           token-spend measurement (no deps; usable standalone)
     └── superpowers               (claude-plugins-official)
 ```
 
 `terylon-dev` declares `terylon-git` directly as well as through `terylon-devops`, because its `leader` dispatches `code-reviewer` whether or not Azure DevOps is in play.
+
+`terylon-metrics`, like `terylon-git`, is a leaf with no dependencies and can be enabled on its own. `terylon-dev` pulls it so `develop` can report a run's token spend at Gate 3 (`measure-token-spend`).
 
 The boundary between the first two is the forge: everything in `terylon-git` needs git and nothing more. That is why the review pipeline is split — `code-review` and `code-reviewer` are local, `review-pr` and `pr-reviewer` carry the findings to ADO. `terylon-test` splits on the same seam: `verify-test-plan` needs a shell and a repository, `update-pr-checklist` needs Azure DevOps and so lives in `terylon-devops` with the rest of it.
 
