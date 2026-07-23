@@ -178,6 +178,24 @@ table where it clarifies>
 - [ ] <…>
 ```
 
+**A criterion states an outcome. It never names a component, a file path, a command or a flag.**
+Those are implementation choices, and a criterion that names one goes stale the moment the
+implementation moves — which it will, because the criteria are written before the work.
+
+```markdown
+Wrong:  - [ ] the tester invokes measure-token-spend and writes docs/terylon/monitoring/<session>-tokens.md
+Right:  - [ ] after a verification run, the run's token spend is reported per tier and written to the session's monitoring file
+```
+
+This is not hypothetical. A story whose criterion named *the tester* as the caller was
+contradicted by the very pull request implementing it, because the call was placed in a skill
+instead — so the criterion was a defect while the code was correct, and a reader had no way to
+tell which of the two to trust.
+
+**The procedure belongs in the pull request's test plan, authored by whoever did the build.**
+Your criteria say what must be true; the plan says what was run to show it. Keep the two
+shapes apart and neither list duplicates the other.
+
 `<plugin-version>` is read at runtime from `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json`. `<model>` is the model the run executes under (e.g. `opus-4.8`) — the skill knows it from itself, as no environment variable exposes it. `<effort>` comes from the `CLAUDE_EFFORT` environment variable (e.g. `xhigh`); **when `CLAUDE_EFFORT` is unset, omit the entire ` · <model> / <effort>` segment.** The substring `Generated with [Claude Code]` is the sentinel for prior-run detection — everything variable sits after that stable prefix.
 
 **Formatting rules** (the same ADO-markdown rules `ado-mcp` documents in reference §17 — load
@@ -248,3 +266,9 @@ For `--dry-run`: label the block "(dry-run — nothing will be created)".
    checkboxes**, not plain bullets. Equivalently, re-fetch via `ado-mcp` `fetch-work-item` and confirm
    `multilineFieldsFormat["System.Description"]` is `"markdown"`. If they render as plain bullets, the
    field was created as HTML — recreate with `format: "Markdown"` (see Common mistakes).
+6. **Criteria state outcomes, not implementations.** Read every generated criterion back: none
+   names a component, a file path, a command or a flag. A criterion saying "the tester invokes
+   `measure-token-spend` and writes `docs/…/<session>-tokens.md`" is a defect even when it is
+   true on the day it is written, because the next refactor moves the call and the criterion
+   then contradicts working code. The equivalent outcome — "the run's token spend is reported
+   per tier and written to the session's monitoring file" — survives the move.

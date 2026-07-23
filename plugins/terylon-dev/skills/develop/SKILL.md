@@ -5,7 +5,7 @@ description: >-
   description, or several prose items separated by --- on its own line. Several items fan out into
   concurrent leaders, one workspace each. Hosts the human gates and dispatches the leader agent, which
   owns the plan → build (TDD) → finish loop. Optional flags --auto, --dry-run, and --here.
-allowed-tools: Bash(git *), Read, Grep, Glob, Write, Agent, AskUserQuestion, mcp__ado__*, mcp__plugin_terylon-devops_ado__*
+allowed-tools: Bash(git *), Bash(node *), Read, Grep, Glob, Write, Agent, AskUserQuestion, mcp__ado__*, mcp__plugin_terylon-devops_ado__*
 ---
 
 # develop — entry point of the development pipeline

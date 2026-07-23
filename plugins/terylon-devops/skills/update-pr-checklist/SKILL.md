@@ -56,7 +56,7 @@ write
 
 There is no step 3, and that is deliberate: this skill has **no `Agent` tool** and dispatches nothing. The checking happens in the caller's context, under whatever discipline the caller carries — none of which would hold here.
 
-**Acceptance criteria on a work item are out of scope.** They are the same kind of list with the same problem, and a later skill may well want them; this one stays on pull requests so the two do not blur into a thing that half-handles both.
+**Acceptance criteria on a work item are handled by the sibling skill `update-work-item-checklist`, not here.** They are the same kind of list with the same problem, but they live on a different object in a different field — so they get their own transport rather than blurring this one into a thing that half-handles both.
 
 ## Workflow
 
@@ -164,7 +164,17 @@ The thread has no length limit, which is why the detail belongs there and not in
 
 The description is capped at **4000 characters**, counted over the whole field.
 
-Measure with `wc -m`, never `wc -c`: the latter counts bytes, and a checklist carrying arrows, dashes and emoji measures longer in bytes than it is, so trimming against it cuts material that would have fitted.
+**Count code points, and do not trust `wc -m` to do it.** A checklist carrying arrows, dashes and emoji measures longer in bytes than it is, so trimming against a byte count cuts material that would have fitted.
+
+`wc -c` counts bytes by definition. **`wc -m` counts bytes too whenever the locale is not UTF-8** — with `LANG` and `LC_ALL` unset it falls back to the C locale, where a verification run of this skill measured a four-byte emoji as 4 and returned 3246 for a string of 3243 code points. The error is in the safe direction, so it will not produce an over-cap write; it will silently trim content that fitted, which is the failure this paragraph exists to prevent.
+
+Measure with something locale-independent:
+
+```bash
+node -e "process.stdout.write(String([...require('fs').readFileSync(0,'utf8')].length))" < description.md
+```
+
+`wc -m` is correct only after confirming a UTF-8 locale (`locale charmap`), which is not worth depending on.
 
 The rewrite is usually **longer** than what it replaces, since group headings and per-item reasons are added. When it does not fit, cut in this order:
 
@@ -220,10 +230,10 @@ This skill reads the repository to verify it and writes only to the PR. No commi
 - **Putting the evidence in the description.** It belongs in the thread, which has no length limit and does not push the plan over one.
 - **Writing the description before the thread.** The plan says "evidence in the thread below"; write it first and it points at nothing.
 - **Opening a new thread on every run.** Match the prior-run sentinel and reply instead.
-- **Trimming by byte count.** The cap is characters; multi-byte punctuation makes bytes overstate the length.
+- **Trimming by byte count.** The cap is code points; multi-byte punctuation makes bytes overstate the length. `wc -m` is not a way out — outside a UTF-8 locale it returns bytes as well.
 - **Losing `format: "Markdown"` on the write.** The field defaults to HTML, in which `- [ ]` stops being a checkbox — the whole point of writing there.
 - **Renaming a class in a heading.** *Not verifiable here* covers any missing capability; naming one cause in the heading tells the reader the others belong elsewhere.
-- **Reaching for a work item.** Acceptance criteria are out of scope here. Say so rather than half-handling them.
+- **Reaching for a work item.** Acceptance criteria live in the sibling `update-work-item-checklist`. Point at it rather than half-handling them here.
 
 ## Verification
 

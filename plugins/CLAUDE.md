@@ -209,6 +209,22 @@ put it in the lowest plugin that can host it, and let the transports depend upwa
 
 For ADO mechanics, `ado-mcp` (terylon-devops) is the canonical engine: it owns all Azure DevOps MCP recipes in `skills/ado-mcp/references/ado-mcp.md`, and every transport skill in `terylon-devops`, `terylon-product` and `terylon-dev` delegates to it (same-plugin skills via a `${CLAUDE_PLUGIN_ROOT}/skills/ado-mcp/references/ado-mcp.md` Read; cross-plugin skills by loading `ado-mcp` by name). `terylon-git` is deliberately absent from that list — it has no forge access at all. The footer/version is always resolved by the calling skill, never by `ado-mcp`.
 
+### Criteria state outcomes, test plans state procedures
+
+Two checklists travel through this marketplace, and they are **different shapes of sentence** rather than two copies of one list. Writing them in the same shape is what makes them feel duplicated, and it is the author's fault rather than the reader's.
+
+| | Acceptance criteria (work item) | Test plan (pull request) |
+|---|---|---|
+| Sentence shape | an **outcome** — "a ticked box means something" | a **procedure and its expected result** — "run X, expect Y" |
+| Authored by | `create-user-story`, before the work | the build, rendered by `write-pr-description` |
+| May name a component, path or command? | **never** — it goes stale the moment the implementation moves | yes, that is the point |
+| Earns its tick | **derived** — a covering plan item executed and passed | **executed** — the run passed |
+| Checked for coverage by | `planner` at design time, `tester` after the build | `tester` |
+
+`planner` is the **only conversion point**: it turns each criterion into task test cases and emits a criterion-to-task coverage map, so a criterion nothing verifies is caught before any code exists. `tester` executes the plan and never tests a criterion directly — a criterion with no covering plan item comes back as a reported gap, never closed by an improvised check, because a tester that authors the test and then runs it has marked its own homework.
+
+The two write-backs carry different content for the same reason: the pull request thread gets the procedure evidence, the work-item comment gets the coverage verdict and a pointer to the thread.
+
 ---
 
 ## Plugin overview
@@ -220,11 +236,11 @@ For ADO mechanics, `ado-mcp` (terylon-devops) is the canonical engine: it owns a
 | `terylon-devops` | Azure DevOps layer — everyone on ADO | `terylon-git` |
 | `terylon-product` | product owner / PM | `terylon-devops` |
 | `terylon-dev` | developers | `terylon-git`, `terylon-devops`, `terylon-metrics`, `superpowers` |
-| `terylon-test` | anyone holding a checklist that decides something | `terylon-devops` |
+| `terylon-test` | anyone holding a checklist that decides something | `terylon-devops`, `terylon-metrics` |
 
 `terylon-product` reaches `terylon-git` transitively through `terylon-devops`. `terylon-dev` declares it directly, because `leader` dispatches `code-reviewer` whether or not Azure DevOps is in play.
 
-`terylon-metrics` is the second dependency-free leaf beside `terylon-git`: it needs neither git nor a forge, only a shell and the local session transcripts. `terylon-dev` declares it so `develop` can report a run's token spend at Gate 3 via `measure-token-spend`; any repository can also enable it alone.
+`terylon-metrics` is the second dependency-free leaf beside `terylon-git`: it needs neither git nor a forge, only a shell and the local session transcripts. `terylon-dev` and `terylon-test` both declare it — `develop` reports a run's token spend at its Gate 3 and `test` reports the verification run's spend at its end, both through `measure-token-spend`; any repository can also enable it alone.
 
 ### What lives where
 
@@ -232,10 +248,10 @@ For ADO mechanics, `ado-mcp` (terylon-devops) is the canonical engine: it owns a
 |---|---|---|
 | `terylon-git` | `create-workspace`, `code-review`, `delegate-to-repo-agents` | `code-reviewer` |
 | `terylon-metrics` | `measure-token-spend` | — |
-| `terylon-devops` | `ado-mcp`, `review-pr`, `write-pr-description`, `address-pr-comments`, `update-pr-checklist` | `pr-reviewer` |
+| `terylon-devops` | `ado-mcp`, `review-pr`, `write-pr-description`, `address-pr-comments`, `update-pr-checklist`, `update-work-item-checklist` | `pr-reviewer` |
 | `terylon-product` | `create-user-story`, `create-feature` | — |
 | `terylon-dev` | `develop` | `leader`, `planner`, `developer`, `debugger`, `refactorer`, `security-reviewer`, `performance-reviewer`, `architecture-reviewer`, `edge-case-reviewer` |
-| `terylon-test` | `verify-test-plan`, `run-build-and-tests`, `run-ui-flows` | `tester` |
+| `terylon-test` | `test`, `verify-test-plan`, `run-build-and-tests`, `run-ui-flows` | `tester` |
 
 The boundary between the first two is the forge: everything in `terylon-git` needs git and nothing more, everything in `terylon-devops` touches Azure DevOps. That is why the review pipeline is split — `code-review` and `code-reviewer` are local, `review-pr` and `pr-reviewer` carry the findings to ADO.
 
@@ -263,22 +279,35 @@ The `<repo-local specialist>` branches are **not ours**. A target repository may
 
 `develop` is a skill rather than an agent because only the main thread can prompt the user. Everything below it is dispatched and reports back.
 
+### Two measured limits on dispatched agents
+
+Both were found by running this pipeline against itself rather than by reading the specification, and both make parts of the diagrams above **aspirational rather than descriptive**. Read them before trusting a fan-out drawn here.
+
+**A skill loaded by name carries instructions, not capability.** The `skills:` field lets an agent open a skill's prose; it does not hand over the tools that prose tells it to call. So **every agent must declare in its own `tools:` each tool the skills it loads will use** — the ADO namespace for an agent driving `update-pr-checklist`, `Bash(node *)` for one running `measure-token-spend`. The `tester` shipped a release documented as driving two ADO transports while declaring no ADO namespace at all, and its first real run returned `BLOCKED` for precisely that reason.
+
+**`Agent` in an agent's `tools:` did not grant nested dispatch.** Measured three times in one session — `tester` twice, `leader` once — a plugin agent dispatched through the `Agent` tool came up holding no `Agent`, no `Task` and no other dispatch tool; `leader` additionally lacked the `TodoWrite` that `subagent-driven-development` requires of its controller. The cause is **not established**, so this is a measurement and not a claim about the specification. The consequence is not small: **only the main thread was observed to hold a dispatch tool**, so wherever these files draw an agent fanning out under its own power, that step is unproven.
+
+An agent in that position **says the capability is absent, degrades to in-context work, and marks anything that needs a live fan-out unverifiable.** It does not quietly substitute the nearest available evidence — a unit fixture modelling N subagents is not a run of N subagents, and reporting it as one is the failure `terylon-test` exists to prevent.
+
 Given several work items, `develop` runs this chain once per item with the leaders **concurrent** — one seed-spec, worktree and branch each. The shape does not change; it multiplies. Gates stay on the main thread and are hosted as each leader returns, which is also why every question has to name its work item.
 
 `terylon-test` runs after all of it, on the claims rather than the code:
 
 ```
-tester (terylon-test — drives the run)
-├── update-pr-checklist (read) ....... terylon-devops; the test plan out of the PR
-├── verify-test-plan ................. engine: triage, routing, evidence
-│   └── per-claim subagents           one round; claims are independent
-│       ├── run-build-and-tests       the project's build and suite — a shell is enough
-│       ├── run-ui-flows              the interface, through browser automation
-│       └── <repo-local specialist>   conditional; capability gate below
-└── update-pr-checklist (write) ...... terylon-devops; the thread, then the rewritten plan
+test (skill, main thread — holds the write-back gate, reports token spend)
+└── tester (terylon-test — drives the run)
+    ├── update-pr-checklist (read) ......... terylon-devops; the test plan, and the work item it links
+    ├── update-work-item-checklist (read) .. terylon-devops; the acceptance criteria of that work item
+    ├── verify-test-plan ................... engine: triage, coverage, routing, evidence
+    │   └── per-claim subagents            one round; claims are independent
+    │       ├── run-build-and-tests        the project's build and suite — a shell is enough
+    │       ├── run-ui-flows               the interface, through browser automation
+    │       └── <repo-local specialist>    conditional; capability gate below
+    ├── update-pr-checklist (write) ........ terylon-devops; the thread, then the rewritten plan
+    └── update-work-item-checklist (write) . terylon-devops; the comment, then the annotated criteria
 ```
 
-Azure DevOps appears only at the ends. `update-pr-checklist` lives in `terylon-devops` because it needs ADO and nothing else does — it reads the plan and writes the answer, and it holds no `Agent`, so the verification cannot happen in its context. The agent that drives sits **above** it, which is the one place this differs from the review pipeline: `code-reviewer` is below `pr-reviewer`, so there the transport dispatches; here the caller does.
+Azure DevOps appears only at the ends, in `terylon-devops`. The two `update-*-checklist` transports read the plan and the criteria and write the answers back; they hold no `Agent`, so the verification cannot happen in their context. Two things sit above them, mirroring the development pipeline: the `tester` agent drives the run, and the `test` skill hosts the one gate a subagent cannot — consent before the write — and reports the run's token spend, exactly as `develop` and `leader` do. `code-reviewer` sits below `pr-reviewer`, so there the transport dispatches; here the caller drives and the transports only read and write.
 
 The two executors are the **execution layer**. They run the artifact and report facts — commands, exit statuses, case names, observed state — while the engine keeps the judgment about what a result means. `run-ui-flows` is separate purely because of its dependency class: a checklist walker that needs only a shell must not drag in a browser stack, so the plugin ships no `.mcp.json` for it and reports the capability as absent instead.
 
