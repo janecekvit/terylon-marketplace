@@ -43,6 +43,15 @@ Two states cannot express what verification actually produces. Classify every it
 
 The boundary between the first two is the question **"is there something to run?"** A guard hook is code: feed it a payload, read the exit. A `SKILL.md` paragraph telling an agent to announce its route has nothing to execute — the artifact is prose read by a model, and only a run of that model can show whether it complied.
 
+**Ask a second question before settling on static: does the behaviour leave a trace outside the model?** Many claims about what a component does are decidable by their consequence even though the instruction itself is prose. "The tester writes nothing before approval" is not a grep — it is a **count**: the pull request's thread count and the work item's comment count, before and after the verify phase. That is an external oracle rather than a self-report, and a claim that has one is **executed**.
+
+| The claim is about behaviour, and … | Class |
+|---|---|
+| it leaves an observable trace — a count, a file, an exit status, a provable absence | **executed** — assert the trace |
+| its only witness is the acting process reporting that it complied | static only |
+
+**Over-classifying as static is the failure mode that survives review**, because it looks like rigour and only shows up as a plan nobody could tick. A run of this skill classed "writes nothing without approval" as static-only while already holding the two counts that settled it.
+
 **Static confirmation is worth doing and worth labelling.** It catches a deleted instruction, a contradiction introduced elsewhere, a constraint missing from a persona that needs it. It cannot catch a model that reads the instruction and does something else. Reporting it as verification is the lie this skill exists to prevent.
 
 ### Routing an executed claim
@@ -61,6 +70,18 @@ Both are loaded **by name** and both report facts rather than verdicts — the c
 
 **A green suite is not coverage.** `run-build-and-tests` returns the case **names** alongside whatever counts the runner printed, and it is the names that matter here: a count can never show whether the claim's case was among them. A suite that passes without touching the behaviour under test leaves the claim unproven, and saying otherwise is the same lie in a more respectable suit.
 
+## Coverage across two lists
+
+A pull request carries a **test plan**; the work item it implements carries **acceptance criteria**. They are two lists of claims about one change, and a caller holding both — the `tester` — asks whether the plan covers the criteria. This skill owns the classification; the caller owns the mapping, because only it holds both lists.
+
+| Relationship | The criterion | What the caller does |
+|---|---|---|
+| covered | has a plan item whose `covering` bears on it | its state follows that item's result — a passed, covering plan item earns the criterion its tick |
+| **gap** | has no covering plan item | exercise it directly if it is executable; otherwise report it as a coverage gap. **Never invent a tick** for a criterion nothing exercised |
+| extra | a plan item maps to no criterion | report it — an extra check, not a defect |
+
+"Are the plan and the criteria the same?" is answered as **covered / gap / extra**, never as a yes or no. The gap is the finding that matters: a criterion the story required with nothing verifying it reads, uncorrected, as satisfied.
+
 ## Workflow
 
 ### 1. Parse and triage
@@ -71,8 +92,22 @@ Read the items. For each, decide its class and say why in one clause. Report the
 
 Some items are untestable because of how they are phrased, not because of what they claim.
 
+### An item's shape decides whether a run can ever tick it
+
+A testable item names **a run and its expected result**. An item that names an **outcome** cannot be executed however true it is, because there is nothing in it to perform.
+
+| Shape | Example | Can a run tick it? |
+|---|---|---|
+| **procedure + expected result** | "Dispatch the tester with no approval; assert the pull request's thread count and the work item's comment count are unchanged and the return is `AWAITING_WRITE_APPROVAL`" | yes |
+| **outcome** | "tester returns in two phases and writes nothing without approval" | no — nothing in it to perform |
+
+Both sentences are about the same fact. The first is a test; the second is an **acceptance criterion that wandered into a test plan**.
+
+**Return an outcome-shaped item as `untestableAsWritten` with a procedural rewrite** — never as static-only. Static-only says "we read it and it is there"; the defect here is that the item was never a test, and calling it static hides an authoring mistake behind a verification class.
+
 | As written | Testable? | Rewritten |
 |---|---|---|
+| "tester returns in two phases and writes nothing without approval" | no — an outcome, not a run | "Dispatch the tester with no approval; assert the thread and comment counts are unchanged and the return is `AWAITING_WRITE_APPROVAL`" |
 | "A read-only lens does not dispatch a writing agent" | no — needs a live pipeline | "Every persona with `disallowedTools: [Edit, Write]` carries the constraint inline and declares the skill" |
 | "The change is safe" | no — unfalsifiable | name the specific failure it must not have |
 | "Tests pass" | yes, but empty | which tests, and what did they cover that they did not before |
@@ -148,7 +183,7 @@ Both halves are load-bearing, and the second is the one that gets skipped. `outc
 ## Known limits
 
 - **Repo-local agents register from the session's own project.** A fixture repository created elsewhere never has its `.claude/agents/` loaded, so any claim about which agents get dispatched cannot be verified from a session rooted somewhere else. It needs a session whose project *is* the fixture. Classify such items as *not verifiable here* rather than approximating them.
-- **Model behaviour is not reproducible by grep.** Every claim of the form "the agent will …" is static-only from this skill's position.
+- **Model behaviour is not reproducible by grep — but its consequences often are.** A claim of the form "the agent will …" is static-only **only when it leaves no trace outside the model**. When it leaves a count, a file, an exit status or a provable absence, assert that trace and class the item *executed*. Reaching for static-only because the subject is an agent is the most common way this skill under-reports.
 - **The plan and the tester may share an author.** When the same run generated the checklist and now verifies it, nothing independent has happened. Exercise the artifact, never re-read the claim — and treat an item you cannot exercise as unverified no matter how confident the wording is.
 
 ## Common mistakes
@@ -175,3 +210,5 @@ Both halves are load-bearing, and the second is the one that gets skipped. `outc
 9. **A green suite is not coverage.** Given a claim whose behaviour no test touches, and a suite that passes, the item does **not** earn a tick: `outcome` is `passed` but `covering` names nothing bearing on the claim, and the tick gate needs both.
 10. **The side-effect contract binds this skill too.** After a *route: here* execution, `git status --porcelain` on the repository under test is unchanged for tracked files, and any ignored build output was declared before it appeared.
 11. Nothing is written: no PR update, no work item, no commit, no tracked-file change in the repository under test.
+12. **Shape is triaged, not only content.** An outcome-shaped item — "tester returns in two phases and writes nothing without approval" — comes back under `untestableAsWritten` with a **procedural** rewrite. It does **not** come back `staticOnly`, which would file an authoring defect under a verification class and leave the plan looking merely unproven rather than mis-written.
+13. **A behavioural claim with an external trace is executed.** Given "the tester writes nothing before approval", and the pull request's thread count and the work item's comment count taken before and after the verify phase, the item is classed `executed` with those counts as its `covering` — not `staticOnly` on the grounds that its subject is an agent.

@@ -78,12 +78,13 @@
     {
       "name": "terylon-test",
       "source": "./plugins/terylon-test",
-      "description": "Tester — walks a pull request's test plan, exercises what can be exercised, and reports what cannot. Separates executed from asserted so a tick means something. Requires terylon-devops.",
+      "description": "Tester — walks a pull request's test plan and its linked work item's acceptance criteria, exercises what can be exercised, reconciles the two, and reports what cannot. Separates executed from asserted so a tick means something. Requires terylon-devops and terylon-metrics.",
       "category": "role",
       "keywords": [
         "testing",
         "verification",
         "test-plan",
+        "acceptance-criteria",
         "pull-request",
         "azure-devops"
       ]

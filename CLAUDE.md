@@ -21,17 +21,17 @@ Internal Claude Code plugin marketplace distributed into product repositories th
 terylon-git                       git only — no forge, no MCP server
 ├── terylon-devops                + Azure DevOps
 │   ├── terylon-product           + user stories, Feature specs
-│   └── terylon-test              + verifying a test plan against the artifact
+│   └── terylon-test              + verifying a test plan and acceptance criteria against the artifact
 └── terylon-dev                   + the build pipeline
-    ├── terylon-metrics           token-spend measurement (no deps; usable standalone)
+    ├── terylon-metrics           token-spend measurement (no deps; pulled by terylon-dev and terylon-test)
     └── superpowers               (claude-plugins-official)
 ```
 
 `terylon-dev` declares `terylon-git` directly as well as through `terylon-devops`, because its `leader` dispatches `code-reviewer` whether or not Azure DevOps is in play.
 
-`terylon-metrics`, like `terylon-git`, is a leaf with no dependencies and can be enabled on its own. `terylon-dev` pulls it so `develop` can report a run's token spend at Gate 3 (`measure-token-spend`).
+`terylon-metrics`, like `terylon-git`, is a leaf with no dependencies and can be enabled on its own. `terylon-dev` pulls it so `develop` can report a run's token spend at Gate 3, and `terylon-test` pulls it so `test` reports the verification run's spend the same way (`measure-token-spend`).
 
-The boundary between the first two is the forge: everything in `terylon-git` needs git and nothing more. That is why the review pipeline is split — `code-review` and `code-reviewer` are local, `review-pr` and `pr-reviewer` carry the findings to ADO. `terylon-test` splits on the same seam: `verify-test-plan` needs a shell and a repository, `update-pr-checklist` needs Azure DevOps and so lives in `terylon-devops` with the rest of it.
+The boundary between the first two is the forge: everything in `terylon-git` needs git and nothing more. That is why the review pipeline is split — `code-review` and `code-reviewer` are local, `review-pr` and `pr-reviewer` carry the findings to ADO. `terylon-test` splits on the same seam: `verify-test-plan` needs a shell and a repository, while `update-pr-checklist` and `update-work-item-checklist` need Azure DevOps and so live in `terylon-devops` with the rest of it.
 
 Component layout and the full dispatch chain: `plugins/CLAUDE.md`.
 
