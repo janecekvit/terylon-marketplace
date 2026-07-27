@@ -155,6 +155,8 @@ Write with `wit_update_work_item` (`update-work-item` recipe). The field is alre
 
 Every `- [X]` left in the field must satisfy the tick gate — executed, passed, covering bears on it. Everything else is `- [ ]`, and the comment says why.
 
+**A `**Superseded**` group is preserved verbatim and never touched.** Its bullets carry no checkbox because the author withdrew those criteria; do not add one, do not tick one, and never move a live criterion into that group. Withdrawal is the author's act — your only field change is a checkbox state on a criterion that is still a claim.
+
 ### Why this skill may write `- [X]` when a generator may not
 
 `ado-mcp` §17 states the house rule and its one carve-out: a checklist uses `- [ ]` unless the skill **executed** the item, it **passed**, the run **bears on that item**, the evidence is **posted where the reader can check it**, and anything not executed stays `- [ ]`. This skill holds that carve-out for the `executed` group and nowhere else. The rule still binds every skill that *generates* acceptance criteria — `create-user-story`, `create-feature` — because generating is not executing, however sure the author feels.

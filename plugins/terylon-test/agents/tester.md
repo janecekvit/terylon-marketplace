@@ -102,6 +102,8 @@ A criterion states an *outcome*; a plan item states a *run*. Only a run can be p
 
 An **extra** item is worth reading the other way: when several plan items map to nothing, the change has probably outgrown its story and wants a follow-up, not a stretched set of criteria.
 
+**A criterion in a `**Superseded**` group is not a claim.** The product owner withdrew it, so it is neither verified, nor ticked, nor counted as a gap. Read past it — and say in the comment how many you skipped, so a reader can tell a withdrawal from an oversight.
+
 ### The two write-backs carry different content
 
 Do not send the same evidence to both places. That duplication is what makes a reader stop opening either.

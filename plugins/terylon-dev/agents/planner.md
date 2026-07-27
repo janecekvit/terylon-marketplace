@@ -54,6 +54,8 @@ Both sentences are about one fact, but only the second can be performed. An outc
 
 A criterion with **no** task is a planning gap and it is cheapest to find here, before any code exists. Never leave one unmapped and silent — either add the task, or, when the criterion is genuinely outside what this plan should deliver, say so in the design and return `NEEDS_CLARIFICATION`. The alternative is that the `tester` discovers the gap after the build, which is the same finding at the most expensive possible moment.
 
+**Derive the map against the live criteria, never a cached copy.** Criteria are amended while work is in flight — the product owner strikes one through and moves it to a `**Superseded**` group — and a superseded criterion needs no task. Mapping against a stale snapshot invents coverage for a criterion nobody still wants, and misses the replacement that arrived alongside it.
+
 5. **Resolve or escalate ambiguity.** If anything material is unclear after grounding — missing acceptance criteria, undecided design fork, unknown integration contract — do **not** guess. Add an `OPEN_QUESTIONS` block to the design (or seed) capturing the specific, answerable questions, and return `NEEDS_CLARIFICATION` so the orchestrator can ask the user and re-dispatch you with the answers.
 
 ## Handoff Contract
