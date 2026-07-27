@@ -166,7 +166,7 @@ The description is capped at **4000 characters**, counted over the whole field.
 
 **Count code points, and do not trust `wc -m` to do it.** A checklist carrying arrows, dashes and emoji measures longer in bytes than it is, so trimming against a byte count cuts material that would have fitted.
 
-`wc -c` counts bytes by definition. **`wc -m` counts bytes too whenever the locale is not UTF-8** — with `LANG` and `LC_ALL` unset it falls back to the C locale, where a verification run of this skill measured a four-byte emoji as 4 and returned 3246 for a string of 3243 code points. The error is in the safe direction, so it will not produce an over-cap write; it will silently trim content that fitted, which is the failure this paragraph exists to prevent.
+`wc -c` counts bytes by definition. **`wc -m` counts bytes too whenever `LANG` and `LC_ALL` are unset**, which is the common case in a tool-driven shell: it falls back to a byte count, where a run of this skill measured a four-byte emoji as 4 and returned 3246 for a string of 3243 code points. The error is in the safe direction, so it will not produce an over-cap write; it will silently trim content that fitted, which is the failure this paragraph exists to prevent.
 
 Measure with something locale-independent:
 
@@ -174,7 +174,7 @@ Measure with something locale-independent:
 node -e "process.stdout.write(String([...require('fs').readFileSync(0,'utf8')].length))" < description.md
 ```
 
-`wc -m` is correct only after confirming a UTF-8 locale (`locale charmap`), which is not worth depending on.
+**Do not reach for `locale charmap` to decide whether `wc -m` is safe.** Measured in this repo's own environment it reported `UTF-8` while `LANG` and `LC_ALL` were both empty and `wc -m` still returned bytes — 3769 against 3765 code points for a real description. `charmap` reports a default, not the active locale, so the check that looks like it settles the question does not settle anything. Measure code points directly or not at all.
 
 The rewrite is usually **longer** than what it replaces, since group headings and per-item reasons are added. When it does not fit, cut in this order:
 

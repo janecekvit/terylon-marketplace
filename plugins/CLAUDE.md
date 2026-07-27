@@ -225,6 +225,15 @@ Two checklists travel through this marketplace, and they are **different shapes 
 
 The two write-backs carry different content for the same reason: the pull request thread gets the procedure evidence, the work-item comment gets the coverage verdict and a pointer to the thread.
 
+**When criteria change mid-flight, amend them visibly.** The contract is allowed to change; changing it silently is not. A withdrawn criterion moves to a trailing `**Superseded**` group — struck through, and with no checkbox, because withdrawn is not the same as unsatisfied — its replacement goes in the group whose outcome it states, and a comment records what was learned. The mechanics live in `create-user-story`; the discrimination that matters lives here:
+
+| What happened | Do |
+|---|---|
+| an outcome the story promised changed or turned out wrong | amend the criteria |
+| new outcomes were added — the work grew past the story | leave the criteria alone and open a follow-up story |
+
+**Only the product owner amends criteria.** `tester` proposes and never applies; `planner` re-derives its coverage map against the live field rather than a cached copy; and a criterion sitting in `**Superseded**` is not a claim — neither verified, nor ticked, nor counted as a coverage gap.
+
 ---
 
 ## Plugin overview

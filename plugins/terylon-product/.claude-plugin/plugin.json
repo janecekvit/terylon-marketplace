@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "terylon-product",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Product owner / PM — authoring User Stories grounded in the real codebase and Feature specifications with a UX section. Requires terylon-devops.",
   "author": {
     "name": "Vít Janeček",
