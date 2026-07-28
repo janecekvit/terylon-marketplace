@@ -24,8 +24,9 @@ its area and iteration.
 
 - `<brief>` — required free-text intent describing what the story is about.
 - `--parent` — required parent Feature WI id or URL of form
-  `https://dev.azure.com/{org}/{project}/_workitems/edit/{id}` (default org / project when a bare id is
-  given: `https://dev.azure.com/janecekvit/Dev/_workitems/edit/{id}`). Used for context, for inheriting
+  `https://dev.azure.com/{org}/{project}/_workitems/edit/{id}`. When a bare id is given, `org` / `project`
+  resolve per the `ado-mcp` recipe *Resolving org / project without a URL* — `TERYLON_ADO_ORG` (default
+  `janecekvit`) for the org, the `--repo` git remote for the project. Used for context, for inheriting
   `System.AreaPath` / `System.IterationPath`, and as the parent the new story is linked under.
 - `--repo` — optional path to the product repo to ground implementation detail against. Default =
   current working directory. The skill grounds read-only against this repo; it never edits product code.

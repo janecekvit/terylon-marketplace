@@ -39,10 +39,12 @@ Component layout and the full dispatch chain: `plugins/CLAUDE.md`.
 
 | | |
 |---|---|
-| Organisation | `janecekvit` |
+| Organisation | `janecekvit` (default; override with the `TERYLON_ADO_ORG` env var) |
 | Project | `Dev` |
 | Repo | `TerylonMarketplace` |
 | MCP server | `@azure-devops/mcp` via `plugins/terylon-devops/.mcp.json` |
+
+The table above is this repository's **own** identity. A consuming repository targets its own organisation by setting `TERYLON_ADO_ORG`; the `.mcp.json` reads it at server startup (`${TERYLON_ADO_ORG:-janecekvit}`), and project / repo derive from the consuming repository's git remote at runtime. See the *Point it at your Azure DevOps organization* section in `README.md`.
 
 ## Language
 

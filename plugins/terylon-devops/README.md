@@ -30,7 +30,13 @@ Everyone working on top of Azure DevOps — directly for the PR workflow, indire
 
 ## MCP server
 
-The plugin registers the `ado` server (`@azure-devops/mcp`, hard-wired to the `janecekvit` organisation) through its own `.mcp.json`. The consumer gets it automatically when enabling the plugin — no manual installation. At runtime the tools are namespaced as `mcp__plugin_terylon-devops_ado__*`.
+The plugin registers the `ado` server (`@azure-devops/mcp`) through its own `.mcp.json`. The consumer gets it automatically when enabling the plugin — no manual installation. At runtime the tools are namespaced as `mcp__plugin_terylon-devops_ado__*`.
+
+The organisation the server targets is **configurable**: the `.mcp.json` passes `${TERYLON_ADO_ORG:-janecekvit}` as the org argument, so a consuming organisation sets the `TERYLON_ADO_ORG` environment variable (its bare org name) in `.claude/settings.json` and everything else — project and repo — derives from the repository's git remote at runtime. The variable is the one irreducible config point, because the server reads the org at startup, before any git command can run. See *Point it at your Azure DevOps organization* in the root `README.md`.
+
+Authentication is forced to **`azcli`** (`-a azcli` in the args): the server takes its token from each consumer's own `az login` via `AzureCliCredential`, so no tenant or secret is baked into the repository — it stays organisation-agnostic in the same way `TERYLON_ADO_ORG` keeps the org agnostic. This is a workaround, not the preferred shape. The package's default outside GitHub Codespaces is `interactive`, which runs an MSAL loopback login and asks Entra ID for an authorization code with `response_mode=query`; Microsoft's own app registration for the server has that loopback redirect under a platform that permits only `fragment`/`form_post`, so Entra rejects it with `AADSTS70007: unsupported mode 'query'` before any Azure DevOps call is made. It is a Microsoft-side defect affecting every default-interactive install outside Codespaces, tracked upstream as [microsoft/azure-devops-mcp#1451](https://github.com/microsoft/azure-devops-mcp/issues/1451); **remove the `-a azcli` argument once it is fixed.** The hosted remote MCP server is the intended successor but does not yet support Claude Code as a client, so it is out of scope.
+
+Each consumer therefore needs the Azure CLI installed and logged in (`az login`) against a tenant with access to their organisation. `AzureCliCredential` uses the active `az` tenant; if a consumer's default `az` tenant is not the one backing their organisation, they append `-t <tenant-guid>` to the args to pin it — otherwise no tenant argument is needed.
 
 ## Setup
 

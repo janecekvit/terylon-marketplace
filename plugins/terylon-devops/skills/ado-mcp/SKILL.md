@@ -32,7 +32,7 @@ Each operation below maps to a recipe in `references/ado-mcp.md`. The reference 
 | Operation | Tool(s) | Used by | Purpose |
 |---|---|---|---|
 | `parse-pr-url` | — (string) | review-pr, address-pr-comments, write-pr-description, pr-reviewer | Parse a PR URL into `org` / `project` / `repoName` / `prId` (bash + PowerShell recipes). |
-| `parse-wi-url` | — (string) | create-user-story, create-feature | Parse a work-item URL or bare number into `org` / `project` / `WI_ID`; `janecekvit` / `Dev` fallback. |
+| `parse-wi-url` | — (string) | create-user-story, create-feature | Parse a work-item URL or bare number into `org` / `project` / `WI_ID`; a bare number resolves `org` / `project` per §9 (env var + git remote). |
 | `resolve-repo-id` | `repo_get_repo_by_name_or_id` | review-pr, address-pr-comments, write-pr-description, pr-reviewer | Resolve `repositoryId` once per repo per run; accepts a name or a GUID. |
 | `fetch-pr-metadata` | `repo_get_pull_request_by_id` | review-pr, address-pr-comments, write-pr-description, pr-reviewer | Fetch the whole PR object (`status`, `isDraft`, `createdBy`, refs, `lastMergeSourceCommit`). |
 | `eligibility-check` | `repo_get_pull_request_by_id` | review-pr, address-pr-comments, write-pr-description, pr-reviewer | Two-phase; returns raw flags + a default recommendation. Decisions stay caller-side. |
@@ -55,8 +55,8 @@ Each operation below maps to a recipe in `references/ado-mcp.md`. The reference 
 
 Read `${CLAUDE_PLUGIN_ROOT}/skills/ado-mcp/references/ado-mcp.md` for exact arguments and gotchas. The mapping below points to the section that holds each operation's full IN/OUT contract.
 
-- **`parse-pr-url`** — IN: PR URL. OUT: `org`, `project`, `repoName`, `prId`. See *Operation catalog* (§4) and *URL parsing* (§9) for the bash (`sed -E`) and PowerShell (`[regex]`) recipes and the `az devops configure --defaults` fallback.
-- **`parse-wi-url`** — IN: WI URL or bare number. OUT: `org`, `project`, `WI_ID`. See §4 and *URL parsing* (§9); bare numbers are used directly with the `janecekvit` / `Dev` defaults.
+- **`parse-pr-url`** — IN: PR URL. OUT: `org`, `project`, `repoName`, `prId`. See *Operation catalog* (§4) and *URL parsing* (§9) for the bash (`sed -E`) and PowerShell (`[regex]`) recipes; when no URL is given, *Resolving org / project without a URL* (§9) gives the resolution order.
+- **`parse-wi-url`** — IN: WI URL or bare number. OUT: `org`, `project`, `WI_ID`. See §4 and *URL parsing* (§9); a bare number resolves `org` / `project` per *Resolving org / project without a URL* (§9) — `TERYLON_ADO_ORG` for the org, the git remote for the project.
 - **`resolve-repo-id`** — IN: repo name or GUID. OUT: `repositoryId`. See §4 and *`repositoryId` resolution invariant* (§5): resolve once per repo per run before any `repo_*` call, then cache.
 - **`fetch-pr-metadata`** — IN: `repositoryId`, `prId`, `project`. OUT: the whole PR object. See §4; the eligibility flags it exposes are detailed in *Eligibility two-phase* (§14).
 - **`eligibility-check`** — IN: PR metadata. OUT: raw flags (`status`, `isDraft`, `createdBy`) + default recommendation. See *Eligibility two-phase* (§14): phase-1 before read, phase-2 re-check before write; call `detect-prior-run` before phase-1; read-only skills are exempt from the write half. **All decisions stay caller-side.**

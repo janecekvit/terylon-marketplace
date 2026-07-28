@@ -43,6 +43,30 @@ Into `.claude/settings.json` of the product repo (commit it — it is shared wit
 }
 ```
 
+### Point it at your Azure DevOps organization
+
+The marketplace defaults to the `janecekvit` organisation, but it runs against **any** Azure DevOps organisation. Set one environment variable — your organisation name — in the same `.claude/settings.json`:
+
+```json
+{
+  "env": {
+    "TERYLON_ADO_ORG": "your-organisation"
+  }
+}
+```
+
+`TERYLON_ADO_ORG` is the bare organisation **name** — the first path segment of your ADO URL, `https://dev.azure.com/`**`your-organisation`**`/…` — not the URL itself: the `ado` MCP server takes the name as a positional argument. It is the one value you must configure, because the server reads it at startup, before any git command can run. Everything else resolves on its own:
+
+| Value | Where it comes from |
+|---|---|
+| Organisation | `TERYLON_ADO_ORG`, else `janecekvit` |
+| Project / repo | the consuming repository's `git remote`, or any URL you paste |
+| Work-item / PR target | the URL you pass the skill |
+
+A `TERYLON_ADO_PROJECT` override exists for the rare repository whose git remote is not its ADO project; normally you never set it.
+
+Note the two are independent: `extraKnownMarketplaces.terylon.source.url` above is where the marketplace **source** lives (this repository — leave it, or fork it and point at your fork), while `TERYLON_ADO_ORG` is where **your work** lives.
+
 > **Why `"source": "git"`?** The client schema `extraKnownMarketplaces.<name>.source.source` accepts `"git"` for ordinary git remotes. `"git-subdir"` is a different schema, used in `marketplace.json#plugins[].source` to declare the sources of individual plugins — the client rejects it.
 >
 > `autoUpdate: true` is a sibling of `source` (not nested inside it) and tells Claude Code to refresh the marketplace in the background.

@@ -76,7 +76,7 @@ One subsection per operation: its IN/OUT contract, the tool(s) it uses, and whic
 ### `parse-wi-url`
 - **In:** WI URL string or bare number. **Out:** `org`, `project`, `WI_ID`.
 - **Tools:** none. **Consumers:** create-user-story, create-feature.
-- **Recipe:** §9. Bare number → use directly; `janecekvit` / `Dev` defaults via `az devops configure --defaults`.
+- **Recipe:** §9. Bare number → use directly; `org` / `project` come from the resolution order in *Resolving org / project without a URL* (§9) — `TERYLON_ADO_ORG` for the org, git remote for the project.
 
 ### `parse-vstfs`
 - **In:** `vstfs://` artifact-link URL. **Out:** `projectGuid`, `repoGuid`, `prId`.
@@ -164,7 +164,7 @@ One subsection per operation: its IN/OUT contract, the tool(s) it uses, and whic
 - **TWO flag profiles — see §13.** Never `git diff HEAD`.
 
 ### `create-work-item`
-- **In:** `project` (default `Dev`), `workItemType` (e.g. `"User Story"`), `fields: [{name, value, format?}]`. **Out:** new work item `id`.
+- **In:** `project` (resolved per *Resolving org / project without a URL* (§9) when not taken from a URL), `workItemType` (e.g. `"User Story"`), `fields: [{name, value, format?}]`. **Out:** new work item `id`.
 - **Tool:** `wit_create_work_item`. **Consumers:** create-user-story, create-feature.
 - **Recipe:** set `System.Title`; `System.Description` with **`format: "Markdown"`**; `System.AreaPath` and `System.IterationPath` (inherited from the parent); optionally `Microsoft.VSTS.Scheduling.StoryPoints`, `Microsoft.VSTS.Common.Priority`, `System.Tags`.
 - **Gotcha (parent):** sets *field values* only — it CANNOT set the parent relation. Link the parent in a separate step (`link-work-item-parent`).
@@ -433,7 +433,69 @@ $PROJECT = ([regex]'dev\.azure\.com/[^/]+/([^/]+)/').Match($wi_url).Groups[1].Va
 $WI_ID   = ([regex]'/edit/(\d+)').Match($wi_url).Groups[1].Value
 ```
 
-**Bare-number shortcut:** if the user passes a bare number, skip URL parsing and use it directly as `WI_ID` (or `prId`). **Fallback for `ORG` / `PROJECT`:** use `az devops configure --defaults` (typically `janecekvit` / `Dev`).
+**Bare-number shortcut:** if the user passes a bare number, skip URL parsing and use it directly as `WI_ID` (or `prId`). `ORG` / `PROJECT` then come from the resolution order below, not from the (absent) URL.
+
+### Resolving `org` / `project` without a URL
+
+When there is no URL to parse — a bare work-item number, or a skill grounding against the current repository — resolve `org` and `project` in this order, first hit wins:
+
+| Source | Supplies | Precedence |
+|---|---|---|
+| An explicit URL argument | `org`, `project`, `repo`, `id` | highest — a pasted URL always wins |
+| `TERYLON_ADO_ORG` / `TERYLON_ADO_PROJECT` env vars | `org`, `project` | override |
+| `git remote get-url origin` of the consuming repository | `org`, `project`, `repo` | the normal path |
+| `az devops configure --defaults` | `org`, `project` | last resort |
+
+**`org` must equal the server's startup organisation.** The `ado` server is launched with `${TERYLON_ADO_ORG:-janecekvit}` (see the plugin `.mcp.json`), so it can only talk to that one organisation. Take `org` from `TERYLON_ADO_ORG` (falling back to `janecekvit`) — the same source the server used — rather than from the remote, so the two never disagree. Derive `project` and `repo` from the remote.
+
+Deriving `project` / `repo` from the git remote, in bash:
+
+Both the HTTPS form (`https://dev.azure.com/{org}/{project}/_git/{repo}`) and the SSH form (`git@ssh.dev.azure.com:v3/{org}/{project}/{repo}`) carry the same three segments; the SSH form has no `/_git/`, so `repo` is its last path segment. In bash:
+
+```bash
+REMOTE=$(git remote get-url origin 2>/dev/null)
+REMOTE=$(echo "$REMOTE" | sed -E 's#//[^@/]+@#//#')   # drop any "user@" before the host
+
+case "$REMOTE" in
+    *dev.azure.com*)      # https://dev.azure.com/{org}/{project}/_git/{repo}  and  git@ssh.dev.azure.com:v3/{org}/{project}/{repo}
+        PROJECT=$(echo "$REMOTE" | sed -E 's#.*dev\.azure\.com[:/](v3/)?([^/]+)/([^/]+).*#\3#')
+        ;;
+    *visualstudio.com*)   # https://{org}.visualstudio.com/{project}/_git/{repo}  (legacy)
+        PROJECT=$(echo "$REMOTE" | sed -E 's#.*visualstudio\.com/([^/]+)/.*#\1#')
+        ;;
+esac
+
+case "$REMOTE" in
+    */_git/*) REPO=$(echo "$REMOTE" | sed -E 's#.*/_git/([^/]+).*#\1#') ;;   # HTTPS
+    *)        REPO=$(echo "$REMOTE" | sed -E 's#.*/([^/]+)$#\1#') ;;         # SSH: last segment
+esac
+REPO="${REPO%.git}"
+
+ORG="${TERYLON_ADO_ORG:-janecekvit}"
+PROJECT="${TERYLON_ADO_PROJECT:-$PROJECT}"
+```
+
+In PowerShell:
+
+```powershell
+$REMOTE = (git remote get-url origin 2>$null) -replace '//[^@/]+@', '//'
+
+if ($REMOTE -match 'dev\.azure\.com[:/](?:v3/)?([^/]+)/([^/]+)')
+{
+    $PROJECT = $Matches[2]
+}
+elseif ($REMOTE -match '//([^.]+)\.visualstudio\.com/([^/]+)')
+{
+    $PROJECT = $Matches[2]
+}
+
+if     ($REMOTE -match '/_git/([^/]+)') { $REPO = $Matches[1] }   # HTTPS
+elseif ($REMOTE -match '/([^/]+)$')     { $REPO = $Matches[1] }   # SSH: last segment
+if ($REPO) { $REPO = $REPO -replace '\.git$', '' }
+
+$ORG     = if ($env:TERYLON_ADO_ORG)     { $env:TERYLON_ADO_ORG }     else { "janecekvit" }
+$PROJECT = if ($env:TERYLON_ADO_PROJECT) { $env:TERYLON_ADO_PROJECT } else { $PROJECT }
+```
 
 ---
 
