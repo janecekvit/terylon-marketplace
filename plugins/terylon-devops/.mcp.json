@@ -2,7 +2,7 @@
   "mcpServers": {
     "ado": {
       "command": "npx",
-      "args": ["-y", "@azure-devops/mcp", "janecekvit"]
+      "args": ["-y", "@azure-devops/mcp", "${TERYLON_ADO_ORG:-janecekvit}", "-a", "azcli"]
     }
   }
 }
