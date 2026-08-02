@@ -18,25 +18,27 @@ Internal Claude Code plugin marketplace distributed into product repositories th
 ## Plugins
 
 ```
-terylon-core                      methodology + measurement — no git, no forge, no MCP server
-terylon-git                       git only — no forge, no MCP server
-├── terylon-devops                + Azure DevOps
-│   ├── terylon-product           + user stories, Feature specs
-│   └── terylon-test              + verifying a test plan and acceptance criteria (pulls terylon-core)
-└── terylon-dev                   + the build pipeline (pulls terylon-core)
+terylon-core                      the root — shared conventions + measurement; no git, no forge, no MCP
+└── terylon-git                   + git; no forge, no MCP server
+    └── terylon-devops            + Azure DevOps
+        ├── terylon-product       + user stories, Feature specs
+        ├── terylon-dev           + the build pipeline (declares terylon-git and terylon-core directly)
+        └── terylon-test          + verifying a test plan and acceptance criteria (declares terylon-core directly)
 ```
 
-`terylon-dev` declares `terylon-git` directly as well as through `terylon-devops`, because its `leader` dispatches `code-reviewer` whether or not Azure DevOps is in play.
+`terylon-dev` declares `terylon-git` directly as well as through `terylon-devops`, because its `leader` dispatches `code-reviewer` whether or not Azure DevOps is in play. `terylon-dev` and `terylon-test` declare `terylon-core` directly for the same reason: both invoke `measure-token-spend`, which has nothing to do with git or a forge.
 
-`terylon-core`, like `terylon-git`, is a leaf with no dependencies and can be enabled on its own. It carries the methodology the pipeline runs on — `write-plan` for the plan format, `run-build-loop` for the controller mechanics — and the measurement: `measure-token-spend` plus a `SubagentStop` hook that records per-agent spend as a run proceeds, without anything having to invoke it. `terylon-dev` and `terylon-test` both pull it.
+`terylon-core` is the **root every other plugin sits on**, and it carries only what all of them may need: `delegate-to-repo-agents` (the capability test a persona applies before dispatching an agent the target repository ships) and `measure-token-spend`, plus a `SubagentStop` hook that records per-agent spend as a run proceeds without anything having to invoke it. It can still be enabled alone for the measurement.
 
 **`terylon-core` replaced `terylon-metrics`, which no longer exists.** A consumer enabling `terylon-metrics@terylon` renames the key to `terylon-core@terylon`; skills are addressed by name, so nothing that loaded `measure-token-spend` changes.
 
-**`superpowers` is no longer a dependency.** The six skills `terylon-dev` used from it are gone: three were replaced by shorter equivalents (`write-plan`, `run-build-loop` in `terylon-core`, `finish-branch` in `terylon-git`), and three were dropped because the personas already carried them in full.
+**`superpowers` is no longer a dependency.** The six skills `terylon-dev` used from it are gone: three were replaced by shorter equivalents (`write-plan` and `run-build-loop`, now in `terylon-dev`; `finish-branch` in `terylon-git`), and three were dropped because the personas already carried them in full.
 
-The boundary between the first two is the forge: everything in `terylon-git` needs git and nothing more. That is why the review pipeline is split — `code-review` and `code-reviewer` are local, `review-pr` and `pr-reviewer` carry the findings to ADO. `terylon-test` splits on the same seam: `verify-test-plan` needs a shell and a repository, while `update-pr-checklist` and `update-work-item-checklist` need Azure DevOps and so live in `terylon-devops` with the rest of it.
+**A component lives in the lowest plugin that all of its consumers can reach.** Consumers are counted by plugin, not by file, and the test is what a component *exercises*, never who calls it — `delegate-to-repo-agents` is consumed by three plugins and calls no git, so it sits in the root; `write-plan` and `run-build-loop` are consumed only by `terylon-dev`, so they sit there rather than in a root that installs for everyone.
 
-Component layout and the full dispatch chain: `plugins/CLAUDE.md`.
+The boundary between the first two is the forge: everything in `terylon-git` exercises git and nothing more. That is why the review pipeline is split — `code-review` and `code-reviewer` are local, `review-pr` and `pr-reviewer` carry the findings to ADO. `terylon-test` splits on the same seam: `verify-test-plan` needs a shell and a repository, while `update-pr-checklist` and `update-work-item-checklist` need Azure DevOps and so live in `terylon-devops` with the rest of it.
+
+Component layout, the placement rule in full, the dispatch chains and the table of every cross-plugin load: `plugins/CLAUDE.md`.
 
 ## Azure DevOps
 

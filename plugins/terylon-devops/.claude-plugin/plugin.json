@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "terylon-devops",
-"version": "1.4.2",
+  "version": "1.5.0",
   "description": "Azure DevOps layer — ADO mechanics, PR review and description, comment handling. Adds the forge transport on top of terylon-git.",
   "author": {
     "name": "Vít Janeček",

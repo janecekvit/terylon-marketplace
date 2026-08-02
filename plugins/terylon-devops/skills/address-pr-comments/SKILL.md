@@ -172,7 +172,7 @@ Then: `Reply "do it" to apply mechanical edits. Inline / conceptual items will b
   `rightFileStart..rightFileEnd` no longer points to the lines the suggestion targeted,
   surface the conflict instead of guessing.
 - Auto-closing threads after edit: tempting, but the reviewer is the one who marks "fixed".
-  Do not call `mcp__ado__repo_update_pull_request_thread` with `status: 2` from this skill.
+  Do not run the `update-thread-status` operation with `status: 2` from this skill.
 - Mixing reviewer edits into unrelated in-flight changes silently. If `git status` shows
   uncommitted work outside the touched files, mention it in the summary.
 - Indentation drift between the suggestion block and the file (tabs vs spaces). Normalise

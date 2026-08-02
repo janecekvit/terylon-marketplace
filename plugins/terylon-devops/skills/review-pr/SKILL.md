@@ -125,7 +125,7 @@ in prose underneath.
   single-spot patch, (b) the change is genuinely multi-file with no representative anchor
   location, or (c) the finding is an open design question with no committed fix yet.
 
-Before posting, Read `${CLAUDE_PLUGIN_ROOT}/skills/ado-mcp/references/ado-mcp.md` and follow its `post-pr-thread` recipe for the exact thread JSON, `threadContext` fields, and `commentType` / `status` enums — that one recipe covers both the inline (with `threadContext`) and PR-wide (no `threadContext`) shapes. Issue the `mcp__plugin_terylon-devops_ado__repo_create_pull_request_thread` call yourself.
+Before posting, Read `${CLAUDE_PLUGIN_ROOT}/skills/ado-mcp/references/ado-mcp.md` and follow its `post-pr-thread` recipe for the exact thread JSON, `threadContext` fields, and `commentType` / `status` enums — that one recipe covers both the inline (with `threadContext`) and PR-wide (no `threadContext`) shapes. Issue the `post-pr-thread` call yourself, with the tool that recipe names — never a tool name copied from here, which is exactly how a server upgrade breaks nine files at once.
 
 ## Comment formatting (mandatory)
 
@@ -170,7 +170,7 @@ Then: `Reply "push" to post these to the PR, or tell me which to skip.`
 - Hard-coding a base branch name. The base is the PR's own `targetRefName`; where no PR metadata is available, detect it via `git symbolic-ref --short refs/remotes/origin/HEAD`.
 - Re-running the skill on a PR you already reviewed will spam threads. The eligibility check
   prevents this — do not bypass it.
-- `mcp__ado__repo_update_pull_request_thread` cannot change `threadContext`. A PR-wide
+- The `update-thread-status` operation cannot change `threadContext`. A PR-wide
   thread cannot be promoted to inline — you have to close it and create a new inline thread,
   which leaves the closed PR-wide as visible clutter on the PR. Commit to inline-vs-PR-wide
   on the first pass; do not post PR-wide "to be safe" with a plan to demote later.
@@ -180,5 +180,5 @@ Then: `Reply "push" to post these to the PR, or tell me which to skip.`
 > The `<PR-URL>` / `<id>` below are **placeholders** — substitute any open PR in a repo you have cloned locally. This is an illustrative example, not a fixed test target.
 
 1. `/review-pr <PR-URL> --dry-run` from a local clone of the PR's repo. Expect: a chat summary of findings (confidence ≥80) and **no** comments posted to the PR (its thread count is unchanged).
-2. Re-run without `--dry-run`. Expect: the same summary, a confirmation prompt, then on `push` a `mcp__ado__repo_create_pull_request_thread` call carrying a `` ```suggestion `` block for a line-scoped finding.
-3. Confirm via `mcp__ado__repo_list_pull_request_threads(pullRequestId=<id>, ...)`: the new thread's `threadContext.filePath` starts with a leading `/`.
+2. Re-run without `--dry-run`. Expect: the same summary, a confirmation prompt, then on `push` a `post-pr-thread` call carrying a `` ```suggestion `` block for a line-scoped finding.
+3. Confirm with the `list-threads` operation for `<id>`: the new thread's `threadContext.filePath` starts with a leading `/`.

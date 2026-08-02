@@ -63,7 +63,7 @@ The four lenses are mutually independent — dispatch them in one round, not in 
 
 ### Phase 2 — build
 
-**Run `run-build-loop`** (from `terylon-core`, loaded by name) against the approved plan and act as its controller. It owns the mechanics this section does not repeat: the ledger that survives a compaction, the pre-flight scan of the plan before Task 1, the bounded fix rounds with their model escalation, and how to pick a tier per role. Do not hand-roll your own per-task loop. For each plan task:
+**Run `run-build-loop`** (loaded by name, from this plugin) against the approved plan and act as its controller. It owns the mechanics this section does not repeat: the ledger that survives a compaction, the pre-flight scan of the plan before Task 1, the bounded fix rounds with their model escalation, and how to pick a tier per role. Do not hand-roll your own per-task loop. For each plan task:
 
 1. **Implement** — `Agent(terylon-dev:developer)` with a single-task brief (goal, in-scope files, acceptance criteria as concrete test cases, **the path to the planner's grounding map**) and a report-file path. The grounding map is the codebase reading the planner did **once** for the work item; passing it by path is what stops each task re-grounding from a cold `Explore`. Model tier: `sonnet` for mechanical tasks, `opus` for integration-heavy or judgment-heavy ones.
 2. **When the developer returns `BLOCKED` on failing tests** — dispatch `Agent(terylon-dev:debugger)` with the path to the test output. Hand its minimal fix back to the developer as a follow-up task.

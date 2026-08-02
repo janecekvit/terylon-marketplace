@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "terylon-core",
-  "version": "1.0.3",
-  "description": "Methodology and measurement — the plan format, the build loop, and per-agent token-spend measurement read from a session's own transcripts. No git, forge, or MCP dependency. Successor to terylon-metrics.",
+  "version": "1.1.1",
+  "description": "The marketplace's root — the conventions every persona shares and per-agent token-spend measurement read from a session's own transcripts. No git, forge, or MCP dependency. Successor to terylon-metrics.",
   "author": {
     "name": "Vít Janeček",
     "email": "vit.janecek@outlook.com"
@@ -11,8 +11,8 @@
   "license": "Proprietary",
   "keywords": [
     "claude-code",
-    "methodology",
-    "planning",
+    "conventions",
+    "delegation",
     "metrics",
     "tokens",
     "measurement",

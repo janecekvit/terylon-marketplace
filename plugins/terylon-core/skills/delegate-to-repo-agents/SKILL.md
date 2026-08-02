@@ -79,7 +79,11 @@ Each shorthand fails in the same direction — **permissively**. An agent declar
 
 The converse also matters: an agent holding `Write` **for its own report file** is not thereby licensed to rewrite what it examines. Capability against the work under examination is the question; the tool list is only evidence about it.
 
-**Some of this repo's own personas fail this test**, and they are not the exception that softens it. `tester`, `debugger` and `code-reviewer` all hold unrestricted `Bash`. What binds them is a written contract — `shared/side-effects.md`, `git status --porcelain` before and after — and **not** their frontmatter. A repo-local agent you know nothing about carries no such contract, so for a candidate the capability test is all you have.
+**One of this marketplace's own personas fails this test**, and it is not the exception that softens it. `tester` holds unrestricted `Bash` — it has to, because exercising an artifact means running the repository's own build. What binds it is a written side-effects contract that its own plugin ships, with `git status --porcelain` before and after as the evidence, and **not** its frontmatter. A repo-local agent you know nothing about carries no such contract, so for a candidate the capability test is all you have.
+
+**Express in the tool list whatever the tool list can express; bind the rest inline.** Scoping is the stronger form and is preferred wherever the persona's work allows it — `code-reviewer` reads diffs and history, so it declares `Bash(git *)` and the question never arises. It is not always available: `debugger` and `tester` must run the target repository's own build and test commands, which no scope can enumerate in advance. Those two carry the constraint **in their own hard rules**, inline, where it binds whether or not this skill is ever loaded.
+
+What must not happen is the third option — an open `Bash`, a `disallowedTools: [Edit, Write]` that reads as a guarantee, and the real constraint parked in a document the persona cannot reach. A constraint nobody can load is a constraint nobody has.
 
 Before dispatching, read the candidate's frontmatter and check its `tools` / `disallowedTools`. If it can write and you cannot, **do not dispatch it**. Describe what you would have asked it to do as a finding instead, and let the persona that is allowed to edit act on it.
 

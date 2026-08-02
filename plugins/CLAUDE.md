@@ -242,33 +242,81 @@ The two write-backs carry different content for the same reason: the pull reques
 
 ## Plugin overview
 
+```
+terylon-core (root — no dependencies)
+    ▲
+    └── terylon-git  [terylon-core]
+           ▲
+           └── terylon-devops  [terylon-git]
+                  ▲
+                  ├── terylon-product  [terylon-devops]
+                  ├── terylon-dev      [terylon-git, terylon-devops, terylon-core]
+                  └── terylon-test     [terylon-devops, terylon-core]
+```
+
 | Slug | Audience | Dependencies |
 |---|---|---|
-| `terylon-git` | any git repository — no forge, no MCP server | none |
-| `terylon-core` | any repository — the plan format, the build loop, run measurement | none |
+| `terylon-core` | every repository — the shared conventions and run measurement | none |
+| `terylon-git` | any git repository — no forge, no MCP server | `terylon-core` |
 | `terylon-devops` | Azure DevOps layer — everyone on ADO | `terylon-git` |
 | `terylon-product` | product owner / PM | `terylon-devops` |
 | `terylon-dev` | developers | `terylon-git`, `terylon-devops`, `terylon-core` |
 | `terylon-test` | anyone holding a checklist that decides something | `terylon-devops`, `terylon-core` |
 
-`terylon-product` reaches `terylon-git` transitively through `terylon-devops`. `terylon-dev` declares it directly, because `leader` dispatches `code-reviewer` whether or not Azure DevOps is in play.
+`terylon-product` reaches everything below it transitively. `terylon-dev` and `terylon-test` declare `terylon-core` **directly** as well: both load `measure-token-spend` whether or not git or a forge is in play, and `terylon-dev` additionally declares `terylon-git`, because `leader` dispatches `code-reviewer` whether or not Azure DevOps is.
 
-`terylon-core` is the second dependency-free leaf beside `terylon-git`: it needs neither git nor a forge, only a shell and the local session transcripts. It holds the methodology the pipeline runs on and the measurement of what that costs. `terylon-dev` and `terylon-test` both declare it — `develop` reports a run's token spend at its Gate 3 and `test` reports the verification run's spend at its end, both through `measure-token-spend`, and the plugin's `SubagentStop` hook records per-agent spend continuously in either. Any repository can also enable it alone.
+`terylon-core` is the **root**, not a second leaf. It needs neither git nor a forge, only a shell and the local session transcripts, and every other plugin sits on it. It **replaced `terylon-metrics`**, which no longer exists, and its arrival removed the `superpowers` dependency: `write-plan` and `run-build-loop` replaced two of those skills, `finish-branch` in `terylon-git` a third, and the remaining three were dropped because `developer`, `refactorer` and `debugger` already carried them in their own prose. A skill that only restates what the persona says costs cache-write to load and buys nothing.
 
-It **replaced `terylon-metrics`**, which no longer exists, and its arrival removed the `superpowers` dependency: `write-plan` and `run-build-loop` live here, `finish-branch` in `terylon-git`, and the remaining three superpowers skills were dropped because `developer`, `refactorer` and `debugger` already carried them in their own prose. A skill that only restates what the persona says costs cache-write to load and buys nothing.
+### Where a component belongs
+
+**A component lives in the lowest plugin that all of its consumers can reach, and a plugin declares a dependency only on what it actually loads.** Count consumers by *plugin*, not by file, and count only real loads — a prose mention that is an example is not a consumer.
+
+| Consumers span | It lives in |
+|---|---|
+| one plugin | that plugin |
+| several plugins | their lowest common ancestor |
+
+Two failure modes, and both have happened here:
+
+| Symptom | What it means | Worked example |
+|---|---|---|
+| A component in the root that only one plugin loads | the root installs for everyone, so everyone pays for it | `write-plan` and `run-build-loop` sat in `terylon-core` and moved to `terylon-dev` |
+| A component in a plugin whose dependency it never exercises | the plugin's own boundary claim becomes false | `delegate-to-repo-agents` sat in `terylon-git` and never called git; it moved to `terylon-core` |
+
+**The test is what a component exercises, never who calls it.** `delegate-to-repo-agents` mentions `git checkout` and `git status` three times — as examples of what a write-capable agent can do, not as calls it makes. Its `allowed-tools` is `Read, Grep, Glob`. Reading the mentions rather than the tool list is what kept it in the wrong plugin.
 
 ### What lives where
 
 | Plugin | Skills | Agents |
 |---|---|---|
-| `terylon-git` | `create-workspace`, `code-review`, `finish-branch`, `delegate-to-repo-agents` | `code-reviewer` |
-| `terylon-core` | `write-plan`, `run-build-loop`, `measure-token-spend` | — |
+| `terylon-core` | `delegate-to-repo-agents`, `measure-token-spend` | — |
+| `terylon-git` | `create-workspace`, `code-review`, `finish-branch` | `code-reviewer` |
 | `terylon-devops` | `ado-mcp`, `create-pr`, `review-pr`, `write-pr-description`, `address-pr-comments`, `update-pr-checklist`, `update-work-item-checklist` | `pr-reviewer` |
 | `terylon-product` | `create-user-story`, `create-feature` | — |
-| `terylon-dev` | `develop` | `leader`, `planner`, `developer`, `debugger`, `refactorer`, `security-reviewer`, `performance-reviewer`, `architecture-reviewer`, `edge-case-reviewer` |
+| `terylon-dev` | `develop`, `write-plan`, `run-build-loop` | `leader`, `planner`, `developer`, `debugger`, `refactorer`, `security-reviewer`, `performance-reviewer`, `architecture-reviewer`, `edge-case-reviewer` |
 | `terylon-test` | `test`, `verify-test-plan`, `run-build-and-tests`, `run-ui-flows` | `tester` |
 
-The boundary between the first two is the forge: everything in `terylon-git` needs git and nothing more, everything in `terylon-devops` touches Azure DevOps. That is why the review pipeline is split — `code-review` and `code-reviewer` are local, `review-pr` and `pr-reviewer` carry the findings to ADO.
+`terylon-core` also ships the `SubagentStop` hook that records per-agent spend continuously, plus `shared/oet.js` and `shared/weights.json`.
+
+The boundary between `terylon-git` and `terylon-devops` is the forge: everything in `terylon-git` exercises git and nothing more, everything in `terylon-devops` touches Azure DevOps. That is why the review pipeline is split — `code-review` and `code-reviewer` are local, `review-pr` and `pr-reviewer` carry the findings to ADO.
+
+### Every cross-plugin load, and what covers it
+
+| Loader | Loads | From | Covered by |
+|---|---|---|---|
+| the seven `terylon-dev` personas | `delegate-to-repo-agents` | core | `terylon-dev` → core, direct |
+| `code-reviewer` | `delegate-to-repo-agents` | core | `terylon-git` → core |
+| `tester`, `run-ui-flows` | `delegate-to-repo-agents` | core | `terylon-test` → core, direct |
+| `develop`, `leader` | `measure-token-spend` | core | `terylon-dev` → core, direct |
+| `test`, `tester` | `measure-token-spend` | core | `terylon-test` → core, direct |
+| `develop`, `code-reviewer`, `pr-reviewer` | `create-workspace` | git | dev → git direct; devops → git |
+| `develop` | `finish-branch` | git | dev → git |
+| `review-pr`, `address-pr-comments` | `code-review` | git | devops → git |
+| `develop` | `create-pr`, `ado-mcp` | devops | dev → devops |
+| `tester` | `update-pr-checklist`, `update-work-item-checklist` | devops | test → devops |
+| `create-user-story`, `create-feature` | `ado-mcp` | devops | product → devops |
+
+No edge points upward, there is no cycle, and `terylon-core` loads nothing. **When you add a load, add its row** — the table is how the next placement error gets caught before it ships.
 
 ### Dispatch chain
 
@@ -290,7 +338,7 @@ develop (skill, main thread — holds the gates)
         └── pr-reviewer ──▶ code-reviewer  (a PR exists)
 ```
 
-The `<repo-local specialist>` branches are **not ours**. A target repository may ship its own agents — a stack-specific implementer, a domain reviewer — and a persona dispatches one when it covers the technology more specifically than a generic persona can. Most repositories ship none, and the branch simply does not occur. The convention lives in the `delegate-to-repo-agents` skill in `terylon-git`, loaded by name, and **the gate is a capability test**: may the candidate change the files under examination? `Edit`, `Write` and **unrestricted `Bash`** all mean yes — `sed -i` rewrites a file as surely as `Edit` does — so `disallowedTools: [Edit, Write]` alone settles nothing. Every shorthand for this rule fails in the same direction, permissively; the skill states the test and the shorthands are not repeated here on purpose.
+The `<repo-local specialist>` branches are **not ours**. A target repository may ship its own agents — a stack-specific implementer, a domain reviewer — and a persona dispatches one when it covers the technology more specifically than a generic persona can. Most repositories ship none, and the branch simply does not occur. The convention lives in the `delegate-to-repo-agents` skill in `terylon-core`, loaded by name, and **the gate is a capability test**: may the candidate change the files under examination? `Edit`, `Write` and **unrestricted `Bash`** all mean yes — `sed -i` rewrites a file as surely as `Edit` does — so `disallowedTools: [Edit, Write]` alone settles nothing. Every shorthand for this rule fails in the same direction, permissively; the skill states the test and the shorthands are not repeated here on purpose.
 
 `develop` is a skill rather than an agent because only the main thread can prompt the user. Everything below it is dispatched and reports back.
 

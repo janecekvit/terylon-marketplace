@@ -6,6 +6,20 @@ Developer pipeline: from a user story (a link to an Azure DevOps work item or a 
 
 Developers who want a complete gated loop: clarify the story, plan it against the real codebase, build it test-first task by task, and close the PR.
 
+## Where it sits
+
+```
+terylon-core .................. delegate-to-repo-agents, measure-token-spend
+    ▲   ▲
+    │   └── terylon-git ....... create-workspace, code-review, finish-branch, code-reviewer
+    │          ▲
+    │          └── terylon-devops ....... ado-mcp, create-pr, write-pr-description, pr-reviewer
+    │                 ▲
+    └─────────────────┴── terylon-dev  ← you are here
+```
+
+All three are declared **directly** rather than relied on transitively: `leader` dispatches `code-reviewer` whether or not Azure DevOps is in play, and `develop` loads `measure-token-spend` at Gate 3 whether or not a pull request exists.
+
 ## Dispatch chain
 
 ```
@@ -38,13 +52,17 @@ At Gate 3 the skill may **offer** `/code-review ultra`, the harness's heavier mu
 
 With several items the whole chain runs **once per item, concurrently** — one seed-spec, worktree, branch and `leader` each. The shape does not change; it multiplies. Gates stay on the main thread and are hosted as each leader returns.
 
-The `<repo-local specialist>` branches are **not part of this plugin**. A target repository may ship its own agents — a stack-specific implementer, a domain reviewer — and a persona dispatches one when it covers the technology more specifically than a generic persona can. Most repositories ship none and the branch never occurs. The convention is the `delegate-to-repo-agents` skill in `terylon-git`; its load-bearing rule is a **capability test**: may the candidate change the files under examination? `Edit`, `Write` and **unrestricted `Bash`** all mean yes, so `disallowedTools` alone settles nothing.
+The `<repo-local specialist>` branches are **not part of this plugin**. A target repository may ship its own agents — a stack-specific implementer, a domain reviewer — and a persona dispatches one when it covers the technology more specifically than a generic persona can. Most repositories ship none and the branch never occurs. The convention is the `delegate-to-repo-agents` skill in `terylon-core`; its load-bearing rule is a **capability test**: may the candidate change the files under examination? `Edit`, `Write` and **unrestricted `Bash`** all mean yes, so `disallowedTools` alone settles nothing.
 
 ## What it contains
 
-**Skill:**
+**Skills:**
 
 - **`develop`** — the entry point on the main thread. It parses flags, runs the intake clarification, dispatches `leader` and hosts the gates. It is a skill and not an agent, because **only the main thread can ask the user**.
+- **`write-plan`** — the implementation plan's format: header, global constraints, file map, task shape with interfaces, the no-placeholder rules and the self-review. Written for an implementer who sees only their own task. `planner` emits its artifacts in this format.
+- **`run-build-loop`** — the controller's mechanics for executing a plan: the ledger that survives a compaction, the pre-flight scan before the first task, the bounded fix rounds with their model escalation, and how to pick a tier per role. `leader` runs it rather than hand-rolling a per-task loop.
+
+The last two shipped in `terylon-core` until `1.4.x`. They moved here because nothing outside this plugin consumes them, and the root installs for everyone.
 
 **Agents:**
 
@@ -55,19 +73,19 @@ The `<repo-local specialist>` branches are **not part of this plugin**. A target
 - **`refactorer`** — once the tests are green it goes through the diff for simplification, reuse and consistency.
 - **`edge-case-reviewer`**, **`security-reviewer`**, **`performance-reviewer`**, **`architecture-reviewer`** — read-only review lenses running in parallel, each with its own angle. They propose, they do not edit.
 
-Every persona here is **generic by design** — that is what lets the same pipeline run over any repository. Where the target repo ships an agent that knows the stack better, the persona delegates to it rather than approximating it, under the `delegate-to-repo-agents` convention from `terylon-git`. The persona keeps ownership: it verifies what returns, its report names the delegation, and its own return values are unchanged.
+Every persona here is **generic by design** — that is what lets the same pipeline run over any repository. Where the target repo ships an agent that knows the stack better, the persona delegates to it rather than approximating it, under the `delegate-to-repo-agents` convention from `terylon-core`. The persona keeps ownership: it verifies what returns, its report names the delegation, and its own return values are unchanged.
 
 ## Reuse
 
-The plugin is deliberately thin. The build phase **runs** `run-build-loop` from `terylon-core` (the ledger, the pre-flight scan, the fix-round escalation, the model economics) and `planner` emits its artifacts in the `write-plan` format from the same plugin. Finishing goes through `finish-branch` and isolation through `create-workspace`, both from `terylon-git`. The built-in one-shot agents `Explore` and `Plan` do the grounding and the architecture draft. Only the orchestration, the personas and the Azure DevOps wiring are its own.
+The plugin is deliberately thin. Isolation goes through `create-workspace` and finishing through `finish-branch`, both from `terylon-git`; the pull request is opened by `create-pr` from `terylon-devops`, which fills its own description — this plugin issues no ADO recipe of its own at Gate 3. The built-in one-shot agents `Explore` and `Plan` do the grounding and the architecture draft. Only the orchestration, the personas, the plan format and the build loop are its own.
 
 It used to reuse six skills from the `superpowers` plugin. Three were replaced by shorter equivalents here; the other three turned out to be carried in full by the personas themselves, so they were dropped rather than rewritten. `terylon-dev` no longer requires the `claude-plugins-official` marketplace.
 
 ## Dependencies
 
-- **`terylon-devops`** — the `ado` MCP server, the `ado-mcp` engine, `review-pr`, `write-pr-description`. Installed automatically.
-- **`terylon-git`** — `create-workspace`, `code-review`, `delegate-to-repo-agents`, and the `code-reviewer` agent that `leader` dispatches for the whole-branch review. Declared directly rather than relied on transitively, because `leader` uses it whether or not a pull request is in play.
-- **`terylon-core`** — `run-build-loop`, `write-plan`, and the `measure-token-spend` skill that `develop` invokes at Gate 3. It also ships the `SubagentStop` hook that records the run's spend continuously. A dependency-free leaf, declared so it installs automatically.
+- **`terylon-devops`** — the `ado` MCP server, the `ado-mcp` engine, `create-pr` (which `develop` invokes at Gate 3), `review-pr`, `write-pr-description`. Installed automatically.
+- **`terylon-git`** — `create-workspace`, `code-review`, `finish-branch`, and the `code-reviewer` agent that `leader` dispatches for the whole-branch review. Declared directly rather than relied on transitively, because `leader` uses it whether or not a pull request is in play.
+- **`terylon-core`** — `delegate-to-repo-agents`, which every persona loads before dispatching a repo-local specialist, and `measure-token-spend`, which `develop` invokes at Gate 3. It also ships the `SubagentStop` hook that records the run's spend continuously. The marketplace's dependency-free root, declared directly so neither use depends on git being in play.
 
 ## Setup
 

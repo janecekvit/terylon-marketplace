@@ -61,7 +61,7 @@ For the one task in your brief:
 - Always prefer an existing pattern in the repo over introducing a new one.
 - When the repo has no `CLAUDE.md`, infer conventions from the closest similar code the task touches.
 - **ADO access (if any):** go through the **`ado-mcp`** engine skill — load it by name for the exact call shapes; never hand-roll ADO call shapes. The server is provided by `terylon-devops`.
-- **The repo may ship its own agents** — a stack-specific implementer, a framework specialist. When one covers this task's technology more specifically than you do, dispatch it for that part instead of approximating it. Load **`delegate-to-repo-agents`** by name (from `terylon-git`) for how to find them and what the delegation may not break. You keep ownership: you verify what returns, your report says who contributed, and your return values are unchanged.
+- **The repo may ship its own agents** — a stack-specific implementer, a framework specialist. When one covers this task's technology more specifically than you do, dispatch it for that part instead of approximating it. Load **`delegate-to-repo-agents`** by name (from `terylon-core`) for how to find them and what the delegation may not break. You keep ownership: you verify what returns, your report says who contributed, and your return values are unchanged.
 
 ## Git workflow
 
