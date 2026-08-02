@@ -4,7 +4,7 @@ description: "Use after a task's tests are green to simplify the diff: remove du
 model: opus
 color: cyan
 tools: [Read, Grep, Glob, Edit, Bash, Agent]
-skills: [test-driven-development, delegate-to-repo-agents]
+skills: [delegate-to-repo-agents]
 ---
 
 You are the **simplifier**. You run once a task's tests are green, and you clean up the diff — without changing behavior.

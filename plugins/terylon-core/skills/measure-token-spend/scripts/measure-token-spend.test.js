@@ -7,6 +7,7 @@ const path = require("path");
 const operatingSystem = require("os");
 
 const measurer = require("./measure-token-spend.js");
+const oet = require("../../../shared/oet.js");
 
 function writeJsonLines(filePath, records)
 {
@@ -123,13 +124,16 @@ test("the report names the tiers, the agent types, and the subagent-tier subtrac
 test("parseArguments pairs flags and nulls a trailing flag with no value", () =>
 {
     assert.deepStrictEqual(
-        measurer.parseArguments(["--project", "p", "--session", "s", "--out", "o", "--dir", "d"]),
-        { directory: "d", project: "p", session: "s", outputPath: "o" });
+        measurer.parseArguments(["--project", "p", "--session", "s", "--out", "o", "--dir", "d", "--top", "3"]),
+        { directory: "d", project: "p", session: "s", outputPath: "o", topRuns: 3 });
 
     // A flag given as the last token must resolve to null, not undefined (the crash guard).
     assert.deepStrictEqual(
         measurer.parseArguments(["--project"]),
-        { directory: null, project: null, session: null, outputPath: null });
+        { directory: null, project: null, session: null, outputPath: null, topRuns: 10 });
+
+    // A non-numeric --top must fall back to the default rather than producing NaN slices.
+    assert.strictEqual(measurer.parseArguments(["--top", "nonsense"]).topRuns, 10);
 });
 
 test("resolveSession honours an explicit session and otherwise picks the newest by mtime", () =>
@@ -149,4 +153,102 @@ test("resolveSession honours an explicit session and otherwise picks the newest 
     assert.deepStrictEqual(
         measurer.resolveSession({ directory: root, project: null, session: "older", outputPath: null }),
         { directory: root, session: "older" });
+});
+
+test("OET weights each bucket and scales by the agent's model", () =>
+{
+    const weights = oet.FALLBACK_WEIGHTS;
+
+    // 100 output + 0.25 x 40 cache-write + 0.02 x 1000 cache-read = 100 + 10 + 20 = 130.
+    assert.strictEqual(oet.outputEquivalentTokens({ output: 100, cacheWrite: 40, cacheRead: 1000 }, "claude-opus-5", weights), 130);
+
+    // Same usage on sonnet is a fifth of it.
+    assert.strictEqual(oet.outputEquivalentTokens({ output: 100, cacheWrite: 40, cacheRead: 1000 }, "claude-sonnet-4-5", weights), 26);
+
+    // Cache-read alone is not free, and it is not counted at parity either.
+    assert.strictEqual(oet.outputEquivalentTokens({ output: 0, cacheWrite: 0, cacheRead: 500 }, "claude-opus-5", weights), 10);
+});
+
+test("an unknown or missing model falls back to the default factor, never to NaN or zero", () =>
+{
+    const weights = oet.FALLBACK_WEIGHTS;
+
+    for (const model of [null, undefined, "", "some-future-model", 42])
+    {
+        const value = oet.outputEquivalentTokens({ output: 100, cacheWrite: 0, cacheRead: 0 }, model, weights);
+
+        assert.ok(Number.isFinite(value), "OET must stay finite for model " + String(model));
+        assert.strictEqual(value, 100);
+    }
+
+    // Dated and suffixed identifiers still resolve to their family.
+    assert.strictEqual(oet.modelFactor("claude-opus-5[1m]", weights), 1.0);
+    assert.strictEqual(oet.modelFactor("claude-haiku-4-5-20251001", weights), 0.05);
+});
+
+test("an unreadable weights file degrades to the documented defaults, not to zero weights", () =>
+{
+    const loaded = oet.loadWeights(path.join(operatingSystem.tmpdir(), "no-such-weights-file.json"));
+
+    assert.strictEqual(loaded.bucket.cacheWrite, 0.25);
+    assert.strictEqual(loaded.readOn, "unknown");
+});
+
+test("the shipped weights file parses and carries the read date the report prints", () =>
+{
+    const shipped = oet.loadWeights();
+
+    assert.strictEqual(typeof shipped.readOn, "string");
+    assert.notStrictEqual(shipped.readOn, "unknown");
+    assert.strictEqual(shipped.bucket.output, 1.0);
+});
+
+test("top runs are ordered by OET, not by output", () =>
+{
+    // A chatty cheap run against a quiet expensive one: output ranks them one way, OET the other.
+    const chatty = { identifier: "agent-chatty", type: "x", usage: { output: 300, cacheRead: 0, cacheWrite: 0 }, oet: 300 };
+    const cacheHeavy = { identifier: "agent-cache", type: "y", usage: { output: 50, cacheRead: 0, cacheWrite: 4000 }, oet: 1050 };
+
+    const ordered = measurer.topRunsByOet([chatty, cacheHeavy], 10);
+
+    assert.deepStrictEqual(ordered.map((row) => row.identifier), ["agent-cache", "agent-chatty"]);
+
+    // The limit truncates, and a limit of zero yields no table rather than a crash.
+    assert.strictEqual(measurer.topRunsByOet([chatty, cacheHeavy], 1).length, 1);
+    assert.strictEqual(measurer.topRunsByOet([chatty, cacheHeavy], 0).length, 0);
+});
+
+test("the raw sums are unchanged by the OET addition", () =>
+{
+    const fixture = buildFixture();
+    const measurement = measurer.measureSession(fixture.root, fixture.sessionId);
+
+    // Identical to the pre-OET assertions: adding a derived column must not disturb the facts.
+    assert.strictEqual(measurement.totals.output, 675);
+    assert.strictEqual(measurement.totals.cacheRead, 6750);
+    assert.strictEqual(measurement.totals.cacheWrite, 68);
+    assert.ok(measurement.totals.oet > measurement.totals.output);
+});
+
+test("the report carries the OET column, the weights date, and the costliest-runs table", () =>
+{
+    const fixture = buildFixture();
+    const measurement = measurer.measureSession(fixture.root, fixture.sessionId);
+    const report = measurer.formatReport(measurement, fixture.sessionId);
+
+    assert.match(report, /\| OET \|/);
+    assert.match(report, /Weights read on `\d{4}-\d{2}-\d{2}`/);
+    assert.match(report, /## Costliest individual runs/);
+    assert.match(report, /`agent-c`/);
+});
+
+test("readAgentMeta returns both the type and the model, and survives a missing file", () =>
+{
+    const root = fileSystem.mkdtempSync(path.join(operatingSystem.tmpdir(), "token-spend-"));
+    const metaPath = path.join(root, "agent-x.meta.json");
+
+    fileSystem.writeFileSync(metaPath, JSON.stringify({ agentType: "developer", model: "claude-sonnet-4-5" }), "utf8");
+
+    assert.deepStrictEqual(measurer.readAgentMeta(metaPath), { type: "developer", model: "claude-sonnet-4-5" });
+    assert.deepStrictEqual(measurer.readAgentMeta(path.join(root, "absent.meta.json")), { type: "unknown", model: null });
 });

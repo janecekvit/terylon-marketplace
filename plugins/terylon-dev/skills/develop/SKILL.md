@@ -5,7 +5,7 @@ description: >-
   description, or several prose items separated by --- on its own line. Several items fan out into
   concurrent leaders, one workspace each. Hosts the human gates and dispatches the leader agent, which
   owns the plan → build (TDD) → finish loop. Optional flags --auto, --dry-run, and --here.
-allowed-tools: Bash(git *), Bash(node *), Read, Grep, Glob, Write, Agent, AskUserQuestion, mcp__ado__*, mcp__plugin_terylon-devops_ado__*
+allowed-tools: Bash(git *), Bash(node *), Read, Grep, Glob, Write, Agent, AskUserQuestion, mcp__plugin_terylon-devops_ado__*
 ---
 
 # develop — entry point of the development pipeline
@@ -17,7 +17,7 @@ It is a **skill and not an agent** for two reasons: it carries the slash command
 ## Usage
 
 ```
-/terylon-dev:develop <item> [<item> …] [--auto | --dry-run] [--here] [--no-downgrade]
+/terylon-dev:develop <item> [<item> …] [--auto | --dry-run] [--here]
 ```
 
 An `<item>` is either an **Azure DevOps work item URL** (`dev.azure.com/{org}/{project}/_workitems/edit/<id>`), which is fetched and turned into a seed-spec, or a **prose description**, which becomes the seed directly.
@@ -27,13 +27,12 @@ An `<item>` is either an **Azure DevOps work item URL** (`dev.azure.com/{org}/{p
 - `--dry-run` — stop after Gate 1 (plan only, no code).
 - `--auto` — skip the *pauses* at the gates; `leader` runs the loop on its own. The git rules still hold.
 - `--here` — stay in the current checkout instead of an isolated worktree. Use only when you are already on the intended feature branch.
-- `--no-downgrade` — turn off the spend-reactive downgrade. `leader` never lowers effort or model for spend; every agent runs at full tier. Use it when you want maximum quality regardless of cost. Without it, `leader` proposes a downgrade at a spend threshold (and, under `--auto`, applies it); `--no-downgrade` wins if combined with `--auto`.
 
 ## Prerequisites
 
 - **`terylon-devops`** — a hard dependency, installed automatically. It provides the `ado` MCP server, the `ado-mcp` engine (**load it by name**), and `write-pr-description`.
 - **`terylon-git`** — a direct hard dependency (also reachable through `terylon-devops`), so it is installed automatically. It provides `create-workspace` and the `code-review` engine — **load both by name**.
-- **`superpowers`** — a hard dependency via `claude-plugins-official`. `leader` runs `subagent-driven-development` from it.
+- **`terylon-core`** — a hard dependency, installed automatically. It provides `run-build-loop` (the controller mechanics `leader` runs), `write-plan` (the plan format `planner` emits), and `measure-token-spend`. It also ships the `SubagentStop` hook that records the run's spend continuously.
 - Run from the repo root. All work happens on a feature branch.
 
 ## Shape of a run
@@ -129,7 +128,7 @@ Derive `<slug>` from the item's topic and keep it consistent through the run. **
 
 #### Artifact layout
 
-Every run's working files live under `docs/terylon/` — the terylon-owned working tree, gitignored (local, not distributed). This is terylon's own directory, not the superpowers scratch area:
+Every run's working files live under `docs/terylon/` — the terylon-owned working tree, gitignored (local, not distributed). This is terylon's own directory:
 
 ```text
 docs/terylon/
@@ -155,7 +154,7 @@ By default, ensure an isolated worktree: invoke **`create-workspace "<slug>"`** 
 
 ### 5. Dispatch `leader`
 
-Dispatch **`Agent(terylon-dev:leader)`** with **paths** — seed-spec, ledger, the `--auto` flag, and the `--no-downgrade` flag if set. Never send file contents in the prompt.
+Dispatch **`Agent(terylon-dev:leader)`** with **paths** — seed-spec, ledger, and the `--auto` flag if set. Never send file contents in the prompt.
 
 Handle the return:
 
@@ -163,21 +162,32 @@ Handle the return:
 |---|---|
 | `NEEDS_CLARIFICATION <questions>` | Put them to the user via `AskUserQuestion` (one at a time), write the answers into the seed-spec, re-dispatch `leader`. |
 | `AWAITING_APPROVAL <path> <what>` | **Gate 1** — show the user the artifact's contents and wait for approval or edits. Once approved, re-dispatch `leader` with the approved artifact. This can arrive **mid-build**, not only after the first plan: a review finding that invalidates the design sends `leader` back to `planner`, and a materially changed plan returns here rather than proceeding on a plan the user never saw. Say which finding forced it. |
-| `AWAITING_APPROVAL <ledger> reduce effort/model` | **Spend gate** — `leader` proposes lowering effort/model because the run's spend crossed the threshold. Show the user the proposed change and the number that triggered it, and ask yes/no. On yes, re-dispatch `leader` with the downgrade in effect; on no, re-dispatch to continue at the current tier. Never appears under `--no-downgrade`, and under `--auto` `leader` applies it without returning here. |
 | `BUILD_COMPLETE <ledger>` | Continue to step 6. |
 | `BLOCKED <reason>` | Show the reason to the user and ask how to proceed. |
 
 **Gate 1 is the highest-leverage gate** — spec and design failures are the largest and least recoverable class. Do not move past it without genuine approval. `--dry-run` **stops here**.
 
-#### Batch answers before re-dispatching
+#### A gate is cheap, and a long leader run is not
 
-A `leader` **resume replays a growing transcript** — `leader` carries the session's worst cache-write ratio for exactly this reason, because each continuation rewrites everything before it. **The cost is per resume, not per answer.** So when a return needs several answers — every question in a `NEEDS_CLARIFICATION`, every edit at a Gate — ask them one message at a time as the tools require, but **fold all the answers into the seed-spec and re-dispatch `leader` once.** Never re-dispatch after each single ruling.
+Re-dispatching `leader` starts a **new instance with fresh context** — that is what `Agent(…)` does, and it is a different mechanism from `SendMessage`, which resumes an existing agent and does retain its full history. This pipeline uses the first. Nothing is replayed.
 
-This is orthogonal to the fan-out rule below: across *different* work items you host each gate as it arrives and never barrier; within *one* leader's return you batch the answers it asked for before resuming it.
+Three consequences, and they invert the intuition:
+
+| | |
+|---|---|
+| **Waiting at a gate costs nothing** | `leader` has **ended**. It is not blocked on a question — there are no turns while the user thinks. |
+| **Resuming costs a constant** | a re-dispatched leader starts from an almost empty context and re-reads the ledger and the plan. That is the whole cost, and it does not grow with how much work came before. |
+| **Length is the cost, not count** | every turn re-reads the **entire** cached prefix, and the prefix grows with each turn. A run's cache-read is therefore **quadratic in its turn count**: double the turns and it roughly quadruples; split one run into `k` shorter ones and it drops to about `1/k` of what it was. |
+
+So **do not avoid gates to save tokens** — a gate resets the context and is the cheapest thing in this loop. `--auto` keeps one leader running through the whole build and pays quadratically for it.
+
+**Batching answers is still right, for a smaller reason.** Each re-dispatch pays that constant again, so answering one question, re-dispatching, then answering the next pays it twice. When a return needs several answers — every question in a `NEEDS_CLARIFICATION`, every edit at a Gate — ask them one message at a time as the tools require, then **fold all the answers into the seed-spec and re-dispatch once.** A real saving, but a constant one against a quadratic: never trade a gate away to get it.
+
+This is orthogonal to the fan-out rule below: across *different* work items you host each gate as it arrives and never barrier; within *one* leader's return you batch the answers it asked for before re-dispatching.
 
 ### 6. Gate 3 — finish
 
-Invoke **`superpowers:finishing-a-development-branch`**. For an Azure DevOps PR:
+Invoke **`finish-branch`** (from `terylon-git`, loaded by name). For an Azure DevOps PR:
 
 1. Open the PR via the `create-pull-request` recipe from `ado-mcp` — pass full `refs/heads/<branch>` ref names.
 2. Link the work item via the `link-work-item-to-pull-request` recipe — note that `projectId` and `repositoryId` must be GUIDs, not names.
@@ -187,7 +197,7 @@ Invoke **`superpowers:finishing-a-development-branch`**. For an Azure DevOps PR:
 
 #### Report the run's token spend
 
-After the build completes, invoke **`measure-token-spend`** (from `terylon-metrics`, loaded by name) for the current session and write its report to `docs/terylon/monitoring/<session>-tokens.md`, surfacing the per-tier summary in one line. It reads the run's transcripts **off-context**, so the report costs almost nothing to produce. This is the monitoring that lets the next change be judged against a number rather than an impression — the point of aiming the pipeline's spend in the first place. It runs under `--auto` too; there is nothing to consent to, since it only reads.
+After the build completes, invoke **`measure-token-spend`** (from `terylon-core`, loaded by name) for the current session and write its report to `docs/terylon/monitoring/<session>-tokens.md`, surfacing the per-tier summary in one line. It reads the run's transcripts **off-context**, so the report costs almost nothing to produce. This is the monitoring that lets the next change be judged against a number rather than an impression — the point of aiming the pipeline's spend in the first place. It runs under `--auto` too; there is nothing to consent to, since it only reads.
 
 #### Offering the deeper review
 
@@ -242,15 +252,14 @@ The same goes for every status line, plan, and finding you surface: say which it
 
 ## Common mistakes
 
-- **Writing your own build loop.** The loop belongs to `leader`, which runs `subagent-driven-development`. This skill only hosts the gates.
+- **Writing your own build loop.** The loop belongs to `leader`, which runs `run-build-loop`. This skill only hosts the gates.
 - **Pasting content into dispatches.** Seed-specs, plans, and diffs travel **by path**.
 - **Trying to prompt from a subagent.** `AskUserQuestion` works only here. `leader` returns `NEEDS_CLARIFICATION` and you do the asking.
 - **Hand-rolled isolation.** Use `create-workspace`, or `--here`.
 - **Committing to the default branch.** Never.
 - **Over-decomposing trivial work.** A genuine one-line change takes the trivial route.
 - **Running the full chain on documentation.** A change with nothing to execute takes the documentation route: no planner, Gate 1 falls on the diff. A planner's plan for doc work is longer than the docs it edits.
-- **Re-dispatching a leader once per answer.** A resume rewrites the whole transcript, so the cost is per resume. Gather every answer a return needs and re-dispatch once.
-- **Downgrading without consent.** Outside `--auto`, `leader` proposes a spend downgrade and waits at the spend gate; it never lowers effort or model on its own. Under `--no-downgrade` it never proposes one at all.
+- **Avoiding a gate to save tokens.** A gate ends the leader and the next one starts fresh, which is the cheapest reset available. Length is what costs; a gate shortens it. Batching a single return's answers is still worth it, but for a saving an order of magnitude smaller.
 - **Taking the first work item and dropping the rest.** Several items fan out; they are not a queue you may silently truncate.
 - **Splitting a prose item on its bullets.** Only `---` splits. `implement the uploader with: retry, backoff, logging` is one story whose scope happens to be a list.
 - **Merging items across a `---`.** The separator is the user's statement of intent, not a hint to weigh against how related the items look.
@@ -265,7 +274,7 @@ The same goes for every status line, plan, and finding you surface: say which it
 1. **Discovery:** `terylon-dev` appears in the marketplace; `/terylon-dev:develop` is in autocomplete; the agents `leader`, `planner`, `developer`, `debugger`, `refactorer`, and the four review lenses are dispatchable.
 2. **Frontmatter:** this skill has `AskUserQuestion`; the lenses have no `Edit`/`Write`; fan-out agents list bare `Agent` in `tools`; no `permissionMode`, `hooks`, `mcpServers`, or `disable-model-invocation` anywhere.
 3. **Dry-run to Gate 1** on a small story: intake asks → `leader` dispatches `planner` → `design.md` and `plan.md` appear with real file anchors and acceptance criteria as test cases → **stop**. No code.
-4. **Reuse:** `leader` runs `subagent-driven-development` (no hand-rolled per-task loop) and `create-workspace` handles isolation.
+4. **Reuse:** `leader` runs `run-build-loop` (no hand-rolled per-task loop), `planner` emits the plan in the `write-plan` format, `create-workspace` handles isolation and `finish-branch` handles the finish.
 5. **Gates:** no code before Gate 1; commit/push/PR only with explicit consent; never an automatic merge to the default branch.
 6. **Fan-out** with two work items and `--dry-run`: two seed-specs under distinct slugs, two worktrees on two branches, both leaders dispatched in **one** round, and **two** plans — neither item silently dropped. Every question and status line names its work item.
 7. **Fan-out returns stream:** with one item's plan ready while the other is still planning, Gate 1 for the ready one is hosted immediately rather than after both finish.
@@ -273,5 +282,5 @@ The same goes for every status line, plan, and finding you surface: say which it
 9. **Decomposition:** three prose blocks separated by `---` yield three items; one prose block containing a three-bullet list yields **one**; a mix of two URLs and one prose block yields three. The count is stated before any workspace is created. Eleven items are refused with a batching proposal; six draw a confirmation first.
 10. **Documentation route:** a change touching only `SKILL.md` / agent / rule / `README` files takes the documentation route — no `planner`, no `design.md`/`plan.md`, Gate 1 falls on the diff, and the phase-3 `code-reviewer` still runs. The route is announced. A three-document change does not produce a plan longer than the documents.
 11. **Batched resume:** a single leader return that raises several questions is answered in full and re-dispatched **once**, not re-dispatched after each answer.
-12. **Token-spend report:** at Gate 3 the run invokes `measure-token-spend` (from `terylon-metrics`) and writes `docs/terylon/monitoring/<session>-tokens.md` with per-tier and per-agent totals, so a follow-up run can be judged against a number.
-13. **Spend gate:** past the downgrade threshold without `--auto` or `--no-downgrade`, `leader` returns `AWAITING_APPROVAL … reduce effort/model` and lowers no tier until the user says yes; under `--auto` it applies and records the downgrade; under `--no-downgrade` it never proposes one.
+12. **Token-spend report:** at Gate 3 the run invokes `measure-token-spend` (from `terylon-core`) and writes `docs/terylon/monitoring/<session>-tokens.md` with per-tier and per-agent totals, so a follow-up run can be judged against a number.
+13. **Continuous spend events:** a run that fanned out leaves one JSON line per completed subagent in `docs/terylon/monitoring/<session>-spend.jsonl`, written by the `terylon-core` `SubagentStop` hook without any agent invoking it. A run interrupted before Gate 3 still has its events.

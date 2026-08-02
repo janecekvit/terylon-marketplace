@@ -6,7 +6,7 @@ description: >-
   an Azure DevOps PR if a URL is given. Triggers on phrasings like "write PR
   description", "generate PR summary", "summarize my changes for PR". Optional
   flags --auto and --dry-run.
-allowed-tools: Bash(git *), Read, Grep, Glob, mcp__ado__*, mcp__plugin_terylon-devops_ado__*
+allowed-tools: Bash(git *), Read, Grep, Glob, mcp__plugin_terylon-devops_ado__*
 ---
 
 # Azure DevOps PR — Write Pull Request Description

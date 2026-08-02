@@ -32,7 +32,7 @@ There is no `--here`: the tester reads the repository under test **read-only** a
 ## Prerequisites
 
 - **`terylon-devops`** — a hard dependency, installed automatically. It provides the `ado` MCP server and the two transports the tester drives: `update-pr-checklist` and `update-work-item-checklist`.
-- **`terylon-metrics`** — a hard dependency, installed automatically. It provides `measure-token-spend`, which this skill invokes at the end. **Load it by name.**
+- **`terylon-core`** — a hard dependency, installed automatically. It provides `measure-token-spend`, which this skill invokes at the end. **Load it by name.** It also ships the `SubagentStop` hook that records each tester run's spend as it happens.
 - Run from the repository whose pull request you are verifying, so its own agents and stack are in scope.
 
 ## Shape of a run
@@ -112,7 +112,7 @@ A tester resume replays a growing transcript, so the cost is per resume, not per
 
 ### 4. Report the run's token spend
 
-After every item's verification is complete, invoke **`measure-token-spend`** (from `terylon-metrics`, loaded by name) for the current session and write its report to `docs/terylon/monitoring/<session>-tokens.md`, surfacing the per-tier summary in one line. It reads the run's transcripts **off-context**, so the report costs almost nothing to produce, and it attributes each tester's per-claim fan-out to the subagent tier. This is the same call and skill `develop` makes at its Gate 3; reusing it keeps one measurement method rather than two counters that drift. It runs under `--auto` too — there is nothing to consent to, since it only reads, and it writes to the operator's own session project, never a tracked file in the repository under test.
+After every item's verification is complete, invoke **`measure-token-spend`** (from `terylon-core`, loaded by name) for the current session and write its report to `docs/terylon/monitoring/<session>-tokens.md`, surfacing the per-tier summary in one line. It reads the run's transcripts **off-context**, so the report costs almost nothing to produce, and it attributes each tester's per-claim fan-out to the subagent tier. This is the same call and skill `develop` makes at its Gate 3; reusing it keeps one measurement method rather than two counters that drift. It runs under `--auto` too — there is nothing to consent to, since it only reads, and it writes to the operator's own session project, never a tracked file in the repository under test.
 
 ## Fan-out — several items
 

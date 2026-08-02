@@ -241,22 +241,24 @@ The two write-backs carry different content for the same reason: the pull reques
 | Slug | Audience | Dependencies |
 |---|---|---|
 | `terylon-git` | any git repository — no forge, no MCP server | none |
-| `terylon-metrics` | any repository wanting to measure a Claude Code run | none |
+| `terylon-core` | any repository — the plan format, the build loop, run measurement | none |
 | `terylon-devops` | Azure DevOps layer — everyone on ADO | `terylon-git` |
 | `terylon-product` | product owner / PM | `terylon-devops` |
-| `terylon-dev` | developers | `terylon-git`, `terylon-devops`, `terylon-metrics`, `superpowers` |
-| `terylon-test` | anyone holding a checklist that decides something | `terylon-devops`, `terylon-metrics` |
+| `terylon-dev` | developers | `terylon-git`, `terylon-devops`, `terylon-core` |
+| `terylon-test` | anyone holding a checklist that decides something | `terylon-devops`, `terylon-core` |
 
 `terylon-product` reaches `terylon-git` transitively through `terylon-devops`. `terylon-dev` declares it directly, because `leader` dispatches `code-reviewer` whether or not Azure DevOps is in play.
 
-`terylon-metrics` is the second dependency-free leaf beside `terylon-git`: it needs neither git nor a forge, only a shell and the local session transcripts. `terylon-dev` and `terylon-test` both declare it — `develop` reports a run's token spend at its Gate 3 and `test` reports the verification run's spend at its end, both through `measure-token-spend`; any repository can also enable it alone.
+`terylon-core` is the second dependency-free leaf beside `terylon-git`: it needs neither git nor a forge, only a shell and the local session transcripts. It holds the methodology the pipeline runs on and the measurement of what that costs. `terylon-dev` and `terylon-test` both declare it — `develop` reports a run's token spend at its Gate 3 and `test` reports the verification run's spend at its end, both through `measure-token-spend`, and the plugin's `SubagentStop` hook records per-agent spend continuously in either. Any repository can also enable it alone.
+
+It **replaced `terylon-metrics`**, which no longer exists, and its arrival removed the `superpowers` dependency: `write-plan` and `run-build-loop` live here, `finish-branch` in `terylon-git`, and the remaining three superpowers skills were dropped because `developer`, `refactorer` and `debugger` already carried them in their own prose. A skill that only restates what the persona says costs cache-write to load and buys nothing.
 
 ### What lives where
 
 | Plugin | Skills | Agents |
 |---|---|---|
-| `terylon-git` | `create-workspace`, `code-review`, `delegate-to-repo-agents` | `code-reviewer` |
-| `terylon-metrics` | `measure-token-spend` | — |
+| `terylon-git` | `create-workspace`, `code-review`, `finish-branch`, `delegate-to-repo-agents` | `code-reviewer` |
+| `terylon-core` | `write-plan`, `run-build-loop`, `measure-token-spend` | — |
 | `terylon-devops` | `ado-mcp`, `review-pr`, `write-pr-description`, `address-pr-comments`, `update-pr-checklist`, `update-work-item-checklist` | `pr-reviewer` |
 | `terylon-product` | `create-user-story`, `create-feature` | — |
 | `terylon-dev` | `develop` | `leader`, `planner`, `developer`, `debugger`, `refactorer`, `security-reviewer`, `performance-reviewer`, `architecture-reviewer`, `edge-case-reviewer` |
@@ -294,7 +296,7 @@ Both were found by running this pipeline against itself rather than by reading t
 
 **A skill loaded by name carries instructions, not capability.** The `skills:` field lets an agent open a skill's prose; it does not hand over the tools that prose tells it to call. So **every agent must declare in its own `tools:` each tool the skills it loads will use** — the ADO namespace for an agent driving `update-pr-checklist`, `Bash(node *)` for one running `measure-token-spend`. The `tester` shipped a release documented as driving two ADO transports while declaring no ADO namespace at all, and its first real run returned `BLOCKED` for precisely that reason.
 
-**`Agent` in an agent's `tools:` did not grant nested dispatch.** Measured three times in one session — `tester` twice, `leader` once — a plugin agent dispatched through the `Agent` tool came up holding no `Agent`, no `Task` and no other dispatch tool; `leader` additionally lacked the `TodoWrite` that `subagent-driven-development` requires of its controller. The cause is **not established**, so this is a measurement and not a claim about the specification. The consequence is not small: **only the main thread was observed to hold a dispatch tool**, so wherever these files draw an agent fanning out under its own power, that step is unproven.
+**`Agent` in an agent's `tools:` did not grant nested dispatch.** Measured three times in one session — `tester` twice, `leader` once — a plugin agent dispatched through the `Agent` tool came up holding no `Agent`, no `Task` and no other dispatch tool; `leader` additionally lacked the `TodoWrite` its controller role assumes. The cause is **not established**, so this is a measurement and not a claim about the specification. The consequence is not small: **only the main thread was observed to hold a dispatch tool**, so wherever these files draw an agent fanning out under its own power, that step is unproven.
 
 An agent in that position **says the capability is absent, degrades to in-context work, and marks anything that needs a live fan-out unverifiable.** It does not quietly substitute the nearest available evidence — a unit fixture modelling N subagents is not a run of N subagents, and reporting it as one is the failure `terylon-test` exists to prevent.
 

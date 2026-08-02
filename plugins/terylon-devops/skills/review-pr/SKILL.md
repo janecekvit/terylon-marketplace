@@ -3,7 +3,7 @@ name: review-pr
 description: Use when the user provides an Azure DevOps pull request URL (dev.azure.com/…/pullrequest/N)
   and asks for a code review, or asks to post review comments / suggestions to an Azure DevOps PR.
   Optional flags --auto and --dry-run.
-allowed-tools: Bash(git *), Read, Grep, Glob, Write, mcp__plugin_terylon-devops_ado__*, mcp__ado__*
+allowed-tools: Bash(git *), Read, Grep, Glob, Write, mcp__plugin_terylon-devops_ado__*
 ---
 
 # Azure DevOps PR Code Review
