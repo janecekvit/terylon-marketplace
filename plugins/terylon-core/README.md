@@ -1,22 +1,39 @@
 # terylon-core
 
-**Methodology and measurement** — how a plan is written, how a build loop is driven, and what a run cost. A leaf plugin: no dependencies, no MCP server, works in any repository.
+**The marketplace's root** — the conventions every persona shares, and the measurement of what a run cost. No dependencies, no MCP server, no git; every other Terylon plugin sits on top of it.
 
 > **Successor to `terylon-metrics`.** That plugin no longer exists; everything it shipped lives here. If your `.claude/settings.json` enables `terylon-metrics@terylon`, rename the key to `terylon-core@terylon` — see *Migration* below.
 
-## Audience
+## Where it sits
 
-Two, and they overlap:
+```
+terylon-core  ← you are here      the root: nothing below it, everything above
+    ▲
+    └── terylon-git
+           ▲
+           └── terylon-devops
+                  ▲
+                  ├── terylon-product
+                  ├── terylon-dev
+                  └── terylon-test
+```
 
-- anyone driving a plan-and-build loop who wants the mechanics written down rather than improvised,
-- anyone who wants to know what a Claude Code run cost, measured from the session's own transcripts rather than from the harness's notification figures.
+`terylon-dev` and `terylon-test` declare it **directly** as well as reaching it through the chain, because both load `measure-token-spend` whether or not git or a forge is in play.
+
+## What belongs here
+
+Only what **every** plugin above may need and that needs nothing itself. A component whose consumers all sit in one plugin belongs in that plugin instead — `write-plan` and `run-build-loop` were held here and moved to `terylon-dev` for exactly that reason. The root stays small on purpose: everything in it is installed for everyone.
+
+| Belongs here | Does not |
+|---|---|
+| consumed by two or more plugins **and** needs no git, forge or MCP server | consumed by one plugin, whichever one |
+| a convention any persona may have to apply | anything that exercises git, a forge, or a browser |
 
 ## Skills
 
 | Skill | What it does |
 |---|---|
-| `write-plan` | The implementation plan's format — header, global constraints, file map, task shape with interfaces, the no-placeholder rules, the self-review. Written for an implementer who sees only their own task. |
-| `run-build-loop` | The controller's mechanics for executing a plan: the ledger that survives a compaction, the pre-flight scan before the first task, the bounded fix rounds with model escalation, and how to pick a tier per role. |
+| `delegate-to-repo-agents` | The convention for dispatching agents the *target* repository ships. Its load-bearing rule is a **capability test** — may the candidate change the files under examination? `Edit`, `Write` and unrestricted `Bash` all mean yes. Loaded by name by the personas in `terylon-dev`, `terylon-git` and `terylon-test`. |
 | `measure-token-spend` | Sums a session's token usage per tier (main thread, subagents), per agent type and per individual run, read from `~/.claude/projects/<slug>/<session>/`. Ships a dependency-free Node script that reads the transcripts **off-context** and prints only the totals. |
 
 ## The spend hook
@@ -53,7 +70,13 @@ Into `.claude/settings.json`:
 }
 ```
 
-Dev and test repositories get it automatically: `terylon-dev` and `terylon-test` both declare it as a dependency.
+Enabling any other Terylon plugin installs it automatically — it is the root of the dependency chain.
+
+## Skills that moved out
+
+`write-plan` and `run-build-loop` shipped here in `1.0.x` and now live in **`terylon-dev`**. Both are consumed only by that plugin's `develop`, `leader` and `planner`, and a root that carries a single plugin's methodology is installed for everyone who does not need it.
+
+Nothing changes for a caller: skills are addressed **by name**, so an agent loading `write-plan` keeps working as long as `terylon-dev` is enabled. A repository that enabled `terylon-core` alone in order to get the plan format must now enable `terylon-dev`.
 
 ## Migration from terylon-metrics
 

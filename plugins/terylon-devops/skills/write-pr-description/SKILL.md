@@ -14,7 +14,7 @@ allowed-tools: Bash(git *), Read, Grep, Glob, mcp__plugin_terylon-devops_ado__*
 You generate a pull request description from the current branch's diff against its base
 (detected from the repo, never hard-coded). With no PR URL the description is printed to
 chat. With a PR URL you read the target branch from the PR, generate the description, and
-can post it back via `mcp__ado__repo_update_pull_request`.
+can post it back via the `update-pr-description` operation.
 
 ## Usage
 
@@ -390,7 +390,7 @@ For no-URL mode: `(Local-only — paste into your PR when you open it.)`
 2. `/write-pr-description <my-PR-url> --dry-run`.
    Expect: same description, target branch read from PR metadata, no write.
 3. `/write-pr-description <my-PR-url>`.
-   Expect: confirmation prompt; on `push`, `mcp__ado__repo_update_pull_request` called;
+   Expect: confirmation prompt; on `push`, the `update-pr-description` operation runs;
    refreshing the PR shows the new description wrapped with the start sentinel
    `<!-- write-pr-description:start -->` and the Claude Code footer.
 4. Re-run step 3.

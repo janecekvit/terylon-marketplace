@@ -10,7 +10,7 @@
     {
       "name": "terylon-git",
       "source": "./plugins/terylon-git",
-      "description": "Git-only foundation — worktree isolation, the review engine, and the multi-lens code reviewer. No forge, no MCP server; works in any git repository.",
+      "description": "Git foundation — worktree isolation, the review engine, and the multi-lens code reviewer. No forge, no MCP server; works in any git repository. Requires terylon-core.",
       "category": "general",
       "keywords": [
         "git",
@@ -23,12 +23,12 @@
     {
       "name": "terylon-core",
       "source": "./plugins/terylon-core",
-      "description": "Methodology and measurement — the plan format, the build loop, and per-agent token-spend measurement read from a session's own transcripts. No git, forge, or MCP dependency. Successor to terylon-metrics.",
+      "description": "The marketplace's root — the conventions every persona shares and per-agent token-spend measurement read from a session's own transcripts. No git, forge, or MCP dependency. Successor to terylon-metrics.",
       "category": "general",
       "keywords": [
         "claude-code",
-        "methodology",
-        "planning",
+        "conventions",
+        "delegation",
         "metrics",
         "tokens",
         "measurement",
@@ -63,7 +63,7 @@
     {
       "name": "terylon-dev",
       "source": "./plugins/terylon-dev",
-      "description": "Developer pipeline — from a user story to implemented, tested code through plan → build (TDD) → finish, with an autonomous leader agent and parallel review lenses. Requires terylon-git, terylon-devops and terylon-core.",
+      "description": "Developer pipeline — from a user story to implemented, tested code through plan → build (TDD) → finish, with an autonomous leader agent, parallel review lenses, the plan format and the build loop. Requires terylon-git, terylon-devops and terylon-core.",
       "category": "role",
       "keywords": [
         "developer",

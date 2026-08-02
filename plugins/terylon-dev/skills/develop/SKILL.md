@@ -30,9 +30,9 @@ An `<item>` is either an **Azure DevOps work item URL** (`dev.azure.com/{org}/{p
 
 ## Prerequisites
 
-- **`terylon-devops`** — a hard dependency, installed automatically. It provides the `ado` MCP server, the `ado-mcp` engine (**load it by name**), and `write-pr-description`.
+- **`terylon-devops`** — a hard dependency, installed automatically. It provides the `ado` MCP server, the `ado-mcp` engine (**load it by name**), and `create-pr`, which opens the pull request at Gate 3 and calls `write-pr-description` itself.
 - **`terylon-git`** — a direct hard dependency (also reachable through `terylon-devops`), so it is installed automatically. It provides `create-workspace` and the `code-review` engine — **load both by name**.
-- **`terylon-core`** — a hard dependency, installed automatically. It provides `run-build-loop` (the controller mechanics `leader` runs), `write-plan` (the plan format `planner` emits), and `measure-token-spend`. It also ships the `SubagentStop` hook that records the run's spend continuously.
+- **`terylon-core`** — a hard dependency, installed automatically. It provides `measure-token-spend`, and `delegate-to-repo-agents` for the personas that dispatch a repo-local specialist. It also ships the `SubagentStop` hook that records the run's spend continuously. `run-build-loop` and `write-plan` are **this plugin's own** — `leader` and `planner` load them from here.
 - Run from the repo root. All work happens on a feature branch.
 
 ## Shape of a run
@@ -187,11 +187,9 @@ This is orthogonal to the fan-out rule below: across *different* work items you 
 
 ### 6. Gate 3 — finish
 
-Invoke **`finish-branch`** (from `terylon-git`, loaded by name). For an Azure DevOps PR:
+Invoke **`finish-branch`** (from `terylon-git`, loaded by name). For an Azure DevOps PR, invoke **`create-pr`** (from `terylon-devops`, loaded by name) and pass it the work item this build implemented.
 
-1. Open the PR via the `create-pull-request` recipe from `ado-mcp` — pass full `refs/heads/<branch>` ref names.
-2. Link the work item via the `link-work-item-to-pull-request` recipe — note that `projectId` and `repositoryId` must be GUIDs, not names.
-3. Generate the PR body with **`write-pr-description`** (from `terylon-devops`).
+`create-pr` owns the whole sequence — opening the PR, associating the work items, and filling the description through `write-pr-description` — plus reviewers and auto-complete, which this skill has no reason to reimplement. **Do not issue the `create-pull-request` or `link-work-item-to-pull-request` recipes here.** Duplicating them puts the ref-name and GUID rules in two places, and the copy is the one that goes stale.
 
 **Require explicit consent before every commit, push, and PR** — consent for one operation is not consent for the next. **Never merge to the default branch yourself.** `--auto` may skip the *pause*, not these rules.
 
@@ -274,7 +272,7 @@ The same goes for every status line, plan, and finding you surface: say which it
 1. **Discovery:** `terylon-dev` appears in the marketplace; `/terylon-dev:develop` is in autocomplete; the agents `leader`, `planner`, `developer`, `debugger`, `refactorer`, and the four review lenses are dispatchable.
 2. **Frontmatter:** this skill has `AskUserQuestion`; the lenses have no `Edit`/`Write`; fan-out agents list bare `Agent` in `tools`; no `permissionMode`, `hooks`, `mcpServers`, or `disable-model-invocation` anywhere.
 3. **Dry-run to Gate 1** on a small story: intake asks → `leader` dispatches `planner` → `design.md` and `plan.md` appear with real file anchors and acceptance criteria as test cases → **stop**. No code.
-4. **Reuse:** `leader` runs `run-build-loop` (no hand-rolled per-task loop), `planner` emits the plan in the `write-plan` format, `create-workspace` handles isolation and `finish-branch` handles the finish.
+4. **Reuse:** `leader` runs `run-build-loop` (no hand-rolled per-task loop), `planner` emits the plan in the `write-plan` format, `create-workspace` handles isolation, `finish-branch` handles the finish and `create-pr` opens the pull request (no hand-rolled ADO recipes).
 5. **Gates:** no code before Gate 1; commit/push/PR only with explicit consent; never an automatic merge to the default branch.
 6. **Fan-out** with two work items and `--dry-run`: two seed-specs under distinct slugs, two worktrees on two branches, both leaders dispatched in **one** round, and **two** plans — neither item silently dropped. Every question and status line names its work item.
 7. **Fan-out returns stream:** with one item's plan ready while the other is still planning, Gate 1 for the ready one is hosted immediately rather than after both finish.

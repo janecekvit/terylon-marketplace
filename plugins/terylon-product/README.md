@@ -6,6 +6,20 @@ Skills for product owners and PMs: turning a short brief into Azure DevOps work 
 
 Product owners and PMs who write User Stories and Feature specifications into Azure DevOps.
 
+## Where it sits
+
+```
+terylon-core ............. the shared conventions
+    ▲
+    └── terylon-git
+           ▲
+           └── terylon-devops ....... ado-mcp, the ADO MCP server
+                  ▲
+                  └── terylon-product  ← you are here
+```
+
+`terylon-devops` is the only declared dependency; the two below it arrive with it. Both skills here reach Azure DevOps through the `ado-mcp` engine and issue no call shape of their own.
+
 ## What it contains
 
 - **`create-user-story`** — from a short brief and a parent Feature it creates a User Story **grounded in the real codebase**: concrete files, functions and integration points found in the repo, not generic phrasing. The story is created under the parent and inherits both `AreaPath` and `IterationPath`.

@@ -122,13 +122,34 @@ Annotate the edges with what the reader cannot infer from the shape: which branc
 | Diagram | Lives in |
 |---|---|
 | Which agents a skill or agent dispatches, and in what order | that `SKILL.md` or agent file |
-| How plugins depend on each other | root `CLAUDE.md` and `plugins/CLAUDE.md` |
+| How plugins depend on each other | root `CLAUDE.md`, `plugins/CLAUDE.md`, root `README.md`, **and every plugin `README.md`** |
 | Which component lives in which plugin | `plugins/CLAUDE.md` |
 | How a value flows through a pipeline | the file that owns the pipeline |
 
 Use plain ASCII (`└──`, `├──`, `──▶`, `┐`/`┘`), never Unicode box-drawing beyond that set — it has to stay readable in a terminal diff, in a raw file, and in the ADO renderer alike.
 
 **Keep them true.** A diagram that no longer matches the code is worse than no diagram, because it is believed. When you rename or re-wire a component, grep for its name in every diagram before you finish.
+
+### Every orienting document carries the dependency graph
+
+**A document that orients a reader in this marketplace draws the plugin dependency graph. This is not optional and it is not satisfied by prose.** A reader who opens one plugin must not have to open three more to learn what it sits on.
+
+| Document | Draws |
+|---|---|
+| root `CLAUDE.md`, root `README.md` | the whole graph |
+| `plugins/CLAUDE.md` | the whole graph, plus which component lives in which plugin and every cross-plugin load |
+| each `plugins/<slug>/README.md` | the graph from **that plugin's vantage** — what it sits on, what sits on it, marked `← you are here` |
+
+**Plugins have no `CLAUDE.md` of their own** — only the repo root and `plugins/` do. A plugin's orienting document is its `README.md`, and the rule binds there exactly as it binds on a `CLAUDE.md`.
+
+**The graph is derived from `plugin.json#dependencies`, which is the only source of truth.** Draw what the manifests declare, never what the prose remembers. A diagram that disagrees with a manifest is a defect in the diagram — fix the drawing, or fix the manifest if the drawing turned out to be the honest one, but never leave them disagreeing.
+
+Two things the drawing must show, because both have been got wrong here and neither is visible in prose:
+
+- **Direct versus transitive.** A plugin that declares a dependency it could have reached through the chain is saying something — annotate it, as `terylon-dev` does with `terylon-git` and `terylon-core`.
+- **The root.** Which plugin has no dependencies at all, so a reader can see at a glance what installs for everyone.
+
+**Update the diagrams in the same commit that changes a `dependencies` array, adds a plugin, or moves a component between plugins.** A dependency edge added without redrawing is how the diagrams stopped being true the last time.
 
 ## Cross-references
 

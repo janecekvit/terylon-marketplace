@@ -1,6 +1,22 @@
 # terylon-devops
 
-The Azure DevOps layer of the `terylon` marketplace. It provides ADO mechanics and the PR workflow on top of `terylon-git`. Both `terylon-product` and `terylon-dev` declare it as a dependency, so it is installed automatically.
+The Azure DevOps layer of the `terylon` marketplace. It provides ADO mechanics and the PR workflow on top of `terylon-git`. `terylon-product`, `terylon-dev` and `terylon-test` all declare it as a dependency, so it is installed automatically.
+
+## Where it sits
+
+```
+terylon-core ............. the shared conventions
+    ▲
+    └── terylon-git ...... worktrees, the local review engine
+           ▲
+           └── terylon-devops  ← you are here
+                  ▲
+                  ├── terylon-product ... user stories, Feature specs
+                  ├── terylon-dev ....... the build pipeline
+                  └── terylon-test ...... test plans, acceptance criteria
+```
+
+Everything here touches Azure DevOps and nothing below it does. That boundary is why the review pipeline is split: `code-review` and `code-reviewer` are local and live in `terylon-git`, while `review-pr` and `pr-reviewer` carry the findings to the forge and live here.
 
 ## Audience
 

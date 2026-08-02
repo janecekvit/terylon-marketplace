@@ -79,11 +79,25 @@ When a pull request has a test plan **and** its linked work item has acceptance 
 
 Results reach the pull request through `update-pr-checklist` (the plan, regrouped) and the work item through `update-work-item-checklist` (the criteria, **annotated in place** — the author's structure is the contract, so it is not regrouped; every downgrade is named in a work-item comment).
 
+## Where it sits
+
+```
+terylon-core .................. delegate-to-repo-agents, measure-token-spend
+    ▲   ▲
+    │   └── terylon-git
+    │          ▲
+    │          └── terylon-devops ....... update-pr-checklist, update-work-item-checklist
+    │                 ▲
+    └─────────────────┴── terylon-test  ← you are here
+```
+
+Azure DevOps appears only at the ends of the run — the two `update-*-checklist` transports read the checklists in and write the answers back. Everything between them is forge-agnostic, which is why `verify-test-plan` can be pointed at any list of claims.
+
 ## Dependencies
 
 - **`terylon-devops`** — the `ado` MCP server, the `ado-mcp` engine, and the two transports (`update-pr-checklist`, `update-work-item-checklist`). Installed automatically.
-- **`terylon-core`** — `measure-token-spend`, which the `test` skill invokes at the end of a run to report the verification's own token spend, plus the `SubagentStop` hook that records per-agent spend as the run proceeds. Installed automatically.
-- **`terylon-git`** — reached through `terylon-devops`; supplies `delegate-to-repo-agents`.
+- **`terylon-core`** — `measure-token-spend`, which the `test` skill invokes at the end of a run to report the verification's own token spend, and `delegate-to-repo-agents`, which `tester` and `run-ui-flows` load before dispatching a repo-local specialist. It also ships the `SubagentStop` hook that records per-agent spend as the run proceeds. Installed automatically.
+- **`terylon-git`** — reached through `terylon-devops`. Nothing here loads it directly; it arrives because `terylon-devops` needs it.
 - **Playwright MCP server** — **optional**, and needed only by `run-ui-flows`. The plugin ships no `.mcp.json` for it on purpose: that would start a browser server for every consumer, including those who only walk a shell checklist. Without it, `run-ui-flows` reports the capability as absent and UI claims come back *not verifiable here* rather than silently unchecked.
 
 ## Setup
