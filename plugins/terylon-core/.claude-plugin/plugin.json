@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "terylon-core",
+  "version": "1.0.3",
+  "description": "Methodology and measurement — the plan format, the build loop, and per-agent token-spend measurement read from a session's own transcripts. No git, forge, or MCP dependency. Successor to terylon-metrics.",
+  "author": {
+    "name": "Vít Janeček",
+    "email": "vit.janecek@outlook.com"
+  },
+  "homepage": "https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace?path=/plugins/terylon-core",
+  "license": "Proprietary",
+  "keywords": [
+    "claude-code",
+    "methodology",
+    "planning",
+    "metrics",
+    "tokens",
+    "measurement",
+    "observability"
+  ]
+}

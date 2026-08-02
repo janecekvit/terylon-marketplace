@@ -6,9 +6,6 @@
     "name": "Vít Janeček",
     "email": "vit.janecek@outlook.com"
   },
-  "allowCrossMarketplaceDependenciesOn": [
-    "claude-plugins-official"
-  ],
   "plugins": [
     {
       "name": "terylon-git",
@@ -24,12 +21,14 @@
       ]
     },
     {
-      "name": "terylon-metrics",
-      "source": "./plugins/terylon-metrics",
-      "description": "Claude Code run metrics — per-agent, per-tier token-spend measurement read from a session's own transcripts. No git, forge, or MCP dependency.",
+      "name": "terylon-core",
+      "source": "./plugins/terylon-core",
+      "description": "Methodology and measurement — the plan format, the build loop, and per-agent token-spend measurement read from a session's own transcripts. No git, forge, or MCP dependency. Successor to terylon-metrics.",
       "category": "general",
       "keywords": [
         "claude-code",
+        "methodology",
+        "planning",
         "metrics",
         "tokens",
         "measurement",
@@ -64,7 +63,7 @@
     {
       "name": "terylon-dev",
       "source": "./plugins/terylon-dev",
-      "description": "Developer pipeline — from a user story to implemented, tested code through plan → build (TDD) → finish, with an autonomous leader agent and parallel review lenses. Requires terylon-git, terylon-devops, terylon-metrics and superpowers.",
+      "description": "Developer pipeline — from a user story to implemented, tested code through plan → build (TDD) → finish, with an autonomous leader agent and parallel review lenses. Requires terylon-git, terylon-devops and terylon-core.",
       "category": "role",
       "keywords": [
         "developer",
@@ -78,7 +77,7 @@
     {
       "name": "terylon-test",
       "source": "./plugins/terylon-test",
-      "description": "Tester — walks a pull request's test plan and its linked work item's acceptance criteria, exercises what can be exercised, reconciles the two, and reports what cannot. Separates executed from asserted so a tick means something. Requires terylon-devops and terylon-metrics.",
+      "description": "Tester — walks a pull request's test plan and its linked work item's acceptance criteria, exercises what can be exercised, reconciles the two, and reports what cannot. Separates executed from asserted so a tick means something. Requires terylon-devops and terylon-core.",
       "category": "role",
       "keywords": [
         "testing",

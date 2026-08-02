@@ -3,7 +3,7 @@ name: pr-reviewer
 description: "Use when auditing someone else's Azure DevOps pull request — checks eligibility, builds the PR diff, dispatches code-reviewer for the thorough review, and posts the confirmed findings back to the PR. Trigger: 'review this PR', a foreign PR URL."
 model: opus
 color: red
-tools: [Bash(git *), Read, Grep, Glob, Write, Agent, mcp__ado__*, mcp__plugin_terylon-devops_ado__*]
+tools: [Bash(git *), Read, Grep, Glob, Write, Agent, mcp__plugin_terylon-devops_ado__*]
 disallowedTools: [Edit]
 skills: [ado-mcp, review-pr, create-workspace]
 ---

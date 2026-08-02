@@ -4,6 +4,7 @@
 const fileSystem = require("fs");
 const path = require("path");
 const operatingSystem = require("os");
+const oet = require("../../../shared/oet.js");
 
 // Only assistant-turn records carry the model's own token usage. User, system, tool-result and
 // summary records must never be summed, or the total counts context as if it were spend.
@@ -21,9 +22,14 @@ const META_SUFFIX = ".meta.json";
 // Inserts a comma every three digits from the right (thousands separators) for readable totals.
 const DIGIT_GROUP_SEPARATOR = /\B(?=(\d{3})+(?!\d))/g;
 
+// How many individual agent runs the report lists by OET. Aggregating by type alone hides the
+// difference between fourteen even runs and one runaway, which is the question the table exists
+// to answer.
+const DEFAULT_TOP_RUNS = 10;
+
 function parseArguments(argumentVector)
 {
-    const parsed = { directory: null, project: null, session: null, outputPath: null };
+    const parsed = { directory: null, project: null, session: null, outputPath: null, topRuns: DEFAULT_TOP_RUNS };
 
     for (let index = 0; index < argumentVector.length; index += 1)
     {
@@ -35,6 +41,11 @@ function parseArguments(argumentVector)
         else if (argument === "--project") { parsed.project = argumentVector[++index] ?? null; }
         else if (argument === "--session") { parsed.session = argumentVector[++index] ?? null; }
         else if (argument === "--out") { parsed.outputPath = argumentVector[++index] ?? null; }
+        else if (argument === "--top")
+        {
+            const requested = Number.parseInt(argumentVector[++index] ?? "", 10);
+            parsed.topRuns = Number.isFinite(requested) && requested >= 0 ? requested : DEFAULT_TOP_RUNS;
+        }
     }
 
     return parsed;
@@ -176,7 +187,9 @@ function resolveSession(parsed)
 
 function sumUsage(transcriptPath)
 {
-    const totals = { output: 0, cacheRead: 0, cacheWrite: 0, assistantRecords: 0 };
+    // `model` is carried alongside the sums because the main thread has no .meta.json to read it
+    // from — its records are the only place the model appears, and OET needs it to weight them.
+    const totals = { output: 0, cacheRead: 0, cacheWrite: 0, assistantRecords: 0, model: null };
 
     let content;
 
@@ -216,22 +229,28 @@ function sumUsage(transcriptPath)
         totals.cacheRead += usage[CACHE_READ_FIELD] || 0;
         totals.cacheWrite += usage[CACHE_WRITE_FIELD] || 0;
         totals.assistantRecords += 1;
+
+        if (totals.model === null && typeof record.message.model === "string")
+        {
+            totals.model = record.message.model;
+        }
     }
 
     return totals;
 }
 
-function readAgentType(metaPath)
+function readAgentMeta(metaPath)
 {
     try
     {
         const meta = JSON.parse(fileSystem.readFileSync(metaPath, "utf8"));
-        return meta.agentType || "unknown";
+        return { type: meta.agentType || "unknown", model: typeof meta.model === "string" ? meta.model : null };
     }
     catch
     {
         // No meta file, or unreadable: the transcript still counts, only its label is unknown.
-        return "unknown";
+        // A null model falls back to the default weight, which never under-counts.
+        return { type: "unknown", model: null };
     }
 }
 
@@ -242,37 +261,59 @@ function aggregateByType(subagents)
     for (const subagent of subagents)
     {
         const existing = byType.get(subagent.type)
-            || { type: subagent.type, count: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+            || { type: subagent.type, count: 0, output: 0, cacheRead: 0, cacheWrite: 0, oet: 0 };
 
         existing.count += 1;
         existing.output += subagent.usage.output;
         existing.cacheRead += subagent.usage.cacheRead;
         existing.cacheWrite += subagent.usage.cacheWrite;
+        existing.oet += subagent.oet;
         byType.set(subagent.type, existing);
     }
 
     const rows = Array.from(byType.values());
-    rows.sort((left, right) => right.output - left.output);
+    rows.sort((left, right) => right.oet - left.oet);
     return rows;
 }
 
-function grandTotals(mainTotals, subagents)
+function topRunsByOet(subagents, limit)
 {
-    const totals = { output: mainTotals.output, cacheRead: mainTotals.cacheRead, cacheWrite: mainTotals.cacheWrite };
+    // Sorted by OET, not by output: a run whose cost is cache-write must not sort below a chattier
+    // but cheaper one, which is exactly the inversion the per-type table alone cannot show.
+    const rows = subagents.slice();
+    rows.sort((left, right) => right.oet - left.oet);
+    return rows.slice(0, limit);
+}
+
+function grandTotals(mainTotals, subagents, mainOet)
+{
+    const totals =
+    {
+        output: mainTotals.output,
+        cacheRead: mainTotals.cacheRead,
+        cacheWrite: mainTotals.cacheWrite,
+        oet: mainOet || 0,
+    };
 
     for (const subagent of subagents)
     {
         totals.output += subagent.usage.output;
         totals.cacheRead += subagent.usage.cacheRead;
         totals.cacheWrite += subagent.usage.cacheWrite;
+        totals.oet += subagent.oet;
     }
 
     return totals;
 }
 
-function measureSession(projectDirectory, sessionId)
+function measureSession(projectDirectory, sessionId, options)
 {
+    const settings = options || {};
+    const weights = settings.weights || oet.loadWeights();
+    const topRuns = typeof settings.topRuns === "number" ? settings.topRuns : DEFAULT_TOP_RUNS;
+
     const mainTotals = sumUsage(path.join(projectDirectory, sessionId + TRANSCRIPT_SUFFIX));
+    const mainOet = oet.outputEquivalentTokens(mainTotals, mainTotals.model, weights);
 
     const subagentsDirectory = path.join(projectDirectory, sessionId, "subagents");
     const subagents = [];
@@ -294,16 +335,23 @@ function measureSession(projectDirectory, sessionId)
 
         const identifier = entry.slice(0, -TRANSCRIPT_SUFFIX.length);
         const usage = sumUsage(path.join(subagentsDirectory, entry));
-        const type = readAgentType(path.join(subagentsDirectory, identifier + META_SUFFIX));
+        const meta = readAgentMeta(path.join(subagentsDirectory, identifier + META_SUFFIX));
 
-        subagents.push({ identifier, type, usage });
+        // The .meta.json model wins; the transcript's own is the fallback for a meta file that
+        // never named one.
+        const model = meta.model || usage.model;
+
+        subagents.push({ identifier, type: meta.type, model, usage, oet: oet.outputEquivalentTokens(usage, model, weights) });
     }
 
     return {
         main: mainTotals,
+        mainOet,
         subagents,
         byType: aggregateByType(subagents),
-        totals: grandTotals(mainTotals, subagents),
+        topRuns: topRunsByOet(subagents, topRuns),
+        totals: grandTotals(mainTotals, subagents, mainOet),
+        weightsReadOn: weights.readOn || "unknown",
     };
 }
 
@@ -312,9 +360,10 @@ function groupDigits(value)
     return String(value).replace(DIGIT_GROUP_SEPARATOR, ",");
 }
 
-function usageRow(label, output, cacheRead, cacheWrite)
+function usageRow(label, output, cacheRead, cacheWrite, oetValue)
 {
-    return "| " + label + " | " + groupDigits(output) + " | " + groupDigits(cacheRead) + " | " + groupDigits(cacheWrite) + " |";
+    return "| " + label + " | " + groupDigits(output) + " | " + groupDigits(cacheRead)
+        + " | " + groupDigits(cacheWrite) + " | " + groupDigits(oetValue) + " |";
 }
 
 function formatReport(measurement, sessionId)
@@ -322,6 +371,7 @@ function formatReport(measurement, sessionId)
     const subagentOutput = measurement.totals.output - measurement.main.output;
     const subagentCacheRead = measurement.totals.cacheRead - measurement.main.cacheRead;
     const subagentCacheWrite = measurement.totals.cacheWrite - measurement.main.cacheWrite;
+    const subagentOet = measurement.totals.oet - measurement.mainOet;
 
     const lines = [];
 
@@ -329,21 +379,42 @@ function formatReport(measurement, sessionId)
     lines.push("");
     lines.push("Measured from transcripts (`type == \"assistant\"`), not from notification figures.");
     lines.push("");
-    lines.push("| Tier | output | cache-read | cache-write |");
-    lines.push("|---|---:|---:|---:|");
-    lines.push(usageRow("main thread", measurement.main.output, measurement.main.cacheRead, measurement.main.cacheWrite));
-    lines.push(usageRow(measurement.subagents.length + " subagents", subagentOutput, subagentCacheRead, subagentCacheWrite));
-    lines.push(usageRow("**total**", measurement.totals.output, measurement.totals.cacheRead, measurement.totals.cacheWrite));
+    lines.push("**OET** — output-equivalent tokens — is the derived quantity proportional to cost;");
+    lines.push("the three raw sums beside it are the measured facts. Weights read on `"
+        + measurement.weightsReadOn + "`.");
+    lines.push("");
+    lines.push("| Tier | output | cache-read | cache-write | OET |");
+    lines.push("|---|---:|---:|---:|---:|");
+    lines.push(usageRow("main thread", measurement.main.output, measurement.main.cacheRead, measurement.main.cacheWrite, measurement.mainOet));
+    lines.push(usageRow(measurement.subagents.length + " subagents", subagentOutput, subagentCacheRead, subagentCacheWrite, subagentOet));
+    lines.push(usageRow("**total**", measurement.totals.output, measurement.totals.cacheRead, measurement.totals.cacheWrite, measurement.totals.oet));
     lines.push("");
     lines.push("## By agent type");
     lines.push("");
-    lines.push("| Type | n | output | cache-read | cache-write |");
-    lines.push("|---|---:|---:|---:|---:|");
+    lines.push("| Type | n | output | cache-read | cache-write | OET |");
+    lines.push("|---|---:|---:|---:|---:|---:|");
 
     for (const typeRow of measurement.byType)
     {
         lines.push("| `" + typeRow.type + "` | " + typeRow.count + " | "
-            + groupDigits(typeRow.output) + " | " + groupDigits(typeRow.cacheRead) + " | " + groupDigits(typeRow.cacheWrite) + " |");
+            + groupDigits(typeRow.output) + " | " + groupDigits(typeRow.cacheRead) + " | "
+            + groupDigits(typeRow.cacheWrite) + " | " + groupDigits(typeRow.oet) + " |");
+    }
+
+    if (measurement.topRuns.length > 0)
+    {
+        lines.push("");
+        lines.push("## Costliest individual runs");
+        lines.push("");
+        lines.push("| Agent | Type | model | output | cache-read | cache-write | OET |");
+        lines.push("|---|---|---|---:|---:|---:|---:|");
+
+        for (const run of measurement.topRuns)
+        {
+            lines.push("| `" + run.identifier + "` | `" + run.type + "` | " + (run.model || "unknown") + " | "
+                + groupDigits(run.usage.output) + " | " + groupDigits(run.usage.cacheRead) + " | "
+                + groupDigits(run.usage.cacheWrite) + " | " + groupDigits(run.oet) + " |");
+        }
     }
 
     lines.push("");
@@ -354,7 +425,7 @@ function main()
 {
     const parsed = parseArguments(process.argv.slice(2));
     const resolved = resolveSession(parsed);
-    const measurement = measureSession(resolved.directory, resolved.session);
+    const measurement = measureSession(resolved.directory, resolved.session, { topRuns: parsed.topRuns });
     const report = formatReport(measurement, resolved.session);
 
     process.stdout.write(report + "\n");
@@ -371,8 +442,9 @@ module.exports = {
     parseArguments,
     resolveSession,
     sumUsage,
-    readAgentType,
+    readAgentMeta,
     aggregateByType,
+    topRunsByOet,
     grandTotals,
     measureSession,
     formatReport,

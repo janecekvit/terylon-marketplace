@@ -82,7 +82,7 @@ Results reach the pull request through `update-pr-checklist` (the plan, regroupe
 ## Dependencies
 
 - **`terylon-devops`** — the `ado` MCP server, the `ado-mcp` engine, and the two transports (`update-pr-checklist`, `update-work-item-checklist`). Installed automatically.
-- **`terylon-metrics`** — `measure-token-spend`, which the `test` skill invokes at the end of a run to report the verification's own token spend. Installed automatically.
+- **`terylon-core`** — `measure-token-spend`, which the `test` skill invokes at the end of a run to report the verification's own token spend, plus the `SubagentStop` hook that records per-agent spend as the run proceeds. Installed automatically.
 - **`terylon-git`** — reached through `terylon-devops`; supplies `delegate-to-repo-agents`.
 - **Playwright MCP server** — **optional**, and needed only by `run-ui-flows`. The plugin ships no `.mcp.json` for it on purpose: that would start a browser server for every consumer, including those who only walk a shell checklist. Without it, `run-ui-flows` reports the capability as absent and UI claims come back *not verifiable here* rather than silently unchecked.
 

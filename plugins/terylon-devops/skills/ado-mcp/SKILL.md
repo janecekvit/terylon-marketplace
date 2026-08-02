@@ -4,7 +4,7 @@ description: >-
   Use when another Terylon skill needs Azure DevOps MCP mechanics — URL/ID parsing,
   repo-id resolution, PR/work-item metadata, diffs, threads/comments, eligibility,
   and the ADO posting conventions. Internal mechanics library for other skills, not a user command.
-allowed-tools: Read, Grep, Glob, Bash(git *), mcp__ado__*, mcp__plugin_terylon-devops_ado__*
+allowed-tools: Read, Grep, Glob, Bash(git *), mcp__plugin_terylon-devops_ado__*
 ---
 
 # ado-mcp — Azure DevOps MCP engine

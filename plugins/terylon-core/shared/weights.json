@@ -1,0 +1,28 @@
+{
+  "$comment": [
+    "Weights for the output-equivalent token (OET) metric. Each is a RATIO between published",
+    "rates, never an absolute price: ratios move far more slowly than the prices they come from,",
+    "so a stale table degrades gracefully instead of lying.",
+    "",
+    "bucket.output      1.00  the unit",
+    "bucket.cacheWrite  0.25  5-minute-TTL cache-write rate against the output rate",
+    "bucket.cacheRead   0.02  cache-read rate against the output rate",
+    "",
+    "model.*  each model family's output rate against the opus output rate.",
+    "",
+    "A model the table does not name falls back to model.default = 1.00 — the conservative",
+    "direction, because under-weighting an unrecognised agent hides spend."
+  ],
+  "readOn": "2026-08-01",
+  "bucket": {
+    "output": 1.0,
+    "cacheWrite": 0.25,
+    "cacheRead": 0.02
+  },
+  "model": {
+    "default": 1.0,
+    "opus": 1.0,
+    "sonnet": 0.2,
+    "haiku": 0.05
+  }
+}

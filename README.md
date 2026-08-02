@@ -7,13 +7,15 @@ Internal Claude Code plugin marketplace for the development workflow on top of A
 | Plugin | Audience | Dependencies |
 |---|---|---|
 | `terylon-git` | any git repository — worktree isolation, review engine, code reviewer | none |
-| `terylon-metrics` | any repository — token-spend measurement from session transcripts | none |
+| `terylon-core` | any repository — the plan format, the build loop, token-spend measurement | none |
 | `terylon-devops` | Azure DevOps — ADO mechanics, PR review and description | `terylon-git` |
 | `terylon-product` | product owner / PM — user stories, Feature specs | `terylon-devops` |
-| `terylon-dev` | developers — plan → build (TDD) → finish | `terylon-git`, `terylon-devops`, `terylon-metrics`, `superpowers` |
-| `terylon-test` | anyone holding a checklist — verifies a test plan and acceptance criteria against the artifact | `terylon-devops`, `terylon-metrics` |
+| `terylon-dev` | developers — plan → build (TDD) → finish | `terylon-git`, `terylon-devops`, `terylon-core` |
+| `terylon-test` | anyone holding a checklist — verifies a test plan and acceptance criteria against the artifact | `terylon-devops`, `terylon-core` |
 
-`terylon-git` is deliberately forge-agnostic: it needs git and nothing else, so a repository hosted anywhere can use the worktree and review machinery without pulling in an ADO MCP server it has no use for. `terylon-devops` adds that layer on top. `terylon-metrics` is a second forge-agnostic leaf — it reads Claude Code session transcripts to measure a run's token spend, needs neither git nor a forge, and both `terylon-dev` and `terylon-test` pull it so `develop` and `test` can report a run's spend at finish.
+`terylon-git` is deliberately forge-agnostic: it needs git and nothing else, so a repository hosted anywhere can use the worktree and review machinery without pulling in an ADO MCP server it has no use for. `terylon-devops` adds that layer on top. `terylon-core` is a second forge-agnostic leaf — it carries the methodology the pipeline runs on (`write-plan`, `run-build-loop`) and the measurement of what a run costs, needs neither git nor a forge, and both `terylon-dev` and `terylon-test` pull it.
+
+> **`terylon-core` replaces `terylon-metrics`.** That plugin no longer exists. If `.claude/settings.json` enables `terylon-metrics@terylon`, rename the key to `terylon-core@terylon` — nothing else changes, because skills are addressed by name. `terylon-dev` also no longer requires the `claude-plugins-official` marketplace.
 
 Every slug carries the `terylon-` prefix. The prefix is intentionally redundant with the `@terylon` marketplace suffix — thanks to it, typing `/terylon` makes autocomplete show commands from all plugins in one filtered list.
 
@@ -70,8 +72,6 @@ Note the two are independent: `extraKnownMarketplaces.terylon.source.url` above 
 > **Why `"source": "git"`?** The client schema `extraKnownMarketplaces.<name>.source.source` accepts `"git"` for ordinary git remotes. `"git-subdir"` is a different schema, used in `marketplace.json#plugins[].source` to declare the sources of individual plugins — the client rejects it.
 >
 > `autoUpdate: true` is a sibling of `source` (not nested inside it) and tells Claude Code to refresh the marketplace in the background.
-
-`terylon-dev` additionally requires the `claude-plugins-official` marketplace to be enabled, because of the `superpowers` plugin.
 
 ## Local marketplace development
 

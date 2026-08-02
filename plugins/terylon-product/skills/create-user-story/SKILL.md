@@ -5,7 +5,7 @@ description: >-
   parent Feature — drafts a codebase-grounded, implementation-ready story (Approach, precise
   implementation detail, acceptance-criteria checklist, out-of-scope) and creates it in ADO.
   Optional flags --auto and --dry-run.
-allowed-tools: Bash(git *), Read, Grep, Glob, Agent, mcp__ado__*, mcp__plugin_terylon-devops_ado__*
+allowed-tools: Bash(git *), Read, Grep, Glob, Agent, mcp__plugin_terylon-devops_ado__*
 ---
 
 # Azure DevOps — Create User Story

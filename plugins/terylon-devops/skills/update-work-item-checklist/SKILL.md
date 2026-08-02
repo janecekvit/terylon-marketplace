@@ -6,7 +6,7 @@ description: >-
   "publish the acceptance-criteria verification". Reads the criteria out and writes results in:
   the earned ticks in place, everything else with its reason in a work-item comment. Does no
   checking of its own; the caller supplies the outcome.
-allowed-tools: Read, Grep, Glob, Write, mcp__ado__*, mcp__plugin_terylon-devops_ado__*
+allowed-tools: Read, Grep, Glob, Write, mcp__plugin_terylon-devops_ado__*
 ---
 
 # update-work-item-checklist

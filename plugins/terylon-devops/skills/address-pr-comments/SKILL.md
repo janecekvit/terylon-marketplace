@@ -3,7 +3,7 @@ name: address-pr-comments
 description: Use when the user provides an Azure DevOps pull request URL (dev.azure.com/…/pullrequest/N)
   for THEIR OWN PR and asks to apply / address / incorporate the review comments left by others.
   Optional flags --auto and --dry-run.
-allowed-tools: Bash(git *), Read, Grep, Glob, Edit, Write, mcp__ado__*, mcp__plugin_terylon-devops_ado__*
+allowed-tools: Bash(git *), Read, Grep, Glob, Edit, Write, mcp__plugin_terylon-devops_ado__*
 ---
 
 # Azure DevOps PR — Address Reviewer Comments

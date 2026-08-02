@@ -59,14 +59,15 @@ Every persona here is **generic by design** — that is what lets the same pipel
 
 ## Reuse
 
-The plugin is deliberately thin. The build phase **runs** `superpowers:subagent-driven-development` (its controller loop, ledger and final review); it further uses `writing-plans`, `test-driven-development`, `requesting-code-review` and `finishing-a-development-branch`, plus the built-in one-shot agents `Explore` and `Plan`. Isolation goes through `create-workspace` from `terylon-git`. Only the orchestration, the personas and the Azure DevOps wiring are its own.
+The plugin is deliberately thin. The build phase **runs** `run-build-loop` from `terylon-core` (the ledger, the pre-flight scan, the fix-round escalation, the model economics) and `planner` emits its artifacts in the `write-plan` format from the same plugin. Finishing goes through `finish-branch` and isolation through `create-workspace`, both from `terylon-git`. The built-in one-shot agents `Explore` and `Plan` do the grounding and the architecture draft. Only the orchestration, the personas and the Azure DevOps wiring are its own.
+
+It used to reuse six skills from the `superpowers` plugin. Three were replaced by shorter equivalents here; the other three turned out to be carried in full by the personas themselves, so they were dropped rather than rewritten. `terylon-dev` no longer requires the `claude-plugins-official` marketplace.
 
 ## Dependencies
 
 - **`terylon-devops`** — the `ado` MCP server, the `ado-mcp` engine, `review-pr`, `write-pr-description`. Installed automatically.
 - **`terylon-git`** — `create-workspace`, `code-review`, `delegate-to-repo-agents`, and the `code-reviewer` agent that `leader` dispatches for the whole-branch review. Declared directly rather than relied on transitively, because `leader` uses it whether or not a pull request is in play.
-- **`terylon-metrics`** — the `measure-token-spend` skill that `develop` invokes at Gate 3 to report the run's token spend. A dependency-free leaf, declared so it installs automatically.
-- **`superpowers`** from the `claude-plugins-official` marketplace — reused skills. Requires that marketplace to be enabled.
+- **`terylon-core`** — `run-build-loop`, `write-plan`, and the `measure-token-spend` skill that `develop` invokes at Gate 3. It also ships the `SubagentStop` hook that records the run's spend continuously. A dependency-free leaf, declared so it installs automatically.
 
 ## Setup
 
