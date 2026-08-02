@@ -119,7 +119,7 @@ An addition dropped on the floor is the failure mode that matters: the author wo
 
 ### 6. Guard the field rewrite
 
-`wit_update_work_item` **silently drops tag-shaped `<…>` content** (`ado-mcp` §`update-work-item`). Round-tripping acceptance criteria that contain a literal `<…>` would corrupt the author's wording without any error.
+The `update-work-item` operation **silently drops tag-shaped `<…>` content** (`ado-mcp` §`update-work-item`). Round-tripping acceptance criteria that contain a literal `<…>` would corrupt the author's wording without any error.
 
 **Before rewriting the field, scan the fetched criteria for a literal `<…>` tag shape.** If any item contains one, do **not** rewrite the field. Put every result in the comment instead, and say in the comment that the field was left untouched to avoid corrupting it. Content already stored escaped (`&lt;…&gt;`) is not tag-shaped and is safe.
 
@@ -151,7 +151,7 @@ One work-item comment carries everything a checkbox cannot:
 
 Rewrite the `AcceptanceCriteria` field **only** to change checkbox states. Keep the author's headings, ordering and item wording **verbatim**. Do not add group headings, do not reorder, do not reword — the three-group rewrite is `update-pr-checklist`'s answer to a flat test plan; acceptance criteria are the author's structured contract and stay theirs.
 
-Write with `wit_update_work_item` (`update-work-item` recipe). The field is already Markdown (step 2 refused otherwise), so no format patch is needed; a Markdown body sent to a Markdown field renders correctly.
+Write with the `update-work-item` recipe from `ado-mcp`. The field is already Markdown (step 2 refused otherwise), so no format patch is needed; a Markdown body sent to a Markdown field renders correctly.
 
 Every `- [X]` left in the field must satisfy the tick gate — executed, passed, covering bears on it. Everything else is `- [ ]`, and the comment says why.
 
@@ -183,7 +183,7 @@ This skill reads the repository only as a caller needs and writes only to the wo
 1. **Read:** given a work item id, the acceptance criteria come back with their encoding reported. No write tool is called and nothing is dispatched; this skill has no `Agent` and must not acquire one.
 2. **Read, no criteria:** a work item with an empty `AcceptanceCriteria` reports nothing to read, and invents none.
 3. **HTML field:** an HTML `AcceptanceCriteria` is reported as such, nothing is ticked, and the field is not auto-converted.
-4. **`--dry-run`:** the annotated field and the comment are printed, nothing is written, no `wit_update_work_item` or `wit_add_work_item_comment` call is made.
+4. **`--dry-run`:** the annotated field and the comment are printed, nothing is written, no `update-work-item` or `wi-comment-post` write is made.
 5. **Write order:** the comment appears **first**, then the field is annotated; the author's headings and wording survive verbatim, only checkbox states change.
 6. **Ticking discipline:** every `- [X]` corresponds to an item the result marks executed and passed, with a `covering` bearing on it.
 7. **A tick with nothing behind it** is downgraded to `- [ ]`, kept in place, and named in the comment — never removed silently.

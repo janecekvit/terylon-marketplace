@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "terylon-test",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Tester — walks a pull request's test plan and the acceptance criteria of its linked work item, exercises what can be exercised, reconciles the two, and reports what cannot. Separates executed from asserted so a tick means something. Requires terylon-devops and terylon-core.",
   "author": {
     "name": "Vít Janeček",

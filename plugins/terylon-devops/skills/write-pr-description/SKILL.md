@@ -32,6 +32,8 @@ can post it back via `mcp__ado__repo_update_pull_request`.
 - `--dry-run` — never post; only print the generated description in chat.
 - Default — print the description in chat, wait for `push` / `apply` before posting.
 
+**This skill owns the PR *body*; `create-pr` owns the PR *shell*.** When a pull request has to be opened as well, `create-pr` is the caller — it handles the branch, the work items, the reviewers and auto-complete, and delegates the description here. Run this one directly when the PR already exists and only its description needs writing.
+
 ## Prerequisites
 
 - Local clone of the repo checked out (the skill reads the diff locally via `git`).
@@ -40,7 +42,7 @@ can post it back via `mcp__ado__repo_update_pull_request`.
 
 ## Azure DevOps mechanics — delegated to `ado-mcp`
 
-The Azure DevOps tool recipes this skill relies on (PR-URL parsing, resolving the repository id, fetching PR metadata, and the `repo_update_pull_request` write shape) live in the **`ado-mcp`** engine skill. Before issuing any `mcp__ado__*` call, read its single source of truth:
+The Azure DevOps tool recipes this skill relies on (PR-URL parsing, resolving the repository id, fetching PR metadata, and the the `update-pr-description` operation write shape) live in the **`ado-mcp`** engine skill. Before issuing any `mcp__ado__*` call, read its single source of truth:
 
 ```
 ${CLAUDE_PLUGIN_ROOT}/skills/ado-mcp/references/ado-mcp.md
@@ -55,7 +57,7 @@ Delegation centralizes the *recipes* only — this skill still issues its own `m
 Priority chain — stop at the first that applies:
 
 1. **`--base=<ref>` supplied** — use it verbatim. It always wins, PR URL or not.
-2. **PR URL given** — fetch the PR metadata per the `ado-mcp` reference (parse URL → resolve `repositoryId` → `repo_get_pull_request_by_id`) and read `targetRefName`. Strip `refs/heads/`. Use that value as `<base>`.
+2. **PR URL given** — fetch the PR metadata per the `ado-mcp` reference (the `parse-pr-url`, `resolve-repo-id` and `fetch-pr-metadata` operations, in that order) and read `targetRefName`. Strip `refs/heads/`. Use that value as `<base>`.
 3. **Neither** — detect the repo's integration branch instead of hard-coding a branch name:
 
    ```bash
@@ -221,9 +223,9 @@ Final shape:
 
 **Re-fetch the PR metadata first.** Do not reuse the snapshot from step 2 — in default mode
 the wait for `push` is unbounded, and a CI bot appending a preview link during that gap
-would be overwritten by a description computed before it existed. `repo_update_pull_request`
+would be overwritten by a description computed before it existed. the `update-pr-description` operation
 replaces the entire field, and ADO keeps no revision history for PR descriptions, so the
-loss is unrecoverable. One extra `repo_get_pull_request_by_id` costs a second; the sibling
+loss is unrecoverable. One extra `fetch-pr-metadata` costs a second; the sibling
 `review-pr` re-checks at its own step 6 for the same reason.
 
 Use the freshly-read `pullRequest.description`. The skill writes **only** its own marked
@@ -241,37 +243,90 @@ there is no longer an `overwrite` prompt because the design makes silent overwri
 impossible. If the user genuinely wants to nuke a hand-written description, they edit the
 PR to remove the existing text first, then re-run.
 
-### 8. Check the length, then update
+### 8. Budget the region, measure it, then update
 
-**ADO caps `description` at 4000 characters**, counted over the *whole* field — the Claude
-region plus anything preserved around it. Over the limit the call fails validation before
-reaching ADO (`too_big`) and writes nothing, so measure before calling:
+The description is read by a human in under a minute and **shares one small field with whatever CI appends afterwards**, so it is length-budgeted first and complete second.
+
+#### 8a. The constants
+
+**The unit of measure is the region — sentinel through footer, inclusive — not the body.** The two markers cost roughly 150 characters that Azure DevOps counts like any other text, so a body written to a 2500-character budget posts at over 2650.
+
+| Constant | Value | What it is |
+|---|---|---|
+| `CAP` | 4000 | ADO's hard limit on `description`. The MCP schema **rejects** an over-length write (`too_big`); it does not truncate, and nothing is posted. |
+| `FIELD_CEILING` | 3900 | `CAP` less 100 for CRLF normalisation and a longer `<plugin-version>`. |
+| `CI_RESERVE` | 700 | Held back for what CI appends to the same field **after** we post. |
+| `BUDGET` | 2500 | Nominal budget for the region. |
+| `FLOOR` | 400 | The smallest region that still says something: sentinel, a summary, one sentence, footer. |
+
+Let `FOREIGN` be everything in the current description **outside** the Claude region — the whole description on a first run, everything before the sentinel plus everything after the footer on a re-run. Read it from the metadata already fetched in step 2; no extra call.
+
+```
+JOIN  = 2 if FOREIGN > 0 else 0          # the blank line between regions
+B_eff = min(BUDGET, FIELD_CEILING - FOREIGN - JOIN - CI_RESERVE)
+```
+
+Drop `CI_RESERVE` to 0 **only when CI's block is already visible in `FOREIGN`** — a preview link, an environment table, deploy output. At that point it is counted once already, and reserving for it twice shrinks the budget on every re-run. When in doubt, keep the reserve.
+
+**If `B_eff < FLOOR`, do not post.** Print the description to chat with the arithmetic — `FOREIGN`, `CI_RESERVE`, `B_eff` — and give the author the choice: trim the foreign content and re-run, or take the description as chat output. **Never truncate to fit, and never delete foreign content to make room.**
+
+#### 8b. Structural caps
+
+These keep the output short by construction, so the ladder below rarely runs.
+
+| Element | Cap |
+|---|---|
+| Summary | 2 sentences, 300 characters |
+| Sub-headers under **Changes** | 3 |
+| Bullets under **Changes** | 7 total, 3 per sub-header |
+| Characters per bullet | 150 |
+| **Test plan** items | 5, at 110 characters each |
+| Bullets in the whole body | 12 |
+
+**Do not enumerate files.** Azure DevOps already lists every changed file with its line counts in the Files tab. Forty files at roughly 60 characters each is the entire budget spent on what the reviewer is one click from. Name a path only where a bullet is meaningless without it.
+
+#### 8c. Measure before posting
+
+Assemble the full region and **count it — do not estimate.** A bullet judged at 140 characters is routinely 190.
+
+**A character here is a UTF-16 code unit** — what .NET's `String.Length` counts — because the gates downstream are .NET (`nvarchar(4000)` server-side). So the footer's robot emoji costs **2**, while `é`, `—` and `→` cost 1 each.
+
+| Method | When | Why |
+|---|---|---|
+| **`wc -c`** — the default | always | counts UTF-8 bytes, which are never fewer than UTF-16 code units. A quoted heredoc (`<<'EOF'`) adds exactly one newline, so compare `count - 1` against `B_eff`. Passing this guarantees you are under the real limit. |
+| UTF-16 code units | only when the byte count is the **only** thing over | `wc -c` over-charges every non-ASCII character (an em dash costs 3 bytes, 1 unit). If the byte count exceeds `B_eff` by less than the number of non-ASCII characters, the region probably fits and cutting would be wrong. Needs its own tool grant — ask rather than assume. |
+| **`wc -m`** | **never** | locale-dependent: bytes under the C locale Git for Windows ships, code points under a UTF-8 locale. The code-point reading **under-counts the footer emoji**, which is the one way to pass the check while being over the real limit. |
 
 ```bash
-wc -m <<'DESCRIPTION'
-<the located-or-appended description from step 7>
+wc -c <<'DESCRIPTION'
+<the assembled region from step 7>
 DESCRIPTION
 ```
 
-**`-m`, not `-c`.** The cap counts characters; `-c` counts bytes, and a description carrying arrows, dashes and emoji measures longer in bytes than it is. Trimming against the byte count cuts material that would have fitted.
+#### 8d. Reduction ladder
 
-Over 4000, cut from the generated body — never from content you did not write. Drop whole
-sections rather than trimming every bullet; a reviewer gets more from four complete sections
-than from eight truncated ones. Cut in this order:
+Over budget? Apply these **in order**, re-measuring after each rung, and stop at the first that fits. The order is fixed so two runs on the same diff produce the same output.
 
-1. Rationale and background prose — the "why we chose this" paragraphs
-2. Reviewer notes and pointers
-3. Detail inside **Changes** bullets, keeping every path and symbol name (see the caveman
-   rule in step 5: compress the language, never the information)
+1. Drop any diff-stat, commit list, or file enumeration.
+2. Collapse file-scoped bullets into their theme, naming at most the 2 load-bearing paths.
+3. Drop the third sub-header, merging at most one of its bullets into the nearest survivor.
+4. Rewrite over-long bullets down to 150 characters, longest first — cut the justification clause, keep verb, object and location.
+5. Drop the lowest-value bullets, last-in-section first, until **Changes** has 5. Never below 2.
+6. Cut **Test plan** to 3 — keep what a reviewer cannot infer: the risky path, the regression, the manual step. Never below 1.
+7. Cut the summary to one sentence, 200 characters.
+8. Drop whole sections the repo template did not ask for, heading included.
+9. Reduce each remaining group to a single one-line bullet, 3 lines total.
+10. Floor shape: sentinel, summary, one sentence, footer.
+11. Still over — do not post; fall back to the `B_eff < FLOOR` behaviour in 8a.
 
-Never cut the **Test plan** or the footer. Say in the chat summary which sections you
-dropped, so the author can paste them into a comment if they matter.
+**Invariants no rung may break:**
 
-Then write the description via `repo_update_pull_request` using the call shape in the
-`ado-mcp` reference (pass `pullRequestId`, `repositoryId`, `projectName`, and the
-located-or-appended description from step 7).
+- **Never drop the sentinel or the footer.** The next run needs both to find the region; losing either makes it append a duplicate instead of replacing.
+- **Never truncate mid-anything.** Reduction means rewriting a unit or removing a whole unit, never slicing a string. No half sentences, no dangling `[link](`, no unclosed backtick, no trailing ellipsis.
+- **Never leave a dangling heading** — removing a section's last bullet removes its heading too, unless the repo template mandates the section, which then keeps `_TBD by author_`.
+- **Never cut foreign content.** It is not ours; the budget bends around it.
 
-Print confirmation with a link to the PR.
+Then write the description via the `ado-mcp` update recipe, and print confirmation with a link to the PR **and the region's measured length against `B_eff`**.
 
 ### 9. Do not commit
 
@@ -299,6 +354,10 @@ For no-URL mode: `(Local-only — paste into your PR when you open it.)`
 - **Writing from a stale snapshot** — the description read in step 2 can be minutes or hours
   old by the time the user says `push`. Re-fetch at step 7. Anything a CI bot appended in
   between is gone otherwise, with no revision history to recover it from.
+- **Using `wc -m`** — locale-dependent, and under the UTF-8 reading it under-counts the footer emoji, so it can pass while the region is over. `wc -c` is the safe default.
+- **Budgeting the body instead of the region** — the sentinel and footer cost about 150 characters that ADO counts too.
+- **Spending the budget on a file list** — the Files tab already has it.
+- **Deleting foreign content to make room** — it is not ours. When `B_eff` drops below the floor, print to chat and let the author decide.
 - **Skipping the length check** — 4000 characters over the whole field, and a long branch
   easily exceeds it. The call fails cleanly, but only after the description was generated;
   measure at step 8 and cut whole sections rather than discovering the limit on the write.
@@ -362,3 +421,5 @@ For no-URL mode: `(Local-only — paste into your PR when you open it.)`
    run, and the remainder is marked `_TBD by author_`. Expect **no** plausible-looking procedure
    reverse-engineered from the diff. On a branch that *did* produce a plan file, expect its
    per-task test cases to appear rather than a fresh set derived from the diff.
+
+> **See also:** `create-pr` for opening the pull request this description goes into, `review-pr` for the review pass, `address-pr-comments` for the inbound direction.

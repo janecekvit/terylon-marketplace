@@ -108,7 +108,7 @@ The last two rows are the reason this skill exists.
 
 ### 5. Re-fetch, then reconcile
 
-**Fetch the PR again immediately before the write** — the whole object, not only the description. In default mode the wait for `push` is unbounded, and `repo_update_pull_request` replaces the whole field with no revision history to recover from.
+**Fetch the PR again immediately before the write** — the whole object, not only the description. In default mode the wait for `push` is unbounded, and `update-pr-description` replaces the whole field with no revision history to recover from.
 
 **Re-run the eligibility check on what comes back**, as `ado-mcp` prescribes and `review-pr` does at its own step 6. A PR that was completed or abandoned during the wait must not be written to; a verification thread arriving after a merge is noise on something nobody will read again. Fetching the description alone answers what the plan says and not whether writing to it is still allowed.
 
@@ -239,7 +239,7 @@ This skill reads the repository to verify it and writes only to the PR. No commi
 
 1. **Read:** given a PR URL, the items come back from the test plan with the scope named — the sentinel region, or the section standing alone. No write tool is called and nothing is dispatched; this skill has no `Agent` and must not acquire one.
 2. **Read, no plan:** a PR with no `## Test plan` reports that there is nothing to read, and invents none.
-3. **`--dry-run`:** the three groups are printed, nothing is written, and no `repo_update_pull_request` call is made.
+3. **`--dry-run`:** the three groups are printed, nothing is written, and no `update-pr-description` write is made.
 4. **Write:** the evidence thread appears **first**, then the plan is rewritten inside the selected scope, and content before the sentinel and after the footer survives.
 5. **Hand-written plan, no sentinel:** the section is rewritten and nothing else in the field is touched — no sentinel is added.
 6. **Ticking discipline:** every `- [X]` left behind corresponds to an item the result marks executed and passed, with a `covering` bearing on it. A green run with an empty or unrelated `covering` produces no tick.

@@ -121,7 +121,7 @@ the user's chosen edit text.
 
 **Re-check eligibility first.** Re-fetch the PR metadata via the `fetch-pr-metadata` recipe and skip posting if `status` is no longer active or `isDraft` flipped true. The snapshot from step 2 is stale by now: applying the edits took time, and default mode waited for the user on top of that. The sibling `review-pr` does this at its step 6.
 
-The stakes here are lower than in `write-pr-description` — `repo_reply_to_comment` is additive, so the worst case is a reply landing on a PR someone just completed. That is noise rather than data loss, but it is noise with your name on it.
+The stakes here are lower than in `write-pr-description` — the `reply-to-thread` operation is additive, so the worst case is a reply landing on a PR someone just completed. That is noise rather than data loss, but it is noise with your name on it.
 
 Per thread that was successfully addressed, post a short reply ending with the standard footer:
 
