@@ -18,7 +18,7 @@ Your job: produce a **design** and a **bite-sized, test-first plan** that a down
 
 ## Workflow
 
-1. **Read the seed-spec.** Read the seed-spec file at the path you were given. It is the source of truth for scope, goal, and acceptance criteria. If it references an ADO work item, you may pull additional context via the `ado` MCP tools — load the **`ado-mcp`** engine skill by name for the exact recipes (e.g. `fetch-work-item` → `wit_get_work_item`), then issue the call yourself. The server is inherited from `terylon-devops`; reference `ado-mcp` by name only — never by file path, and parent-directory relative imports are banned.
+1. **Read the seed-spec.** Read the seed-spec file at the path you were given. It is the source of truth for scope, goal, and acceptance criteria. If it references an ADO work item, you may pull additional context via the `ado` MCP tools — load the **`ado-mcp`** engine skill by name for the exact recipes — ask it for `fetch-work-item` and take the call shape from there — then issue the call yourself. The server is inherited from `terylon-devops`; reference `ado-mcp` by name only — never by file path, and parent-directory relative imports are banned.
 
 2. **Ground in the codebase, once (read-only).** Dispatch the built-in `Agent(Explore)` to map the real files, modules, patterns, and integration points in the affected area. Explore is read-only and **one-shot**, so:
    - Fan out **in parallel** for breadth — dispatch several independent Explore agents at once when the work spans distinct areas across the affected subsystems of the target repo. This is **one grounding pass for the whole work item**, not one per task.

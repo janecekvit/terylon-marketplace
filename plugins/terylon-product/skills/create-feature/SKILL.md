@@ -110,29 +110,20 @@ Before updating the work item:
 2. **Confirm title edits separately.** Title edits are higher blast radius than description edits - get a separate yes for the name.
 3. **Always Markdown — never HTML.** In HTML a `- [ ]` line is a dead bullet, headings and tables need hand-written tags, and the Definition of Ready checklist stops being a checklist. Markdown renders all of it natively and matches what `create-user-story` already does.
 
-   | Mode | Call | How |
+   | Mode | Operation | What it must carry |
    |---|---|---|
-   | New Feature | `wit_create_work_item` | `System.Description` with **`format: "Markdown"`** — send the draft as written |
-   | Update existing | `wit_update_work_item` | patch the format path **and** the content in one call, format op first |
+   | New Feature | `create-work-item` | `System.Description` as Markdown — send the draft as written |
+   | Update existing | `update-work-item` | the format path **and** the content in one call, format first |
 
-   The update shape, because `wit_update_work_item` takes no per-field `format` in its `fields` ops:
-
-   ```
-   updates: [
-     { op: "add", path: "/multilineFieldsFormat/System.Description", value: "Markdown" },
-     { op: "add", path: "/fields/System.Description",                value: "<markdown body>" }
-   ]
-   ```
-
-   Include the format op **every time**, even when the field is already Markdown — it is idempotent, and omitting it against an HTML field silently writes Markdown source into an HTML container. See the `update-work-item` recipe in `ado-mcp` for the verified call.
+   **Patch the format path every time, even when the field is already Markdown.** It is idempotent, and omitting it against an HTML field silently writes Markdown source into an HTML container, where a `- [ ]` renders as a dead bullet. The exact patch shape lives in the `update-work-item` recipe in `ado-mcp` — read it there rather than writing it from memory: the tool surface changes between pinned server versions, and a stale parameter name rejects the whole call.
 4. **Do NOT hard-wrap.** ADO renders every source line break verbatim - it does not treat a single newline as a soft wrap the way GitHub does. Wrapping a paragraph or a bullet at 72 / 80 chars produces visibly choppy short lines in the rendered work item. Emit each paragraph and each bullet as **one continuous line**; insert a real line break only between distinct paragraphs, bullets, or headings. This applies to the Markdown draft and to the HTML you push.
 5. **Dashes:** in the body use only `-` or `–`, never an em-dash (`—`). The footer line below is the single exception - it is emitted from the template verbatim.
 
-The Azure DevOps calls themselves - fetching the Feature (`fetch-work-item`), creating one (`create-work-item`) and pushing an update (`update-work-item`) - are owned by the **`ado-mcp`** engine skill. Load `ado-mcp` by name for the exact `wit_get_work_item` / `wit_create_work_item` / `wit_update_work_item` call shapes; this skill issues its own `mcp__plugin_terylon-devops_ado__*` calls following those recipes.
+The Azure DevOps calls themselves - fetching the Feature (`fetch-work-item`), creating one (`create-work-item`) and pushing an update (`update-work-item`) - are owned by the **`ado-mcp`** engine skill. **Load `ado-mcp` by name and take the call shapes from it**; this skill issues its own `mcp__plugin_terylon-devops_ado__*` calls following those recipes and names no tool of its own.
 
-Every write is Markdown. A new Feature is created with `format: "Markdown"`; an update patches `/multilineFieldsFormat/System.Description` alongside the content, since `wit_update_work_item` carries no `format` in its field ops. See step 3 above for the exact shape.
+Every write is Markdown. A new Feature is created with `format: "Markdown"`; an update patches `/multilineFieldsFormat/System.Description` alongside the content, because the update operation carries no per-field format. See step 3 and the `update-work-item` recipe.
 
-**Parenting.** `create-work-item` sets field values only - it cannot set the parent relation. To place the Feature under an Epic, follow with `link-work-item-parent` (`wit_work_items_link`) where `id` is the new Feature and `linkToId` is the Epic, `type: "parent"`. Getting the direction backwards makes the Epic a child of the Feature.
+**Parenting.** `create-work-item` sets field values only - it cannot set the parent relation. To place the Feature under an Epic, follow with `link-work-item-parent`, where the **new Feature** is the subject and the Epic is what it links to. Getting the direction backwards makes the Epic a child of the Feature.
 
 ## Footer
 
@@ -184,7 +175,7 @@ In Claude Code from the repo root:
 ## Common mistakes
 
 - **Writing HTML at all.** Every multiline field this skill touches is Markdown. HTML costs the interactive checkboxes and forces hand-written `<p>` / `<ul><li>` tags for content ADO renders on its own.
-- **Updating without the format op.** `wit_update_work_item` takes no per-field `format`, so a Markdown body patched into a field still encoded as HTML renders as literal `#` and `-`. Always send the `/multilineFieldsFormat/` op alongside the content — it is idempotent when the field is already Markdown, and it is the repair when it is not.
+- **Updating without the format op.** The `update-work-item` operation takes no per-field `format`, so a Markdown body patched into a field still encoded as HTML renders as literal `#` and `-`. Always send the `/multilineFieldsFormat/` op alongside the content — it is idempotent when the field is already Markdown, and it is the repair when it is not.
 - **Forgetting the parent link.** `create-work-item` sets fields only. Without a following `link-work-item-parent`, the Feature is orphaned rather than sitting under its Epic.
 - **Inventing what you cannot know.** Customer names, external references, real-world numbers. Mark `[needs input]` and say so in the readiness verdict.
 - **Hard-wrapping paragraphs or bullets.** ADO renders source line breaks verbatim; wrapping at 72 or 80 characters produces visibly choppy lines. One continuous line per paragraph and per bullet.

@@ -180,7 +180,7 @@ after it). **The order is binding:** everything variable — version, model, eff
 
 When a skill emits markdown destined for Azure DevOps rendering — PR descriptions, PR thread comments, wiki posts — DO NOT hard-wrap paragraphs or bullets at 72 / 80 chars. ADO renders source line breaks verbatim (not as markdown soft wraps like GitHub does), so wrapping produces visibly choppy short lines in the rendered output. Emit one continuous line per paragraph and one continuous line per bullet; insert real `\n` only between distinct paragraphs / bullets / headings. Let the renderer wrap.
 
-This rule applies to any skill that writes to ADO via `mcp__ado__*` — `review-pr`, `address-pr-comments`, `write-pr-description`, and any future ADO-writing skills.
+This rule applies to any skill that writes to ADO via `mcp__ado__*` — `create-pr`, `review-pr`, `address-pr-comments`, `write-pr-description`, and any future ADO-writing skills.
 
 ### Cross-skill references
 
@@ -206,6 +206,10 @@ which changes nothing about how they compose: `review-pr` loads `code-review` **
 and `terylon-devops` declares `dependencies: ["terylon-git"]` so the engine is always
 present. A split like this is the normal outcome when an engine has no forge dependency:
 put it in the lowest plugin that can host it, and let the transports depend upwards.
+
+**A transport names operations, never tools.** The engine owns the tool surface; a transport that restates a call shape becomes a second place to fix when the surface moves — and it moves. `@azure-devops/mcp` 2.9.0 consolidated every tool into action-based forms, renaming all but one of them and turning `projectName` into `project`; because every schema is `additionalProperties: false`, each stale name fails the whole call rather than degrading. The marketplace had those names copied across nine files and would have failed on first contact.
+
+So a transport writes ``the `update-pr-description` operation``, not the tool it resolves to. When the server changes, one file changes.
 
 For ADO mechanics, `ado-mcp` (terylon-devops) is the canonical engine: it owns all Azure DevOps MCP recipes in `skills/ado-mcp/references/ado-mcp.md`, and every transport skill in `terylon-devops`, `terylon-product` and `terylon-dev` delegates to it (same-plugin skills via a `${CLAUDE_PLUGIN_ROOT}/skills/ado-mcp/references/ado-mcp.md` Read; cross-plugin skills by loading `ado-mcp` by name). `terylon-git` is deliberately absent from that list — it has no forge access at all. The footer/version is always resolved by the calling skill, never by `ado-mcp`.
 
@@ -259,7 +263,7 @@ It **replaced `terylon-metrics`**, which no longer exists, and its arrival remov
 |---|---|---|
 | `terylon-git` | `create-workspace`, `code-review`, `finish-branch`, `delegate-to-repo-agents` | `code-reviewer` |
 | `terylon-core` | `write-plan`, `run-build-loop`, `measure-token-spend` | — |
-| `terylon-devops` | `ado-mcp`, `review-pr`, `write-pr-description`, `address-pr-comments`, `update-pr-checklist`, `update-work-item-checklist` | `pr-reviewer` |
+| `terylon-devops` | `ado-mcp`, `create-pr`, `review-pr`, `write-pr-description`, `address-pr-comments`, `update-pr-checklist`, `update-work-item-checklist` | `pr-reviewer` |
 | `terylon-product` | `create-user-story`, `create-feature` | — |
 | `terylon-dev` | `develop` | `leader`, `planner`, `developer`, `debugger`, `refactorer`, `security-reviewer`, `performance-reviewer`, `architecture-reviewer`, `edge-case-reviewer` |
 | `terylon-test` | `test`, `verify-test-plan`, `run-build-and-tests`, `run-ui-flows` | `tester` |

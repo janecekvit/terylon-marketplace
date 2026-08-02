@@ -14,8 +14,9 @@ Everyone working on top of Azure DevOps — directly for the PR workflow, indire
 
 **Transport skills** (they parse URLs, fetch, write back):
 
+- **`create-pr`** — open a pull request for the current branch: the work items it belongs to, the description (delegated to `write-pr-description`), optionally reviewers and auto-complete. It owns the PR *shell*; every gate that reaches outside git — pushing, emailing a reviewer, setting auto-complete — waits for consent even under `--auto`.
 - **`review-pr`** — review a PR and post the findings as inline suggestion blocks or PR-wide threads
-- **`write-pr-description`** — a PR description from the branch diff
+- **`write-pr-description`** — a PR description from the branch diff, and the PR *body* whether `create-pr` calls it or you do
 - **`update-pr-checklist`** — reads a pull request's test plan out of the description and writes results back into it: the plan rewritten into labelled groups, plus one evidence thread. It checks nothing and holds no `Agent` — a caller supplies the outcome, normally the `tester` agent from `terylon-test`. The last gate before the write is its own: an item is ticked only if the outcome shows it executed, passed, and covered by something bearing on it.
 - **`update-work-item-checklist`** — the sibling of `update-pr-checklist` for a work item's acceptance criteria. Reads the criteria out and writes a tester's results back: the earned ticks annotated **in place** — the author's structure is the contract, so it is not regrouped — and everything else with its reason in a work-item comment. Like its sibling it checks nothing, holds no `Agent`, and ticks only what the outcome shows executed, passed, and covered.
 - **`address-pr-comments`** — apply reviewer comments from your own PR locally
@@ -65,6 +66,8 @@ Each consumer therefore needs the Azure CLI installed and logged in (`az login`)
 ## Usage
 
 ```
+/terylon-devops:create-pr [--base=<ref>] [--title=<text>] [--draft] [--work-items=<ids>]
+                          [--reviewers=<emails>] [--auto-complete[=<strategy>]] [--auto | --dry-run]
 /terylon-devops:review-pr <PR-URL> [--auto | --dry-run]
 /terylon-devops:write-pr-description [<PR-URL>] [--base=<ref>] [--auto | --dry-run]
 /terylon-devops:address-pr-comments <PR-URL> [--auto | --dry-run]

@@ -2,16 +2,17 @@
 name: create-user-story
 description: >-
   Use when a product owner wants to create an Azure DevOps User Story from a short brief and a
-  parent Feature — drafts a codebase-grounded, implementation-ready story (Approach, precise
-  implementation detail, acceptance-criteria checklist, out-of-scope) and creates it in ADO.
+  parent Feature — drafts a codebase-grounded, implementation-ready story (short Summary, Description,
+  Approach, precise implementation detail, acceptance-criteria checklist, out-of-scope) and creates it in ADO.
   Optional flags --auto and --dry-run.
-allowed-tools: Bash(git *), Read, Grep, Glob, Agent, mcp__plugin_terylon-devops_ado__*
+allowed-tools: Bash(git *), Bash(wc *), Read, Grep, Glob, Agent, mcp__plugin_terylon-devops_ado__*
 ---
 
 # Azure DevOps — Create User Story
 
 You turn a short brief plus a parent Feature into a well-structured, **codebase-grounded** Azure
-DevOps User Story: a Markdown description with Approach, precise implementation detail anchored in
+DevOps User Story: a Markdown description opening with a capped plain-language `## Summary`, then
+Description, Approach, precise implementation detail anchored in
 real artifacts, an acceptance-criteria checklist, and an out-of-scope section — precise enough for a
 downstream AI agent to implement directly. The story is created under the parent Feature, inheriting
 its area and iteration.
@@ -106,6 +107,28 @@ Draft the User Story in Markdown using the **Output template** below. Write a co
 Title with a scope qualifier when relevant (e.g. `… (Devices MVP)`). Ground the `## Implementation`
 section in the real artifacts the sub-agent returned in step 4.
 
+#### 5a. `## Summary` — the human-readable opener
+
+**Every story opens with a `## Summary` block: 2 to 5 bullets, 400 characters total, hard cap.**
+
+Not to be confused with the `## Summary` of a PR description (`write-pr-description`), which is prose rather than bullets. The same name is deliberate — same job, same position, adjacent artifacts — but the shape and the cap belong to this skill.
+
+The rest of the description is written for whoever implements it: grounded, exact, long. That precision is the point and is **not** budgeted. But it makes the story unreadable at a glance, and most people who open a story are not implementing it — they are triaging a backlog, running a planning session, or checking what a colleague is on. `## Summary` is the part they read.
+
+| Belongs in it | Does not |
+|---|---|
+| **what changes**, in the language of someone using the thing rather than the language of the code | file paths, symbol names |
+| **why**, when the reason is not obvious from the what | tool or parameter names, version numbers |
+| **the one constraint or decision** a reader would otherwise have to dig for | links |
+
+A bullet a product owner cannot parse has failed at its one job.
+
+**Measure it before creating.** 400 characters is roughly four lines of prose and drafts overshoot it routinely. Count the assembled block — bullet markers included, the heading excluded — with `wc -c` on a quoted heredoc; UTF-8 bytes are never fewer than the characters, so passing that check guarantees you are inside the cap.
+
+Over budget: **cut the qualifier from the longest bullet before cutting a whole bullet.** Dropping a bullet loses a fact; tightening one only loses words. Never go below 2 bullets, and never solve it by moving the content down into `## Description`.
+
+**The section that follows is `## Description`, and it is what keeps the opener honest.** Everything after `## Summary` sits under a heading of its own — never a bare paragraph. An unheaded paragraph renders as a continuation of the bullets, so a block that promised 400 characters visually runs on for a screen and a half and a skimmer cannot tell where "short" ended.
+
 ### 6. Branch on flags / create flow
 
 - `--dry-run` → print the draft in chat, labelled dry-run. **Stop** — never create.
@@ -155,6 +178,10 @@ not git changes — it reads the product repo only to ground the story. Stop aft
 **Description** (Markdown, written with `format: "Markdown"`):
 
 ```markdown
+## Summary
+- <what changes, in plain language — 2 to 5 bullets, 400 characters TOTAL (step 5a)>
+
+## Description
 <one-paragraph what + why, linking the parent Feature and any related WIs / spikes>
 
 ## Approach
@@ -237,7 +264,7 @@ describing anything. A pull request whose plan items map to **no** criterion is 
 the second row, not an invitation to add rows to the first.
 
 **Two mechanics from `ado-mcp` bite here.** The field must be `markdown` or `~~` renders
-literally, and `wit_update_work_item` silently drops tag-shaped `<…>` content - so scan the
+literally, and the `update-work-item` operation silently drops tag-shaped `<…>` content - so scan the
 criteria you are round-tripping for a literal angle bracket before writing.
 
 **This is the product owner's act, never the tester's.** The `tester` proposes rewrites for
@@ -275,7 +302,14 @@ criteria it finds defective and applies none of them; see the criteria/test-plan
 Then, for default mode: `Reply "push" to create User Story under Feature #<id>.`
 For `--dry-run`: label the block "(dry-run — nothing will be created)".
 
+**Print the measured `## Summary` length against the 400-character cap** beside the draft, so a reader can see the budget was checked rather than assumed.
+
 ## Common mistakes
+
+- **Skipping `## Summary`, or burying it** — it is mandatory and it goes first, above the opening paragraph. Its whole value is being the first thing on screen.
+- **Writing `## Summary` in code** — file paths, symbol and tool names belong below it.
+- **Trimming `## Implementation` to hit a budget** — only `## Summary` is capped. The grounded detail serves a different reader, which is why the two are separate sections.
+- **Leaving the paragraph after `## Summary` unheaded** — it belongs under `## Description`, or the short block visually runs on and the cap buys nothing.
 
 - **Hard-wrapping paragraphs / bullets** — ADO renders source line breaks verbatim; wrapping at 72–80
   chars produces visible choppy lines. One continuous line per paragraph / bullet.
@@ -293,7 +327,7 @@ For `--dry-run`: label the block "(dry-run — nothing will be created)".
   grounding failed, say so rather than inventing plausible-looking detail.
 - **Forgetting the parent link** — `create-work-item` sets field values only; it CANNOT set the parent
   relation. Skipping `link-work-item-parent` leaves the story orphaned (no parent Feature).
-- **Reversing the `wit_work_items_link` direction** — `id` must be the new story and `linkToId` the
+- **Reversing the `link-work-item-parent` direction** — `id` must be the new story and `linkToId` the
   Feature, with `type: "parent"`. Swapping them makes the Feature a child of the story.
 
 ## Verification

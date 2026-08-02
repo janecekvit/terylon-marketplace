@@ -26,11 +26,11 @@ All ADO calls use tools from the `ado` MCP server, declared in `plugins/terylon-
 
 **Tool namespace — documented vs runtime:**
 
-- This document writes tool names in the short documented form `mcp__ado__*` (e.g. `mcp__ado__repo_get_pull_request_by_id`).
-- **At runtime the server is namespaced by its providing plugin: `mcp__plugin_terylon-devops_ado__*`** (e.g. `mcp__plugin_terylon-devops_ado__repo_get_pull_request_by_id`). This is the form you actually call, and the form that must appear in each calling skill's `allowed-tools`.
+- This document writes tool names in the short documented form `mcp__ado__*` (e.g. `repo_pull_request(action="get")`).
+- **At runtime the server is namespaced by its providing plugin: `mcp__plugin_terylon-devops_ado__*`** (e.g. `mcp__plugin_terylon-devops_ado__repo_pull_request(action="get")`). This is the form you actually call, and the form that must appear in each calling skill's `allowed-tools`.
 - The two are the same tool. The bare `mcp__ado__*` names in this document are shorthand for the namespaced runtime form.
 
-**WIT tool-name drift:** the `wit_*` tools were added in a later version of `@azure-devops/mcp` and tool names have drifted between versions. In particular the comment-listing tool is `wit_list_work_item_comments` (NOT `wit_get_work_item_comments`, which does not exist at runtime). Verify the exact names installed locally with the inspector:
+**WIT tool-name drift:** the `wit_*` tools were added in a later version of `@azure-devops/mcp` and tool names have drifted between versions. In particular the comment-listing tool is `wit_work_item(action="list_comments")` (NOT `wit_work_item(action="list_comments")`, which does not exist at runtime). Verify the exact names installed locally with the inspector:
 
 ```
 npx @azure-devops/mcp --list-tools
@@ -38,29 +38,87 @@ npx @azure-devops/mcp --list-tools
 
 ---
 
-## 3. Tool catalog
+## 3. Tool catalog — the 2.9.0 surface
 
-Every `mcp__ado__*` tool used by the Terylon skills, with its key parameters. Call them in the runtime namespace `mcp__plugin_terylon-devops_ado__*`.
+The pinned server is **`@azure-devops/mcp@2.9.0`**, which consolidated the whole surface into **action-based tools**: one tool per resource, an `action` parameter selecting the operation. Call them in the runtime namespace `mcp__plugin_terylon-devops_ado__*`.
 
-| Tool | What it does | Key parameters |
-|------|-------------|----------------|
-| `mcp__ado__repo_get_repo_by_name_or_id` | Resolve repo details (incl. `id`) by name or GUID | `repositoryNameOrId`, `projectName` |
-| `mcp__ado__repo_get_pull_request_by_id` | Fetch PR metadata (status, branches, createdBy, isDraft, refs, lastMergeSourceCommit) | `pullRequestId`, `repositoryId`, `projectName` |
-| `mcp__ado__repo_list_pull_request_threads` | List all comment threads on a PR | `pullRequestId`, `repositoryId`, `projectName` |
-| `mcp__ado__repo_list_pull_request_thread_comments` | List comments inside one thread | `pullRequestId`, `repositoryId`, `projectName`, `threadId` |
-| `mcp__ado__repo_create_pull_request_thread` | Create a new thread (inline or PR-wide) | `pullRequestId`, `repositoryId`, `projectName`, `comments`, `status`, `threadContext?` |
-| `mcp__ado__repo_update_pull_request_thread` | Update thread status (e.g. mark fixed) — policy-guarded | `pullRequestId`, `repositoryId`, `projectName`, `threadId`, `status` |
-| `mcp__ado__repo_reply_to_comment` | Add a reply to an existing thread | `pullRequestId`, `repositoryId`, `projectName`, `threadId`, `parentCommentId`, `content` |
-| `mcp__ado__repo_update_pull_request` | Update PR fields (overwrites the whole `description`) | `pullRequestId`, `repositoryId`, `projectName`, `description` |
-| `mcp__ado__wit_get_work_item` | Fetch work item fields + relations | `id`, `projectName`, `expand?` |
-| `mcp__ado__wit_list_work_item_comments` | List all discussion comments on a WI | `workItemId`, `projectName` |
-| `mcp__ado__wit_add_work_item_comment` | Post a new comment to a WI | `workItemId`, `projectName`, `text` |
-| `mcp__ado__wit_get_work_items_batch_by_ids` | Fetch many WIs in one call with an explicit field selector | `ids`, `project`, `fields` |
-| `mcp__ado__wit_create_work_item` | Create a work item; set field values only (cannot set the parent relation) | `project`, `workItemType`, `fields` |
-| `mcp__ado__wit_update_work_item` | Update fields on an existing work item (JSON-Patch; no format arg) | `id`, `updates` (`[{op, path, value}]`) |
-| `mcp__ado__wit_work_items_link` | Link work items (e.g. make one a child of a parent) | `updates` (`[{id, linkToId, type}]`) |
-| `mcp__ado__repo_create_pull_request` | Create a PR (optionally associate work items) | `repositoryId`, `sourceRefName`, `targetRefName`, `title`, `project?`, `description?`, `isDraft?`, `labels?`, `workItems?` |
-| `mcp__ado__wit_link_work_item_to_pull_request` | Link a work item to an existing PR (artifact link) | `projectId`, `repositoryId`, `pullRequestId`, `workItemId` |
+**Three things break silently when a call is written from memory of the old surface**, and all three fail the whole call rather than degrading:
+
+| Trap | Consequence |
+|---|---|
+| Every schema is `additionalProperties: false` | one unknown parameter rejects the entire call |
+| `project` became **`project`** | the old name is now an unknown parameter — see above |
+| The old one-tool-per-operation names are **gone** | `repo_pull_request_write(action="update")` and its siblings do not resolve at all |
+
+### Reads
+
+| Tool | Actions | Key parameters |
+|---|---|---|
+| `repo_repository` | `get`, `list` | `repositoryNameOrId`, `project` |
+| `repo_pull_request` | `get`, `list`, `list_by_commits` | `pullRequestId`, `repositoryId`, `project`, `includeWorkItemRefs?`, `includeChangedFiles?`, `status?`, `sourceRefName?` |
+| `repo_pull_request_thread` | `list`, `list_comments` | `repositoryId`, `pullRequestId` (**both required**), `project`, `threadId` (for `list_comments`), `status?` |
+| `wit_work_item` | `get`, `get_batch`, `list_comments`, `my`, `list_revisions`, `list_for_iteration`, `get_type` | see the per-action parameter table below |
+| `wit_query` | `get`, `get_results`, `wiql` | `wiql`, `project`, `top?` |
+| `core_get_identity_ids` | — (no action) | `searchFilter` |
+
+### Writes
+
+| Tool | Actions | Key parameters |
+|---|---|---|
+| `repo_pull_request_write` | `create`, `update`, `update_reviewers`, `vote` | `repositoryId`, `project`, `sourceRefName`, `targetRefName`, `title`, `description` (**≤4000**), `workItems?`, `isDraft?`, `autoComplete?`, `mergeStrategy?`, `reviewerIds?`, `reviewerAction?` |
+| `repo_pull_request_thread_write` | `create`, `reply`, `update_status` | `repositoryId`, `pullRequestId` (**both required**), `content`, `threadId`, `filePath?`, `rightFileStartLine?`, `rightFileEndLine?`, `status?` |
+| `wit_work_item_write` | `create`, `update`, `update_batch`, `add_child` | `workItemType`, `fields[]`, `id`, `updates[]`, `parentId`, `items[]` |
+| `wit_work_item_comment_write` | `add`, `update` | `workItemId`, `text`, `commentId` (for `update`), `format?` |
+| `wit_work_item_link_write` | `link`, `unlink`, `link_to_pull_request`, `add_artifact_link` | `updates[]`, `projectId` / `repositoryId` (**GUIDs**), `pullRequestId`, `workItemId` |
+
+### `wit_work_item` — the parameter name changes per action
+
+This one is a genuine trap: the work item's id is called something different depending on what you are doing with it.
+
+| Action | Id parameter | Other |
+|---|---|---|
+| `get` | `id` | `expand` **or** `fields` — never both |
+| `get_batch` | `ids[]` | `fields[]` |
+| `list_comments` | `workItemId` | `top?` |
+| `list_revisions` | `workItemId` | `expand?`, `skip?`, `top?` |
+
+### Migration from the pre-2.9.0 names
+
+Prose written before the consolidation names tools that no longer exist. Translate it with this table rather than trusting it:
+
+| Was | Is |
+|---|---|
+| `repo_get_repo_by_name_or_id` | `repo_repository(action="get")` |
+| `repo_get_pull_request_by_id` | `repo_pull_request(action="get")` |
+| `repo_create_pull_request` | `repo_pull_request_write(action="create")` |
+| `repo_update_pull_request` | `repo_pull_request_write(action="update")` |
+| `repo_list_pull_request_threads` | `repo_pull_request_thread(action="list")` |
+| `repo_list_pull_request_thread_comments` | `repo_pull_request_thread(action="list_comments")` |
+| `repo_create_pull_request_thread` | `repo_pull_request_thread_write(action="create")` |
+| `repo_update_pull_request_thread` | `repo_pull_request_thread_write(action="update_status")` |
+| `repo_reply_to_comment` | `repo_pull_request_thread_write(action="reply")` |
+| `wit_get_work_item` | `wit_work_item(action="get")` |
+| `wit_get_work_items_batch_by_ids` | `wit_work_item(action="get_batch")` |
+| `wit_list_work_item_comments`, `wit_get_work_item_comments` | `wit_work_item(action="list_comments")` |
+| `wit_create_work_item` | `wit_work_item_write(action="create")` |
+| `wit_update_work_item` | `wit_work_item_write(action="update")` |
+| `wit_add_child_work_items` | `wit_work_item_write(action="add_child")` |
+| `wit_work_items_link` | `wit_work_item_link_write(action="link")` |
+| `wit_link_work_item_to_pull_request` | `wit_work_item_link_write(action="link_to_pull_request")` |
+| `wit_add_work_item_comment` | `wit_work_item_comment_write(action="add")` |
+| `wit_update_work_item_comment` | `wit_work_item_comment_write(action="update")` |
+
+**A rename is not always the whole change.** `repo_pull_request_thread_write(action="update_status")` became `update_status`, which is narrower than the name it replaced; thread creation moved its inline anchor from a `threadContext` object to flat `rightFile*` parameters. Where this document's recipes disagree with the table above, the table is newer.
+
+### Responses omit what they just did
+
+Several writes return a trimmed object that does not contain the field the call set. Measured: `repo_pull_request(action="get", includeWorkItemRefs=true)` returned **no `workItemRefs` key at all** on a PR that demonstrably had a linked work item, and the `update` response strips `autoCompleteSetBy` and `completionOptions`.
+
+**Never report an outcome from the response that produced it.** Read the state back — and for work-item links, read it from the *work item* (`wit_work_item(action="get", expand="Relations")`), which is where the relation actually lives.
+
+### Batch reads are all-or-nothing
+
+`wit_work_item(action="get_batch")` returns `null` for the **entire batch** when a single id is unknown, so a batch of untrusted ids tells you nothing about the good ones. Validate untrusted candidates one call at a time. A `null` also conflates not-found, deleted and no-permission — report "could not be resolved", never "does not exist".
 
 ---
 
@@ -85,77 +143,77 @@ One subsection per operation: its IN/OUT contract, the tool(s) it uses, and whic
 
 ### `resolve-repo-id`
 - **In:** `repoName` (or GUID) + `project`. **Out:** `repositoryId` (`id` GUID).
-- **Tools:** `repo_get_repo_by_name_or_id`. **Consumers:** review-pr, address-pr-comments, write-pr-description, pr-reviewer.
+- **Tools:** `repo_repository(action="get")`. **Consumers:** review-pr, address-pr-comments, write-pr-description, pr-reviewer.
 - **Invariant:** resolve once per repo per run; cache (§5).
 
 ### `fetch-pr-metadata`
 - **In:** `prId`, `repositoryId`, `project`. **Out:** whole PR object (`status`, `isDraft`, `createdBy`, `sourceRefName`, `targetRefName`, `lastMergeSourceCommit`, `description`).
-- **Tools:** `repo_get_pull_request_by_id`. **Consumers:** review-pr, address-pr-comments, write-pr-description, pr-reviewer.
+- **Tools:** `repo_pull_request(action="get")`. **Consumers:** review-pr, address-pr-comments, write-pr-description, pr-reviewer.
 
 ### `eligibility-check`
 - **In:** PR metadata. **Out:** raw flags (`status`, `isDraft`, `createdBy.uniqueName`) + default recommendation.
-- **Tools:** `repo_get_pull_request_by_id`. **Consumers:** review-pr, address-pr-comments, write-pr-description, pr-reviewer.
+- **Tools:** `repo_pull_request(action="get")`. **Consumers:** review-pr, address-pr-comments, write-pr-description, pr-reviewer.
 - **Decisions stay skill-side** (§14). Two-phase: phase-1 before read, phase-2 re-check before write.
 
 ### `detect-prior-run`
 - **In:** PR threads or WI comments. **Out:** boolean (prior Claude post present).
-- **Tools:** `repo_list_pull_request_threads` (PR) / `wit_get_work_item` (WI). **Consumers:** review-pr, address-pr-comments, create-user-story, pr-reviewer.
+- **Tools:** `repo_pull_request_thread(action="list")` (PR) / `wit_work_item(action="get")` (WI). **Consumers:** review-pr, address-pr-comments, create-user-story, pr-reviewer.
 - **Sentinel:** version-less `Generated with [Claude Code]` (§15).
 
 ### `list-threads`
 - **In:** `prId`, `repositoryId`, `project`. **Out:** raw threads `[{ id, status, comments: [{ id, content, commentType, ... }] }]`.
-- **Tools:** `repo_list_pull_request_threads`. **Consumers:** review-pr, address-pr-comments, pr-reviewer.
+- **Tools:** `repo_pull_request_thread(action="list")`. **Consumers:** review-pr, address-pr-comments, pr-reviewer.
 - Classification/filtering stay skill-side.
 
 ### `list-thread-comments`
 - **In:** `prId`, `repositoryId`, `project`, `threadId`. **Out:** comments in that thread.
-- **Tools:** `repo_list_pull_request_thread_comments`. **Consumers:** address-pr-comments.
+- **Tools:** `repo_pull_request_thread(action="list_comments")`. **Consumers:** address-pr-comments.
 - The first comment's `id` feeds `reply-to-thread` as `parentCommentId`.
 
 ### `post-pr-thread`
 - **In:** comment body, `status`, optional `threadContext`. **Out:** created thread.
-- **Tools:** `repo_create_pull_request_thread`. **Consumers:** review-pr, pr-reviewer.
+- **Tools:** `repo_pull_request_thread_write(action="create")`. **Consumers:** review-pr, pr-reviewer.
 - **Merged op:** inline (with `threadContext`) and PR-wide (no `threadContext`) keyed on `threadContext` presence (§7, §8).
 
 ### `reply-to-thread`
 - **In:** `threadId`, `parentCommentId`, reply `content`. **Out:** created reply.
-- **Tools:** `repo_reply_to_comment`. **Consumers:** address-pr-comments.
+- **Tools:** `repo_pull_request_thread_write(action="reply")`. **Consumers:** address-pr-comments.
 - Does **not** change thread status.
 
 ### `update-thread-status`
 - **In:** `threadId`, `status`. **Out:** updated thread.
-- **Tools:** `repo_update_pull_request_thread`. **Consumers:** *(none today — exposed for completeness)*.
+- **Tools:** `repo_pull_request_thread_write(action="update_status")`. **Consumers:** *(none today — exposed for completeness)*.
 - **Policy-guarded — never auto-resolve to `2` (fixed)** (§6).
 
 ### `update-pr-description`
 - **In:** `prId`, `repositoryId`, `project`, full `description` string (**≤4000 chars**). **Out:** updated PR.
-- **Tools:** `repo_update_pull_request`. **Consumers:** write-pr-description.
+- **Tools:** `repo_pull_request_write(action="update")`. **Consumers:** write-pr-description.
 - Overwrites the whole `description` field; the Claude-region locate-or-append logic stays skill-side.
 - **`description` is capped at 4000 characters** and the cap counts the *whole* field, not just the region you are writing. Over the limit the call fails validation before reaching ADO (`too_big`), so nothing is written — the failure is safe but the work is wasted. Measure before calling, and remember that a locate-or-append write carries any content that was already there.
 
 ### `fetch-work-item`
 - **In:** `WI_ID`, `project`, `expand`. **Out:** WI fields + relations.
-- **Tools:** `wit_get_work_item`. **Consumers:** create-user-story, create-feature.
+- **Tools:** `wit_work_item(action="get")`. **Consumers:** create-user-story, create-feature.
 - Use `expand="relations"`; HTML fields pass as-is (§11).
 
 ### `fetch-work-items-batch`
 - **In:** `ids[]`, `project`, explicit `fields[]`. **Out:** `[{ id, rev, fields, url }, ...]`.
-- **Tools:** `wit_get_work_items_batch_by_ids`. **Consumers:** *(none today — exposed for completeness)*.
+- **Tools:** `wit_work_item(action="get_batch")`. **Consumers:** *(none today — exposed for completeness)*.
 - Explicit `fields` selector; deleted IDs silently omitted; ~200/call (§12).
 
 ### `parent-rollup`
 - **In:** WIs from a batch (with `System.Parent`). **Out:** `parentId → (type, title)` lookup.
-- **Tools:** `wit_get_work_items_batch_by_ids`. **Consumers:** *(none today — exposed for completeness)*.
+- **Tools:** `wit_work_item(action="get_batch")`. **Consumers:** *(none today — exposed for completeness)*.
 - `System.Parent` is top-level; two-pass; one level only (§12).
 
 ### `wi-comments-read`
 - **In:** `WI_ID`, `project`. **Out:** `{ totalCount, comments: [{ id, text, createdBy }] }`.
-- **Tools:** `wit_list_work_item_comments`. **Consumers:** *(none today — exposed for completeness)*.
+- **Tools:** `wit_work_item(action="list_comments")`. **Consumers:** *(none today — exposed for completeness)*.
 - Doubles as the WI `detect-prior-run` source (grep `comments[].text`).
 
 ### `wi-comment-post`
 - **In:** `WI_ID`, `project`, `text` (already includes the caller's footer). **Out:** `{ id }`.
-- **Tools:** `wit_add_work_item_comment`. **Consumers:** *(none today — exposed for completeness)*.
+- **Tools:** `wit_work_item_comment_write(action="add")`. **Consumers:** *(none today — exposed for completeness)*.
 - Plain text; print the returned `id`.
 
 ### `build-pr-diff`
@@ -165,27 +223,27 @@ One subsection per operation: its IN/OUT contract, the tool(s) it uses, and whic
 
 ### `create-work-item`
 - **In:** `project` (resolved per *Resolving org / project without a URL* (§9) when not taken from a URL), `workItemType` (e.g. `"User Story"`), `fields: [{name, value, format?}]`. **Out:** new work item `id`.
-- **Tool:** `wit_create_work_item`. **Consumers:** create-user-story, create-feature.
+- **Tool:** `wit_work_item_write(action="create")`. **Consumers:** create-user-story, create-feature.
 - **Recipe:** set `System.Title`; `System.Description` with **`format: "Markdown"`**; `System.AreaPath` and `System.IterationPath` (inherited from the parent); optionally `Microsoft.VSTS.Scheduling.StoryPoints`, `Microsoft.VSTS.Common.Priority`, `System.Tags`.
 - **Gotcha (parent):** sets *field values* only — it CANNOT set the parent relation. Link the parent in a separate step (`link-work-item-parent`).
 - **Gotcha (checkboxes):** `- [ ]` renders as an interactive checkbox **only when the field is written with `format: "Markdown"`**. ADO defaults every multiline field to HTML, where the same line is a plain bullet or a literal `[ ]`. Pass `format: "Markdown"` for **each** multiline field independently — `System.Description` and `Microsoft.VSTS.Common.AcceptanceCriteria` do not inherit from one another, and setting only the first leaves a story whose description renders and whose criteria do not.
 
 ### `link-work-item-parent`
 - **In:** `updates: [{ id: <childId>, linkToId: <parentId>, type: "parent" }]`. **Out:** linked work item.
-- **Tool:** `wit_work_items_link`. **Consumers:** create-user-story.
+- **Tool:** `wit_work_item_link_write(action="link")`. **Consumers:** create-user-story.
 - **Recipe:** `id` is the work item being updated (the new story); `linkToId` is the Feature; `type: "parent"` makes the story a child of the Feature.
-- **Alternative (one call, limited fields):** `wit_add_child_work_items(parentId, workItemType, items:[{title, description, format, areaPath?, iterationPath?}])` creates AND links a child in one call — but supports only title/description/format/area/iteration, NOT StoryPoints/Priority/Tags. Use create-work-item + link-work-item-parent when any extra metadata is needed.
+- **Alternative (one call, limited fields):** `wit_work_item_write(action="add_child")(parentId, workItemType, items:[{title, description, format, areaPath?, iterationPath?}])` creates AND links a child in one call — but supports only title/description/format/area/iteration, NOT StoryPoints/Priority/Tags. Use create-work-item + link-work-item-parent when any extra metadata is needed.
 
 ### `update-work-item`
 - **In:** `id`, `updates: [{ op, path, value }]` (JSON-Patch). **Out:** updated work item.
-- **Tool:** `wit_update_work_item`. **Consumers:** create-feature.
+- **Tool:** `wit_work_item_write(action="update")`. **Consumers:** create-feature.
 - **Recipe:** patch existing fields — `op: "replace"` (or the schema default `add`, which ADO upserts), `path: "/fields/<FieldRef>"` (e.g. `/fields/System.Title`, `/fields/System.Description`), `value: "<new value>"`.
-- **Gotcha (no format arg):** unlike `create-work-item`'s `fields:[{name,value,format?}]`, `wit_update_work_item` takes JSON-Patch ops with **no per-field `format`** in the `fields` shape. A plain field op writes into whatever encoding the field already has, so a Markdown string sent to an HTML field renders as literal `#` and `-` characters.
+- **Gotcha (no format arg):** unlike `create-work-item`'s `fields:[{name,value,format?}]`, `wit_work_item_write(action="update")` takes JSON-Patch ops with **no per-field `format`** in the `fields` shape. A plain field op writes into whatever encoding the field already has, so a Markdown string sent to an HTML field renders as literal `#` and `-` characters.
 
 - **Converting an existing field to Markdown.** The encoding lives at its own patch path, so an update *can* switch it — patch the format and the content in the same call, format first:
 
   ```
-  wit_update_work_item(
+  wit_work_item_write(action="update")(
     id: <WI_ID>,
     updates: [
       { op: "add", path: "/multilineFieldsFormat/System.Description", value: "Markdown" },
@@ -202,8 +260,8 @@ One subsection per operation: its IN/OUT contract, the tool(s) it uses, and whic
 
   | Call | `feat/<slug>` arrives as |
   |---|---|
-  | `wit_create_work_item` | `feat/&lt;slug&gt;` — escaped, renders correctly |
-  | `wit_update_work_item` | `feat/` — **the tag is silently dropped** |
+  | `wit_work_item_write(action="create")` | `feat/&lt;slug&gt;` — escaped, renders correctly |
+  | `wit_work_item_write(action="update")` | `feat/` — **the tag is silently dropped** |
 
   Observed on Story #110: `create-workspace creates a worktree on \`feat/<slug>\`` came back as `` `feat/` ``, losing the placeholder without any error. Nothing in the response signals it, so the loss is only visible by reading the stored value back.
 
@@ -214,15 +272,15 @@ One subsection per operation: its IN/OUT contract, the tool(s) it uses, and whic
 
 ### `create-pull-request`
 - **In:** `repositoryId`, `sourceRefName`, `targetRefName`, `title` (required); `project` (required when `repositoryId` is a name), `description?` (≤4000), `isDraft?`, `labels?`, `workItems?`. **Out:** new PR (`pullRequestId`).
-- **Tool:** `repo_create_pull_request`. **Consumers:** develop (terylon-dev).
+- **Tool:** `repo_pull_request_write(action="create")`. **Consumers:** develop (terylon-dev).
 - **Recipe:** pass **full ref names** (`refs/heads/<branch>`) for `sourceRefName` / `targetRefName` — do NOT strip `refs/heads/` here (that stripping is only for diff building, §13). Resolve `repositoryId` once via `resolve-repo-id` (§5); pass `project` when `repositoryId` is a name. `description` is capped at 4000 chars — keep the generated PR body within the limit.
 - **Associate work items:** `workItems` (space-separated WI IDs, e.g. `"101055 98792"`) links work items at creation — an alternative to a separate `link-work-item-to-pull-request` call. Draft/eligibility decisions and footer stay caller-side.
 
 ### `link-work-item-to-pull-request`
 - **In:** `projectId`, `repositoryId`, `pullRequestId`, `workItemId` (optional `pullRequestProjectId` for cross-project links). **Out:** linked work item.
-- **Tool:** `wit_link_work_item_to_pull_request`. **Consumers:** develop (terylon-dev).
-- **Gotcha (GUIDs, not names):** `projectId` must be the **project GUID** (the tool rejects a project name) and `repositoryId` must be the **repo GUID**. Resolve both via `resolve-repo-id` (§5) — `repo_get_repo_by_name_or_id` returns the repo object with its `project.id`. Most other ops accept a project *name*; this one does not.
-- **Vs `link-work-item-parent`:** that op links a work item to a parent *work item* (`wit_work_items_link`); this op links a work item to a *pull request* (an artifact link). Different tools, different purposes.
+- **Tool:** `wit_work_item_link_write(action="link_to_pull_request")`. **Consumers:** develop (terylon-dev).
+- **Gotcha (GUIDs, not names):** `projectId` must be the **project GUID** (the tool rejects a project name) and `repositoryId` must be the **repo GUID**. Resolve both via `resolve-repo-id` (§5) — `repo_repository(action="get")` returns the repo object with its `project.id`. Most other ops accept a project *name*; this one does not.
+- **Vs `link-work-item-parent`:** that op links a work item to a parent *work item* (`wit_work_item_link_write(action="link")`); this op links a work item to a *pull request* (an artifact link). Different tools, different purposes.
 
 ---
 
@@ -231,11 +289,11 @@ One subsection per operation: its IN/OUT contract, the tool(s) it uses, and whic
 A PR URL gives you `repoName`, not the GUID `repositoryId` that every `repo_*` call needs. **Resolve `repositoryId` once per repo per run, before any other `repo_*` call, and cache it** for all subsequent calls in that run.
 
 ```
-mcp__ado__repo_get_repo_by_name_or_id(repositoryNameOrId=<repoName>, projectName=<project>)
+repo_repository(action="get")(repositoryNameOrId=<repoName>, project=<project>)
 → returns { id: "<uuid>", name: "...", ... }
 ```
 
-`repo_get_repo_by_name_or_id` accepts a name **or** a GUID, so it also resolves a `repoGuid` from a parsed `vstfs://` link (§10) to a repo name for `git fetch`. In a multi-repo run, cache one `repositoryId` per repo.
+`repo_repository(action="get")` accepts a name **or** a GUID, so it also resolves a `repoGuid` from a parsed `vstfs://` link (§10) to a repo name for `git fetch`. In a multi-repo run, cache one `repositoryId` per repo.
 
 ---
 
@@ -250,111 +308,72 @@ mcp__ado__repo_get_repo_by_name_or_id(repositoryNameOrId=<repoName>, projectName
 
 ---
 
-## 7. Request JSON shapes
+## 7. Request shapes
 
-### Inline suggestion thread (arguments to `repo_create_pull_request_thread`)
+2.9.0 takes **flat parameters**, not the nested request bodies the REST API uses. The old `comments[]` array and `threadContext` object are gone from the write side; both survive on the **read** side, which is why §8 still matters.
 
-```json
-{
-  "comments": [
-    {
-      "parentCommentId": 0,
-      "content": "<why explanation>\n\n```suggestion\n<exact replacement text — MUST match file's indentation/tabs>\n```\n\n---\n*🤖 Generated with [Claude Code](https://claude.ai/code) — <skill-name>@<plugin-version>*",
-      "commentType": 1
-    }
-  ],
-  "status": 1,
-  "threadContext": {
-    "filePath": "/<path/from/repo/root>.cpp",
-    "rightFileStart": { "line": <N>, "offset": 1 },
-    "rightFileEnd":   { "line": <N+1>, "offset": 1 }
-  }
-}
-```
+### Inline suggestion thread
 
-The `` ```suggestion `` block content replaces the covered lines in the file.
+`repo_pull_request_thread_write(action="create")`
 
-### Multi-line span (lines N..M inclusive)
+| Parameter | Value |
+|---|---|
+| `repositoryId`, `pullRequestId` | both **required**, at the top level |
+| `project` | required when `repositoryId` is a name |
+| `filePath` | `/path/from/repo/root.cpp` — leading `/`, forward slashes, no leading dot |
+| `rightFileStartLine` | `N` |
+| `rightFileEndLine` | `N+1` for a single line; `M+1` for a span `N..M` — always **one past** the last line covered |
+| `rightFileStartOffset`, `rightFileEndOffset` | `1` |
+| `content` | the comment body, including the suggestion block and the footer |
+| `status` | `Active` (a word here, not the numeric enum reads return) |
 
-```json
-"threadContext": {
-  "filePath": "/path.cpp",
-  "rightFileStart": { "line": <N>, "offset": 1 },
-  "rightFileEnd":   { "line": <M+1>, "offset": 1 }
-}
-```
+The content of a ` ```suggestion ` block replaces the covered lines, so its indentation must match the file exactly — tabs against tabs.
 
-### PR-wide thread (no inline anchor)
+### PR-wide thread
 
-```json
-{
-  "comments": [
-    {
-      "parentCommentId": 0,
-      "content": "<conceptual finding>\n\n---\n*🤖 Generated with [Claude Code](https://claude.ai/code) — <skill-name>@<plugin-version>*",
-      "commentType": 1
-    }
-  ],
-  "status": 1
-}
-```
+The same call **without** `filePath` and without the `rightFile*` parameters. Their absence is what makes the thread PR-wide; there is no separate tool.
 
-No `threadContext` → a top-level thread on the Overview tab.
+### Reply to a thread
 
-### Reply to a thread (arguments to `repo_reply_to_comment`)
+`repo_pull_request_thread_write(action="reply")` with `threadId` and `content`. **No `parentCommentId`** — 2.9.0 dropped it, and a reply attaches to the thread rather than to a comment within it.
+
+### Update a thread's status
+
+`repo_pull_request_thread_write(action="update_status")` with `threadId` and `status`. This is narrower than the `update` it replaced: **status is the only thing it can change.**
+
+### Update a PR description
+
+`repo_pull_request_write(action="update")` with `pullRequestId`, `repositoryId`, `project` and `description`.
+
+**`description` is capped at 4000 characters and the schema rejects an over-length value outright** (`too_big`) — it does not truncate, and nothing is written. Measure the whole field, not the part you generated.
+
+### Post a work-item comment
+
+`wit_work_item_comment_write(action="add")` with `workItemId`, `text`, and `format: "Markdown"`.
+
+### Create a work item
+
+`wit_work_item_write(action="create")` with `workItemType` and **`fields` as an array of `{name, value, format?}`** — not an object keyed by field name. `format: "Markdown"` belongs on each large text field individually.
 
 ```
-mcp__ado__repo_reply_to_comment(
-  pullRequestId=..., repositoryId=..., projectName=...,
-  threadId=<tid>,
-  parentCommentId=<id of the first comment in the thread>,
-  content="<reply text>"
-)
+fields = [
+  { name: "System.Title",       value: "<title>" },
+  { name: "System.Description", value: "<markdown>", format: "Markdown" },
+  { name: "Microsoft.VSTS.Common.AcceptanceCriteria", value: "<markdown>", format: "Markdown" }
+]
 ```
 
-### Update PR description (arguments to `repo_update_pull_request`)
+It **cannot set the parent relation** — link it afterwards with `wit_work_item_link_write(action="link", updates=[{id, linkToId, type: "parent"}])`.
 
-```
-mcp__ado__repo_update_pull_request(
-  pullRequestId=<prId>, repositoryId=<repoId>, projectName=<PROJECT>,
-  description=<full new description string>
-)
-```
+### Update a work item
 
-Overwrites the whole `description` field — pass the located-or-appended full description, not a delta.
+`wit_work_item_write(action="update")` with `id` and **`updates` as JSON-Patch operations** — `[{op, path, value}]`, where `path` is `/fields/<ReferenceName>`.
 
-### Post WI comment (arguments to `wit_add_work_item_comment`)
+### Batch work-item lookup
 
-```
-mcp__ado__wit_add_work_item_comment(
-  workItemId=<WI_ID>,
-  projectName=<PROJECT>,
-  text=<plan_markdown_string>   # MUST already include the caller's footer
-)
-→ { id: <comment_id>, ... }
-```
+`wit_work_item(action="get_batch")` with `ids[]` and an explicit `fields[]` selector. Without the selector the response carries every field of every item, which is large enough to matter.
 
-No temp file needed — the MCP tool accepts plain text directly.
-
-### Batch WI lookup with explicit `fields` (arguments to `wit_get_work_items_batch_by_ids`)
-
-```
-mcp__ado__wit_get_work_items_batch_by_ids(
-  ids=[<id>, <id>, ...],
-  project=<PROJECT>,
-  fields=[
-    "System.Id",
-    "System.Title",
-    "System.WorkItemType",
-    "System.State",
-    "System.AreaPath",
-    "System.IterationPath",
-    "System.AssignedTo",
-    "System.Parent"
-  ]
-)
-→ [{ id, rev, fields: { ... }, url }, ...]
-```
+**One unknown id nulls the whole batch** — see §3. Untrusted ids go one call at a time.
 
 ---
 
@@ -362,16 +381,16 @@ mcp__ado__wit_get_work_items_batch_by_ids(
 
 `filePath` MUST start with `/`, use forward slashes, and have no leading dot (e.g. `/src/foo.cpp`, never `./src/foo.cpp` or `src\foo.cpp`).
 
-**Write side (anchoring a new thread to a line):**
+**Write side (anchoring a new thread to a line).** 2.9.0 takes these as **flat parameters** — `rightFileStartLine`, `rightFileEndLine`, `rightFileStartOffset`, `rightFileEndOffset` — not as the nested `threadContext` object of the REST API and of pre-2.9.0 tools. The arithmetic is unchanged:
 
-- Single line `N` → `rightFileStart { line: N, offset: 1 }`, `rightFileEnd { line: N+1, offset: 1 }`.
-- Span `N..M` inclusive → `rightFileStart { line: N, offset: 1 }`, `rightFileEnd { line: M+1, offset: 1 }`.
+- Single line `N` → `rightFileStartLine = N`, `rightFileEndLine = N+1`.
+- Span `N..M` inclusive → `rightFileStartLine = N`, `rightFileEndLine = M+1`.
 
-So `rightFileEnd.line` is always **one past** the last line you intend to cover.
+So the end line is always **one past** the last line you intend to cover.
 
 (Verified against a live inline thread.)
 
-**Read side (inverse — mapping an existing thread anchor back to file lines):**
+**Read side (inverse — mapping an existing thread anchor back to file lines).** Reads still return the nested `threadContext` object, so the two directions genuinely differ in shape: flat going out, nested coming back.
 
 When you read a thread's `threadContext` to find which lines a comment covers (e.g. `address-pr-comments` locating the edited region), invert the write-side math: the actual last edited line is `rightFileEnd.line - 1` (NOT `rightFileEnd.line`). The covered range is therefore `rightFileStart.line .. rightFileEnd.line - 1`. The `- 1` is load-bearing — omitting it produces an off-by-one that edits or quotes one line too many.
 
@@ -541,7 +560,7 @@ Then resolve `repoGuid` to a repo name with `resolve-repo-id` (§5) for `git fet
 
 ## 11. Work item structure
 
-`wit_get_work_item` with `expand="relations"` returns:
+`wit_work_item(action="get")` with `expand="relations"` returns:
 
 ```json
 {
@@ -575,7 +594,7 @@ Then resolve `repoGuid` to a repo name with `resolve-repo-id` (§5) for `git fet
 
 ### Batch lookup
 
-When you already have a known list of work-item IDs, prefer a single batch call (`wit_get_work_items_batch_by_ids`, §7) over per-WI fetches.
+When you already have a known list of work-item IDs, prefer a single batch call (`wit_work_item(action="get_batch")`, §7) over per-WI fetches.
 
 - **Always pass an explicit `fields` selector.** The default field set is large — the response can be ~10× bigger than you need.
 - **Silent omission caveat:** if a requested ID does not exist (deleted WI), the batch endpoint silently omits it from the response. **Cross-check the returned IDs against the input list** to detect deletions, and surface `(WI not found)` for any missing ones.
