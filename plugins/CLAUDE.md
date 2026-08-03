@@ -293,7 +293,7 @@ Two failure modes, and both have happened here:
 | `terylon-git` | `create-workspace`, `code-review`, `finish-branch` | `code-reviewer` |
 | `terylon-devops` | `ado-mcp`, `create-pr`, `review-pr`, `write-pr-description`, `address-pr-comments`, `update-pr-checklist`, `update-work-item-checklist` | `pr-reviewer` |
 | `terylon-product` | `create-user-story`, `create-feature` | — |
-| `terylon-dev` | `develop`, `write-plan`, `run-build-loop` | `leader`, `planner`, `developer`, `debugger`, `refactorer`, `security-reviewer`, `performance-reviewer`, `architecture-reviewer`, `edge-case-reviewer` |
+| `terylon-dev` | `develop`, `brainstorm`, `write-plan`, `run-build-loop` | `leader`, `planner`, `developer`, `debugger`, `refactorer`, `security-reviewer`, `performance-reviewer`, `architecture-reviewer`, `edge-case-reviewer` |
 | `terylon-test` | `test`, `verify-test-plan`, `run-build-and-tests`, `run-ui-flows` | `tester` |
 
 `terylon-core` also ships the `SubagentStop` hook that records per-agent spend continuously, plus `shared/oet.js` and `shared/weights.json`.
@@ -322,6 +322,8 @@ No edge points upward, there is no cycle, and `terylon-core` loads nothing. **Wh
 
 ```
 develop (skill, main thread — holds the gates)
+├── brainstorm (skill)   Gate 0's second mode; an item with no stated outcome
+│                        └── design document + 1..N approved seed-specs
 └── leader
     ├── planner
     ├── developer ──▶ debugger  (on a failing test)
@@ -340,7 +342,9 @@ develop (skill, main thread — holds the gates)
 
 The `<repo-local specialist>` branches are **not ours**. A target repository may ship its own agents — a stack-specific implementer, a domain reviewer — and a persona dispatches one when it covers the technology more specifically than a generic persona can. Most repositories ship none, and the branch simply does not occur. The convention lives in the `delegate-to-repo-agents` skill in `terylon-core`, loaded by name, and **the gate is a capability test**: may the candidate change the files under examination? `Edit`, `Write` and **unrestricted `Bash`** all mean yes — `sed -i` rewrites a file as surely as `Edit` does — so `disallowedTools: [Edit, Write]` alone settles nothing. Every shorthand for this rule fails in the same direction, permissively; the skill states the test and the shorthands are not repeated here on purpose.
 
-`develop` is a skill rather than an agent because only the main thread can prompt the user. Everything below it is dispatched and reports back.
+`develop` is a skill rather than an agent because only the main thread can prompt the user. Everything below it is dispatched and reports back. `brainstorm` is a skill for the same reason and sits at the same level: it is loaded, not dispatched, and it runs in `develop`'s own context because it does nothing but ask.
+
+**`brainstorm` is Gate 0's second mode, not a step before it.** It ends where that gate ends — at an approved seed-spec — so making it a preceding step would put two intakes in a row. The seam against `planner` is what keeps them from overlapping: `brainstorm` settles *what and why* and may never name a file path, `planner` settles *how* and must.
 
 ### Two measured limits on dispatched agents
 

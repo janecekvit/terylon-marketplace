@@ -24,7 +24,9 @@ All three are declared **directly** rather than relied on transitively: `leader`
 
 ```
 develop (skill, main thread — the only place that can ask the user)
-├── Gate 0  intake ....................... asks
+├── Gate 0  intake ── or ──▶ brainstorm .. asks; triage picks the mode
+│                             └── design document + 1..N approved seed-specs
+├── route ............................... per item, after Gate 0 has settled what it is
 ├── create-workspace .................... from terylon-git (unless --here)
 └── leader ─────────────────────────────▶ owns the loop, returns at each gate
     ├── planner ──▶ Explore              design + TDD plan
@@ -59,6 +61,7 @@ The `<repo-local specialist>` branches are **not part of this plugin**. A target
 **Skills:**
 
 - **`develop`** — the entry point on the main thread. It parses flags, runs the intake clarification, dispatches `leader` and hosts the gates. It is a skill and not an agent, because **only the main thread can ask the user**.
+- **`brainstorm`** — the step before a plan exists: it grounds a vague idea in the repository, runs a one-question-at-a-time dialogue, writes a design document with the alternatives it rejected, and decomposes the result into seed-specs. It is **also the second mode of `develop`'s Gate 0**, reached by triage when an item states no outcome — it ends where that gate ends, at an approved seed-spec, so it stands in for the gate rather than running before it. Like `develop`, a skill rather than an agent, because it is nothing but questions.
 - **`write-plan`** — the implementation plan's format: header, global constraints, file map, task shape with interfaces, the no-placeholder rules and the self-review. Written for an implementer who sees only their own task. `planner` emits its artifacts in this format.
 - **`run-build-loop`** — the controller's mechanics for executing a plan: the ledger that survives a compaction, the pre-flight scan before the first task, the bounded fix rounds with their model escalation, and how to pick a tier per role. `leader` runs it rather than hand-rolling a per-task loop.
 
@@ -111,11 +114,16 @@ It used to reuse six skills from the `superpowers` plugin. Three were replaced b
 ## Usage
 
 ```
-/terylon-dev:develop <item> [<item> …] [--auto | --dry-run] [--here]
+/terylon-dev:develop <item> [<item> …] [--auto | --dry-run] [--here] [--no-brainstorm]
+/terylon-dev:brainstorm <idea> [--no-decompose]
 ```
 
 - `--dry-run` — stops after the plan is approved (a plan, no code)
 - `--auto` — skips the pauses at the gates; `leader` runs the whole loop on its own. The git rules still apply.
 - `--here` — stay in the current checkout instead of an isolated worktree
+- `--no-brainstorm` — run the ordinary intake at Gate 0 however vague the item looks
+- `--no-decompose` — `brainstorm` only: one seed-spec, whatever the design contains
 
-**Several items fan out.** An item is an ADO work item URL or a prose description; prose items are separated by `---` on its own line, and prose without a separator is one item however many bullets it contains. Up to ten, with a confirmation above five. Each gets its own seed-spec, worktree and `leader`, and the leaders run concurrently. Intake still happens one item at a time — it is interactive — but from there the builds proceed in parallel, and each leader's gate is hosted the moment it returns rather than at a barrier. Every question names the work item it belongs to, because with several builds live an unlabelled question gets answered against the wrong story. Worktrees stop being optional at that point, so `--here` is refused with more than one item.
+**An item too vague to plan enters `brainstorm` instead of the intake.** Gate 0 triages on the item itself — an outcome and a way to know it is met means intake, a sentence of intent means brainstorm — and announces which mode it took. A brainstorm can turn one item into several, so the item count is restated before any workspace exists and each resulting item is routed on its own. Under `--auto` the mode is skipped and said to be skipped: it is a dialogue, and there is no unattended form of one.
+
+**Several items fan out.** An item is an ADO work item URL, a path to a seed-spec `brainstorm` already wrote, or a prose description; prose items are separated by `---` on its own line, and prose without a separator is one item however many bullets it contains. Up to ten, with a confirmation above five. Each gets its own seed-spec, worktree and `leader`, and the leaders run concurrently. Intake still happens one item at a time — it is interactive — but from there the builds proceed in parallel, and each leader's gate is hosted the moment it returns rather than at a barrier. Every question names the work item it belongs to, because with several builds live an unlabelled question gets answered against the wrong story. Worktrees stop being optional at that point, so `--here` is refused with more than one item.
