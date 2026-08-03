@@ -17,29 +17,31 @@ It is a **skill and not an agent** for two reasons: it carries the slash command
 ## Usage
 
 ```
-/terylon-dev:develop <item> [<item> …] [--auto | --dry-run] [--here]
+/terylon-dev:develop <item> [<item> …] [--auto | --dry-run] [--here] [--no-brainstorm]
 ```
 
-An `<item>` is either an **Azure DevOps work item URL** (`dev.azure.com/{org}/{project}/_workitems/edit/<id>`), which is fetched and turned into a seed-spec, or a **prose description**, which becomes the seed directly.
+An `<item>` is an **Azure DevOps work item URL** (`dev.azure.com/{org}/{project}/_workitems/edit/<id>`), which is fetched and turned into a seed-spec; a **path to a seed-spec** that `brainstorm` already wrote, which is read as-is; or a **prose description**, which becomes the seed directly.
 
-**Any number of items, of either kind, mixed freely.** URLs separate themselves; prose items are separated by **`---` on its own line**. Prose without a `---` is one item no matter how many bullets it contains — see step 2. Each item becomes its own workspace and its own `leader`, run concurrently; the ceiling and the rest of the mechanics are in *Fan-out*.
+**Any number of items, of either kind, mixed freely.** URLs separate themselves; prose items are separated by **`---` on its own line**. Prose without a `---` is one item no matter how many bullets it contains — see step 1. Each item becomes its own workspace and its own `leader`, run concurrently; the ceiling and the rest of the mechanics are in *Fan-out*.
 
 - `--dry-run` — stop after Gate 1 (plan only, no code).
 - `--auto` — skip the *pauses* at the gates; `leader` runs the loop on its own. The git rules still hold.
 - `--here` — stay in the current checkout instead of an isolated worktree. Use only when you are already on the intended feature branch.
+- `--no-brainstorm` — skip the Gate 0 triage and run the ordinary intake, however vague the item looks.
 
 ## Prerequisites
 
 - **`terylon-devops`** — a hard dependency, installed automatically. It provides the `ado` MCP server, the `ado-mcp` engine (**load it by name**), and `create-pr`, which opens the pull request at Gate 3 and calls `write-pr-description` itself.
 - **`terylon-git`** — a direct hard dependency (also reachable through `terylon-devops`), so it is installed automatically. It provides `create-workspace` and the `code-review` engine — **load both by name**.
-- **`terylon-core`** — a hard dependency, installed automatically. It provides `measure-token-spend`, and `delegate-to-repo-agents` for the personas that dispatch a repo-local specialist. It also ships the `SubagentStop` hook that records the run's spend continuously. `run-build-loop` and `write-plan` are **this plugin's own** — `leader` and `planner` load them from here.
+- **`terylon-core`** — a hard dependency, installed automatically. It provides `measure-token-spend`, and `delegate-to-repo-agents` for the personas that dispatch a repo-local specialist. It also ships the `SubagentStop` hook that records the run's spend continuously. `run-build-loop`, `write-plan` and `brainstorm` are **this plugin's own** — `leader` and `planner` load the first two from here, and Gate 0 loads the third.
 - Run from the repo root. All work happens on a feature branch.
 
 ## Shape of a run
 
 ```
 develop (this skill — main thread, the only place that can ask the user)
-├── Gate 0   intake .................. asks ✓
+├── Gate 0   intake ── or ──▶ brainstorm .. asks ✓   (triage picks the mode)
+├── route    per item, once Gate 0 has settled what the item is
 ├── create-workspace                   isolated worktree (unless --here)
 ├── leader ─────────────────────────▶  owns the loop, returns at each gate
 │   └── AWAITING_APPROVAL <plan path>
@@ -73,25 +75,7 @@ Returns are handled **as they arrive**, not at a barrier. Waiting for the slowes
 
 ## Workflow
 
-### 1. Route
-
-Classify the request first — three routes, and the classification decides which gates run:
-
-| Route | When | Planner | Gate 1 |
-|---|---|---|---|
-| **Trivial** | an obvious, single-file, low-risk edit | skip | **skip** |
-| **Documentation** | a change with **nothing to execute** — prose, config, or instructions across `SKILL.md` / agent / rule / `README` files; no runtime behaviour and no test surface | skip | **keep** |
-| **Full chain** | anything with code to write and test | run | keep |
-
-- **Trivial** → skip planning, go straight to the build hop with a one-task plan.
-- **Documentation** → skip the **planner**: the seed-spec is the plan, because a planner drawing a design and a test-first plan for work with nothing to run buys a plan longer than the documents it edits. Make the edits directly, then hold **Gate 1 over the complete diff** (not a planner's plan) before anything is committed, and still run the phase-3 whole-branch review (`code-reviewer`) afterwards. Gate 1 stays because changing the instructions the pipeline itself obeys is exactly the kind of change that needs a human's eyes.
-- **Full chain** → the full pipeline below.
-
-**Say which route you took and why, in one line, before acting on it.** Two of the three routes change which gates run — the trivial route drops Gate 1, the documentation route drops the planner — so a misclassification silently removes a checkpoint or spends the pipeline's most expensive tier on work with nothing to test. The user finds out from what never arrives, not from anything the run said. Announcing it costs a line and makes the choice contestable.
-
-**Several work items fan out.** Each gets its own seed-spec, its own worktree, and its own `leader`, and the leaders run concurrently — see *Fan-out* below. Never take the first item and drop the rest.
-
-### 2. Input resolution
+### 1. Input resolution
 
 **First decide how many items the input contains**, then resolve each one.
 
@@ -102,6 +86,7 @@ The split is **explicit, never inferred**:
 | Input | Items |
 |---|---|
 | Azure DevOps work item URLs | one per URL |
+| A path to an existing seed-spec under `docs/terylon/intake/` | one per path — read it as the seed, never rewrite it |
 | Prose containing `---` on its own line | one per `---`-separated block |
 | Prose without `---` | exactly **1**, however many bullets it contains |
 
@@ -132,19 +117,59 @@ Every run's working files live under `docs/terylon/` — the terylon-owned worki
 
 ```text
 docs/terylon/
-├── intake/      <slug>-seed.md        the approved seed-spec (this skill)
-├── specs/       <slug>-grounding.md   the one-per-work-item grounding map (planner)
+├── intake/      <slug>-seed.md        the approved seed-spec (this skill, or brainstorm)
+├── specs/       <idea-slug>-brainstorm.md  the design and its decisions — one per brainstorm, covering every item it produced
+│                <slug>-grounding.md   the one-per-work-item grounding map (planner)
 │                <slug>-design.md      the design (planner)
 ├── plans/       <slug>.md             the implementation plan (planner)
 ├── ledgers/     <slug>-ledger.md      leader loop state
 └── monitoring/  <session>-tokens.md   per-run token spend (measure-token-spend, Gate 3)
 ```
 
-### 3. Gate 0 — interactive intake
+### 2. Gate 0 — intake, or brainstorm
 
-`AskUserQuestion`, **one question per message**. Ask **only what is genuinely open** — not what the story or the code already answers. Fold each answer back into the seed-spec.
+Gate 0 has **two modes**, and both end at the same place: the **approved seed-spec**, the input contract for `leader`. Triage each item, then run the mode it earns.
 
-Result: the **approved seed-spec**, the input contract for `leader`.
+| The item | Mode |
+|---|---|
+| states an outcome, and how you would know it is met | intake |
+| is a work item carrying acceptance criteria | intake |
+| is one sentence of intent with no stated outcome | **brainstorm** |
+| could reasonably be one deliverable or several | **brainstorm** |
+| is a work item whose description is empty or restates its title | **brainstorm** |
+
+**Say which mode you took, in one line.** Both directions cost: an unnecessary brainstorm spends a dialogue on work that was already decided, and a skipped one sends `planner` at something nobody has defined. Announcing it lets the user overrule a misread before it spends anything.
+
+**Intake.** `AskUserQuestion`, **one question per message**. Ask **only what is genuinely open** — not what the story or the code already answers. Fold each answer back into the seed-spec. A seed-spec carrying a `brainstormed:` marker was already interrogated; ask only what it left open.
+
+**Brainstorm.** Load **`brainstorm`** (this plugin's own, by name). It grounds the idea, runs the dialogue, writes a design document, and returns **one or more** approved seed-specs. Then:
+
+| | |
+|---|---|
+| **Restate the count** | one item can become several, which invalidates the count stated in step 1. Say the new one before creating any workspace |
+| **Route each resulting item separately** | items from one design can take different routes — see step 3 |
+| **`--auto` does not load it** | it is a dialogue and has no unattended form. Say that it was skipped and proceed on the seed as given, rather than inventing the answers |
+| **`--no-brainstorm` skips the triage** | run the intake regardless of how vague the item looks |
+
+### 3. Route
+
+Classify **each item, once Gate 0 has settled what it is** — three routes, and the classification decides which gates run:
+
+| Route | When | Planner | Gate 1 |
+|---|---|---|---|
+| **Trivial** | an obvious, single-file, low-risk edit | skip | **skip** |
+| **Documentation** | a change with **nothing to execute** — prose, config, or instructions across `SKILL.md` / agent / rule / `README` files; no runtime behaviour and no test surface | skip | **keep** |
+| **Full chain** | anything with code to write and test | run | keep |
+
+- **Trivial** → skip planning, go straight to the build hop with a one-task plan.
+- **Documentation** → skip the **planner**: the seed-spec is the plan, because a planner drawing a design and a test-first plan for work with nothing to run buys a plan longer than the documents it edits. Make the edits directly, then hold **Gate 1 over the complete diff** (not a planner's plan) before anything is committed, and still run the phase-3 whole-branch review (`code-reviewer`) afterwards. Gate 1 stays because changing the instructions the pipeline itself obeys is exactly the kind of change that needs a human's eyes.
+- **Full chain** → the full pipeline below.
+
+**The route is per item, not per invocation.** One brainstorm can produce a documentation item and two full-chain items from the same design; routing them together sends the wrong gates to two of the three.
+
+**Say which route you took and why, in one line, before acting on it.** Two of the three routes change which gates run — the trivial route drops Gate 1, the documentation route drops the planner — so a misclassification silently removes a checkpoint or spends the pipeline's most expensive tier on work with nothing to test. The user finds out from what never arrives, not from anything the run said. Announcing it costs a line and makes the choice contestable.
+
+**Several work items fan out.** Each gets its own seed-spec, its own worktree, and its own `leader`, and the leaders run concurrently — see *Fan-out* below. Never take the first item and drop the rest.
 
 ### 4. Workspace
 
@@ -222,7 +247,7 @@ Every item carries its own `<slug>`, and every path derives from it — `docs/te
 
 ### Sequential intakes, concurrent builds
 
-Run **Gate 0 for every item first**, one at a time. Intake is interactive and cannot be parallelized, and it is also where you learn whether two of the items collide (see below) — worth knowing before any of them start building.
+Run **Gate 0 for every item first**, one at a time — in either mode, since both are interactive and neither can be parallelized. It is also where you learn whether two of the items collide (see below), worth knowing before any of them start building. An item that took the brainstorm mode may leave the gate as several items; those join the set and are routed with the rest.
 
 Then create the workspaces and dispatch **all leaders in one round**, so they run concurrently rather than one after another.
 
@@ -256,6 +281,11 @@ The same goes for every status line, plan, and finding you surface: say which it
 - **Hand-rolled isolation.** Use `create-workspace`, or `--here`.
 - **Committing to the default branch.** Never.
 - **Over-decomposing trivial work.** A genuine one-line change takes the trivial route.
+- **Running the intake on an item nobody has defined.** An item with no stated outcome takes the brainstorm mode of Gate 0. Intake asks what a seed leaves open; it cannot ask what the seed *is*.
+- **Brainstorming an item that already carries acceptance criteria.** The dialogue re-decides work that was decided, and the second answer is not more true than the first.
+- **Keeping the old count after a brainstorm split one item into three.** Restate it before any workspace exists.
+- **Routing brainstormed items together.** One design can yield a documentation item and two full-chain ones; the route is per item.
+- **Inventing intake answers under `--auto`.** The brainstorm mode is a dialogue. Skip it, say so, and proceed on the seed as given.
 - **Running the full chain on documentation.** A change with nothing to execute takes the documentation route: no planner, Gate 1 falls on the diff. A planner's plan for doc work is longer than the docs it edits.
 - **Avoiding a gate to save tokens.** A gate ends the leader and the next one starts fresh, which is the cheapest reset available. Length is what costs; a gate shortens it. Batching a single return's answers is still worth it, but for a saving an order of magnitude smaller.
 - **Taking the first work item and dropping the rest.** Several items fan out; they are not a queue you may silently truncate.
@@ -282,3 +312,6 @@ The same goes for every status line, plan, and finding you surface: say which it
 11. **Batched resume:** a single leader return that raises several questions is answered in full and re-dispatched **once**, not re-dispatched after each answer.
 12. **Token-spend report:** at Gate 3 the run invokes `measure-token-spend` (from `terylon-core`) and writes `docs/terylon/monitoring/<session>-tokens.md` with per-tier and per-agent totals, so a follow-up run can be judged against a number.
 13. **Continuous spend events:** a run that fanned out leaves one JSON line per completed subagent in `docs/terylon/monitoring/<session>-spend.jsonl`, written by the `terylon-core` `SubagentStop` hook without any agent invoking it. A run interrupted before Gate 3 still has its events.
+14. **Gate 0 triage:** a one-sentence item with no stated outcome enters the brainstorm mode and the mode is announced; a work item carrying acceptance criteria runs the ordinary intake. `--no-brainstorm` forces the intake either way.
+15. **A brainstorm that splits:** one vague item becoming three leaves three seed-specs under distinct slugs, the new count is restated **before** any workspace is created, and each item is routed on its own — a documentation item among them keeps its own route. The count-keyed constraints bind on the **new** count: six items out of one brainstorm draw the confirmation, and `--here` is refused once a split takes the run past one item.
+16. **`--auto` on a vague item:** the brainstorm mode is skipped, the skip is stated, and the run proceeds on the seed as given rather than on invented answers.
