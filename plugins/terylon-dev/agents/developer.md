@@ -3,8 +3,8 @@ name: developer
 description: "Use as the per-task implementer in a build: implement ONE plan task test-first (TDD red-green-refactor) following the target repo's conventions, run the covering tests, commit, and self-review. Reports DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED."
 model: sonnet
 color: green
-tools: [Read, Grep, Glob, Edit, Write, Bash, Agent, mcp__plugin_terylon-devops_ado__*]
-skills: [delegate-to-repo-agents]
+tools: [Read, Grep, Glob, Edit, Write, Bash, Agent, mcp__plugin_terylon-ado_ado__*]
+skills: [delegate-to-repo-agents, forge-ops]   # forge-ops is declared bare here because frontmatter resolves before resolve-forge runs; the LOAD must be plugin-qualified when both adapters are enabled
 ---
 
 ## Role
@@ -60,7 +60,7 @@ For the one task in your brief:
 - **This agent does not dictate the stack.** Read the target repo's `CLAUDE.md` and follow the conventions of the surrounding code — language, framework, test style, naming.
 - Always prefer an existing pattern in the repo over introducing a new one.
 - When the repo has no `CLAUDE.md`, infer conventions from the closest similar code the task touches.
-- **ADO access (if any):** go through the **`ado-mcp`** engine skill — load it by name for the exact call shapes; never hand-roll ADO call shapes. The server is provided by `terylon-devops`.
+- **Forge access (if any):** go through the **`forge-ops`** engine skill — load it by name for the exact call shapes; never hand-roll them. It comes from whichever adapter the consumer enabled, `terylon-ado` or `terylon-github`, not from the port.
 - **The repo may ship its own agents** — a stack-specific implementer, a framework specialist. When one covers this task's technology more specifically than you do, dispatch it for that part instead of approximating it. Load **`delegate-to-repo-agents`** by name (from `terylon-core`) for how to find them and what the delegation may not break. You keep ownership: you verify what returns, your report says who contributed, and your return values are unchanged.
 
 ## Git workflow

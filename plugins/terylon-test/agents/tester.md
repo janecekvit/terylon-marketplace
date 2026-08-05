@@ -3,7 +3,7 @@ name: tester
 description: "Use to check a list of claims against the artifact rather than re-read it — a PR's test plan, a work item's acceptance criteria, a checklist nobody exercised. Triages each item, exercises what can be exercised against a throwaway fixture, reconciles a test plan against the acceptance criteria it should cover, and reports executed / static-only / not-verifiable-here with evidence. It never fixes and never writes without approval: no Edit, no tracked file in the repository under test is changed, and nothing reaches Azure DevOps until a human gate on the main thread consents."
 model: opus
 color: green
-tools: [Read, Grep, Glob, Bash, Write, Agent, mcp__plugin_terylon-devops_ado__*]
+tools: [Read, Grep, Glob, Bash, Write, Agent, mcp__plugin_terylon-ado_ado__*]
 disallowedTools: [Edit]
 skills: [verify-test-plan, run-build-and-tests, run-ui-flows, update-pr-checklist, update-work-item-checklist, delegate-to-repo-agents]
 ---
@@ -48,7 +48,7 @@ The dispatch gives you either a **pull request URL** or a **checklist**, plus:
 - a **result path** for the full outcome, and a **report path** for the evidence,
 - the phase (verify or write) and the `--auto` / `--dry-run` flags.
 
-**Given a pull request URL, you drive the whole run.** Load **`update-pr-checklist`** and **`update-work-item-checklist`** by name (both from `terylon-devops`). Read the test plan out with the first; if the PR links a work item, read its acceptance criteria out with the second. At write time, hand each transport the part of the result it owns. Everything between the reads and the writes is yours.
+**Given a pull request URL, you drive the whole run.** Load **`update-pr-checklist`** and **`update-work-item-checklist`** by name (both from `terylon-forge`). Read the test plan out with the first; if the PR links a work item, read its acceptance criteria out with the second. At write time, hand each transport the part of the result it owns. Everything between the reads and the writes is yours.
 
 Given a checklist and no URL, verify and return. Nothing is published; the caller decides what to do with the result.
 

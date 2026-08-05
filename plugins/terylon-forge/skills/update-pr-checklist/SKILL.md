@@ -5,22 +5,22 @@ description: >-
   test plan", "tick off what was actually verified", "publish the verification". Reads the items out
   and writes results in: which were checked, which were not, and why. Does no checking of its own;
   the caller supplies the outcome.
-allowed-tools: Read, Grep, Glob, Write, mcp__plugin_terylon-devops_ado__*
+allowed-tools: Read, Grep, Glob, Write, Bash(gh *), Bash(node *), mcp__plugin_terylon-ado_ado__*
 ---
 
 # update-pr-checklist
 
-Reads a pull request's test plan out of Azure DevOps and writes results back into it.
+Reads a pull request's test plan off the forge and writes results back into it.
 
 **It checks nothing itself.** A caller that has done the checking hands over the outcome, and this skill puts it where the reader will see it. That separation is the point: a skill that both ran the check and wrote the tick would be marking its own homework.
 
 ## Usage
 
 ```
-/terylon-devops:update-pr-checklist <PR-URL> [--results=<path>] [--dry-run | --auto]
+/terylon-forge:update-pr-checklist <PR-URL> [--results=<path>] [--dry-run | --auto]
 ```
 
-- `<PR-URL>` — `https://dev.azure.com/{org}/{project}/_git/{repo}/pullrequest/{id}`.
+- `<PR-URL>` — either forge's PR URL — `dev.azure.com/{org}/{project}/_git/{repo}/pullrequest/{id}` or `github.com/{owner}/{repo}/pull/{n}`.
 - No `--results` — read the test plan and return the items with where they sit. Writes nothing.
 - `--results=<path>` — a file holding the outcome per item; write it back.
 - `--dry-run` — print what would be written; write nothing.
@@ -36,8 +36,8 @@ Per item: what was **checked**, what came of it, and what that leaves unproven. 
 
 ## Prerequisites
 
-- The `ado` MCP server from this plugin; at runtime `mcp__plugin_terylon-devops_ado__*`.
-- Call shapes come from the **`ado-mcp`** engine skill — **load it by name** before any `mcp__ado__*` call.
+- **An adapter enabled** — `terylon-ado` or `terylon-github`. The port registers no server of its own: the adapter supplies `forge-ops`, and on Azure DevOps the `ado` MCP server with it. `resolve-forge` decides which one a run targets, and a missing adapter stops the run rather than being worked around.
+- Call shapes come from the **`forge-ops`** engine skill of whichever adapter `resolve-forge` names — **load it by name** before the first platform call.
 
 ## Shape of a run
 
@@ -62,7 +62,7 @@ There is no step 3, and that is deliberate: this skill has **no `Agent` tool** a
 
 ### 1-2. Fetch the PR, and find the plan
 
-Parse the URL, resolve `repositoryId`, fetch the PR (recipes in `ado-mcp`). Stop with a message if the PR is `completed` or `abandoned`; a draft is fine.
+Parse the URL, resolve the repository identity, fetch the PR (operations in `forge-ops`). Stop with a message if `eligibility-check` reports `isOpen` false; a draft is fine.
 
 The test plan usually sits inside the region `write-pr-description` owns, bounded by `<!-- write-pr-description:start -->` and the footer. Where it sits decides what you may rewrite:
 
@@ -110,7 +110,7 @@ The last two rows are the reason this skill exists.
 
 **Fetch the PR again immediately before the write** — the whole object, not only the description. In default mode the wait for `push` is unbounded, and `update-pr-description` replaces the whole field with no revision history to recover from.
 
-**Re-run the eligibility check on what comes back**, as `ado-mcp` prescribes and `review-pr` does at its own step 6. A PR that was completed or abandoned during the wait must not be written to; a verification thread arriving after a merge is noise on something nobody will read again. Fetching the description alone answers what the plan says and not whether writing to it is still allowed.
+**Re-run the eligibility check on what comes back**, as `forge-ops` prescribes and `review-pr` does at its own step 6. A PR that was completed or abandoned during the wait must not be written to; a verification thread arriving after a merge is noise on something nobody will read again. Fetching the description alone answers what the plan says and not whether writing to it is still allowed.
 
 This is not theoretical. A run of this workflow by hand found that the author had ticked eight boxes in the browser while the verification was running; writing from the earlier snapshot would have erased all eight.
 
@@ -160,21 +160,29 @@ The thread has no length limit, which is why the detail belongs there and not in
 
 **The write must be idempotent.** A second run over an unchanged branch produces the same description, not the same description with the annotations appended again. Rewrite the whole scope from the current result rather than editing the previous rendering, and post one thread reply per run — a run that found nothing new says so briefly rather than repeating the last one's evidence.
 
-### The 4000-character cap
+### The description cap
 
-The description is capped at **4000 characters**, counted over the whole field.
+The description is capped, and **the number is the forge's** — `forge-ops` reports it, 4000 on Azure DevOps and far more on GitHub. It is counted over the whole field, not over the part you are writing.
 
-**Count code points, and do not trust `wc -m` to do it.** A checklist carrying arrows, dashes and emoji measures longer in bytes than it is, so trimming against a byte count cuts material that would have fitted.
+**The forge's cap is not the only budget on this field, and it is the looser one.** `write-pr-description` writes the same field to a smaller working budget, holding a reserve for whatever continuous integration appends afterwards. A rewrite here is normally **longer** than what it replaces, so a plan that fitted that budget when it was generated can leave it once this skill has added group headings and per-item reasons. Measured on a real run: a plan generated at 2468 UTF-16 units came back at 2662 after the rewrite — inside the forge's cap, past the budget the other skill had just kept.
+
+**Measure against both, and say which one you are over.** Under the working budget, write and move on. Over it but inside the forge's cap, write anyway and **say so in the chat summary**, naming the two numbers — the reserve exists for a real reason and eating it silently is how a later CI append gets rejected for length. Over the forge's cap, do not write: cut by the order below and measure again.
+
+**Count UTF-16 code units — the same unit `write-pr-description` measures against — and do not trust `wc -m` to count anything.** The cap on the side that has a small one is a .NET `nvarchar`, so the unit is what `String.Length` counts: the footer's robot emoji costs **2**, while `é`, `—` and `→` cost 1 each. A checklist carrying arrows, dashes and emoji measures longer in bytes than it is, so trimming against a byte count cuts material that would have fitted.
 
 `wc -c` counts bytes by definition. **`wc -m` counts bytes too whenever `LANG` and `LC_ALL` are unset**, which is the common case in a tool-driven shell: it falls back to a byte count, where a run of this skill measured a four-byte emoji as 4 and returned 3246 for a string of 3243 code points. The error is in the safe direction, so it will not produce an over-cap write; it will silently trim content that fitted, which is the failure this paragraph exists to prevent.
 
 Measure with something locale-independent:
 
 ```bash
-node -e "process.stdout.write(String([...require('fs').readFileSync(0,'utf8')].length))" < description.md
+node -e "process.stdout.write(String(require('fs').readFileSync(0,'utf8').length))" < description.md
 ```
 
-**Do not reach for `locale charmap` to decide whether `wc -m` is safe.** Measured in this repo's own environment it reported `UTF-8` while `LANG` and `LC_ALL` were both empty and `wc -m` still returned bytes — 3769 against 3765 code points for a real description. `charmap` reports a default, not the active locale, so the check that looks like it settles the question does not settle anything. Measure code points directly or not at all.
+JavaScript's `String.length` is UTF-16 code units, which is why the snippet reads the string rather than spreading it — spreading yields **code points**, which under-count every emoji and are the one way to pass this check while being over the real limit.
+
+**Do not reach for `locale charmap` to decide whether `wc -m` is safe.** Measured in this repo's own environment it reported `UTF-8` while `LANG` and `LC_ALL` were both empty and `wc -m` still returned bytes — 3769 against 3765 code points for a real description. `charmap` reports a default, not the active locale, so the check that looks like it settles the question does not settle anything. Measure with the snippet above or not at all.
+
+Both of those measurements were taken against code points, which is what this skill used to count. **The measured facts stand — `wc -m` returned bytes in both — and only the unit they were compared against changed.** Code points sit between the two: never above the byte count, never below the UTF-16 count, so the old snippet stayed safe on plain text and under-counted exactly where a description carries an emoji.
 
 The rewrite is usually **longer** than what it replaces, since group headings and per-item reasons are added. When it does not fit, cut in this order:
 
@@ -188,7 +196,7 @@ The rewrite is usually **longer** than what it replaces, since group headings an
 
 ### Why this skill may write `- [X]` when nothing else may
 
-`ado-mcp` states the house rule: checklists use `- [ ]` only, never `- [x]`. It exists because ADO renders a pre-checked box as a static tick the reader cannot untick, so a box checked on the author's say-so is a claim nobody verified and nobody can withdraw.
+`forge-ops` states the house rule: checklists use `- [ ]` only, never `- [x]`. It exists because a pre-checked box renders as a claim nobody verified, and on at least one forge as a static tick the reader cannot untick, so a box checked on the author's say-so is a claim nobody verified and nobody can withdraw.
 
 **This skill holds the only carve-out, and only while it earns it:**
 
@@ -206,7 +214,7 @@ The rule still binds every skill that **generates** a plan, including `write-pr-
 
 Post **one thread**, before the description write, carrying: the fixture, per-item case counts, the near-miss cases proving legitimate work still passes, every rewrite the engine proposed for an untestable item, everything the reconciliation turned up, and an explicit paragraph on any tick that was moved. A tick whose evidence is not shown is unfalsifiable, and this skill exists to stop unfalsifiable ticks.
 
-End the thread with the footer, exactly as `ado-mcp` requires of every posted comment:
+End the thread with the footer, exactly as `forge-ops` requires of every posted comment:
 
 ```
 ---

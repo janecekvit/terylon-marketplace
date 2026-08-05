@@ -1,14 +1,14 @@
 ---
 name: review-pr
-description: Use when the user provides an Azure DevOps pull request URL (dev.azure.com/…/pullrequest/N)
-  and asks for a code review, or asks to post review comments / suggestions to an Azure DevOps PR.
+description: Use when the user provides a pull request URL from either forge (dev.azure.com/…/pullrequest/N
+  or github.com/…/pull/N) and asks for a code review, or asks to post review comments / suggestions to it.
   Optional flags --auto and --dry-run.
-allowed-tools: Bash(git *), Read, Grep, Glob, Write, mcp__plugin_terylon-devops_ado__*
+allowed-tools: Bash(git *), Bash(gh *), Read, Grep, Glob, Write, Agent, mcp__plugin_terylon-ado_ado__*
 ---
 
-# Azure DevOps PR Code Review
+# Pull Request Code Review
 
-You review an Azure DevOps pull request end-to-end and post findings back to the PR
+You review a pull request end-to-end, on either forge, and post findings back to it
 as inline `` ```suggestion `` blocks for line-scoped issues, or PR-wide threads for
 conceptual ones. Per-language rules are handled by `code-review` from the conventions of
 the surrounding code.
@@ -19,40 +19,42 @@ the surrounding code.
 /review-pr <PR-URL> [--auto | --dry-run]
 ```
 
-- `<PR-URL>` — required, of form `https://dev.azure.com/{org}/{project}/_git/{repo}/pullrequest/{id}`.
+- `<PR-URL>` — required, in either forge's PR URL — `dev.azure.com/{org}/{project}/_git/{repo}/pullrequest/{id}` or `github.com/{owner}/{repo}/pull/{n}`. Its host is what `resolve-forge` reads first.
 - `--auto` — post any issue scored ≥80 immediately, no confirmation.
 - `--dry-run` — never post; only report in chat.
 - Default — summarize in chat, wait for explicit user confirmation ("push", "post"), then post.
 
 ## Prerequisites
 
-- The `ado` MCP server registered (see `plugins/terylon-devops/README.md`). Invoked on demand by the MCP host — no manual install needed beyond the `.mcp.json` entry.
+- **An adapter enabled** — `terylon-ado` or `terylon-github`. The port registers no server of its own: the adapter supplies `forge-ops`, and on Azure DevOps the `ado` MCP server with it. `resolve-forge` decides which one a run targets, and a missing adapter stops the run rather than being worked around.
 - The PR's repo cloned locally; current working directory is that clone (so `git diff` works against fetched refs).
-- **REQUIRED SUB-SKILL: `code-review`** (from `terylon-git`, loaded by name). This skill delegates review judgment to `code-review`; it handles only transport (PR URL → diff → ADO threads). `terylon-devops` declares `dependencies: ["terylon-git"]`, so the engine is always installed alongside it.
+- **REQUIRED SUB-SKILL: `code-review`** (from `terylon-git`, loaded by name). This skill delegates review judgment to `code-review`; it handles only transport (PR URL → diff → ADO threads). `terylon-forge` declares `dependencies: ["terylon-git"]`, so the engine is always installed alongside it.
 
 ## Workflow
 
 ### 1. Parse PR URL & resolve the repo
 
-Load the Azure DevOps mechanics reference once — Read `${CLAUDE_PLUGIN_ROOT}/skills/ado-mcp/references/ado-mcp.md` (sibling skill in this plugin). It is the single source of truth for parsing the PR URL into `org` / `project` / `repoName` / `prId` and for resolving `repositoryId`. Follow its `parse-pr-url` and `resolve-repo-id` recipes, issuing the `mcp__plugin_terylon-devops_ado__*` calls yourself. Keep the resolved `repositoryId` for all subsequent calls.
+Resolve the forge first (`resolve-forge`), then load that adapter's mechanics once — its `forge-ops` skill, by name and plugin-qualified. It is the single source of truth for parsing the PR URL into its coordinates and for resolving the repository identity. Follow its `parse-pr-url` and `resolve-repo-id` operations, issuing the calls yourself with whatever tool or command each recipe names. Keep what `resolve-repo-id` returned and pass it on unchanged.
 
 ### 2. Eligibility check
 
-Fetch PR metadata and list existing threads using the `fetch-pr-metadata`, `list-threads`, and `detect-prior-run` recipes in `${CLAUDE_PLUGIN_ROOT}/skills/ado-mcp/references/ado-mcp.md` (issue the `mcp__plugin_terylon-devops_ado__*` calls yourself).
+Fetch PR metadata and list existing threads using the `fetch-pr-metadata`, `list-threads`, and `detect-prior-run` operations, following the adapter's `forge-ops` reference; you issue the calls yourself.
 
 Skip with a chat message if any of:
 
-- `status` is `completed` or `abandoned`.
-- `isDraft` is `true`.
+- `isOpen` is false — the pull request is completed, abandoned, closed or merged.
+- `isDraft` is true.
 - A prior Claude review already exists — the `detect-prior-run` recipe greps existing threads for the version-less sentinel `Generated with [Claude Code]`. If found, re-running should be opt-in (ask the user to confirm before proceeding).
+
+**Read `eligibility-check`'s normalised verdict, never a raw field.** One forge reports this as a number and the other has no field of that name at all, so a test written against the English words matches nothing on both and the gate fails **open** — which is how a run posts to a pull request somebody already merged.
 
 ### 3. Build the diff locally
 
-Follow the `build-pr-diff` recipe, **profile (a)**, in `${CLAUDE_PLUGIN_ROOT}/skills/ado-mcp/references/ado-mcp.md`: merge-base `origin/<target>` `origin/<source>` for `$BASE`, the PR's `lastMergeSourceCommit.commitId` for `$HEAD`, then `git diff --name-only $BASE..$HEAD`.
+Follow the `build-pr-diff` recipe, **profile (a)**, in the adapter's `forge-ops` reference: merge-base `origin/<target>` `origin/<source>` for `$BASE`, the PR's normalised **`headSha`** for `$HEAD`, then `git diff --name-only $BASE..$HEAD`. Both forges report a head commit; only its field name differs, and the normalised key is why this line does not have to know which.
 
 Never use `git diff HEAD` — it picks up unrelated commits. Always merge-base of the PR's source/target branches.
 
-`<target>` and `<source>` are the PR's own `targetRefName` / `sourceRefName` (strip the `refs/heads/` prefix) — never a hard-coded branch name. If `targetRefName` is missing or does not resolve locally, detect the repo's default branch instead:
+`<target>` and `<source>` are the PR's own **`targetBranch` / `sourceBranch`** — the normalised keys, already stripped of whatever ref prefix their forge uses — never a hard-coded branch name. If `targetBranch` is absent or does not resolve locally, detect the repo's default branch instead:
 
 ```bash
 BASE_BRANCH=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')
@@ -66,7 +68,7 @@ Report the branch you settled on before diffing.
 Invoke the `code-review` skill (from `terylon-git`, **loaded by name** — never by path) with:
 - `--scope=pr`
 - `--base=<merge-base sha>` (from the `git merge-base` step above)
-- `--head=<lastMergeSourceCommit.commitId>`
+- `--head=<headSha>` — the PR's normalised head commit, from step 3
 - `--repo=<absolute path to the local clone>`
 
 Per-language rules are handled by `code-review` from the conventions of the surrounding code. It also picks up the target repo's root and per-folder `CLAUDE.md` on its own — pass nothing extra for rules.
@@ -99,7 +101,7 @@ Filter to issues scoring ≥80.
 
 ### 6. Re-run eligibility check (defensive)
 
-The PR may have been completed mid-review. Re-fetch metadata via the `fetch-pr-metadata` recipe in `${CLAUDE_PLUGIN_ROOT}/skills/ado-mcp/references/ado-mcp.md`; abort posting if `status` is no longer active or `isDraft` flipped true.
+The PR may have been completed mid-review. Re-fetch metadata via the `fetch-pr-metadata` recipe in the adapter's `forge-ops` reference; abort posting if `isOpen` went false or `isDraft` flipped true.
 
 ### 7. Post (or summarize)
 
@@ -119,13 +121,14 @@ PR-wide — if there is one primary mechanical fix, post it inline and discuss a
 in prose underneath.
 
 - **Inline** (`` ```suggestion `` block) — there is a concrete patch to propose at a single
-  location, span ≤ 10 lines, single file. Use `threadContext` with `filePath` (must start
-  with `/`), `rightFileStart`, `rightFileEnd`.
-- **PR-wide** (top-level thread, no `threadContext`) — only when (a) there is no concrete
+  location, span ≤ 10 lines, single file. Anchor it with the file path and the span, **in the
+  shape `forge-ops` documents** — the leading slash and the end-line arithmetic differ between
+  forges, and each is rejected by the other.
+- **PR-wide** (top-level thread, no anchor) — only when (a) there is no concrete
   single-spot patch, (b) the change is genuinely multi-file with no representative anchor
   location, or (c) the finding is an open design question with no committed fix yet.
 
-Before posting, Read `${CLAUDE_PLUGIN_ROOT}/skills/ado-mcp/references/ado-mcp.md` and follow its `post-pr-thread` recipe for the exact thread JSON, `threadContext` fields, and `commentType` / `status` enums — that one recipe covers both the inline (with `threadContext`) and PR-wide (no `threadContext`) shapes. Issue the `post-pr-thread` call yourself, with the tool that recipe names — never a tool name copied from here, which is exactly how a server upgrade breaks nine files at once.
+Before posting, Read the adapter's `forge-ops` reference and follow its `post-pr-thread` recipe for the exact request shape, anchor fields and status enums — that one recipe covers both the inline (anchored) and PR-wide shapes. Issue the `post-pr-thread` call yourself, with the tool that recipe names — never a tool name copied from here, which is exactly how a server upgrade breaks nine files at once.
 
 ## Comment formatting (mandatory)
 
@@ -133,7 +136,7 @@ Every comment body:
 
 1. Body explains the *why* in 1–4 sentences. Cite specific file/line/commit-sha.
 2. For inline: include a `` ```suggestion `` block with the proposed replacement text.
-   The block content REPLACES the lines covered by `threadContext` — make sure indentation
+   The block content REPLACES the lines the anchor covers — make sure indentation
    (tabs vs spaces) matches the file exactly, otherwise the diff preview shows whitespace churn.
 3. End with this footer, exactly:
 
@@ -162,15 +165,15 @@ Then: `Reply "push" to post these to the PR, or tell me which to skip.`
 
 ## Common mistakes
 
-- Forgetting leading `/` in `threadContext.filePath` — Azure DevOps rejects the request silently
+- Writing the comment's file path in the shape the *other* forge wants — one requires a leading `/` and rejects the request without it, the other requires its absence. `forge-ops` states which
   (returns 200 but creates a non-inline thread).
 - Mismatched indentation in the suggestion block — preview shows wrong replacement, author rejects.
 - Skipping the second eligibility check — posting on a just-completed PR creates noise.
 - `git diff HEAD..origin/<branch>` picks up unrelated base-branch commits. Always use `git merge-base`.
-- Hard-coding a base branch name. The base is the PR's own `targetRefName`; where no PR metadata is available, detect it via `git symbolic-ref --short refs/remotes/origin/HEAD`.
+- Hard-coding a base branch name. The base is the PR's own `targetBranch`; where no PR metadata is available, detect it via `git symbolic-ref --short refs/remotes/origin/HEAD`.
 - Re-running the skill on a PR you already reviewed will spam threads. The eligibility check
   prevents this — do not bypass it.
-- The `update-thread-status` operation cannot change `threadContext`. A PR-wide
+- The `update-thread-status` operation cannot move an anchor. A PR-wide
   thread cannot be promoted to inline — you have to close it and create a new inline thread,
   which leaves the closed PR-wide as visible clutter on the PR. Commit to inline-vs-PR-wide
   on the first pass; do not post PR-wide "to be safe" with a plan to demote later.
@@ -181,4 +184,4 @@ Then: `Reply "push" to post these to the PR, or tell me which to skip.`
 
 1. `/review-pr <PR-URL> --dry-run` from a local clone of the PR's repo. Expect: a chat summary of findings (confidence ≥80) and **no** comments posted to the PR (its thread count is unchanged).
 2. Re-run without `--dry-run`. Expect: the same summary, a confirmation prompt, then on `push` a `post-pr-thread` call carrying a `` ```suggestion `` block for a line-scoped finding.
-3. Confirm with the `list-threads` operation for `<id>`: the new thread's `threadContext.filePath` starts with a leading `/`.
+3. Confirm with the `list-threads` operation for `<id>`: the new thread comes back anchored to the file and span you intended.

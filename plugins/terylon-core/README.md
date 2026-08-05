@@ -11,8 +11,10 @@ terylon-core  ← you are here      the root: nothing below it, everything above
     ▲
     └── terylon-git
            ▲
-           └── terylon-devops
+           └── terylon-forge          the forge port; ships no adapter
                   ▲
+                  ├── terylon-ado ....... adapter: ADO mechanics + the ado MCP server
+                  ├── terylon-github .... adapter: gh CLI mechanics, no server
                   ├── terylon-product
                   ├── terylon-dev
                   └── terylon-test

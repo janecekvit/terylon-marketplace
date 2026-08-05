@@ -7,7 +7,6 @@
       "Glob",
       "WebSearch",
       "WebFetch",
-
       "Bash(ls:*)",
       "Bash(dir:*)",
       "Bash(find:*)",
@@ -38,17 +37,14 @@
       "Bash(realpath:*)",
       "Bash(xargs grep *)",
       "Bash(xxd:*)",
-
       "Bash(pwd)",
       "Bash(whoami)",
       "Bash(hostname)",
       "Bash(date:*)",
       "Bash(env)",
-
       "Bash(jq:*)",
       "Bash(yq:*)",
       "Bash(node -e *)",
-
       "Bash(Get-ChildItem:*)",
       "Bash(Get-Content:*)",
       "Bash(Get-Item:*)",
@@ -65,7 +61,6 @@
       "Bash(Resolve-Path:*)",
       "Bash(Split-Path:*)",
       "Bash(Join-Path:*)",
-
       "Bash(Select-String:*)",
       "Bash(Select-Object:*)",
       "Bash(Where-Object:*)",
@@ -85,7 +80,6 @@
       "Bash(ConvertFrom-Csv:*)",
       "Bash(Write-Host:*)",
       "Bash(Write-Output:*)",
-
       "Bash(git status*)",
       "Bash(git log*)",
       "Bash(git diff*)",
@@ -110,23 +104,13 @@
       "Bash(git stash list*)",
       "Bash(git symbolic-ref*)",
       "Bash(git check-ignore*)",
-
       "Bash(git add *)",
       "Bash(git checkout -b *)",
       "Bash(git switch *)",
       "Bash(git switch -c *)",
       "Bash(git stash*)",
       "Bash(git restore --staged *)",
-
-      "mcp__plugin_terylon-devops_ado__wit_get_work_item",
-      "mcp__plugin_terylon-devops_ado__wit_get_work_item_type",
-      "mcp__plugin_terylon-devops_ado__wit_list_work_item_comments",
-      "mcp__plugin_terylon-devops_ado__wit_get_work_items_batch_by_ids",
-      "mcp__plugin_terylon-devops_ado__repo_get_repo_by_name_or_id",
-      "mcp__plugin_terylon-devops_ado__repo_get_pull_request_by_id",
-      "mcp__plugin_terylon-devops_ado__repo_get_pull_request_changes",
-      "mcp__plugin_terylon-devops_ado__repo_list_pull_request_threads",
-      "mcp__plugin_terylon-devops_ado__repo_list_pull_request_thread_comments"
+      "mcp__plugin_terylon-ado_ado__*"
     ],
     "deny": [
       "Bash(git push origin main)",
@@ -150,13 +134,21 @@
       {
         "matcher": "Edit|Write",
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/git-guard.js\"", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/git-guard.js\"",
+            "timeout": 5
+          }
         ]
       },
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/git-guard.js\"", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/git-guard.js\"",
+            "timeout": 5
+          }
         ]
       }
     ]

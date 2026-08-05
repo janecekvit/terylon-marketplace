@@ -20,6 +20,8 @@ Run a verification from the main thread:
 /terylon-test:test <PR-URL> [--auto | --dry-run]
 ```
 
+Swap `terylon-ado@terylon` for `terylon-github@terylon` on GitHub. **One of the two is required**: the port ships no adapter, so without one every forge operation stops. `terylon-forge`, `terylon-git` and `terylon-core` install automatically as dependencies.
+
 `test` is the entry point. It is a **skill, not an agent**, for the same reason `develop` is: only the main thread can ask the user, and someone has to host the one gate that matters — **consent before anything is written back to Azure DevOps**. It dispatches the `tester` agent to verify, shows what would be written, waits for a yes, and only then lets the tester write. At the end it reports the run's token spend, exactly the way `develop` does at its Gate 3.
 
 `test` is to `tester` what `develop` is to `leader`. Several PRs or checklists fan out into concurrent testers, one gate hosted per PR as it returns.
@@ -29,18 +31,18 @@ Run a verification from the main thread:
 ```
 test (skill, main thread — holds the write-back gate, reports token spend)
 └── tester (the role agent — drives the whole run)
-    ├── update-pr-checklist (read) ......... terylon-devops: the test plan, and the work item it links
-    ├── update-work-item-checklist (read) .. terylon-devops: the acceptance criteria of that work item
+    ├── update-pr-checklist (read) ......... terylon-forge: the test plan, and the work item it links
+    ├── update-work-item-checklist (read) .. terylon-forge: the acceptance criteria of that work item
     ├── verify-test-plan ................... the engine: triage, coverage, routing, evidence
     │   └── per-claim subagents            one round, claims are independent
     │       ├── run-build-and-tests        the build and the suite — a shell is enough
     │       ├── run-ui-flows               the interface, through browser automation
     │       └── <repo-local specialist>    conditional; capability gate, not frontmatter
-    ├── update-pr-checklist (write) ........ terylon-devops: the thread, then the rewritten plan
-    └── update-work-item-checklist (write) . terylon-devops: the comment, then the annotated criteria
+    ├── update-pr-checklist (write) ........ terylon-forge: the thread, then the rewritten plan
+    └── update-work-item-checklist (write) . terylon-forge: the comment, then the annotated criteria
 ```
 
-Azure DevOps appears only at the ends, and lives in another plugin. The `update-*-checklist` skills are in **`terylon-devops`** with the rest of the ADO skills — they read and write, hold no `Agent`, and check nothing. Everything between those calls is this plugin's, and none of it knows a pull request is involved, which is why the same run works on a checklist handed over directly. The tester can also be dispatched directly, without the skill; it then runs as the lower-level engine, without the write-back gate or the token-spend report — the same as dispatching `leader` outside `develop`.
+The forge appears only at the ends, and lives in another plugin. The `update-*-checklist` skills are in **`terylon-forge`** with the rest of the transports — they read and write, hold no `Agent`, and check nothing. Everything between those calls is this plugin's, and none of it knows a pull request is involved, which is why the same run works on a checklist handed over directly. The tester can also be dispatched directly, without the skill; it then runs as the lower-level engine, without the write-back gate or the token-spend report — the same as dispatching `leader` outside `develop`.
 
 ## What it contains
 
@@ -86,18 +88,21 @@ terylon-core .................. delegate-to-repo-agents, measure-token-spend
     ▲   ▲
     │   └── terylon-git
     │          ▲
-    │          └── terylon-devops ....... update-pr-checklist, update-work-item-checklist
+    │          └── terylon-forge ....... update-pr-checklist, update-work-item-checklist, resolve-forge
     │                 ▲
+    │                 ├── terylon-ado ....... adapter: forge-ops + the ado MCP server
+    │                 ├── terylon-github .... adapter: forge-ops over the gh CLI
     └─────────────────┴── terylon-test  ← you are here
 ```
 
-Azure DevOps appears only at the ends of the run — the two `update-*-checklist` transports read the checklists in and write the answers back. Everything between them is forge-agnostic, which is why `verify-test-plan` can be pointed at any list of claims.
+The forge appears only at the ends of the run — the two `update-*-checklist` transports read the checklists in and write the answers back, through whichever adapter is enabled. Everything between them is forge-agnostic, which is why `verify-test-plan` can be pointed at any list of claims.
 
 ## Dependencies
 
-- **`terylon-devops`** — the `ado` MCP server, the `ado-mcp` engine, and the two transports (`update-pr-checklist`, `update-work-item-checklist`). Installed automatically.
+- **`terylon-forge`** — the forge port: the two transports (`update-pr-checklist`, `update-work-item-checklist`) and `resolve-forge`. Installed automatically.
+- **An adapter** — `terylon-ado` or `terylon-github`, enabled by the consumer rather than declared here. It supplies the `forge-ops` engine and, on Azure DevOps, the `ado` MCP server.
 - **`terylon-core`** — `measure-token-spend`, which the `test` skill invokes at the end of a run to report the verification's own token spend, and `delegate-to-repo-agents`, which `tester` and `run-ui-flows` load before dispatching a repo-local specialist. It also ships the `SubagentStop` hook that records per-agent spend as the run proceeds. Installed automatically.
-- **`terylon-git`** — reached through `terylon-devops`. Nothing here loads it directly; it arrives because `terylon-devops` needs it.
+- **`terylon-git`** — reached through `terylon-forge`. Nothing here loads it directly; it arrives because `terylon-forge` needs it.
 - **Playwright MCP server** — **optional**, and needed only by `run-ui-flows`. The plugin ships no `.mcp.json` for it on purpose: that would start a browser server for every consumer, including those who only walk a shell checklist. Without it, `run-ui-flows` reports the capability as absent and UI claims come back *not verifiable here* rather than silently unchecked.
 
 ## Setup
@@ -115,7 +120,8 @@ Azure DevOps appears only at the ends of the run — the two `update-*-checklist
     }
   },
   "enabledPlugins": {
-    "terylon-test@terylon": true
+    "terylon-test@terylon": true,
+    "terylon-ado@terylon": true
   }
 }
 ```
@@ -147,7 +153,7 @@ Pin the version rather than floating `@latest`: `shared/side-effects.md` require
 /terylon-test:test <PR-URL> [--auto | --dry-run]
 ```
 
-It reads the plan and the linked work item's acceptance criteria, verifies what it can, shows what would be written and waits for consent, then writes the result through `update-pr-checklist` and `update-work-item-checklist` in `terylon-devops`, and finally reports the run's token spend. Given a checklist and no URL it verifies and returns, writing nothing. `--dry-run` verifies and shows the proposed writes without making them; `--auto` skips the pause.
+It reads the plan and the linked work item's acceptance criteria, verifies what it can, shows what would be written and waits for consent, then writes the result through `update-pr-checklist` and `update-work-item-checklist` in `terylon-forge`, and finally reports the run's token spend. Given a checklist and no URL it verifies and returns, writing nothing. `--dry-run` verifies and shows the proposed writes without making them; `--auto` skips the pause.
 
 ## What it will not do
 

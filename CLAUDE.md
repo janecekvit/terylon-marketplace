@@ -20,13 +20,17 @@ Internal Claude Code plugin marketplace distributed into product repositories th
 ```
 terylon-core                      the root — shared conventions + measurement; no git, no forge, no MCP
 └── terylon-git                   + git; no forge, no MCP server
-    └── terylon-devops            + Azure DevOps
+    └── terylon-forge             the forge port — the PR workflow, written against operations; ships no adapter
+        ├── terylon-ado           adapter: the ADO body of forge-ops + the ado MCP server
+        ├── terylon-github        adapter: the GitHub body of forge-ops, over the gh CLI; no server
         ├── terylon-product       + user stories, Feature specs
         ├── terylon-dev           + the build pipeline (declares terylon-git and terylon-core directly)
         └── terylon-test          + verifying a test plan and acceptance criteria (declares terylon-core directly)
 ```
 
-`terylon-dev` declares `terylon-git` directly as well as through `terylon-devops`, because its `leader` dispatches `code-reviewer` whether or not Azure DevOps is in play. `terylon-dev` and `terylon-test` declare `terylon-core` directly for the same reason: both invoke `measure-token-spend`, which has nothing to do with git or a forge.
+`terylon-dev` declares `terylon-git` directly as well as through `terylon-forge`, because its `leader` dispatches `code-reviewer` whether or not a forge is in play. `terylon-dev` and `terylon-test` declare `terylon-core` directly for the same reason: both invoke `measure-token-spend`, which has nothing to do with git or a forge.
+
+**A consumer enables two keys: a role plugin and an adapter.** Nothing declares an adapter — the port ships none on purpose, because declaring one would install an Azure DevOps MCP server in every GitHub repository. `terylon-forge` **replaced `terylon-devops`**, splitting it along that seam: the portable transports became the port, the ADO mechanics became `terylon-ado`, and `ado-mcp` became `forge-ops`. See the *Migrating* note in `plugins/terylon-forge/README.md`.
 
 `terylon-core` is the **root every other plugin sits on**, and it carries only what all of them may need: `delegate-to-repo-agents` (the capability test a persona applies before dispatching an agent the target repository ships) and `measure-token-spend`, plus a `SubagentStop` hook that records per-agent spend as a run proceeds without anything having to invoke it. It can still be enabled alone for the measurement.
 
@@ -36,7 +40,9 @@ terylon-core                      the root — shared conventions + measurement;
 
 **A component lives in the lowest plugin that all of its consumers can reach.** Consumers are counted by plugin, not by file, and the test is what a component *exercises*, never who calls it — `delegate-to-repo-agents` is consumed by three plugins and calls no git, so it sits in the root; `write-plan` and `run-build-loop` are consumed only by `terylon-dev`, so they sit there rather than in a root that installs for everyone.
 
-The boundary between the first two is the forge: everything in `terylon-git` exercises git and nothing more. That is why the review pipeline is split — `code-review` and `code-reviewer` are local, `review-pr` and `pr-reviewer` carry the findings to ADO. `terylon-test` splits on the same seam: `verify-test-plan` needs a shell and a repository, while `update-pr-checklist` and `update-work-item-checklist` need Azure DevOps and so live in `terylon-devops` with the rest of it.
+**Only one component in the marketplace is loaded up the dependency chain**, and it is `forge-ops`, reached from the port and from the two role plugins that also call it. It is a port and adapter relationship rather than an oversight, and the rules that keep it honest — the port declares no adapter, both adapters use one skill name, a transport that finds neither stops — are in `plugins/CLAUDE.md`.
+
+Two boundaries run through this stack. Between `terylon-git` and `terylon-forge` the test is whether something reaches outside the repository: that is why the review pipeline is split, with `code-review` and `code-reviewer` local and `review-pr` and `pr-reviewer` carrying the findings outward. `terylon-test` splits on the same seam — `verify-test-plan` needs a shell and a repository, while the two `update-*-checklist` transports reach a forge and so live in `terylon-forge`. Between the port and the adapters the test is whether something **depends** on a platform: a transport that *issues* a `gh` subcommand or an `mcp__` tool call has crossed it and belongs in an adapter. Two things are not crossings — a transport's `allowed-tools` naming both surfaces, and a transport naming a difference the port declares — because hiding either is what makes a transport wrong. The rule with both carve-outs is in `plugins/CLAUDE.md`.
 
 Component layout, the placement rule in full, the dispatch chains and the table of every cross-plugin load: `plugins/CLAUDE.md`.
 
@@ -44,12 +50,18 @@ Component layout, the placement rule in full, the dispatch chains and the table 
 
 | | |
 |---|---|
-| Organisation | `janecekvit` (default; override with the `TERYLON_ADO_ORG` env var) |
+| Organisation | **not recorded here** — each person sets `TERYLON_ADO_ORG` in their own settings |
 | Project | `Dev` |
 | Repo | `TerylonMarketplace` |
-| MCP server | `@azure-devops/mcp@2.9.0` (pinned) via `plugins/terylon-devops/.mcp.json` |
+| MCP server | `@azure-devops/mcp@2.9.0` (pinned) via `plugins/terylon-ado/.mcp.json` |
 
-The table above is this repository's **own** identity. A consuming repository targets its own organisation by setting `TERYLON_ADO_ORG`; the `.mcp.json` reads it at server startup (`${TERYLON_ADO_ORG:-janecekvit}`), and project / repo derive from the consuming repository's git remote at runtime. See the *Point it at your Azure DevOps organization* section in `README.md`.
+**No organisation name is committed anywhere in this repository except inside its own URL.** The `source.url` in the setup snippets and the `homepage` in each manifest have to name it — that is the address you install the marketplace from, and a placeholder there would point at nothing. Everywhere else it is absent on purpose: example URLs in the recipes use `contoso`, and the migration notes describe the failure a hard-coded default caused without repeating the value that caused it.
+
+**`.claude/settings.json` deliberately carries no `env` block.** It did briefly, and the reason it does not is the same reason `.mcp.json` lost its fallback, one level up: **this repository is the marketplace source.** Anyone who forks it to point at their own copy inherits its committed settings, and a committed `TERYLON_ADO_ORG` would hand them this owner's organisation — the very outcome removing the fallback was meant to prevent, reintroduced through a file nobody thinks of as code. Whoever works on this repository sets the variable in their **own** `~/.claude/settings.json`, where a personal default belongs and where a fork cannot inherit it.
+
+**`TERYLON_ADO_ORG` is required and has no default.** The `.mcp.json` passes `${TERYLON_ADO_ORG}` bare: unset, the server does not target anything. It used to carry a hard-coded default, which meant a consumer who forgot the variable did not fail — they silently targeted whichever organisation the marketplace author happened to use, and found out at the first call, from an authorization error naming an organisation nobody had chosen. A missing required value must fail where it is missing.
+
+Project and repo still derive from the consuming repository's git remote at runtime, and a GitHub-hosted repository sets nothing at all: `terylon-github` reads the owner from the remote and authenticates through `gh`. See *Point it at your forge* in `README.md`.
 
 ## Language
 

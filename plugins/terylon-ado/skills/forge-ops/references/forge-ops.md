@@ -1,17 +1,17 @@
 # Azure DevOps MCP — canonical reference
 
-Single source of truth for all Azure DevOps (ADO) MCP mechanics used across the Terylon plugins. This document is the heavy reference behind the `ado-mcp` engine skill. The transport callers (`review-pr`, `address-pr-comments`, `write-pr-description` and the `pr-reviewer` agent in `terylon-devops`; `create-user-story`, `create-feature` in `terylon-product`; `develop` in `terylon-dev`) delegate their ADO recipes here and issue their own tool calls following these recipes.
+Single source of truth for all Azure DevOps (ADO) MCP mechanics used across the Terylon plugins. This document is the heavy reference behind the `forge-ops` engine skill, the **Azure DevOps body of the `terylon-forge` port**; its sibling is `terylon-github:forge-ops`, the same catalog over the `gh` CLI. Two bodies, one contract: where they disagree about what an operation means, the port's declaration decides and one of them is wrong. The transport callers (`review-pr`, `address-pr-comments`, `write-pr-description` and the `pr-reviewer` agent, all in `terylon-forge`; `create-user-story`, `create-feature` in `terylon-product`; `develop` in `terylon-dev`) delegate their ADO recipes here and issue their own tool calls following these recipes.
 
 ---
 
 ## 1. Overview & scope
 
-`ado-mcp` owns **all mechanical ADO operations**: URL/ID parsing, `repositoryId` resolution, PR and work-item metadata fetches, local diff construction, thread/comment listing and posting, batch work-item lookup, parent rollup, and the ADO posting conventions (field encodings, `threadContext` anchoring, markdown rendering).
+`forge-ops` owns **all mechanical ADO operations**: URL/ID parsing, `repositoryId` resolution, PR and work-item metadata fetches, local diff construction, thread/comment listing and posting, batch work-item lookup, parent rollup, and the ADO posting conventions (field encodings, `threadContext` anchoring, markdown rendering).
 
 It does **NOT** own any judgment or generation. The following always stay in the calling skill:
 
 - **Footer / version resolution** — the caller stamps its own footer from its own `plugin.json` (see §16).
-- **Eligibility *decisions*** — `ado-mcp` returns raw flags; the caller decides draft policy, ownership gating, and the prior-run BLOCK / ASK / PROCEED branch (see §14).
+- **Eligibility *decisions*** — `forge-ops` returns raw flags; the caller decides draft policy, ownership gating, and the prior-run BLOCK / ASK / PROCEED branch (see §14).
 - **Thread classification** — mechanical vs inline-text vs conceptual is caller-owned.
 - **Review diff dot-choice** — the three-dot symmetric reviewer view lives in the `code-review` engine (in `terylon-git`, loaded by name), not here (see §13).
 - **All generation / judgment** — confidence scoring, description authoring, user-story and feature drafting.
@@ -22,15 +22,15 @@ This file is the single source of truth; when a recipe changes, it changes here 
 
 ## 2. MCP server prerequisites & tool namespace
 
-All ADO calls use tools from the `ado` MCP server, declared in `plugins/terylon-devops/.mcp.json`. `terylon-product` and `terylon-dev` inherit it via `dependencies: ["terylon-devops"]`.
+All ADO calls use tools from the `ado` MCP server, declared in `plugins/terylon-ado/.mcp.json`. No plugin declares this one as a dependency: the consumer enables it, and the port would install an Azure DevOps server everywhere if it declared it.
 
 **Tool namespace — documented vs runtime:**
 
 - This document writes tool names in the short documented form `mcp__ado__*` (e.g. `repo_pull_request(action="get")`).
-- **At runtime the server is namespaced by its providing plugin: `mcp__plugin_terylon-devops_ado__*`** (e.g. `mcp__plugin_terylon-devops_ado__repo_pull_request(action="get")`). This is the form you actually call, and the form that must appear in each calling skill's `allowed-tools`.
+- **At runtime the server is namespaced by its providing plugin: `mcp__plugin_terylon-ado_ado__*`** (e.g. `mcp__plugin_terylon-ado_ado__repo_pull_request(action="get")`). This is the form you actually call, and the form that must appear in each calling skill's `allowed-tools`.
 - The two are the same tool. The bare `mcp__ado__*` names in this document are shorthand for the namespaced runtime form.
 
-**WIT tool-name drift:** the `wit_*` tools were added in a later version of `@azure-devops/mcp` and tool names have drifted between versions. In particular the comment-listing tool is `wit_work_item(action="list_comments")` (NOT `wit_work_item(action="list_comments")`, which does not exist at runtime). Verify the exact names installed locally with the inspector:
+**WIT tool-name drift:** the `wit_*` tools were added in a later version of `@azure-devops/mcp` and the names drifted between versions. The comment-listing tool is `wit_work_item(action="list_comments")`; the pre-2.9.0 `wit_list_work_item_comments` does not exist at runtime. Verify the exact names installed locally with the inspector:
 
 ```
 npx @azure-devops/mcp --list-tools
@@ -40,15 +40,15 @@ npx @azure-devops/mcp --list-tools
 
 ## 3. Tool catalog — the 2.9.0 surface
 
-The pinned server is **`@azure-devops/mcp@2.9.0`**, which consolidated the whole surface into **action-based tools**: one tool per resource, an `action` parameter selecting the operation. Call them in the runtime namespace `mcp__plugin_terylon-devops_ado__*`.
+The pinned server is **`@azure-devops/mcp@2.9.0`**, which consolidated the whole surface into **action-based tools**: one tool per resource, an `action` parameter selecting the operation. Call them in the runtime namespace `mcp__plugin_terylon-ado_ado__*`.
 
 **Three things break silently when a call is written from memory of the old surface**, and all three fail the whole call rather than degrading:
 
 | Trap | Consequence |
 |---|---|
 | Every schema is `additionalProperties: false` | one unknown parameter rejects the entire call |
-| `project` became **`project`** | the old name is now an unknown parameter — see above |
-| The old one-tool-per-operation names are **gone** | `repo_pull_request_write(action="update")` and its siblings do not resolve at all |
+| `projectName` became **`project`** | the old name is now an unknown parameter — see above |
+| The old one-tool-per-operation names are **gone** | `repo_update_pull_request` and its siblings do not resolve at all; the migration table below has every one |
 
 ### Reads
 
@@ -131,7 +131,7 @@ One subsection per operation: its IN/OUT contract, the tool(s) it uses, and whic
 - **Tools:** none (string parsing). **Consumers:** review-pr, address-pr-comments, write-pr-description, pr-reviewer.
 - **Recipe:** §9 (bash + PowerShell).
 
-### `parse-wi-url`
+### `parse-item-url`
 - **In:** WI URL string or bare number. **Out:** `org`, `project`, `WI_ID`.
 - **Tools:** none. **Consumers:** create-user-story, create-feature.
 - **Recipe:** §9. Bare number → use directly; `org` / `project` come from the resolution order in *Resolving org / project without a URL* (§9) — `TERYLON_ADO_ORG` for the org, git remote for the project.
@@ -147,11 +147,28 @@ One subsection per operation: its IN/OUT contract, the tool(s) it uses, and whic
 - **Invariant:** resolve once per repo per run; cache (§5).
 
 ### `fetch-pr-metadata`
-- **In:** `prId`, `repositoryId`, `project`. **Out:** whole PR object (`status`, `isDraft`, `createdBy`, `sourceRefName`, `targetRefName`, `lastMergeSourceCommit`, `description`).
+- **In:** `prId`, `repositoryId`, `project`. **Out:** the whole PR object — `status`, `isDraft`, `createdBy`, `sourceRefName`, `targetRefName`, `lastMergeSourceCommit`, `description`, **`mergeStatus`**, **`autoCompleteSetBy`** and **`completionOptions`**. The last three are what `set-auto-merge`'s gate reads and what it echoes back; an output list omitting them leaves that gate with nothing to test.
 - **Tools:** `repo_pull_request(action="get")`. **Consumers:** review-pr, address-pr-comments, write-pr-description, pr-reviewer.
 
 ### `eligibility-check`
-- **In:** PR metadata. **Out:** raw flags (`status`, `isDraft`, `createdBy.uniqueName`) + default recommendation.
+- **In:** PR metadata. **Out:** the **normalised verdict** below, plus the raw flags it was derived from.
+
+**The normalised verdict is what a transport reads. It never reads the raw fields.** Azure DevOps returns `status` as a **number** and GitHub has no `status` key at all, so a transport comparing against `"completed"` matches nothing on either side and passes everything — the gate then fails **open**, which is how a run posts to a pull request somebody already merged.
+
+| Normalised | Type | Derived here from |
+|---|---|---|
+| `isOpen` | boolean | `status == 1` (active). `2` completed, `3` abandoned |
+| `isDraft` | boolean | `isDraft` |
+| `author` | string | `createdBy.uniqueName` — email-shaped |
+| `sourceBranch` | string | `sourceRefName`, stripped of `refs/heads/` |
+| `targetBranch` | string | `targetRefName`, stripped of `refs/heads/` |
+| `headSha` | string | `lastMergeSourceCommit.commitId` — the commit the diff's `$HEAD` must be |
+| `isMergeable` | boolean | `mergeStatus == 3` (succeeded) |
+| `autoMergeAlreadySet` | boolean | `autoCompleteSetBy` present |
+
+**These are numbers, not words** (§6). The one place a word is correct is the `status` **input** of `list-pull-requests`.
+
+**The two branch keys are stripped here, once.** Consumers used to be told to read `targetRefName` and strip the prefix themselves — a raw field name and a prefix shape that exist on this side only, restated in six places across the port. The other body reports the same two keys from `baseRefName` / `headRefName` with nothing to strip.
 - **Tools:** `repo_pull_request(action="get")`. **Consumers:** review-pr, address-pr-comments, write-pr-description, pr-reviewer.
 - **Decisions stay skill-side** (§14). Two-phase: phase-1 before read, phase-2 re-check before write.
 
@@ -161,7 +178,19 @@ One subsection per operation: its IN/OUT contract, the tool(s) it uses, and whic
 - **Sentinel:** version-less `Generated with [Claude Code]` (§15).
 
 ### `list-threads`
-- **In:** `prId`, `repositoryId`, `project`. **Out:** raw threads `[{ id, status, comments: [{ id, content, commentType, ... }] }]`.
+- **In:** `prId`, `repositoryId`, `project`. **Out:** the **normalised thread shape** below. The raw form is `[{ id, status, comments: [{ id, content, commentType, … }] }]` and stays here.
+
+**Both bodies return this shape, key for key**, or a transport cannot be written once against them:
+
+| Key | Meaning | From, here |
+|---|---|---|
+| `threadId` | opaque handle for replies and status changes | `id` |
+| `isResolved` | boolean | `status` in `{2 fixed, 4 closed, 6 byDesign}` |
+| `isSystem` | boolean — generated, not written by a person | `comments[0].commentType == 3` |
+| `anchor` | `null` for PR-wide, else `{ path, startLine, endLine }` **inclusive** | `threadContext`, with `rightFileEnd.line - 1` as `endLine` |
+| `comments[]` | `{ commentId, body, author }` | `{ id, content, createdBy.uniqueName }` |
+
+The `- 1` is load-bearing: this side stores the end one past the last covered line, and reporting it raw makes every consumer edit one line too many.
 - **Tools:** `repo_pull_request_thread(action="list")`. **Consumers:** review-pr, address-pr-comments, pr-reviewer.
 - Classification/filtering stay skill-side.
 
@@ -195,6 +224,7 @@ One subsection per operation: its IN/OUT contract, the tool(s) it uses, and whic
 - **In:** `WI_ID`, `project`, `expand`. **Out:** WI fields + relations.
 - **Tools:** `wit_work_item(action="get")`. **Consumers:** create-user-story, create-feature.
 - Use `expand="relations"`; HTML fields pass as-is (§11).
+- **Gotcha — `multilineFieldsFormat` is empty under a `fields` filter.** The response reports which multiline fields are markdown in a `multilineFieldsFormat` object, and **that object comes back `{}` whenever the call passes an explicit `fields` list**, even for fields it asked for. It is populated under `expand`. Measured on a work item whose description and acceptance criteria are both markdown: the filtered fetch reported `{}` and the `expand` fetch reported both as `markdown`. **A check that confirms the format must use `expand`** — the filtered form fails it every time, and fails it in the direction that looks like a real defect.
 
 ### `fetch-work-items-batch`
 - **In:** `ids[]`, `project`, explicit `fields[]`. **Out:** `[{ id, rev, fields, url }, ...]`.
@@ -206,14 +236,15 @@ One subsection per operation: its IN/OUT contract, the tool(s) it uses, and whic
 - **Tools:** `wit_work_item(action="get_batch")`. **Consumers:** *(none today — exposed for completeness)*.
 - `System.Parent` is top-level; two-pass; one level only (§12).
 
-### `wi-comments-read`
+### `item-comments-read`
 - **In:** `WI_ID`, `project`. **Out:** `{ totalCount, comments: [{ id, text, createdBy }] }`.
-- **Tools:** `wit_work_item(action="list_comments")`. **Consumers:** *(none today — exposed for completeness)*.
+- **Tools:** `wit_work_item(action="list_comments")`. **Consumers:** update-work-item-checklist.
 - Doubles as the WI `detect-prior-run` source (grep `comments[].text`).
 
-### `wi-comment-post`
+### `item-comment-post`
 - **In:** `WI_ID`, `project`, `text` (already includes the caller's footer). **Out:** `{ id }`.
-- **Tools:** `wit_work_item_comment_write(action="add")`. **Consumers:** *(none today — exposed for completeness)*.
+- **Tools:** `wit_work_item_comment_write(action="add")`, and `(action="update")` for the idempotent re-run. **Consumers:** update-work-item-checklist.
+- **Update form:** pass the existing `commentId` with `action="update"`. A re-run **updates** its previous comment rather than posting a second; both bodies must offer this or the idempotence the callers rely on has no call behind it.
 - Plain text; print the returned `id`.
 
 ### `build-pr-diff`
@@ -236,9 +267,10 @@ One subsection per operation: its IN/OUT contract, the tool(s) it uses, and whic
 
 ### `update-work-item`
 - **In:** `id`, `updates: [{ op, path, value }]` (JSON-Patch). **Out:** updated work item.
-- **Tool:** `wit_work_item_write(action="update")`. **Consumers:** create-feature.
+- **Tool:** `wit_work_item_write(action="update")` — or `action="update_batch"` with `batchUpdates: [{ id, op, path, value, format }]`. **Consumers:** create-feature, update-work-item-checklist.
+- **The two update forms are not equivalent, and only one can state a format.** `update_batch` accepts a per-op **`format`**; the single `update` does not. So rewriting a markdown multiline field — acceptance criteria, a description — goes through `update_batch` **even for one item**, or the write lands with no format stated and depends on whatever encoding the field already carries. Measured: `update_batch` with `format: "Markdown"` on a single-element array round-tripped the criteria with `multilineFieldsFormat` still `markdown`.
 - **Recipe:** patch existing fields — `op: "replace"` (or the schema default `add`, which ADO upserts), `path: "/fields/<FieldRef>"` (e.g. `/fields/System.Title`, `/fields/System.Description`), `value: "<new value>"`.
-- **Gotcha (no format arg):** unlike `create-work-item`'s `fields:[{name,value,format?}]`, `wit_work_item_write(action="update")` takes JSON-Patch ops with **no per-field `format`** in the `fields` shape. A plain field op writes into whatever encoding the field already has, so a Markdown string sent to an HTML field renders as literal `#` and `-` characters.
+- **Gotcha (no format arg on the single form):** unlike `create-work-item`'s `fields:[{name,value,format?}]`, `wit_work_item_write(action="update")` takes JSON-Patch ops with **no per-field `format`**. A plain field op writes into whatever encoding the field already has, so a Markdown string sent to an HTML field renders as literal `#` and `-` characters. `update_batch` is the form that carries `format`; use it when the encoding matters rather than hoping the field is already right.
 
 - **Converting an existing field to Markdown.** The encoding lives at its own patch path, so an update *can* switch it — patch the format and the content in the same call, format first:
 
@@ -272,9 +304,44 @@ One subsection per operation: its IN/OUT contract, the tool(s) it uses, and whic
 
 ### `create-pull-request`
 - **In:** `repositoryId`, `sourceRefName`, `targetRefName`, `title` (required); `project` (required when `repositoryId` is a name), `description?` (≤4000), `isDraft?`, `labels?`, `workItems?`. **Out:** new PR (`pullRequestId`).
-- **Tool:** `repo_pull_request_write(action="create")`. **Consumers:** develop (terylon-dev).
+- **Tool:** `repo_pull_request_write(action="create")`. **Consumers:** create-pr, develop (terylon-dev).
 - **Recipe:** pass **full ref names** (`refs/heads/<branch>`) for `sourceRefName` / `targetRefName` — do NOT strip `refs/heads/` here (that stripping is only for diff building, §13). Resolve `repositoryId` once via `resolve-repo-id` (§5); pass `project` when `repositoryId` is a name. `description` is capped at 4000 chars — keep the generated PR body within the limit.
 - **Associate work items:** `workItems` (space-separated WI IDs, e.g. `"101055 98792"`) links work items at creation — an alternative to a separate `link-work-item-to-pull-request` call. Draft/eligibility decisions and footer stay caller-side.
+
+### `check-preconditions`
+- **In:** nothing. **Out:** usable / not usable, with the reason.
+- **Tools:** none (environment + git). **Consumers:** create-pr, and any transport before its first call.
+- **Recipe:** `TERYLON_ADO_ORG` must be set — there is no default (§9) — and it must equal the organisation in the repository's remote, or every call goes to an organisation the remote does not describe. Report the mismatch and stop; do not "correct" either side.
+
+### `list-pull-requests`
+- **In:** `repositoryId`, `project`, optional `sourceRefName` (full `refs/heads/<branch>`), `status`.
+- **Out:** one entry per matching pull request, each carrying the **same normalised `isOpen` / `isDraft` / `author`** that `eligibility-check` reports, derived the same way (`status == 1` is open, and so on). **Tool:** `repo_pull_request(action="list")`. **Consumers:** create-pr.
+- **Gotcha:** the `status` **input** is a **word** (`"Active"`, `"All"`), unlike the numeric `status` the response carries. That input is the one place the word form is correct — and the response's number never leaves this file.
+
+### `resolve-current-user`
+- **In:** nothing. **Out:** the identity of whoever the run is acting as, in the same form `eligibility-check` reports `author`.
+- **Recipe:** `git config user.email` — on this forge `createdBy.uniqueName` is email-shaped, so the two compare directly.
+- **Why it is an operation:** the ownership gate needs "am I the author", and the answer is a platform question. Without it a transport reaches for a platform command of its own and crosses the port boundary to ask something the port should have answered.
+
+### `resolve-identity`
+- **In:** an email or display name. **Out:** identity GUIDs. **Tool:** `core_get_identity_ids`. **Consumers:** create-pr.
+- **Gotcha:** reviewer operations take **GUIDs, never emails**. Zero or several matches is a stop-and-ask, never a guess.
+
+### `add-reviewers`
+- **In:** `repositoryId`, `pullRequestId`, `project`, `reviewerIds` (GUIDs), `reviewerAction: "add"`.
+- **Out:** updated reviewers. **Tool:** `repo_pull_request_write(action="update_reviewers")`. **Consumers:** create-pr.
+- **Gotcha:** the request body carries `{ id }` only, so every reviewer added here is **optional** — required comes from a branch policy. On read-back an optional reviewer **omits** `isRequired` rather than reporting `false`; never test for an explicit `false`.
+
+### `set-auto-merge`
+- **In:** `repositoryId`, `pullRequestId`, `project`, `autoComplete`, `mergeStrategy`, `deleteSourceBranch`, `transitionWorkItems`.
+- **Out:** updated pull request. **Tool:** `repo_pull_request_write(action="update")`. **Consumers:** create-pr.
+- **Gate before calling:** `status == 1`, `isDraft == false`, `mergeStatus == 3`, `autoCompleteSetBy` absent. **These are numbers, not words** (§6) — comparing against `"active"` matches nothing and passes everything.
+- **Gotchas:** completion options are sent whole, so read and echo back what a human already chose; `transitionWorkItems` defaults to `true` and moves every linked item on the board; **never send `bypassReason`** — any non-empty string overrides branch policies. The response **strips** `autoCompleteSetBy` and `completionOptions`, so read the pull request back to confirm.
+
+### `list-linked-items`
+- **In:** `repositoryId`, `pullRequestId`, `project`. **Out:** the items already linked to the pull request.
+- **Tool:** `repo_pull_request(action="get", includeWorkItemRefs=true)`, **read back from the work item** when it returns nothing.
+- **Measured gotcha:** that call returned **no `workItemRefs` key at all** on a pull request that demonstrably had a linked work item. Never report "no links" from its absence — confirm against `wit_work_item(action="get", expand="Relations")`, which is where the relation actually lives.
 
 ### `link-work-item-to-pull-request`
 - **In:** `projectId`, `repositoryId`, `pullRequestId`, `workItemId` (optional `pullRequestProjectId` for cross-project links). **Out:** linked work item.
@@ -410,7 +477,7 @@ https://dev.azure.com/{org}/{project}/_git/{repoName}/pullrequest/{prId}
 In bash:
 
 ```bash
-url="https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace/pullrequest/12345"
+url="https://dev.azure.com/contoso/Platform/_git/ExampleRepo/pullrequest/12345"
 ORG=$(echo "$url"     | sed -E 's|.*dev\.azure\.com/([^/]+)/.*|\1|')
 PROJECT=$(echo "$url" | sed -E 's|.*dev\.azure\.com/[^/]+/([^/]+)/.*|\1|')
 REPO=$(echo "$url"    | sed -E 's|.*/_git/([^/]+)/.*|\1|')
@@ -420,7 +487,7 @@ PRID=$(echo "$url"    | sed -E 's|.*/pullrequest/([0-9]+).*|\1|')
 In PowerShell:
 
 ```powershell
-$url   = "https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace/pullrequest/12345"
+$url   = "https://dev.azure.com/contoso/Platform/_git/ExampleRepo/pullrequest/12345"
 $ORG   = ([regex]'dev\.azure\.com/([^/]+)/').Match($url).Groups[1].Value
 $PROJ  = ([regex]'dev\.azure\.com/[^/]+/([^/]+)/').Match($url).Groups[1].Value
 $REPO  = ([regex]'/_git/([^/]+)/').Match($url).Groups[1].Value
@@ -437,7 +504,7 @@ https://dev.azure.com/{org}/{project}/_workitems/edit/{id}
 In bash:
 
 ```bash
-wi_url="https://dev.azure.com/janecekvit/Dev/_workitems/edit/98310"
+wi_url="https://dev.azure.com/contoso/Platform/_workitems/edit/98310"
 ORG=$(echo "$wi_url"     | sed -E 's|.*dev\.azure\.com/([^/]+)/.*|\1|')
 PROJECT=$(echo "$wi_url" | sed -E 's|.*dev\.azure\.com/[^/]+/([^/]+)/.*|\1|')
 WI_ID=$(echo "$wi_url"   | sed -E 's|.*/edit/([0-9]+).*|\1|')
@@ -446,7 +513,7 @@ WI_ID=$(echo "$wi_url"   | sed -E 's|.*/edit/([0-9]+).*|\1|')
 In PowerShell:
 
 ```powershell
-$wi_url  = "https://dev.azure.com/janecekvit/Dev/_workitems/edit/98310"
+$wi_url  = "https://dev.azure.com/contoso/Platform/_workitems/edit/98310"
 $ORG     = ([regex]'dev\.azure\.com/([^/]+)/').Match($wi_url).Groups[1].Value
 $PROJECT = ([regex]'dev\.azure\.com/[^/]+/([^/]+)/').Match($wi_url).Groups[1].Value
 $WI_ID   = ([regex]'/edit/(\d+)').Match($wi_url).Groups[1].Value
@@ -465,7 +532,9 @@ When there is no URL to parse — a bare work-item number, or a skill grounding 
 | `git remote get-url origin` of the consuming repository | `org`, `project`, `repo` | the normal path |
 | `az devops configure --defaults` | `org`, `project` | last resort |
 
-**`org` must equal the server's startup organisation.** The `ado` server is launched with `${TERYLON_ADO_ORG:-janecekvit}` (see the plugin `.mcp.json`), so it can only talk to that one organisation. Take `org` from `TERYLON_ADO_ORG` (falling back to `janecekvit`) — the same source the server used — rather than from the remote, so the two never disagree. Derive `project` and `repo` from the remote.
+**`org` must equal the server's startup organisation.** The `ado` server is launched with `${TERYLON_ADO_ORG}` (see the plugin `.mcp.json`), so it can only talk to that one organisation. Take `org` from that variable — the same source the server used — rather than from the remote, so the two never disagree. Derive `project` and `repo` from the remote.
+
+**There is no fallback.** With `TERYLON_ADO_ORG` unset the server has no organisation to talk to, so **stop and say the variable is unset** rather than guessing one. The variable used to carry a hard-coded default, and the failure that produced was worse than this one: calls went to a real organisation nobody had chosen — whichever one the marketplace author happened to use — and failed later, on authorization, naming an org the consumer had never heard of.
 
 Deriving `project` / `repo` from the git remote, in bash:
 
@@ -490,7 +559,7 @@ case "$REMOTE" in
 esac
 REPO="${REPO%.git}"
 
-ORG="${TERYLON_ADO_ORG:-janecekvit}"
+ORG="${TERYLON_ADO_ORG:?TERYLON_ADO_ORG is not set - no default organisation exists}"
 PROJECT="${TERYLON_ADO_PROJECT:-$PROJECT}"
 ```
 
@@ -512,7 +581,7 @@ if     ($REMOTE -match '/_git/([^/]+)') { $REPO = $Matches[1] }   # HTTPS
 elseif ($REMOTE -match '/([^/]+)$')     { $REPO = $Matches[1] }   # SSH: last segment
 if ($REPO) { $REPO = $REPO -replace '\.git$', '' }
 
-$ORG     = if ($env:TERYLON_ADO_ORG)     { $env:TERYLON_ADO_ORG }     else { "janecekvit" }
+$ORG     = if ($env:TERYLON_ADO_ORG)     { $env:TERYLON_ADO_ORG }     else { throw "TERYLON_ADO_ORG is not set - no default organisation exists" }
 $PROJECT = if ($env:TERYLON_ADO_PROJECT) { $env:TERYLON_ADO_PROJECT } else { $PROJECT }
 ```
 
@@ -620,9 +689,9 @@ Build the diff **locally with `git`** — the MCP server exposes metadata, not r
 ### Profile (a) — review-pr
 
 ```bash
-SOURCE=$(strip "refs/heads/" from sourceRefName)
-TARGET=$(strip "refs/heads/" from targetRefName)
-HEAD=lastMergeSourceCommit.commitId
+SOURCE=$sourceBranch      # normalised; derived here from sourceRefName
+TARGET=$targetBranch      # normalised; derived here from targetRefName
+HEAD=$headSha             # normalised; derived here from lastMergeSourceCommit.commitId
 
 git fetch origin "$SOURCE" "$TARGET"
 BASE=$(git merge-base "origin/$TARGET" "origin/$SOURCE")
@@ -647,14 +716,14 @@ The `--no-prefix --unified=100000 --minimal` flags are load-bearing (full-file c
 
 ## 14. Eligibility — two-phase
 
-`eligibility-check` returns **raw flags** (`status`, `isDraft`, `createdBy.uniqueName`) and a default recommendation. The **decisions** stay caller-side.
+`eligibility-check` returns the **normalised verdict** — `isOpen`, `isDraft`, `author`, `isMergeable`, `autoMergeAlreadySet`, `sourceBranch`, `targetBranch` — plus the raw flags it derived them from. **A caller reads the normalised keys and never the raw ones.** The **decisions** stay caller-side.
 
 - **Phase 1 — before any read/work:** fetch metadata, evaluate the caller's skip rules (completed/abandoned, draft policy, ownership gate).
-- **Phase 2 — re-check before any write:** re-fetch metadata immediately before posting; abort if `status` is no longer active or `isDraft` flipped to `true` (the PR may have been completed mid-run). **Read-only skills are exempt from the phase-2 write half.**
+- **Phase 2 — re-check before any write:** re-fetch metadata immediately before posting; abort if `isOpen` went false or `isDraft` flipped to `true` (the PR may have been completed mid-run). **Read-only skills are exempt from the phase-2 write half.**
 
 **Sequencing obligation:** call `detect-prior-run` **before** phase-1 so the prior-run check and the eligibility flags are evaluated together — this reproduces `review-pr`'s fused gate (a prior Claude post is part of the skip decision, not a separate later step).
 
-**Caller-owned decisions** (never decided here): the draft policy (write-pr-description allows drafts; review-pr/address skip them), the ownership gate (address-pr-comments requires `createdBy.uniqueName == git config user.email`), and the prior-run BLOCK / ASK / PROCEED branch.
+**Caller-owned decisions** (never decided here): the draft policy (write-pr-description allows drafts; review-pr/address skip them), the ownership gate (address-pr-comments compares the normalised `author` against `resolve-current-user`), and the prior-run BLOCK / ASK / PROCEED branch.
 
 ---
 
@@ -662,7 +731,7 @@ The `--no-prefix --unified=100000 --minimal` flags are load-bearing (full-file c
 
 Detect a prior skill run by searching for the **version-less sentinel substring** `Generated with [Claude Code]` (it survives the `@<version>` suffix, so match the substring, not the full footer).
 
-- **PR path:** list threads, search `comments[0].content` of each thread.
+- **PR path:** list threads and search the **`body` of each thread's first comment** — the normalised key `list-threads` returns, not the raw field it is derived from. A recipe that names the raw key contradicts its own sibling twelve hundred lines above.
 - **WI path:** fetch the parent work item with `expand="relations"`, then read its child work items and search each `fields["System.Description"]` (this is the duplicate guard `create-user-story` runs before creating a story).
 
 If a prior post is found, the caller decides what to do (ask before re-running, overwrite under `--auto`, etc. — §14).
@@ -671,7 +740,7 @@ If a prior post is found, the caller decides what to do (ask before re-running, 
 
 ## 16. Footer / version contract
 
-**`ado-mcp` does NOT resolve a version or stamp a footer.** The calling skill assembles the footer from its **own** `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` (which resolves to the *caller's* plugin root) plus its own skill `name`, and passes the finished content into the write op (`post-pr-thread`, `update-pr-description`, `wi-comment-post`).
+**`forge-ops` does NOT resolve a version or stamp a footer.** The calling skill assembles the footer from its **own** `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` (which resolves to the *caller's* plugin root) plus its own skill `name`, and passes the finished content into the write op (`post-pr-thread`, `update-pr-description`, `item-comment-post`).
 
 The footer is, as a **placeholder template only**:
 
@@ -689,6 +758,7 @@ The footer is, as a **placeholder template only**:
 Applies to every write (PR threads, PR descriptions, WI comments):
 
 - **Never hard-wrap** paragraphs or bullets. Azure DevOps renders line breaks verbatim, so a hard-wrapped paragraph shows mid-sentence breaks. Let lines run long; break only at real paragraph boundaries.
+- **`!<id>` is safe inside a pull request and unsafe outside it.** Azure DevOps renders `!<id>` as a link to a pull request and `#<id>` as a link to a work item, so the two sigils are needed. But **pull request numbers are per-repository while the sigil carries no repository**, so outside the pull request's own threads the renderer guesses which one you meant. Measured: `!68` in a work-item comment rendered as a link to `_git/DumpAnalysis/pullrequest/68` — a different repository in the same project, where pull request 68 does not exist. **In a work-item comment, write the full URL.** The sigil stays correct in a thread on the pull request itself, where the repository is implied by where the text lives.
 - **Checklists use unchecked `- [ ]` only.** Never emit `- [x]`. The reason is that ADO renders a pre-checked box as a static tick the reader cannot untick, so a box checked on the author's say-so is both a claim nobody verified and one nobody can withdraw.
 
   **One carve-out, and it is narrow.** A skill that **executed** the item may write `- [X]`, on five conditions: it ran the thing rather than reading about it, the run **passed**, what it ran **bears on that item** rather than merely passing nearby, the evidence is posted where a reader can check it, and any item it could not execute stays `- [ ]`. The exemption belongs to whichever skill meets all five, not to any named one — an allowlist would go stale the moment a second skill qualified. A skill claiming it states the five conditions in its own steps, and those steps govern: this is the summary, and a summary that drifts looser than what it summarises is worse than none. The third condition is the one that gets skipped: a green suite that never touches the behaviour under test satisfies "it ran" and proves nothing. The rule above still binds every skill that *generates* a checklist — `write-pr-description`, `create-user-story`, `review-pr` — because generating is not executing, however sure the author feels.
@@ -701,10 +771,10 @@ Applies to every write (PR threads, PR descriptions, WI comments):
 
 `${CLAUDE_PLUGIN_ROOT}` always resolves to the plugin that **owns the executing file** — it is plugin-local, and parent-directory relative imports across plugins are banned by `plugins/CLAUDE.md`. This forces two delegation mechanisms:
 
-- **Same-plugin (terylon-devops transport skills):** deterministic `Read ${CLAUDE_PLUGIN_ROOT}/skills/ado-mcp/references/ado-mcp.md` — reachable because `ado-mcp` is a sibling skill in the same plugin.
-- **Cross-plugin (terylon-product / terylon-dev callers):** load the `ado-mcp` skill **by name** (skills are global once installed; both plugins declare `dependencies: ["terylon-devops"]`). Reference it by name only — **never with a path or `@`**, and never path into `terylon-devops` from another plugin's file.
+- **Inside this plugin:** deterministic `Read ${CLAUDE_PLUGIN_ROOT}/skills/forge-ops/references/forge-ops.md`, reachable because it is this plugin's own file.
+- **From anywhere else — which is every caller:** load the `forge-ops` skill **by name**, plugin-qualified as `terylon-ado:forge-ops` when both adapters are enabled. Reference it by name only, **never with a path or `@`**, and never path into `terylon-ado` from another plugin's file: `${CLAUDE_PLUGIN_ROOT}` there resolves to the caller's own plugin, so the path silently points at a file that does not exist.
 
-**Consequence for shared docs:** there is no cross-plugin file path, so a shared reference cannot live as a path-imported doc across plugins. Centralizing it in the `ado-mcp` skill (loaded by name) is the supported cross-plugin mechanism.
+**Consequence for shared docs:** there is no cross-plugin file path, so a shared reference cannot live as a path-imported doc across plugins. Centralizing it in the `forge-ops` skill (loaded by name) is the supported cross-plugin mechanism.
 
 ---
 
@@ -712,12 +782,9 @@ Applies to every write (PR threads, PR descriptions, WI comments):
 
 Every caller that delegates its ADO recipes to this file:
 
-- `review-pr` (terylon-devops) — same-plugin `Read` of this file.
-- `address-pr-comments` (terylon-devops) — same-plugin `Read` of this file.
-- `write-pr-description` (terylon-devops) — same-plugin `Read` of this file.
-- `pr-reviewer` (terylon-devops, agent) — same-plugin `Read` of this file.
-- `create-user-story` (terylon-product) — loads `ado-mcp` by name.
-- `create-feature` (terylon-product) — loads `ado-mcp` by name.
-- `develop` (terylon-dev) — loads `ado-mcp` by name.
+- `create-pr`, `review-pr`, `write-pr-description`, `address-pr-comments`, `update-pr-checklist`, `update-work-item-checklist` and the `pr-reviewer` agent (all terylon-forge) — load this skill by name.
+- `create-user-story` (terylon-product) — loads `forge-ops` by name.
+- `create-feature` (terylon-product) — loads `forge-ops` by name.
+- `develop` (terylon-dev) — loads `forge-ops` by name.
 
-Each caller still issues its own `mcp__ado__*` (runtime `mcp__plugin_terylon-devops_ado__*`) calls following these recipes; delegation centralizes the **knowledge**, not the calls. The footer/version is always resolved by the calling skill (§16).
+Each caller still issues its own `mcp__ado__*` (runtime `mcp__plugin_terylon-ado_ado__*`) calls following these recipes; delegation centralizes the **knowledge**, not the calls. The footer/version is always resolved by the calling skill (§16).

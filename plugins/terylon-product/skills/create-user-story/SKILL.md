@@ -5,7 +5,7 @@ description: >-
   parent Feature — drafts a codebase-grounded, implementation-ready story (short Summary, Description,
   Approach, precise implementation detail, acceptance-criteria checklist, out-of-scope) and creates it in ADO.
   Optional flags --auto and --dry-run.
-allowed-tools: Bash(git *), Bash(wc *), Read, Grep, Glob, Agent, mcp__plugin_terylon-devops_ado__*
+allowed-tools: Bash(git *), Bash(wc *), Bash(gh *), Read, Grep, Glob, Agent, mcp__plugin_terylon-ado_ado__*
 ---
 
 # Azure DevOps — Create User Story
@@ -26,8 +26,8 @@ its area and iteration.
 - `<brief>` — required free-text intent describing what the story is about.
 - `--parent` — required parent Feature WI id or URL of form
   `https://dev.azure.com/{org}/{project}/_workitems/edit/{id}`. When a bare id is given, `org` / `project`
-  resolve per the `ado-mcp` recipe *Resolving org / project without a URL* — `TERYLON_ADO_ORG` (default
-  `janecekvit`) for the org, the `--repo` git remote for the project. Used for context, for inheriting
+  resolve per the `forge-ops` recipe *Resolving org / project without a URL* — `TERYLON_ADO_ORG` for the
+  org, with no default, and the `--repo` git remote for the project. Used for context, for inheriting
   `System.AreaPath` / `System.IterationPath`, and as the parent the new story is linked under.
 - `--repo` — optional path to the product repo to ground implementation detail against. Default =
   current working directory. The skill grounds read-only against this repo; it never edits product code.
@@ -39,28 +39,30 @@ its area and iteration.
 
 ## Prerequisites
 
-- The `ado` MCP server is provided by `terylon-devops@terylon`, auto-installed because this plugin
-  declares `dependencies: ["terylon-devops"]`. At runtime the plugin-provided server is namespaced
-  `mcp__plugin_terylon-devops_ado__*`; the bare `mcp__ado__*` names in this document are shorthand for
-  that namespaced form.
-- ADO mechanics (tool call shapes, field encodings, markdown rendering rules) are owned by the
-  **`ado-mcp`** engine skill, which lives in the **`terylon-devops`** plugin. **Load `ado-mcp` by name**
-  for the exact recipes before issuing any `mcp__ado__*` call.
-- **Cross-plugin reference — by name only, never by path.** `ado-mcp` is in a different plugin than this
-  skill, so it MUST be loaded by its name `ado-mcp` and never by a file path. `${CLAUDE_PLUGIN_ROOT}`
-  resolves to **`terylon-product`** (this plugin), NOT to `terylon-devops` — so building a path to the
+- **This skill is Azure DevOps only today.** It names ADO work-item fields with no GitHub
+  counterpart, so it requires `terylon-ado@terylon`. Porting it is separate work.
+- Forge access comes from that adapter. `terylon-forge`, the port, is auto-installed because this plugin declares
+  `dependencies: ["terylon-forge"]`, but it ships no adapter and registers no server. On Azure DevOps
+  the server is namespaced `mcp__plugin_terylon-ado_ado__*` at runtime; the bare `mcp__ado__*` names in
+  this document are shorthand for that form.
+- Platform mechanics (call shapes, field encodings, markdown rendering rules) are owned by the
+  **`forge-ops`** engine skill of that adapter. **Load `forge-ops` by name** — plugin-qualified when both
+  adapters are enabled — for the exact recipes before the first platform call.
+- **Cross-plugin reference — by name only, never by path.** `forge-ops` is in a different plugin than this
+  skill, so it MUST be loaded by its name `forge-ops` and never by a file path. `${CLAUDE_PLUGIN_ROOT}`
+  resolves to **`terylon-product`** (this plugin), NOT to `terylon-forge` — so building a path to the
   engine's files under `${CLAUDE_PLUGIN_ROOT}` points at a file that does not exist here and will fail.
   Relative parent-directory imports (paths that climb out of this plugin) are likewise banned. Loading
   the engine by name is the only supported cross-plugin mechanism.
 - The skill runs inside the product repo it grounds against (`--repo` default = cwd).
 
-## Azure DevOps mechanics — delegated to `ado-mcp`
+## Azure DevOps mechanics — delegated to `forge-ops`
 
 The Azure DevOps recipes this skill relies on — fetching a work item (`fetch-work-item`), creating a
 work item (`create-work-item`), and linking a parent (`link-work-item-parent`) — live in the
-**`ado-mcp`** engine skill (terylon-devops). Load `ado-mcp` **by name** for those recipes before
+**`forge-ops`** engine skill of the enabled adapter. Load `forge-ops` **by name** for those recipes before
 calling any `mcp__ado__*` tool. Delegation centralizes the *recipes* only — this skill still issues its
-own `mcp__ado__*` calls following them, and assembles its own footer. `ado-mcp` never resolves or
+own `mcp__ado__*` calls following them, and assembles its own footer. `forge-ops` never resolves or
 stamps this skill's footer; footer/version are resolved locally (see the Output template section).
 
 ## Workflow
@@ -73,7 +75,7 @@ work-item id. Resolve `--repo` (default = current working directory). Capture `-
 
 ### 2. Fetch the parent Feature
 
-Fetch the parent Feature via `ado-mcp` `fetch-work-item` with `expand="relations"`. Read its
+Fetch the parent Feature via `forge-ops` `fetch-work-item` with `expand="relations"`. Read its
 `System.Title` and `System.Description` for context, and capture `System.AreaPath` and
 `System.IterationPath` to inherit onto the new story. Keep the relations list for the duplicate guard
 in step 6.
@@ -146,7 +148,7 @@ Over budget: **cut the qualifier from the longest bullet before cutting a whole 
 
 ### 7. Create the story and link the parent
 
-Create via `ado-mcp` `create-work-item`:
+Create via `forge-ops` `create-work-item`:
 
 - `workItemType = "User Story"`,
 - `System.Title`,
@@ -159,7 +161,7 @@ Create via `ado-mcp` `create-work-item`:
 
 **The acceptance criteria go in `Microsoft.VSTS.Common.AcceptanceCriteria`**, the field named for them, as a `- [ ]` checklist in Markdown. Do not duplicate them into `System.Description` — two copies means one of them starts drifting, and a reader has no way to tell which is current. The description carries the story, the approach, the implementation detail and the out-of-scope boundary; the criteria live in their own field.
 
-Then link the parent via `ado-mcp` `link-work-item-parent` with
+Then link the parent via `forge-ops` `link-work-item-parent` with
 `updates: [{ id: <new story id>, linkToId: <Feature id>, type: "parent" }]` — `id` is the new story,
 `linkToId` is the Feature, `type: "parent"` makes the story a child of the Feature. Verify the direction:
 the story's parent is the Feature, not the reverse.
@@ -263,7 +265,7 @@ Stretching a story's criteria to cover work it explicitly excluded is how a stor
 describing anything. A pull request whose plan items map to **no** criterion is the signal for
 the second row, not an invitation to add rows to the first.
 
-**Two mechanics from `ado-mcp` bite here.** The field must be `markdown` or `~~` renders
+**Two mechanics from `forge-ops` bite here.** The field must be `markdown` or `~~` renders
 literally, and the `update-work-item` operation silently drops tag-shaped `<…>` content - so scan the
 criteria you are round-tripping for a literal angle bracket before writing.
 
@@ -273,8 +275,8 @@ criteria it finds defective and applies none of them; see the criteria/test-plan
 
 `<plugin-version>` is read at runtime from `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json`. `<model>` is the model the run executes under (e.g. `opus-4.8`) — the skill knows it from itself, as no environment variable exposes it. `<effort>` comes from the `CLAUDE_EFFORT` environment variable (e.g. `xhigh`); **when `CLAUDE_EFFORT` is unset, omit the entire ` · <model> / <effort>` segment.** The substring `Generated with [Claude Code]` is the sentinel for prior-run detection — everything variable sits after that stable prefix.
 
-**Formatting rules** (the same ADO-markdown rules `ado-mcp` documents in reference §17 — load
-`ado-mcp` by name for the full text):
+**Formatting rules** (the same markdown rules `forge-ops` documents — load
+`forge-ops` by name for the full text):
 
 - **Acceptance criteria use unchecked `- [ ]` only** — never `- [x]` and never static glyphs (`✓`,
   `✅`, `🟢`, "Done"). ADO renders a pre-checked `[x]` as a static green tick the reader cannot toggle,
@@ -345,7 +347,7 @@ For `--dry-run`: label the block "(dry-run — nothing will be created)".
 4. Duplicate guard — re-run step 2 against the same Feature with the same title. Expect: the existing
    AI-drafted child (footer sentinel) is detected and the skill asks before creating a duplicate.
 5. Checkbox rendering — open the created story in ADO: the acceptance criteria appear as **interactive
-   checkboxes**, not plain bullets. Equivalently, re-fetch via `ado-mcp` `fetch-work-item` and confirm
+   checkboxes**, not plain bullets. Equivalently, re-fetch via `forge-ops` `fetch-work-item` and confirm
    `multilineFieldsFormat["System.Description"]` is `"markdown"`. If they render as plain bullets, the
    field was created as HTML — recreate with `format: "Markdown"` (see Common mistakes).
 6. **Criteria state outcomes, not implementations.** Read every generated criterion back: none
