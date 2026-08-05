@@ -1,14 +1,14 @@
 ---
 name: address-pr-comments
-description: Use when the user provides an Azure DevOps pull request URL (dev.azure.com/…/pullrequest/N)
-  for THEIR OWN PR and asks to apply / address / incorporate the review comments left by others.
+description: Use when the user provides a pull request URL from either forge (dev.azure.com/…/pullrequest/N
+  or github.com/…/pull/N) for THEIR OWN PR and asks to apply / address / incorporate the review comments left by others.
   Optional flags --auto and --dry-run.
-allowed-tools: Bash(git *), Read, Grep, Glob, Edit, Write, mcp__plugin_terylon-devops_ado__*
+allowed-tools: Bash(git *), Read, Grep, Glob, Edit, Write, Bash(gh *), mcp__plugin_terylon-ado_ado__*
 ---
 
-# Azure DevOps PR — Address Reviewer Comments
+# Pull Request — Address Reviewer Comments
 
-You read all open reviewer threads on an Azure DevOps pull request and apply the
+You read all open reviewer threads on a pull request, on either forge, and apply the
 requested changes to the local working tree. Inline `` ```suggestion `` blocks become
 mechanical Edits. Free-text feedback is interpreted, planned, and applied — with user
 confirmation by default.
@@ -19,7 +19,7 @@ confirmation by default.
 /address-pr-comments <PR-URL> [--auto | --dry-run]
 ```
 
-- `<PR-URL>` — required, of form `https://dev.azure.com/{org}/{project}/_git/{repo}/pullrequest/{id}`.
+- `<PR-URL>` — required, in either forge's PR URL — `dev.azure.com/{org}/{project}/_git/{repo}/pullrequest/{id}` or `github.com/{owner}/{repo}/pull/{n}`. Its host is what `resolve-forge` reads first.
 - `--auto` — apply mechanical (suggestion-block) edits immediately, no confirmation. Free-text
   threads still pause for review (interpretation is judgment, not mechanics).
 - `--dry-run` — never edit; only report the plan in chat.
@@ -28,7 +28,7 @@ confirmation by default.
 
 ## Prerequisites
 
-- The `ado` MCP server registered (see `plugins/terylon-devops/README.md`). Invoked on demand by the MCP host — no manual install needed beyond the `.mcp.json` entry.
+- **An adapter enabled** — `terylon-ado` or `terylon-github`. The port registers no server of its own: the adapter supplies `forge-ops`, and on Azure DevOps the `ado` MCP server with it. `resolve-forge` decides which one a run targets, and a missing adapter stops the run rather than being worked around.
 - Local clone of the PR's source branch checked out (you'll edit files in place).
 - Git worktree clean OR user is fine with mixing reviewer-driven edits into existing changes.
 
@@ -36,28 +36,35 @@ confirmation by default.
 
 ### 1. Parse PR URL and resolve the repository id
 
-Follow the **parse-pr-url** and **resolve-repo-id** recipes in the `ado-mcp` engine skill (`Read ${CLAUDE_PLUGIN_ROOT}/skills/ado-mcp/references/ado-mcp.md`). Extract `org`, `project`, `repoName`, `prId` from the URL, then call the documented `repo_get_repo_by_name_or_id` recipe yourself to obtain `repositoryId` (use the returned `id` for all subsequent calls). You issue the `mcp__plugin_terylon-devops_ado__*` calls — `ado-mcp` only supplies the recipe and exact argument shapes.
+Resolve the forge first (`resolve-forge`), then follow the **parse-pr-url** and **resolve-repo-id** operations in that adapter's `forge-ops` (loaded by name, plugin-qualified when both adapters are enabled). Keep what `resolve-repo-id` returns and pass it on unchanged — it is a GUID on one forge and an `{owner}/{repo}` string on the other. **You issue the calls**; `forge-ops` supplies only the recipe and the exact argument shapes, and names the tool or command each resolves to.
 
 ### 2. Eligibility check
 
-Fetch PR metadata using the **fetch-pr-metadata** recipe in `ado-mcp` (`repo_get_pull_request_by_id`; exact arguments in `${CLAUDE_PLUGIN_ROOT}/skills/ado-mcp/references/ado-mcp.md`). You make the call.
+Fetch PR metadata using the **fetch-pr-metadata** operation; its arguments are in the adapter's `forge-ops` reference. You make the call.
 
 Skip with a chat message if any of:
 
-- `status` is `completed` or `abandoned` (nothing to address — already merged/closed).
-- `isDraft` is `true` (no reviewers yet).
-- `createdBy.uniqueName` is NOT the current user (this skill is for addressing feedback on YOUR PR; reviewing someone else's is `review-pr`).
+- `isOpen` is false (nothing to address — already merged, closed or abandoned).
+- `isDraft` is true (no reviewers yet).
+- `author` is NOT the current user, as `resolve-current-user` reports them (this skill addresses feedback on YOUR PR; reviewing someone else's is `review-pr`).
 
-**Ownership gate (this skill's own rule — keep here, do NOT delegate):** to identify the current user, compare `createdBy.uniqueName` from the PR response against `git config user.email` — Azure DevOps `uniqueName` is typically the user's email address. Only proceed if the PR is YOUR OWN.
+**All three come from `eligibility-check`'s normalised verdict.** Comparing a raw field against English words matches nothing on either forge, and the gate then fails **open**.
+
+**Ownership gate (this skill's own rule — keep here, do NOT delegate):** compare the author `fetch-pr-metadata` returns against the local identity, and proceed only if the PR is **your own**.
+
+Both sides of the comparison come from the port: `author` from `eligibility-check`, and the local identity from **`resolve-current-user`**. They are reported in the same form on purpose — an email on one forge, a handle on the other, but never mixed — because comparing a handle against an email never matches and leaves the gate permanently shut.
+
+**Do not fetch the local identity yourself.** A platform command here is the port asking a question it already answers, and it is how one forge's vocabulary gets back in. **If the two cannot be compared, stop** rather than assuming ownership.
 
 ### 3. Fetch active threads
 
-Fetch threads using the **list-threads** recipe in `ado-mcp` (`repo_list_pull_request_threads`; arguments in `${CLAUDE_PLUGIN_ROOT}/skills/ado-mcp/references/ado-mcp.md`). You make the call.
+Fetch threads using the **list-threads** operation; its arguments are in the adapter's `forge-ops` reference. You make the call.
 
-Then filter the result client-side (this skill's own logic — keep here):
-- Keep only threads with `status` of `1` (active) or `5` (pending).
-- Drop system threads (`comments[0].commentType == 3`).
-- Drop threads whose `comments[0].content` contains `Generated with [Claude Code]`
+Then filter the result client-side (this skill's own logic — keep here). **Filter on what `list-threads` declares, never on one forge's raw enum**: a filter written against Azure DevOps status numbers matches nothing on GitHub, so the skill would report "no active threads" on a pull request full of them and exit successfully. A silent no-op is worse than a stop, so where a forge cannot express one of these, say so and **keep** the thread rather than dropping it.
+
+- Keep only threads whose **`isResolved`** is false. That is the normalised key `list-threads` returns on **both** forges, not one forge's field name. Where a body cannot determine it — one reports it only over GraphQL, so a cheaper read leaves it unknown — it says unknown rather than `false`, and an unknown thread is **kept**.
+- Drop threads whose **`isSystem`** is true. One body derives it from a comment type and the other never sets it; the transport reads the one key either way.
+- Drop threads whose first comment contains `Generated with [Claude Code]`
   (those came from `review-pr` and the user may want to handle those separately).
 
 ### 4. Classify each thread
@@ -66,21 +73,21 @@ For each remaining thread, classify by its FIRST comment's content:
 
 | Pattern | Class | Action |
 |---------|-------|--------|
-| Contains `` ```suggestion `` block AND has `threadContext.filePath` | **mechanical** | Read file, replace lines `rightFileStart.line..rightFileEnd.line - 1` with the suggestion block content. |
-| Has `threadContext.filePath` but no suggestion block | **inline-text** | Reviewer commented on a specific line; apply judgment. Show the user the comment + surrounding code, propose an edit. |
-| No `threadContext` (PR-wide thread) | **conceptual** | Reviewer raised a broader concern. Surface it for human decision; do NOT auto-edit. |
+| Contains `` ```suggestion `` block AND is anchored to a file | **mechanical** | Read the file and replace the anchored span with the suggestion block's content. **Take the span from `list-threads`, not from a raw field**: one forge reports an end one past the last covered line and the other reports the line itself, so hard-coding either arithmetic edits one line too many on the other. |
+| Anchored to a file but with no suggestion block | **inline-text** | Reviewer commented on a specific line; apply judgment. Show the user the comment + surrounding code, propose an edit. |
+| No file anchor (PR-wide thread) | **conceptual** | Reviewer raised a broader concern. Surface it for human decision; do NOT auto-edit. |
 
 ### 5. Build a plan
 
 For each thread, produce:
 
 ```yaml
-- threadId: <int>
+- threadId: <opaque handle — an integer on one forge, a node id string on the other. Pass it back; never parse it>
   class: mechanical | inline-text | conceptual
   file: <path or "(PR-wide)">
   startLine: <int or null>
   endLine: <int or null>
-  reviewer: <displayName>
+  author: <the first comment's `author`, as `list-threads` reports it>
   excerpt: <first 200 chars of comment>
   proposedEdit: |        # null for conceptual
     <new content for those lines>
@@ -101,9 +108,9 @@ For each thread, produce:
 
 For each mechanical item:
 
-1. `Read` the file to confirm current content matches `rightFileStart..rightFileEnd`.
+1. `Read` the file to confirm its current content still matches the anchored span.
 2. If indentation in the suggestion block doesn't match the file's tabs/spaces, normalise to
-   the file's existing convention (Azure DevOps suggestions can lose tab/space fidelity).
+   the file's existing convention (a suggestion block can lose tab/space fidelity in transit on either forge).
 3. `Edit` with `old_string` = exact current lines, `new_string` = suggestion block content.
 4. Record the thread-id → file:line mapping for step 8.
 
@@ -119,7 +126,7 @@ the user's chosen edit text.
 
 ### 8. (Optional) Reply on each addressed thread
 
-**Re-check eligibility first.** Re-fetch the PR metadata via the `fetch-pr-metadata` recipe and skip posting if `status` is no longer active or `isDraft` flipped true. The snapshot from step 2 is stale by now: applying the edits took time, and default mode waited for the user on top of that. The sibling `review-pr` does this at its step 6.
+**Re-check eligibility first.** Re-fetch the PR metadata via the `fetch-pr-metadata` recipe and skip posting if `isOpen` went false or `isDraft` flipped true. The snapshot from step 2 is stale by now: applying the edits took time, and default mode waited for the user on top of that. The sibling `review-pr` does this at its step 6.
 
 The stakes here are lower than in `write-pr-description` — the `reply-to-thread` operation is additive, so the worst case is a reply landing on a PR someone just completed. That is noise rather than data loss, but it is noise with your name on it.
 
@@ -134,7 +141,7 @@ Addressed in local working tree (commit pending). <one-line description of the e
 
 `<plugin-version>` is read at runtime from `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` (parse the `version` field). `<model>` is the model the run executes under (e.g. `opus-4.8`) — the skill knows it from itself, as no environment variable exposes it. `<effort>` comes from the `CLAUDE_EFFORT` environment variable (e.g. `xhigh`); **when `CLAUDE_EFFORT` is unset, omit the entire ` · <model> / <effort>` segment.** The substring `Generated with [Claude Code]` is the sentinel for prior-run detection — everything variable sits after that stable prefix.
 
-Follow the **reply-to-thread** recipe in `ado-mcp` (`Read ${CLAUDE_PLUGIN_ROOT}/skills/ado-mcp/references/ado-mcp.md`) for the exact arguments, then post via `repo_reply_to_comment` yourself. **NO-AUTO-CLOSE:** do NOT update thread status to `2` (fixed) — leave that for the reviewer or for the user to decide.
+Follow the **reply-to-thread** operation for the exact arguments, then post it yourself. **NO-AUTO-CLOSE:** never mark a thread resolved or fixed — that is the reviewer's or the user's judgement, on either forge.
 
 This step is gated by user confirmation (or `--auto`). On `--dry-run`, never post.
 
@@ -168,9 +175,9 @@ Then: `Reply "do it" to apply mechanical edits. Inline / conceptual items will b
 
 - Treating threads posted by `review-pr` as reviewer feedback — would create
   a self-referential loop. Filter them out in step 3 (match on `Generated with [Claude Code]`).
-- Reading a stale file: PR may have been updated since the reviewer commented. If
-  `rightFileStart..rightFileEnd` no longer points to the lines the suggestion targeted,
-  surface the conflict instead of guessing.
+- Reading a stale file: the PR may have been updated since the reviewer commented. If the
+  anchored span no longer points at the lines the suggestion targeted, surface the conflict
+  instead of guessing.
 - Auto-closing threads after edit: tempting, but the reviewer is the one who marks "fixed".
   Do not run the `update-thread-status` operation with `status: 2` from this skill.
 - Mixing reviewer edits into unrelated in-flight changes silently. If `git status` shows

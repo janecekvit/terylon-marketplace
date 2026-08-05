@@ -22,7 +22,7 @@ Azure DevOps renders every source line break **verbatim**. It does not treat a s
 
 Emit each paragraph and each bullet as **one continuous line**. Insert a real line break only between distinct paragraphs, bullets, or headings. Let the renderer wrap.
 
-This applies to every skill that writes to ADO — `review-pr`, `address-pr-comments`, `write-pr-description`, `create-user-story`, `create-feature` — and to any future one.
+This applies to every skill that writes to a forge — `create-pr`, `review-pr`, `address-pr-comments`, `write-pr-description`, both `update-*-checklist` skills, `create-user-story`, `create-feature` — and to any future one. It binds on GitHub too, whose renderer soft-wraps and would not need it: one rule, obeyed on both, is cheaper than remembering which target is which.
 
 ## Dashes
 
@@ -48,7 +48,7 @@ skills: [<name>, …]              # agents only — skills this agent may load,
 ---
 ```
 
-**`skills:` declares, the prose says when.** The field lists the skills an agent may load, by name and across plugin boundaries — `code-reviewer` in `terylon-git` lists `code-review`, and `pr-reviewer` in `terylon-devops` lists `create-workspace` from another plugin. Declaring a skill there does **not** mean the agent uses it on every run: `create-workspace` is listed on `code-reviewer` but only used when `isolate` is set.
+**`skills:` declares, the prose says when.** The field lists the skills an agent may load, by name and across plugin boundaries — `code-reviewer` in `terylon-git` lists `code-review`, and `pr-reviewer` in `terylon-forge` lists `create-workspace` from another plugin. Declaring a skill there does **not** mean the agent uses it on every run: `create-workspace` is listed on `code-reviewer` but only used when `isolate` is set.
 
 So the two carry different halves and both are needed:
 
@@ -59,7 +59,7 @@ So the two carry different halves and both are needed:
 
 Declaring without prose leaves an agent holding a skill it has no reason to open. Prose without the declaration relies on the name resolving anyway. **A safety constraint belongs in the prose regardless** — inline and short, where it cannot be missed if the skill is never loaded. The procedure can live in the skill; the boundary cannot.
 
-**Never set `disable-model-invocation`.** It hides the skill from being loaded by name, which breaks the engine/transport pattern this repo is built on: `ado-mcp` and `code-review` exist to be called by other skills, and a hidden engine cannot be called at all. A skill that is mainly for other skills says so in its prose instead.
+**Never set `disable-model-invocation`.** It hides the skill from being loaded by name, which breaks the engine/transport pattern this repo is built on: `forge-ops` and `code-review` exist to be called by other skills, and a hidden engine cannot be called at all. A skill that is mainly for other skills says so in its prose instead.
 
 - **`description` starts with `Use when …`** and lists triggering conditions with concrete symptoms. It is what the model matches against — describing the internal workflow there wastes the field.
 - **`name` follows the kind:** skills are named for the action (`create-workspace`, `code-review`), agents for the role (`developer`, `code-reviewer`). See the naming section in `plugins/CLAUDE.md`.
@@ -153,7 +153,7 @@ Two things the drawing must show, because both have been got wrong here and neit
 
 ## Cross-references
 
-- **Refer to other skills by name only.** Write ``the `ado-mcp` engine``, never `@path/to/SKILL.md`. An `@`-prefixed path force-loads the file into context immediately and burns tokens.
+- **Refer to other skills by name only.** Write ``the `forge-ops` engine``, never `@path/to/SKILL.md`. An `@`-prefixed path force-loads the file into context immediately and burns tokens.
 - **Never use `../`** to reach into another plugin. It is not in the specification and it breaks when the layout shifts. A skill in another plugin is loaded **by name**; `${CLAUDE_PLUGIN_ROOT}` resolves to the *calling* plugin's own root, so it can only address files inside that same plugin.
 - **Link within the repo by relative path** for humans (`see plugins/CLAUDE.md`), which is prose, not an import.
 

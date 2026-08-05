@@ -5,7 +5,7 @@ description: >-
   Triggers on phrasings like "write a Feature", "draft a Feature spec", "update Feature N",
   "is this Feature ready", "review this Feature". Applies the Terylon Feature Specification
   Standard in this skill's references/.
-allowed-tools: Read, Edit, Write, Bash(git *), mcp__plugin_terylon-devops_ado__*
+allowed-tools: Read, Edit, Write, Bash(git *), Bash(gh *), mcp__plugin_terylon-ado_ado__*
 ---
 
 # Create Feature
@@ -18,8 +18,9 @@ Drafts, updates, and reviews Azure DevOps Features against the Terylon Feature S
 
 ## Prerequisites
 
-- The `ado` MCP server is provided by `terylon-devops@terylon`, auto-installed because this plugin declares `dependencies: ["terylon-devops"]`. At runtime the server is namespaced `mcp__plugin_terylon-devops_ado__*`; the bare `mcp__ado__*` names below are shorthand for that form.
-- ADO mechanics (tool call shapes, field encodings) are owned by the **`ado-mcp`** engine skill in `terylon-devops`. **Load `ado-mcp` by name** for the exact recipes before issuing any `mcp__ado__*` call. Reference it by name only - this skill lives in a different plugin, so do not path into `terylon-devops` (`${CLAUDE_PLUGIN_ROOT}` is local to `terylon-product`, and parent-directory relative imports are banned).
+- **This skill is Azure DevOps only today.** It names ADO work-item fields with no GitHub counterpart, so it requires `terylon-ado@terylon`. Porting it to the port's vocabulary is separate work.
+- Forge access comes from that adapter. `terylon-forge`, the port, is auto-installed because this plugin declares `dependencies: ["terylon-forge"]`, but it ships no adapter. On Azure DevOps the server is namespaced `mcp__plugin_terylon-ado_ado__*` at runtime; the bare `mcp__ado__*` names below are shorthand for that form.
+- Platform mechanics (call shapes, field encodings) are owned by the **`forge-ops`** engine skill of the enabled adapter, `terylon-ado` or `terylon-github`. **Load `forge-ops` by name** for the exact recipes before the first platform call. Reference it by name only - it lives in a different plugin, so do not path into it (`${CLAUDE_PLUGIN_ROOT}` is local to `terylon-product`, and parent-directory relative imports are banned).
 - The standard this skill applies is `${CLAUDE_PLUGIN_ROOT}/skills/create-feature/references/feature-standard.md`, owned by this repo. Read it at the start of every run.
 
 ## Mode: write a new Feature
@@ -65,7 +66,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/create-feature/references/feature-standard.md
 
 ### 2. Fetch the work item
 
-If the user gave an ADO Feature ID, fetch the work item with `mcp__plugin_terylon-devops_ado__wit_get_work_item` (the `ado-mcp` `fetch-work-item` recipe) to see the current title, description, state, assignees, and tags before drafting. For a pasted draft, skip this step.
+If the user gave an ADO Feature ID, fetch the work item with the `fetch-work-item` operation to see the current title, description, state, assignees, and tags before drafting. For a pasted draft, skip this step.
 
 ### 3. Title - check against Section 1
 
@@ -115,11 +116,11 @@ Before updating the work item:
    | New Feature | `create-work-item` | `System.Description` as Markdown — send the draft as written |
    | Update existing | `update-work-item` | the format path **and** the content in one call, format first |
 
-   **Patch the format path every time, even when the field is already Markdown.** It is idempotent, and omitting it against an HTML field silently writes Markdown source into an HTML container, where a `- [ ]` renders as a dead bullet. The exact patch shape lives in the `update-work-item` recipe in `ado-mcp` — read it there rather than writing it from memory: the tool surface changes between pinned server versions, and a stale parameter name rejects the whole call.
+   **Patch the format path every time, even when the field is already Markdown.** It is idempotent, and omitting it against an HTML field silently writes Markdown source into an HTML container, where a `- [ ]` renders as a dead bullet. The exact patch shape lives in the `update-work-item` recipe in `forge-ops` — read it there rather than writing it from memory: the tool surface changes between pinned server versions, and a stale parameter name rejects the whole call.
 4. **Do NOT hard-wrap.** ADO renders every source line break verbatim - it does not treat a single newline as a soft wrap the way GitHub does. Wrapping a paragraph or a bullet at 72 / 80 chars produces visibly choppy short lines in the rendered work item. Emit each paragraph and each bullet as **one continuous line**; insert a real line break only between distinct paragraphs, bullets, or headings. This applies to the Markdown draft and to the HTML you push.
 5. **Dashes:** in the body use only `-` or `–`, never an em-dash (`—`). The footer line below is the single exception - it is emitted from the template verbatim.
 
-The Azure DevOps calls themselves - fetching the Feature (`fetch-work-item`), creating one (`create-work-item`) and pushing an update (`update-work-item`) - are owned by the **`ado-mcp`** engine skill. **Load `ado-mcp` by name and take the call shapes from it**; this skill issues its own `mcp__plugin_terylon-devops_ado__*` calls following those recipes and names no tool of its own.
+The Azure DevOps calls themselves - fetching the Feature (`fetch-work-item`), creating one (`create-work-item`) and pushing an update (`update-work-item`) - are owned by the **`forge-ops`** engine skill. **Load `forge-ops` by name and take the call shapes from it**; this skill issues its own `mcp__plugin_terylon-ado_ado__*` calls following those recipes and names no tool of its own.
 
 Every write is Markdown. A new Feature is created with `format: "Markdown"`; an update patches `/multilineFieldsFormat/System.Description` alongside the content, because the update operation carries no per-field format. See step 3 and the `update-work-item` recipe.
 
@@ -167,7 +168,7 @@ In Claude Code from the repo root:
 
 1. Run `/create-feature` (or ask "draft a feature spec") in a session — confirm the skill loads and reads the standard at `${CLAUDE_PLUGIN_ROOT}/skills/create-feature/references/feature-standard.md` before drafting.
 2. Pass a sample brief (e.g. "draft a feature: SIEM log forwarding for enterprise customers, depends on the platform team") and confirm the draft uses the Section 2 template verbatim (all seven fields, UX included), runs the Section 3 DoR check, and writes `[needs input]` for fields the brief didn't cover (not invented content).
-3. Given an existing ADO Feature ID, the review mode must call `mcp__plugin_terylon-devops_ado__wit_get_work_item` (the `ado-mcp` `fetch-work-item` recipe) before commenting on the title or fields, and must report on the UX field's three edge states.
+3. Given an existing ADO Feature ID, the review mode must call the `fetch-work-item` operation before commenting on the title or fields, and must report on the UX field's three edge states.
 4. Footer identity — a pushed Feature's footer reads `create-feature@<terylon-product version>`, resolved from this plugin's own `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json`.
 5. **Markdown rendering** — open a Feature this skill wrote: headings, tables and code spans render natively, and any `- [ ]` line is an interactive checkbox rather than a dead bullet. Equivalently, re-fetch it and confirm `multilineFieldsFormat["System.Description"]` reads `"markdown"`.
 6. **Conversion of an inherited HTML Feature** — run the update mode against a Feature whose description is HTML. Expect `multilineFieldsFormat` to read `"markdown"` afterwards and the body to render as Markdown. Verified on Feature #112, which was created as HTML before this rule existed.

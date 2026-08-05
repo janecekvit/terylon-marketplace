@@ -12,7 +12,7 @@ allowed-tools: Read, Grep, Glob, Bash, Agent, Write
 
 A checklist is a list of **claims**. Left alone it stays a list of claims, and a ticked box that nobody exercised is worse than an empty one — it launders an unverified claim into a verified-looking one.
 
-This skill turns claims into one of three states, honestly. It **carries the judgment and writes nowhere**: no PR update, no work item, no commit. Writing the result into a pull request is `update-pr-checklist`'s job, in `terylon-devops`.
+This skill turns claims into one of three states, honestly. It **carries the judgment and writes nowhere**: no PR update, no work item, no commit. Writing the result into a pull request is `update-pr-checklist`'s job, in `terylon-forge`.
 
 ## Usage
 

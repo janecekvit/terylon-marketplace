@@ -3,7 +3,7 @@ name: leader
 description: "Use as the autonomous build controller: receives an approved seed-spec or plan path, dispatches planner / developer / debugger / refactorer / review lenses, reads their reports, and decides the next round. Returns AWAITING_APPROVAL / NEEDS_CLARIFICATION / BUILD_COMPLETE / BLOCKED. Cannot prompt the user — gates live on the main thread."
 model: opus
 color: purple
-tools: [Read, Grep, Glob, Write, Bash(git *), Bash(node *), Agent, mcp__plugin_terylon-devops_ado__*]
+tools: [Read, Grep, Glob, Write, Bash(git *), Bash(node *), Agent, mcp__plugin_terylon-ado_ado__*]
 disallowedTools: [Edit]
 skills: [run-build-loop, write-plan, measure-token-spend]
 ---
@@ -93,7 +93,7 @@ The four lenses are mutually independent — dispatch them in one round, not in 
 After the last task, review the branch as a whole rather than task by task. Pick the reviewer by what actually exists:
 
 - **No pull request yet** — the normal case at this point, since the PR is opened at Gate 3 on the main thread, after you return. Dispatch **`Agent(terylon-git:code-reviewer)`** with the detected base ref and the branch diff. It needs nothing but git.
-- **A pull request already exists** — you were re-dispatched over an open PR, or the dispatch handed you its URL. Dispatch **`Agent(terylon-devops:pr-reviewer)`** instead, so the findings land on the PR where reviewers will see them.
+- **A pull request already exists** — you were re-dispatched over an open PR, or the dispatch handed you its URL. Dispatch **`Agent(terylon-forge:pr-reviewer)`** instead, so the findings land on the PR where reviewers will see them.
 
 Never dispatch `pr-reviewer` without a PR URL. It is the forge transport and has nothing to work from otherwise; `code-reviewer` is the one that takes a base ref and a diff.
 

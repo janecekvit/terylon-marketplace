@@ -6,24 +6,24 @@ description: >-
   "publish the acceptance-criteria verification". Reads the criteria out and writes results in:
   the earned ticks in place, everything else with its reason in a work-item comment. Does no
   checking of its own; the caller supplies the outcome.
-allowed-tools: Read, Grep, Glob, Write, mcp__plugin_terylon-devops_ado__*
+allowed-tools: Read, Grep, Glob, Write, Bash(gh *), mcp__plugin_terylon-ado_ado__*
 ---
 
 # update-work-item-checklist
 
-Reads a work item's acceptance criteria out of Azure DevOps and writes a tester's results back into them.
+Reads an item's acceptance criteria off the forge and writes a tester's results back into them. An **item** is a work item on Azure DevOps and an issue on GitHub; where its criteria live differs — a dedicated field on one, a section of the body on the other — and `forge-ops` normalises both to markdown.
 
 **It checks nothing itself.** A caller that has done the checking hands over the outcome, and this skill puts it where the reader will see it. That separation is the point: a skill that both ran the check and wrote the tick would be marking its own homework.
 
-It is the sibling of `update-pr-checklist`. That one carries a pull request's test plan; this one carries a work item's acceptance criteria. They split on the object, not the discipline — the tick gate, the downgrade rule and the "generating is not executing" line are the same, stated once in `ado-mcp` §17 and obeyed by both.
+It is the sibling of `update-pr-checklist`. That one carries a pull request's test plan; this one carries a work item's acceptance criteria. They split on the object, not the discipline — the tick gate, the downgrade rule and the "generating is not executing" line are the same, stated once in `forge-ops` and obeyed by both.
 
 ## Usage
 
 ```
-/terylon-devops:update-work-item-checklist <WI-URL-or-id> [--results=<path>] [--dry-run | --auto]
+/terylon-forge:update-work-item-checklist <item-URL-or-id> [--results=<path>] [--dry-run | --auto]
 ```
 
-- `<WI-URL-or-id>` — `https://dev.azure.com/{org}/{project}/_workitems/edit/{id}`, or a bare id.
+- `<item-URL-or-id>` — `dev.azure.com/{org}/{project}/_workitems/edit/{id}` or `github.com/{owner}/{repo}/issues/{n}`, or a bare id.
 - No `--results` — read the acceptance criteria and return the items. Writes nothing.
 - `--results=<path>` — a file holding the outcome per item; write it back.
 - `--dry-run` — print what would be written; write nothing.
@@ -39,15 +39,15 @@ Per item: what was **checked**, what came of it, and what that leaves unproven. 
 
 ## Prerequisites
 
-- The `ado` MCP server from this plugin; at runtime `mcp__plugin_terylon-devops_ado__*`.
-- Call shapes come from the **`ado-mcp`** engine skill — load it by reading `${CLAUDE_PLUGIN_ROOT}/skills/ado-mcp/references/ado-mcp.md` before any `mcp__ado__*` call. This skill leans on `fetch-work-item`, `update-work-item`, `wi-comments-read`, `wi-comment-post` and the WI half of `detect-prior-run`.
+- **An adapter enabled** — `terylon-ado` or `terylon-github`. The port registers no server of its own: the adapter supplies `forge-ops`, and on Azure DevOps the `ado` MCP server with it. `resolve-forge` decides which one a run targets, and a missing adapter stops the run rather than being worked around.
+- Call shapes come from the **`forge-ops`** engine skill of whichever adapter `resolve-forge` names — load it by name, plugin-qualified when both are enabled, before the first platform call. This skill leans on `fetch-work-item`, `update-work-item`, `item-comments-read`, `item-comment-post` and the item half of `detect-prior-run`.
 
 ## Shape of a run
 
 ```
 read
 ├── 1  fetch the work item ......... parse URL/id, fetch fields + relations
-└── 2  locate the criteria ......... the AcceptanceCriteria field; confirm it is Markdown
+└── 2  locate the criteria ......... wherever forge-ops says they live; confirm the encoding
 
    … the caller checks the items …
 
@@ -64,9 +64,9 @@ There is no step 3, and that is deliberate: this skill has **no `Agent` tool** a
 
 ### 1-2. Fetch the work item, and find the criteria
 
-Parse the URL or bare id (`parse-wi-url`), fetch the work item with `expand="relations"` (`fetch-work-item`). The acceptance criteria live in `Microsoft.VSTS.Common.AcceptanceCriteria`.
+Parse the URL or bare id (`parse-item-url`), then `fetch-work-item`. **Where the criteria live is the adapter's answer, not this skill's**: a dedicated field on one forge, a section of the item's body on the other. Ask `forge-ops` for it and take what it returns.
 
-**Read the field's encoding, do not assume it** — `multilineFieldsFormat["Microsoft.VSTS.Common.AcceptanceCriteria"]` says `markdown` or `html`.
+**Read the encoding, do not assume it.** Where a forge stores criteria in a field with its own format flag, that flag says `markdown` or `html` and the two parse differently; where criteria are a section of a markdown body there is nothing to read and nothing to convert.
 
 | What you find | What you may do |
 |---|---|
@@ -77,7 +77,7 @@ Parse the URL or bare id (`parse-wi-url`), fetch the work item with `expand="rel
 
 **Never invent criteria.** An empty field means there is nothing to read. Proposing criteria belongs to whoever owns the story.
 
-Unlike a pull request, there is **no completed/abandoned gate** to fail — annotating the acceptance criteria of a story in any state is a meaningful record. Note the work item's `System.State` in the comment so the reader has it, but do not refuse the write on it.
+Unlike a pull request, there is **no completed/abandoned gate** to fail — annotating the acceptance criteria of a story in any state is a meaningful record. Note the item's state in the comment so the reader has it, but do not refuse the write on it.
 
 ### 3. The checking happens elsewhere
 
@@ -119,7 +119,9 @@ An addition dropped on the floor is the failure mode that matters: the author wo
 
 ### 6. Guard the field rewrite
 
-The `update-work-item` operation **silently drops tag-shaped `<…>` content** (`ado-mcp` §`update-work-item`). Round-tripping acceptance criteria that contain a literal `<…>` would corrupt the author's wording without any error.
+**This hazard is one forge's, and `forge-ops` says whether it applies.** Where the update path sanitises tag-shaped text, the rule below binds; where it stores `<…>` verbatim — which the GitHub body states in bold — suppressing the rewrite would withhold this skill's only deliverable and publish a comment giving a reason that is false there. Ask, then decide.
+
+The `update-work-item` operation **silently drops tag-shaped `<…>` content** (`forge-ops` §`update-work-item`). Round-tripping acceptance criteria that contain a literal `<…>` would corrupt the author's wording without any error.
 
 **Before rewriting the field, scan the fetched criteria for a literal `<…>` tag shape.** If any item contains one, do **not** rewrite the field. Put every result in the comment instead, and say in the comment that the field was left untouched to avoid corrupting it. Content already stored escaped (`&lt;…&gt;`) is not tag-shaped and is safe.
 
@@ -138,7 +140,7 @@ One work-item comment carries everything a checkbox cannot:
 - the coverage map against the pull request's test plan when the caller supplied one — which criteria a plan item covers, which are gaps, which plan items map to no criterion;
 - an explicit paragraph on every tick moved, with what was and was not behind the original.
 
-**Idempotence via the sentinel.** Detect a prior run by the version-less substring `Generated with [Claude Code]` in the work item's comments (`detect-prior-run`, WI path). On a re-run, **update that comment** rather than posting another (`wit_update_work_item_comment`) — a work item's discussion should not fill with one run's repetitions. End the comment with the footer, exactly as `ado-mcp` §16 requires:
+**Idempotence via the sentinel.** Detect a prior run by the version-less substring `Generated with [Claude Code]` in the work item's comments (`detect-prior-run`, WI path). On a re-run, **update that comment** rather than posting another (the `item-comment-post` operation's update form) — a work item's discussion should not fill with one run's repetitions. End the comment with the footer, exactly as `forge-ops` requires:
 
 ```
 ---
@@ -151,7 +153,7 @@ One work-item comment carries everything a checkbox cannot:
 
 Rewrite the `AcceptanceCriteria` field **only** to change checkbox states. Keep the author's headings, ordering and item wording **verbatim**. Do not add group headings, do not reorder, do not reword — the three-group rewrite is `update-pr-checklist`'s answer to a flat test plan; acceptance criteria are the author's structured contract and stay theirs.
 
-Write with the `update-work-item` recipe from `ado-mcp`. The field is already Markdown (step 2 refused otherwise), so no format patch is needed; a Markdown body sent to a Markdown field renders correctly.
+Write with the `update-work-item` recipe from `forge-ops`. The field is already Markdown (step 2 refused otherwise), so no format patch is needed; a Markdown body sent to a Markdown field renders correctly.
 
 Every `- [X]` left in the field must satisfy the tick gate — executed, passed, covering bears on it. Everything else is `- [ ]`, and the comment says why.
 
@@ -159,7 +161,7 @@ Every `- [X]` left in the field must satisfy the tick gate — executed, passed,
 
 ### Why this skill may write `- [X]` when a generator may not
 
-`ado-mcp` §17 states the house rule and its one carve-out: a checklist uses `- [ ]` unless the skill **executed** the item, it **passed**, the run **bears on that item**, the evidence is **posted where the reader can check it**, and anything not executed stays `- [ ]`. This skill holds that carve-out for the `executed` group and nowhere else. The rule still binds every skill that *generates* acceptance criteria — `create-user-story`, `create-feature` — because generating is not executing, however sure the author feels.
+`forge-ops` states the house rule and its one carve-out: a checklist uses `- [ ]` unless the skill **executed** the item, it **passed**, the run **bears on that item**, the evidence is **posted where the reader can check it**, and anything not executed stays `- [ ]`. This skill holds that carve-out for the `executed` group and nowhere else. The rule still binds every skill that *generates* acceptance criteria — `create-user-story`, `create-feature` — because generating is not executing, however sure the author feels.
 
 ### Do not commit
 
@@ -183,7 +185,7 @@ This skill reads the repository only as a caller needs and writes only to the wo
 1. **Read:** given a work item id, the acceptance criteria come back with their encoding reported. No write tool is called and nothing is dispatched; this skill has no `Agent` and must not acquire one.
 2. **Read, no criteria:** a work item with an empty `AcceptanceCriteria` reports nothing to read, and invents none.
 3. **HTML field:** an HTML `AcceptanceCriteria` is reported as such, nothing is ticked, and the field is not auto-converted.
-4. **`--dry-run`:** the annotated field and the comment are printed, nothing is written, no `update-work-item` or `wi-comment-post` write is made.
+4. **`--dry-run`:** the annotated field and the comment are printed, nothing is written, no `update-work-item` or `item-comment-post` write is made.
 5. **Write order:** the comment appears **first**, then the field is annotated; the author's headings and wording survive verbatim, only checkbox states change.
 6. **Ticking discipline:** every `- [X]` corresponds to an item the result marks executed and passed, with a `covering` bearing on it.
 7. **A tick with nothing behind it** is downgraded to `- [ ]`, kept in place, and named in the comment — never removed silently.

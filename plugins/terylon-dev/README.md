@@ -13,10 +13,14 @@ terylon-core .................. delegate-to-repo-agents, measure-token-spend
     ▲   ▲
     │   └── terylon-git ....... create-workspace, code-review, finish-branch, code-reviewer
     │          ▲
-    │          └── terylon-devops ....... ado-mcp, create-pr, write-pr-description, pr-reviewer
+    │          └── terylon-forge ....... create-pr, write-pr-description, pr-reviewer, resolve-forge
     │                 ▲
+    │                 ├── terylon-ado ....... adapter: forge-ops + the ado MCP server
+    │                 ├── terylon-github .... adapter: forge-ops over the gh CLI
     └─────────────────┴── terylon-dev  ← you are here
 ```
+
+Swap `terylon-ado@terylon` for `terylon-github@terylon` on GitHub. **One of the two is required**: the port ships no adapter, so without one every forge operation stops. `terylon-forge`, `terylon-git` and `terylon-core` install automatically as dependencies.
 
 All three are declared **directly** rather than relied on transitively: `leader` dispatches `code-reviewer` whether or not Azure DevOps is in play, and `develop` loads `measure-token-spend` at Gate 3 whether or not a pull request exists.
 
@@ -65,11 +69,11 @@ The `<repo-local specialist>` branches are **not part of this plugin**. A target
 - **`write-plan`** — the implementation plan's format: header, global constraints, file map, task shape with interfaces, the no-placeholder rules and the self-review. Written for an implementer who sees only their own task. `planner` emits its artifacts in this format.
 - **`run-build-loop`** — the controller's mechanics for executing a plan: the ledger that survives a compaction, the pre-flight scan before the first task, the bounded fix rounds with their model escalation, and how to pick a tier per role. `leader` runs it rather than hand-rolling a per-task loop.
 
-The last two shipped in `terylon-core` until `1.4.x`. They moved here because nothing outside this plugin consumes them, and the root installs for everyone.
+The last two shipped in `terylon-core` until it moved them out. They moved here because nothing outside this plugin consumes them, and the root installs for everyone.
 
 **Agents:**
 
-- **`leader`** — owns the iteration loop: dispatches the other agents, reads their reports, decides on the next round, keeps the ledger. At a gate it returns control upwards. For the whole-branch review at the end it dispatches `terylon-git:code-reviewer`, or `terylon-devops:pr-reviewer` when a pull request already exists and the findings should land there.
+- **`leader`** — owns the iteration loop: dispatches the other agents, reads their reports, decides on the next round, keeps the ledger. At a gate it returns control upwards. For the whole-branch review at the end it dispatches `terylon-git:code-reviewer`, or `terylon-forge:pr-reviewer` when a pull request already exists and the findings should land there.
 - **`planner`** — turns an agreed brief into a design and a bite-sized TDD plan, grounded in the codebase via `Explore`. It never guesses — when something is unclear it returns `NEEDS_CLARIFICATION`.
 - **`developer`** — implements a single task test-first: red → green → refactor → commit → self-review.
 - **`debugger`** — on a test failure it proceeds systematically: hypothesis → reproduction → minimal fix.
@@ -80,13 +84,14 @@ Every persona here is **generic by design** — that is what lets the same pipel
 
 ## Reuse
 
-The plugin is deliberately thin. Isolation goes through `create-workspace` and finishing through `finish-branch`, both from `terylon-git`; the pull request is opened by `create-pr` from `terylon-devops`, which fills its own description — this plugin issues no ADO recipe of its own at Gate 3. The built-in one-shot agents `Explore` and `Plan` do the grounding and the architecture draft. Only the orchestration, the personas, the plan format and the build loop are its own.
+The plugin is deliberately thin. Isolation goes through `create-workspace` and finishing through `finish-branch`, both from `terylon-git`; the pull request is opened by `create-pr` from `terylon-forge`, which fills its own description — this plugin issues no ADO recipe of its own at Gate 3. The built-in one-shot agents `Explore` and `Plan` do the grounding and the architecture draft. Only the orchestration, the personas, the plan format and the build loop are its own.
 
 It used to reuse six skills from the `superpowers` plugin. Three were replaced by shorter equivalents here; the other three turned out to be carried in full by the personas themselves, so they were dropped rather than rewritten. `terylon-dev` no longer requires the `claude-plugins-official` marketplace.
 
 ## Dependencies
 
-- **`terylon-devops`** — the `ado` MCP server, the `ado-mcp` engine, `create-pr` (which `develop` invokes at Gate 3), `review-pr`, `write-pr-description`. Installed automatically.
+- **`terylon-forge`** — the forge port: `create-pr` (which `develop` invokes at Gate 3), `review-pr`, `write-pr-description`, and `resolve-forge`. Installed automatically.
+- **An adapter** — `terylon-ado` or `terylon-github`. **Not** installed automatically and not declarable here: the port ships none on purpose, so the consumer enables the one their repositories are hosted on. It supplies `forge-ops`, which `develop` and `planner` load by name.
 - **`terylon-git`** — `create-workspace`, `code-review`, `finish-branch`, and the `code-reviewer` agent that `leader` dispatches for the whole-branch review. Declared directly rather than relied on transitively, because `leader` uses it whether or not a pull request is in play.
 - **`terylon-core`** — `delegate-to-repo-agents`, which every persona loads before dispatching a repo-local specialist, and `measure-token-spend`, which `develop` invokes at Gate 3. It also ships the `SubagentStop` hook that records the run's spend continuously. The marketplace's dependency-free root, declared directly so neither use depends on git being in play.
 
@@ -105,8 +110,8 @@ It used to reuse six skills from the `superpowers` plugin. Three were replaced b
     }
   },
   "enabledPlugins": {
-    "terylon-devops@terylon": true,
-    "terylon-dev@terylon": true
+    "terylon-dev@terylon": true,
+    "terylon-ado@terylon": true
   }
 }
 ```

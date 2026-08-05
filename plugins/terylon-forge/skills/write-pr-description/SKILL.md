@@ -3,13 +3,13 @@ name: write-pr-description
 description: >-
   Use when the user wants to generate a pull request description, PR summary,
   or release notes from the current branch's changes, optionally posting it to
-  an Azure DevOps PR if a URL is given. Triggers on phrasings like "write PR
+  the PR if a URL is given, on either forge. Triggers on phrasings like "write PR
   description", "generate PR summary", "summarize my changes for PR". Optional
   flags --auto and --dry-run.
-allowed-tools: Bash(git *), Read, Grep, Glob, mcp__plugin_terylon-devops_ado__*
+allowed-tools: Bash(git *), Bash(gh *), Bash(wc *), Read, Grep, Glob, Write, mcp__plugin_terylon-ado_ado__*
 ---
 
-# Azure DevOps PR — Write Pull Request Description
+# Pull Request — Write the Description
 
 You generate a pull request description from the current branch's diff against its base
 (detected from the repo, never hard-coded). With no PR URL the description is printed to
@@ -22,7 +22,7 @@ can post it back via the `update-pr-description` operation.
 /write-pr-description [<PR-URL>] [--base=<ref>] [--auto | --dry-run]
 ```
 
-- `<PR-URL>` — optional, of form `https://dev.azure.com/{org}/{project}/_git/{repo}/pullrequest/{id}`.
+- `<PR-URL>` — optional, in either forge's PR URL — `dev.azure.com/{org}/{project}/_git/{repo}/pullrequest/{id}` or `github.com/{owner}/{repo}/pull/{n}`.
   When provided, the target branch is read from the PR and used as the base (unless
   overridden with `--base=`). The description can be posted to the PR after confirmation.
 - `--base=<ref>` — override the base branch (e.g. `--base=master` or `--base=main`).
@@ -38,17 +38,15 @@ can post it back via the `update-pr-description` operation.
 
 - Local clone of the repo checked out (the skill reads the diff locally via `git`).
   `git fetch` will run automatically as part of the workflow.
-- `mcp__ado__*` tools are only used in PR-URL mode (auto-registered via `plugins/terylon-devops/.mcp.json`). At runtime the plugin-provided server is namespaced `mcp__plugin_terylon-devops_ado__*`; the bare `mcp__ado__*` names in this document are shorthand for that namespaced form.
+- Forge access is used only in PR-URL mode, and comes from whichever adapter is enabled: `terylon-ado` registers the `ado` MCP server, namespaced `mcp__plugin_terylon-ado_ado__*` at runtime, while `terylon-github` needs only an authenticated `gh`. This skill holds both surfaces and uses the one `resolve-forge` names.
 
-## Azure DevOps mechanics — delegated to `ado-mcp`
+## Platform mechanics — delegated to `forge-ops`
 
-The Azure DevOps tool recipes this skill relies on (PR-URL parsing, resolving the repository id, fetching PR metadata, and the the `update-pr-description` operation write shape) live in the **`ado-mcp`** engine skill. Before issuing any `mcp__ado__*` call, read its single source of truth:
+The recipes this skill relies on (PR-URL parsing, resolving the repository id, fetching PR metadata, and the `update-pr-description` write shape) live in the **`forge-ops`** engine skill of whichever adapter `resolve-forge` names. Load it by name before the first platform call, and read its single source of truth:
 
-```
-${CLAUDE_PLUGIN_ROOT}/skills/ado-mcp/references/ado-mcp.md
-```
+Load the skill `forge-ops` by name, plugin-qualified when both adapters are enabled.
 
-Delegation centralizes the *recipes* only — this skill still issues its own `mcp__ado__*` tool calls following those recipes. `ado-mcp` never resolves or stamps this skill's footer — footer/version are resolved locally (see step 5).
+Delegation centralizes the *recipes* only — this skill still issues its own platform calls following those recipes. `forge-ops` never resolves or stamps this skill's footer — footer/version are resolved locally (see step 5).
 
 ## Workflow
 
@@ -57,7 +55,7 @@ Delegation centralizes the *recipes* only — this skill still issues its own `m
 Priority chain — stop at the first that applies:
 
 1. **`--base=<ref>` supplied** — use it verbatim. It always wins, PR URL or not.
-2. **PR URL given** — fetch the PR metadata per the `ado-mcp` reference (the `parse-pr-url`, `resolve-repo-id` and `fetch-pr-metadata` operations, in that order) and read `targetRefName`. Strip `refs/heads/`. Use that value as `<base>`.
+2. **PR URL given** — fetch the PR metadata per the `forge-ops` reference (the `parse-pr-url`, `resolve-repo-id` and `fetch-pr-metadata` operations, in that order) and read **`targetBranch`**, the normalised key. It arrives stripped of whatever ref prefix its forge uses; do not strip anything yourself. Use that value as `<base>`.
 3. **Neither** — detect the repo's integration branch instead of hard-coding a branch name:
 
    ```bash
@@ -73,7 +71,7 @@ Run `git fetch origin <base>` before computing the diff.
 
 ### 2. Fetch PR metadata (PR mode only)
 
-Fetch the PR metadata once (per the `ado-mcp` reference) and keep the result for later steps — `targetRefName` was already used in step 1, and `pullRequest.description` is read in step 7. Skip with a chat message if `status` is `completed` or `abandoned`. Draft PRs (`isDraft: true`) are allowed — authors update descriptions on drafts frequently.
+Fetch the PR metadata once (per the `forge-ops` reference) and keep the result for later steps — `targetBranch` was already used in step 1, and the current description is read in step 7. Skip with a chat message if `eligibility-check` reports `isOpen` false. Draft PRs (`isDraft: true`) are allowed — authors update descriptions on drafts frequently.
 
 ### 3. Build the diff
 
@@ -121,8 +119,9 @@ Fill the template from the diff and commit log. **Caveman style — terse, high-
 
 **Checklist items in `## Test plan` (or any other checklist-style section) MUST use
 unchecked markdown checkboxes `- [ ]`.** Do NOT pre-check items with `- [x]` and do NOT
-substitute static glyphs (`✓`, `✅`, `🟢`, "Done", etc.) for the checkbox. Reason: ADO
-renders pre-checked `[x]` as a static green tick that the reviewer cannot toggle, which
+substitute static glyphs (`✓`, `✅`, `🟢`, "Done", etc.) for the checkbox. Reason: a
+pre-checked box is a claim nobody verified, and on at least one forge it renders as a
+static tick the reviewer cannot toggle at all, which
 defeats the purpose of a checklist. Even items you have already verified locally stay as
 `- [ ]` — the reviewer ticks them after re-verifying on the PR. If you need to record
 "already done by author", write it in prose elsewhere, not as a checklist item.
@@ -163,9 +162,10 @@ reported, never quietly replaced by the nearest available substitute.
 
 **Carry across any tick you find; never regenerate over one.** Something may have ticked
 items since this description was last written — a reviewer by hand, or a skill that
-executed the plan and holds the exemption `ado-mcp` describes. Rewriting the region as
-fresh `- [ ]` would erase that, and ADO keeps no revision history for a description, so it
-cannot be recovered.
+executed the plan and holds the exemption `forge-ops` describes. Rewriting the region as
+fresh `- [ ]` would erase that, and the forge that keeps no revision history for a
+description is the one that decides here: the loss cannot be recovered, so the rule binds
+on both.
 
 When the existing region carries `- [X]` items, or headings grouping items by how they
 were checked, **preserve them**: match your regenerated items against the ones already
@@ -181,9 +181,9 @@ destroying it.
 The prohibition above still binds *you*: you generate a plan, and generating is not
 executing, however sure you feel about an item.
 
-**Do NOT hard-wrap lines inside the generated description.** ADO's PR-description renderer
-treats every source line break as a visible line break (not a markdown soft wrap as
-GitHub does), so wrapping a paragraph at 72 / 80 chars produces choppy short lines in the
+**Do NOT hard-wrap lines inside the generated description.** One forge's renderer treats
+every source line break as a visible line break rather than as a markdown soft wrap, so
+wrapping a paragraph at 72 / 80 chars produces choppy short lines in the
 rendered output even though horizontal space is generous. Emit each paragraph as one
 continuous line and each bullet as one continuous line; let the renderer wrap naturally.
 Only insert a real `\n` between distinct paragraphs / bullets / headings.
@@ -224,8 +224,8 @@ Final shape:
 **Re-fetch the PR metadata first.** Do not reuse the snapshot from step 2 — in default mode
 the wait for `push` is unbounded, and a CI bot appending a preview link during that gap
 would be overwritten by a description computed before it existed. the `update-pr-description` operation
-replaces the entire field, and ADO keeps no revision history for PR descriptions, so the
-loss is unrecoverable. One extra `fetch-pr-metadata` costs a second; the sibling
+replaces the entire field, and where the forge keeps no revision history for descriptions
+the loss is unrecoverable. One extra `fetch-pr-metadata` costs a second; the sibling
 `review-pr` re-checks at its own step 6 for the same reason.
 
 Use the freshly-read `pullRequest.description`. The skill writes **only** its own marked
@@ -249,12 +249,12 @@ The description is read by a human in under a minute and **shares one small fiel
 
 #### 8a. The constants
 
-**The unit of measure is the region — sentinel through footer, inclusive — not the body.** The two markers cost roughly 150 characters that Azure DevOps counts like any other text, so a body written to a 2500-character budget posts at over 2650.
+**The unit of measure is the region — sentinel through footer, inclusive — not the body.** The two markers cost roughly 150 characters the forge counts like any other text, so a body written to a 2500-character budget posts at over 2650.
 
 | Constant | Value | What it is |
 |---|---|---|
-| `CAP` | 4000 | ADO's hard limit on `description`. The MCP schema **rejects** an over-length write (`too_big`); it does not truncate, and nothing is posted. |
-| `FIELD_CEILING` | 3900 | `CAP` less 100 for CRLF normalisation and a longer `<plugin-version>`. |
+| `CAP` | the forge's limit, from `forge-ops` | 4000 on Azure DevOps, roughly 65 536 on GitHub. The write is **rejected** over the limit; it does not truncate, and nothing is posted. |
+| `FIELD_CEILING` | `CAP` − 100 | The 100 covers CRLF normalisation and a longer `<plugin-version>`. **Derive it; do not pin it.** Pinned at 3900 it silently imposes the Azure DevOps limit on a forge with sixteen times the room, and a pull request carrying a few thousand characters of CI output then refuses to post with the field almost empty. |
 | `CI_RESERVE` | 700 | Held back for what CI appends to the same field **after** we post. |
 | `BUDGET` | 2500 | Nominal budget for the region. |
 | `FLOOR` | 400 | The smallest region that still says something: sentinel, a summary, one sentence, footer. |
@@ -283,13 +283,13 @@ These keep the output short by construction, so the ladder below rarely runs.
 | **Test plan** items | 5, at 110 characters each |
 | Bullets in the whole body | 12 |
 
-**Do not enumerate files.** Azure DevOps already lists every changed file with its line counts in the Files tab. Forty files at roughly 60 characters each is the entire budget spent on what the reviewer is one click from. Name a path only where a bullet is meaningless without it.
+**Do not enumerate files.** Both forges already list every changed file with its line counts in their own files view. Forty files at roughly 60 characters each is the entire budget spent on what the reviewer is one click from. Name a path only where a bullet is meaningless without it.
 
 #### 8c. Measure before posting
 
 Assemble the full region and **count it — do not estimate.** A bullet judged at 140 characters is routinely 190.
 
-**A character here is a UTF-16 code unit** — what .NET's `String.Length` counts — because the gates downstream are .NET (`nvarchar(4000)` server-side). So the footer's robot emoji costs **2**, while `é`, `—` and `→` cost 1 each.
+**A character may be a UTF-16 code unit rather than a byte** — what .NET's `String.Length` counts — wherever the gate downstream is .NET (`nvarchar` server-side). So the footer's robot emoji costs **2**, while `é`, `—` and `→` cost 1 each.
 
 | Method | When | Why |
 |---|---|---|
@@ -302,6 +302,8 @@ wc -c <<'DESCRIPTION'
 <the assembled region from step 7>
 DESCRIPTION
 ```
+
+**Write the measured region to a file, and hand the operation that file.** This is why the skill holds `Write`: one adapter takes the description as a string argument, the other passes every body through a file-valued flag and forbids inlining, because a description carrying backticks, quotes and newlines does not survive shell quoting intact. `forge-ops` says which form its side wants; producing the file either way costs nothing and is the only form that works on both.
 
 #### 8d. Reduction ladder
 
@@ -326,7 +328,7 @@ Over budget? Apply these **in order**, re-measuring after each rung, and stop at
 - **Never leave a dangling heading** — removing a section's last bullet removes its heading too, unless the repo template mandates the section, which then keeps `_TBD by author_`.
 - **Never cut foreign content.** It is not ours; the budget bends around it.
 
-Then write the description via the `ado-mcp` update recipe, and print confirmation with a link to the PR **and the region's measured length against `B_eff`**.
+Then write the description via the `forge-ops` update recipe, and print confirmation with a link to the PR **and the region's measured length against `B_eff`**.
 
 ### 9. Do not commit
 
@@ -355,10 +357,10 @@ For no-URL mode: `(Local-only — paste into your PR when you open it.)`
   old by the time the user says `push`. Re-fetch at step 7. Anything a CI bot appended in
   between is gone otherwise, with no revision history to recover it from.
 - **Using `wc -m`** — locale-dependent, and under the UTF-8 reading it under-counts the footer emoji, so it can pass while the region is over. `wc -c` is the safe default.
-- **Budgeting the body instead of the region** — the sentinel and footer cost about 150 characters that ADO counts too.
+- **Budgeting the body instead of the region** — the sentinel and footer cost about 150 characters the forge counts too.
 - **Spending the budget on a file list** — the Files tab already has it.
 - **Deleting foreign content to make room** — it is not ours. When `B_eff` drops below the floor, print to chat and let the author decide.
-- **Skipping the length check** — 4000 characters over the whole field, and a long branch
+- **Skipping the length check** — the cap is counted over the whole field, and a long branch
   easily exceeds it. The call fails cleanly, but only after the description was generated;
   measure at step 8 and cut whole sections rather than discovering the limit on the write.
 - **Overwriting content outside the Claude region** — CI bots post preview links,
@@ -374,18 +376,19 @@ For no-URL mode: `(Local-only — paste into your PR when you open it.)`
 - **Hard-coding the base branch** — repos disagree on whether the integration branch is
   `main`, `master`, or `develop`. Detect it from `origin/HEAD` and fall back down the list;
   never assume one name.
-- **Pre-checking test-plan items with `- [x]` or `✓`** — ADO renders pre-checked boxes as a
-  static green tick the reviewer cannot toggle. Always emit `- [ ]` and let the reviewer
-  check off items as they verify them.
-- **Hard-wrapping paragraphs / bullets in the generated description** — ADO renders source
-  line breaks verbatim, so wrapping at 72–80 chars produces visible choppy lines in the
-  rendered output. Emit one line per paragraph / bullet; let the renderer wrap.
+- **Pre-checking test-plan items with `- [x]` or `✓`** — a tick nobody earned, and on one
+  forge one the reviewer cannot even clear. Always emit `- [ ]` and let the reviewer check
+  items off as they verify them.
+- **Hard-wrapping paragraphs / bullets in the generated description** — one forge renders
+  source line breaks verbatim, so wrapping at 72–80 chars produces visible choppy lines.
+  Emit one line per paragraph / bullet; let the renderer wrap. Harmless on the other forge,
+  so the stricter rule is the one to follow.
 
 ## Verification
 
 1. `/write-pr-description --dry-run` on a branch with 3+ commits ahead of the repo's
    integration branch. Expect: the base is detected from `origin/HEAD` (reported in the
-   summary), chat output with a template-shaped description, no `mcp__ado__*` calls.
+   summary), chat output with a template-shaped description, no platform calls.
    Test-plan items are emitted as `- [ ]`, never `- [x]` or `✓`.
 2. `/write-pr-description <my-PR-url> --dry-run`.
    Expect: same description, target branch read from PR metadata, no write.
@@ -402,7 +405,7 @@ For no-URL mode: `(Local-only — paste into your PR when you open it.)`
    the appended line to survive — it only does if step 7 re-fetched rather than reusing the
    step-2 snapshot.
    **And test the cap:** on a branch large enough that the generated description exceeds
-   4000 characters, expect the skill to report which sections it dropped and to write
+   the forge's cap, expect the skill to report which sections it dropped and to write
    successfully, rather than failing on `too_big`. The Test plan and the footer survive.
 5. `/write-pr-description <my-PR-url> --auto` on a PR whose description contains a
    CI-posted block (preview links, connection strings) and no sentinel.

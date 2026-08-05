@@ -5,7 +5,7 @@ description: >-
   description, or several prose items separated by --- on its own line. Several items fan out into
   concurrent leaders, one workspace each. Hosts the human gates and dispatches the leader agent, which
   owns the plan → build (TDD) → finish loop. Optional flags --auto, --dry-run, and --here.
-allowed-tools: Bash(git *), Bash(node *), Read, Grep, Glob, Write, Agent, AskUserQuestion, mcp__plugin_terylon-devops_ado__*
+allowed-tools: Bash(git *), Bash(node *), Bash(gh *), Read, Grep, Glob, Write, Agent, AskUserQuestion, mcp__plugin_terylon-ado_ado__*
 ---
 
 # develop — entry point of the development pipeline
@@ -31,8 +31,9 @@ An `<item>` is an **Azure DevOps work item URL** (`dev.azure.com/{org}/{project}
 
 ## Prerequisites
 
-- **`terylon-devops`** — a hard dependency, installed automatically. It provides the `ado` MCP server, the `ado-mcp` engine (**load it by name**), and `create-pr`, which opens the pull request at Gate 3 and calls `write-pr-description` itself.
-- **`terylon-git`** — a direct hard dependency (also reachable through `terylon-devops`), so it is installed automatically. It provides `create-workspace` and the `code-review` engine — **load both by name**.
+- **`terylon-forge`** — a hard dependency, installed automatically. It provides `resolve-forge` and `create-pr`, which opens the pull request at Gate 3 and calls `write-pr-description` itself.
+- **An adapter** — `terylon-ado` or `terylon-github`, enabled by the consumer rather than declared here. It supplies the `forge-ops` engine (**load it by name**, plugin-qualified once `resolve-forge` has answered) and, on Azure DevOps, the `ado` MCP server. With none enabled, say so and stop.
+- **`terylon-git`** — a direct hard dependency (also reachable through `terylon-forge`), so it is installed automatically. It provides `create-workspace` and the `code-review` engine — **load both by name**.
 - **`terylon-core`** — a hard dependency, installed automatically. It provides `measure-token-spend`, and `delegate-to-repo-agents` for the personas that dispatch a repo-local specialist. It also ships the `SubagentStop` hook that records the run's spend continuously. `run-build-loop`, `write-plan` and `brainstorm` are **this plugin's own** — `leader` and `planner` load the first two from here, and Gate 0 loads the third.
 - Run from the repo root. All work happens on a feature branch.
 
@@ -106,7 +107,7 @@ URLs and prose blocks may be mixed in one invocation.
 
 #### Per item
 
-- **ADO URL:** fetch the work item via the `fetch-work-item` recipe from the `ado-mcp` engine and write a seed-spec to `docs/terylon/intake/<slug>-seed.md` — title, description, acceptance criteria, links.
+- **ADO URL:** fetch the work item via the `fetch-work-item` recipe from the `forge-ops` engine and write a seed-spec to `docs/terylon/intake/<slug>-seed.md` — title, description, acceptance criteria, links.
 - **Prose description:** write the prose to that same file as the seed.
 
 Derive `<slug>` from the item's topic and keep it consistent through the run. **Slugs must be unique across the run** — two items whose topics slugify the same way would share a seed-spec, which silently merges two builds into one. Disambiguate with the work item id (`<slug>-116`) or an ordinal, and say that you did.
@@ -212,7 +213,7 @@ This is orthogonal to the fan-out rule below: across *different* work items you 
 
 ### 6. Gate 3 — finish
 
-Invoke **`finish-branch`** (from `terylon-git`, loaded by name). For an Azure DevOps PR, invoke **`create-pr`** (from `terylon-devops`, loaded by name) and pass it the work item this build implemented.
+Invoke **`finish-branch`** (from `terylon-git`, loaded by name). For a pull request, invoke **`create-pr`** (from `terylon-forge`, loaded by name) and pass it the work item this build implemented.
 
 `create-pr` owns the whole sequence — opening the PR, associating the work items, and filling the description through `write-pr-description` — plus reviewers and auto-complete, which this skill has no reason to reimplement. **Do not issue the `create-pull-request` or `link-work-item-to-pull-request` recipes here.** Duplicating them puts the ref-name and GUID rules in two places, and the copy is the one that goes stale.
 

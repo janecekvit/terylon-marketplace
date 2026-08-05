@@ -31,7 +31,8 @@ There is no `--here`: the tester reads the repository under test **read-only** a
 
 ## Prerequisites
 
-- **`terylon-devops`** — a hard dependency, installed automatically. It provides the `ado` MCP server and the two transports the tester drives: `update-pr-checklist` and `update-work-item-checklist`.
+- **`terylon-forge`** — a hard dependency, installed automatically. It provides the two transports the tester drives, `update-pr-checklist` and `update-work-item-checklist`, plus `resolve-forge`.
+- **An adapter** — `terylon-ado` or `terylon-github`, enabled by the consumer rather than declared here. It supplies the `forge-ops` engine the transports follow. With none enabled the tester reports the capability as absent, exactly as it does for any other missing capability.
 - **`terylon-core`** — a hard dependency, installed automatically. It provides `measure-token-spend`, which this skill invokes at the end. **Load it by name.** It also ships the `SubagentStop` hook that records each tester run's spend as it happens.
 - Run from the repository whose pull request you are verifying, so its own agents and stack are in scope.
 

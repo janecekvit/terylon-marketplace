@@ -9,8 +9,10 @@ terylon-core .................. the shared conventions; no git, no forge
     ▲
     └── terylon-git  ← you are here
            ▲
-           └── terylon-devops ....... adds the Azure DevOps layer
+           └── terylon-forge ....... the forge port; ships no adapter
                   ▲
+                  ├── terylon-ado ....... adapter: ADO mechanics + the ado MCP server
+                  ├── terylon-github .... adapter: gh CLI mechanics, no server
                   ├── terylon-product
                   ├── terylon-dev
                   └── terylon-test
@@ -66,4 +68,4 @@ The boundary is enforced by the same test in both directions. `delegate-to-repo-
 /terylon-git:code-review
 ```
 
-`code-reviewer` is an agent, not a command — it is dispatched by `pr-reviewer` (in `terylon-devops`) or directly when you want a thorough pass over a local branch.
+`code-reviewer` is an agent, not a command — it is dispatched by `pr-reviewer` (in `terylon-forge`) or directly when you want a thorough pass over a local branch.

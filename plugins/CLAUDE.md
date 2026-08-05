@@ -50,7 +50,7 @@ The distinction is load-bearing, not decorative. `code-review` (the skill) and `
 |---|---|---|
 | `security-reviewer`, `performance-reviewer`, `architecture-reviewer`, `edge-case-reviewer` | one dimension of a diff | `terylon-dev` |
 | `code-reviewer` | a whole diff — dispatches the lenses, then adversarially verifies what they return | `terylon-git` |
-| `pr-reviewer` | a whole pull request — fetches it, dispatches `code-reviewer`, writes the findings back | `terylon-devops` |
+| `pr-reviewer` | a whole pull request — fetches it, dispatches `code-reviewer`, writes the findings back | `terylon-forge` |
 
 Read top to bottom it goes dimension → code → pull request. A new reviewer belongs somewhere on that ladder; if it does not, it is probably not a reviewer.
 
@@ -58,9 +58,9 @@ The single-dimension lenses are read-only and propose rather than edit. Keep tha
 
 ### No redundant prefixes
 
-Do not prefix a component with its plugin's topic. The plugin slug already namespaces it, so `terylon-devops:devops-review-pr` says "devops" twice. The plugin boundary carries that information; the component name should carry only what is specific to it.
+Do not prefix a component with its plugin's topic. The plugin slug already namespaces it, so `terylon-ado:ado-fetch-work-item` says "ado" twice. The plugin boundary carries that information; the component name should carry only what is specific to it.
 
-`ado-mcp` is not an exception — it is named for Azure DevOps specifically, not for "devops" as a discipline, and its reference document has carried that name since the original port.
+`forge-ops` is not an exception either: it is named for the **port** it implements, not for a platform, which is exactly why both adapters can ship a skill under that one name.
 
 ## Versioning
 
@@ -104,7 +104,7 @@ The `description` field starts with `Use when …` and lists triggering conditio
 internal workflow. (See [agentskills.io/specification](https://agentskills.io/specification).)
 
 **Never set `disable-model-invocation`.** It hides a skill from being loaded by name, and this
-marketplace is built on skills loading each other: `ado-mcp` owns every ADO recipe, `code-review`
+marketplace is built on skills loading each other: `forge-ops` owns every ADO recipe, `code-review`
 owns the review judgment, and both exist precisely to be called by their transport skills. Hiding
 an engine makes it unreachable. A skill whose usual caller is another skill states that in its
 opening paragraph — the flag adds nothing that prose cannot say, and it takes away the calling
@@ -149,7 +149,9 @@ When a skill calls tools from a third-party MCP server (e.g. `mcp__ado__*` from
 **Plugin-level `.mcp.json`:** when the marketplace serves a single organisation (or another
 fixed-config server), prefer dropping a `.mcp.json` at the plugin root over per-skill
 `Prerequisites` snippets — consumers get the server automatically when they enable the
-plugin. See `plugins/terylon-devops/.mcp.json` for the canonical example.
+plugin. See `plugins/terylon-ado/.mcp.json` for the canonical example.
+
+**A server belongs to the plugin whose boundary it matches, not to the plugin whose skills call it.** The `ado` server sits in `terylon-ado` rather than in the port that uses it, because a GitHub repository enabling the port must not start it. When a server would install for consumers who cannot authenticate to it, that server marks a plugin boundary.
 
 ### Footer for posted comments
 
@@ -200,10 +202,10 @@ CLI vs API), prefer **delegation over duplication**:
   the engine via a documented sub-skill contract (flags + return shape).
 
 Example: `code-review` is the engine; `review-pr` is transport (PR URL → diff →
-call `code-review` → format findings → post via `mcp__ado__*`). The two now live in
-**different plugins** — the engine in `terylon-git`, the transport in `terylon-devops` —
+call `code-review` → format findings → post through the `post-pr-thread` operation). The two now live in
+**different plugins** — the engine in `terylon-git`, the transport in `terylon-forge` —
 which changes nothing about how they compose: `review-pr` loads `code-review` **by name**,
-and `terylon-devops` declares `dependencies: ["terylon-git"]` so the engine is always
+and `terylon-forge` declares `dependencies: ["terylon-git"]` so the engine is always
 present. A split like this is the normal outcome when an engine has no forge dependency:
 put it in the lowest plugin that can host it, and let the transports depend upwards.
 
@@ -211,7 +213,16 @@ put it in the lowest plugin that can host it, and let the transports depend upwa
 
 So a transport writes ``the `update-pr-description` operation``, not the tool it resolves to. When the server changes, one file changes.
 
-For ADO mechanics, `ado-mcp` (terylon-devops) is the canonical engine: it owns all Azure DevOps MCP recipes in `skills/ado-mcp/references/ado-mcp.md`, and every transport skill in `terylon-devops`, `terylon-product` and `terylon-dev` delegates to it (same-plugin skills via a `${CLAUDE_PLUGIN_ROOT}/skills/ado-mcp/references/ado-mcp.md` Read; cross-plugin skills by loading `ado-mcp` by name). `terylon-git` is deliberately absent from that list — it has no forge access at all. The footer/version is always resolved by the calling skill, never by `ado-mcp`.
+For platform mechanics, `forge-ops` is the canonical engine — and there are **two of it**, one per adapter, implementing the same catalog:
+
+| Body | Plugin | Mechanism |
+|---|---|---|
+| Azure DevOps | `terylon-ado` | the `ado` MCP server, `mcp__plugin_terylon-ado_ado__*` |
+| GitHub | `terylon-github` | the `gh` CLI |
+
+Every transport in `terylon-forge`, plus `create-user-story` and `create-feature` in `terylon-product` and `develop` and `planner` in `terylon-dev`, delegates to it. Inside the port, `resolve-forge` names the adapter; a caller outside the port that has not run it loads `forge-ops` **by name** — plugin-qualified when both adapters are enabled — and then issues its own calls following the recipes. `terylon-git` is deliberately absent from that list; it has no forge access at all. The footer and version are always resolved by the calling skill, never by `forge-ops`.
+
+**Where the two bodies genuinely differ, the port declares the difference rather than hiding it** — description limits, where acceptance criteria live, how an item's type is expressed, how a thread is resolved. A transport reads the declared value; it never learns which platform produced it. The asymmetry tables are in each `forge-ops`, and they must agree: when they disagree, one of them is wrong, and the port's declaration decides which.
 
 ### Criteria state outcomes, test plans state procedures
 
@@ -247,23 +258,31 @@ terylon-core (root — no dependencies)
     ▲
     └── terylon-git  [terylon-core]
            ▲
-           └── terylon-devops  [terylon-git]
+           └── terylon-forge  [terylon-git]          the port; ships no adapter
                   ▲
-                  ├── terylon-product  [terylon-devops]
-                  ├── terylon-dev      [terylon-git, terylon-devops, terylon-core]
-                  └── terylon-test     [terylon-devops, terylon-core]
+                  ├── terylon-ado      [terylon-forge]   adapter: forge-ops + the ado MCP server
+                  ├── terylon-github   [terylon-forge]   adapter: forge-ops over the gh CLI
+                  ├── terylon-product  [terylon-forge]
+                  ├── terylon-dev      [terylon-git, terylon-forge, terylon-core]
+                  └── terylon-test     [terylon-forge, terylon-core]
 ```
 
 | Slug | Audience | Dependencies |
 |---|---|---|
 | `terylon-core` | every repository — the shared conventions and run measurement | none |
 | `terylon-git` | any git repository — no forge, no MCP server | `terylon-core` |
-| `terylon-devops` | Azure DevOps layer — everyone on ADO | `terylon-git` |
-| `terylon-product` | product owner / PM | `terylon-devops` |
-| `terylon-dev` | developers | `terylon-git`, `terylon-devops`, `terylon-core` |
-| `terylon-test` | anyone holding a checklist that decides something | `terylon-devops`, `terylon-core` |
+| `terylon-forge` | the forge port — everyone working through pull requests | `terylon-git` |
+| `terylon-ado` | repositories on Azure DevOps | `terylon-forge` |
+| `terylon-github` | repositories on GitHub | `terylon-forge` |
+| `terylon-product` | product owner / PM | `terylon-forge` |
+| `terylon-dev` | developers | `terylon-git`, `terylon-forge`, `terylon-core` |
+| `terylon-test` | anyone holding a checklist that decides something | `terylon-forge`, `terylon-core` |
 
-`terylon-product` reaches everything below it transitively. `terylon-dev` and `terylon-test` declare `terylon-core` **directly** as well: both load `measure-token-spend` whether or not git or a forge is in play, and `terylon-dev` additionally declares `terylon-git`, because `leader` dispatches `code-reviewer` whether or not Azure DevOps is.
+`terylon-product` reaches everything below it transitively. `terylon-dev` and `terylon-test` declare `terylon-core` **directly** as well: both load `measure-token-spend` whether or not git or a forge is in play, and `terylon-dev` additionally declares `terylon-git`, because `leader` dispatches `code-reviewer` whether or not a forge is.
+
+**The two adapters are siblings of the role plugins, not layers under them.** Nothing declares an adapter: the consumer enables the one their repositories are hosted on, and the port arrives as its dependency. A consumer therefore enables **two** keys — a role plugin and an adapter.
+
+`terylon-forge` **replaced `terylon-devops`**, which no longer exists. That plugin mixed two things: the transports, which were portable and are now the port, and the Azure DevOps mechanics, which were not and are now `terylon-ado`. The engine skill `ado-mcp` became `forge-ops`, and the MCP namespace moved with the server, from `mcp__plugin_terylon-devops_ado__*` to `mcp__plugin_terylon-ado_ado__*`.
 
 `terylon-core` is the **root**, not a second leaf. It needs neither git nor a forge, only a shell and the local session transcripts, and every other plugin sits on it. It **replaced `terylon-metrics`**, which no longer exists, and its arrival removed the `superpowers` dependency: `write-plan` and `run-build-loop` replaced two of those skills, `finish-branch` in `terylon-git` a third, and the remaining three were dropped because `developer`, `refactorer` and `debugger` already carried them in their own prose. A skill that only restates what the persona says costs cache-write to load and buys nothing.
 
@@ -285,20 +304,52 @@ Two failure modes, and both have happened here:
 
 **The test is what a component exercises, never who calls it.** `delegate-to-repo-agents` mentions `git checkout` and `git status` three times — as examples of what a write-capable agent can do, not as calls it makes. Its `allowed-tools` is `Read, Grep, Glob`. Reading the mentions rather than the tool list is what kept it in the wrong plugin.
 
+#### The one exception: a port and its adapters
+
+**`terylon-forge` loads `forge-ops`, which lives in a plugin above it. Every upward load in this marketplace is that one load, made from three different places, and it is deliberate.**
+
+The rule above would put a component every transport loads into the lowest plugin that reaches it. Applied here it would put the Azure DevOps mechanics into the port, and every GitHub repository would install an Azure DevOps MCP server it has no account on. That is the outcome the split exists to prevent, so the placement rule yields to a **port and adapter** relationship:
+
+| Side | Declares | Holds |
+|---|---|---|
+| `terylon-forge` — the port | the operation catalog, and a dependency on `terylon-git` only | the transports, `pr-reviewer`, `resolve-forge` |
+| `terylon-ado`, `terylon-github` — the adapters | a dependency on `terylon-forge` | one skill each, both named `forge-ops` |
+
+So the **dependency** edge still points down; only the **load** points up. Three rules keep that honest, and none of them is optional:
+
+- **The port declares no adapter.** Ever. The moment it does, the platform it names installs for everyone.
+- **Both adapters implement the same catalog under the same skill name.** A caller loads `forge-ops` and does not branch. `resolve-forge` picks which, and addresses it plugin-qualified when both are enabled.
+- **A transport that finds no adapter says so and stops.** It does not fall back to the other one and does not issue platform calls of its own. A second copy of the call shapes is a second place to fix, and the copy goes stale.
+
+**Do not read this as licence for a second upward load.** It is here because the alternative was worse for a specific, stated reason. A new one needs the same argument made out loud, and a row in the load table below saying which side of the port it sits on.
+
 ### What lives where
 
 | Plugin | Skills | Agents |
 |---|---|---|
 | `terylon-core` | `delegate-to-repo-agents`, `measure-token-spend` | — |
 | `terylon-git` | `create-workspace`, `code-review`, `finish-branch` | `code-reviewer` |
-| `terylon-devops` | `ado-mcp`, `create-pr`, `review-pr`, `write-pr-description`, `address-pr-comments`, `update-pr-checklist`, `update-work-item-checklist` | `pr-reviewer` |
+| `terylon-forge` | `resolve-forge`, `create-pr`, `review-pr`, `write-pr-description`, `address-pr-comments`, `update-pr-checklist`, `update-work-item-checklist` | `pr-reviewer` |
+| `terylon-ado` | `forge-ops` (the ADO body) | — |
+| `terylon-github` | `forge-ops` (the GitHub body) | — |
 | `terylon-product` | `create-user-story`, `create-feature` | — |
 | `terylon-dev` | `develop`, `brainstorm`, `write-plan`, `run-build-loop` | `leader`, `planner`, `developer`, `debugger`, `refactorer`, `security-reviewer`, `performance-reviewer`, `architecture-reviewer`, `edge-case-reviewer` |
 | `terylon-test` | `test`, `verify-test-plan`, `run-build-and-tests`, `run-ui-flows` | `tester` |
 
 `terylon-core` also ships the `SubagentStop` hook that records per-agent spend continuously, plus `shared/oet.js` and `shared/weights.json`.
 
-The boundary between `terylon-git` and `terylon-devops` is the forge: everything in `terylon-git` exercises git and nothing more, everything in `terylon-devops` touches Azure DevOps. That is why the review pipeline is split — `code-review` and `code-reviewer` are local, `review-pr` and `pr-reviewer` carry the findings to ADO.
+`terylon-ado` also ships the `.mcp.json` that registers the `ado` server. `terylon-github` ships no server at all — the `gh` CLI needs none.
+
+Two boundaries, and they are different in kind:
+
+| Boundary | Between | The test |
+|---|---|---|
+| the forge | `terylon-git` and `terylon-forge` | does it reach outside the repository? Everything in `terylon-git` exercises git and nothing more; that is why the review pipeline is split, with `code-review` and `code-reviewer` local and `review-pr` and `pr-reviewer` carrying the findings outward |
+| the platform | `terylon-forge` and the adapters | does it **depend** on a platform? A transport that issues a `gh` subcommand or an `mcp__` tool call has crossed it and belongs in an adapter |
+
+The second is the one that erodes. A transport gains one platform-specific line at a time, each defensible on its own, until the port is a port in name only. **Grep before finishing a change to a transport** — and grep for the runtime forms, `mcp__plugin_terylon-ado_ado__*` rather than `mcp__ado__`, or the check passes because it cannot fire.
+
+**Two things are not crossings, and a grep that flags them is miscalibrated.** A transport's `allowed-tools` names both surfaces on purpose, since an absent one is inert and the grant cannot be resolved at runtime. And a transport **naming** a difference the port declares — that one forge numbers what the other words, that one wants a leading slash — is the port doing its job; hiding those is what makes a transport wrong. What must not appear is a transport *issuing* a platform call, or reading a raw platform field instead of the normalised value the operation returns.
 
 ### Every cross-plugin load, and what covers it
 
@@ -309,14 +360,17 @@ The boundary between `terylon-git` and `terylon-devops` is the forge: everything
 | `tester`, `run-ui-flows` | `delegate-to-repo-agents` | core | `terylon-test` → core, direct |
 | `develop`, `leader` | `measure-token-spend` | core | `terylon-dev` → core, direct |
 | `test`, `tester` | `measure-token-spend` | core | `terylon-test` → core, direct |
-| `develop`, `code-reviewer`, `pr-reviewer` | `create-workspace` | git | dev → git direct; devops → git |
+| `develop`, `code-reviewer`, `pr-reviewer` | `create-workspace` | git | dev → git direct; forge → git |
 | `develop` | `finish-branch` | git | dev → git |
-| `review-pr`, `address-pr-comments` | `code-review` | git | devops → git |
-| `develop` | `create-pr`, `ado-mcp` | devops | dev → devops |
-| `tester` | `update-pr-checklist`, `update-work-item-checklist` | devops | test → devops |
-| `create-user-story`, `create-feature` | `ado-mcp` | devops | product → devops |
+| `review-pr`, `address-pr-comments` | `code-review` | git | forge → git |
+| `develop` | `create-pr` | forge | dev → forge |
+| `tester` | `update-pr-checklist`, `update-work-item-checklist` | forge | test → forge |
+| every transport, `pr-reviewer` | `resolve-forge` | forge | same plugin |
+| every transport, `pr-reviewer` | `forge-ops` | **an adapter** | **the port exception** — the adapter declares forge, not the reverse |
+| `develop`, `planner`, `developer` | `forge-ops` | **an adapter** | **the port exception** — enabled by the consumer, never declared |
+| `create-user-story`, `create-feature` | `forge-ops` | **an adapter** | **the port exception** |
 
-No edge points upward, there is no cycle, and `terylon-core` loads nothing. **When you add a load, add its row** — the table is how the next placement error gets caught before it ships.
+`terylon-core` loads nothing, and there is no cycle. **Exactly three rows point up**, all of them at `forge-ops`, all of them covered by the port exception above; every other edge points down its dependency chain. **When you add a load, add its row** — the table is how the next placement error gets caught before it ships, and a fourth upward row without an argument beside it is the error.
 
 ### Dispatch chain
 
@@ -363,18 +417,18 @@ Given several work items, `develop` runs this chain once per item with the leade
 ```
 test (skill, main thread — holds the write-back gate, reports token spend)
 └── tester (terylon-test — drives the run)
-    ├── update-pr-checklist (read) ......... terylon-devops; the test plan, and the work item it links
-    ├── update-work-item-checklist (read) .. terylon-devops; the acceptance criteria of that work item
+    ├── update-pr-checklist (read) ......... terylon-forge; the test plan, and the work item it links
+    ├── update-work-item-checklist (read) .. terylon-forge; the acceptance criteria of that work item
     ├── verify-test-plan ................... engine: triage, coverage, routing, evidence
     │   └── per-claim subagents            one round; claims are independent
     │       ├── run-build-and-tests        the project's build and suite — a shell is enough
     │       ├── run-ui-flows               the interface, through browser automation
     │       └── <repo-local specialist>    conditional; capability gate below
-    ├── update-pr-checklist (write) ........ terylon-devops; the thread, then the rewritten plan
-    └── update-work-item-checklist (write) . terylon-devops; the comment, then the annotated criteria
+    ├── update-pr-checklist (write) ........ terylon-forge; the thread, then the rewritten plan
+    └── update-work-item-checklist (write) . terylon-forge; the comment, then the annotated criteria
 ```
 
-Azure DevOps appears only at the ends, in `terylon-devops`. The two `update-*-checklist` transports read the plan and the criteria and write the answers back; they hold no `Agent`, so the verification cannot happen in their context. Two things sit above them, mirroring the development pipeline: the `tester` agent drives the run, and the `test` skill hosts the one gate a subagent cannot — consent before the write — and reports the run's token spend, exactly as `develop` and `leader` do. `code-reviewer` sits below `pr-reviewer`, so there the transport dispatches; here the caller drives and the transports only read and write.
+The forge appears only at the ends, in `terylon-forge`, and which forge is `resolve-forge`'s answer. The two `update-*-checklist` transports read the plan and the criteria and write the answers back; they hold no `Agent`, so the verification cannot happen in their context. Two things sit above them, mirroring the development pipeline: the `tester` agent drives the run, and the `test` skill hosts the one gate a subagent cannot — consent before the write — and reports the run's token spend, exactly as `develop` and `leader` do. `code-reviewer` sits below `pr-reviewer`, so there the transport dispatches; here the caller drives and the transports only read and write.
 
 The two executors are the **execution layer**. They run the artifact and report facts — commands, exit statuses, case names, observed state — while the engine keeps the judgment about what a result means. `run-ui-flows` is separate purely because of its dependency class: a checklist walker that needs only a shell must not drag in a browser stack, so the plugin ships no `.mcp.json` for it and reports the capability as absent instead.
 
