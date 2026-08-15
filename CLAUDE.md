@@ -10,7 +10,9 @@ Internal Claude Code plugin marketplace distributed into product repositories th
 /.claude-plugin/marketplace.json   root manifest
 /plugins/<slug>/                   one directory per plugin
 /plugins/CLAUDE.md                 authoring conventions — read before editing a plugin
+/docs/                             the engineering knowledge base — architecture, flows, runbooks, onboarding
 /docs/terylon/                     terylon working tree: intake, specs, plans, ledgers (gitignored)
+/docs/superpowers/                 the same, when those skills run directly (gitignored)
 ```
 
 **All of `/plugins` is the distribution boundary.** Anything inside is consumed by other repos; anything outside stays local.
@@ -63,6 +65,24 @@ Component layout, the placement rule in full, the dispatch chains and the table 
 
 Project and repo still derive from the consuming repository's git remote at runtime, and a GitHub-hosted repository sets nothing at all: `terylon-github` reads the owner from the remote and authenticates through `gh`. See *Point it at your forge* in `README.md`.
 
+## Documentation
+
+Five stores coexist here, and one of them ships to other repositories. Writing into the wrong one is the common mistake.
+
+| Store | Answers | Tracked |
+|---|---|---|
+| `CLAUDE.md` (root, `plugins/`, `docs/`) | *what is in the project* | yes |
+| `README.md` (root) | how a consumer installs and uses the marketplace, in brief | yes |
+| `plugins/<slug>/**` | what other repositories **execute** — the distribution boundary | yes |
+| `docs/terylon/`, `docs/superpowers/` | one task's intake, spec, plan, ledger, spend | **gitignored** — discarded once the work ships |
+| `docs/` (architecture, flows, runbooks, onboarding) | *how it works end to end, and why* | yes |
+
+One-line test: **if the answer is "go read this code", it belongs in a `CLAUDE.md`; if the answer is a diagram, a table of rules, and the reasoning behind a decision, it belongs in `docs/`.**
+
+The knowledge base carries what a `CLAUDE.md` structurally cannot: a **flow spans components**, so no single component's file can see the whole path, and an **ADR records reasoning that was overturned**, which orientation documents have no place for. Two rules keep the two stores honest — `claude-md-sync.md` asks whether the nearest `CLAUDE.md` still orients a reader, `docs-sync.md` asks whether an article anywhere in `docs/` still tells the truth. Both can fire on one change.
+
+This section is the **one** statement of that boundary. `docs/README.md` links here rather than restating it, and the rule deciding which decisions earn an article of their own is stated once too, in `docs/architecture/README.md`. Authoring conventions are in `docs/README.md`.
+
 ## Language
 
 **Everything committed to this repo is written in English** — skills, agents, reference documents, `README.md`, `CLAUDE.md`, rules, code comments, identifiers, and commit messages alike.
@@ -88,8 +108,9 @@ Details in `.claude/rules/`:
 |---|---|
 | `git-workflow.md` | `main` is protected, only through a PR; consent for every commit; branch names |
 | `scripting.md` | Node for hooks, full names over abbreviations, Allman braces, cross-platform |
-| `markdown.md` | frontmatter, no wrapping for ADO, references by name, language |
+| `markdown.md` | frontmatter, no wrapping for ADO, drawing rules, references by name, language |
 | `claude-md-sync.md` | when to update CLAUDE.md after a change |
+| `docs-sync.md` | when an article in `docs/` stopped telling the truth, and how to find it |
 
 In short:
 

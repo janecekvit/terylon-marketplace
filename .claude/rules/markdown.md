@@ -70,7 +70,7 @@ Declaring without prose leaves an agent holding a skill it has no reason to open
 
 - **One `# H1` per file**, at the top, naming what the file is.
 - **Do not skip heading levels.** `##` follows `#`, `###` follows `##`.
-- **Fence every code block with a language tag** — ` ```powershell `, ` ```bash `, ` ```json `, ` ```yaml `. Untagged fences lose syntax highlighting and make the intended interpreter ambiguous.
+- **Fence every code block with a language tag** — ` ```powershell `, ` ```bash `, ` ```json `, ` ```yaml `. Untagged fences lose syntax highlighting and make the intended interpreter ambiguous. **A diagram is the one exception** and takes a bare fence — see below.
 - **A blank line around** every heading, list, table, and fenced block. Some renderers silently merge them otherwise.
 
 ## Show structure, do not describe it
@@ -117,6 +117,18 @@ develop (skill, main thread — holds the gates)
 
 Annotate the edges with what the reader cannot infer from the shape: which branches run in parallel, which are conditional and on what, which direction data flows.
 
+**Three rules keep a diagram readable everywhere it is read** — in a terminal, in a raw file, in a diff pane, in the Azure DevOps renderer and in an agent's context window:
+
+| Rule | Because |
+|---|---|
+| **A bare ` ``` ` fence**, never a language tag | a diagram is not code, and syntax highlighting mangles it |
+| **Under 120 columns** | wide enough that a diagram is never cramped into unreadability, narrow enough to survive a side-by-side diff pane on an ordinary screen |
+| **One idea per diagram** | two diagrams beat one that needs a legend |
+
+The 120 is a ceiling, not a target. It was set rather than inherited: the classic 78 would have put existing, perfectly readable diagrams in breach on the day the rule was written, and a formatting rule violated the moment it ships teaches people to ignore the file it lives in.
+
+**Do not draw what a table says better.** A diagram shows *structure*; a table shows *values*. A list of eight operations with their arguments is a table. Which side of the port each one sits on is a diagram.
+
 **Where each diagram belongs:**
 
 | Diagram | Lives in |
@@ -125,6 +137,7 @@ Annotate the edges with what the reader cannot infer from the shape: which branc
 | How plugins depend on each other | root `CLAUDE.md`, `plugins/CLAUDE.md`, root `README.md`, **and every plugin `README.md`** |
 | Which component lives in which plugin | `plugins/CLAUDE.md` |
 | How a value flows through a pipeline | the file that owns the pipeline |
+| How something travels **end to end, across components** | an article in `docs/flows/` — no single component's file can see the whole path |
 
 Use plain ASCII (`└──`, `├──`, `──▶`, `┐`/`┘`), never Unicode box-drawing beyond that set — it has to stay readable in a terminal diff, in a raw file, and in the ADO renderer alike.
 
@@ -139,8 +152,11 @@ Use plain ASCII (`└──`, `├──`, `──▶`, `┐`/`┘`), never Unic
 | root `CLAUDE.md`, root `README.md` | the whole graph |
 | `plugins/CLAUDE.md` | the whole graph, plus which component lives in which plugin and every cross-plugin load |
 | each `plugins/<slug>/README.md` | the graph from **that plugin's vantage** — what it sits on, what sits on it, marked `← you are here` |
+| `docs/CLAUDE.md` | **not the plugin graph** — it orients inside the knowledge base, and draws the `docs/` tree instead. `docs/README.md` beside it is an authoring standard and draws neither |
 
-**Plugins have no `CLAUDE.md` of their own** — only the repo root and `plugins/` do. A plugin's orienting document is its `README.md`, and the rule binds there exactly as it binds on a `CLAUDE.md`.
+**Plugins have no `CLAUDE.md` of their own** — only the repo root, `plugins/` and `docs/` do. A plugin's orienting document is its `README.md`, and the rule binds there exactly as it binds on a `CLAUDE.md`.
+
+The last row is the limit of this rule: it binds a document that orients a reader **among the plugins**. A document orienting a reader among the documentation stores draws that shape instead — one graph per document, of whatever the reader is actually lost in.
 
 **The graph is derived from `plugin.json#dependencies`, which is the only source of truth.** Draw what the manifests declare, never what the prose remembers. A diagram that disagrees with a manifest is a defect in the diagram — fix the drawing, or fix the manifest if the drawing turned out to be the honest one, but never leave them disagreeing.
 
