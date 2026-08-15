@@ -25,7 +25,7 @@ An `<item>` is an **Azure DevOps work item URL** (`dev.azure.com/{org}/{project}
 **Any number of items, of either kind, mixed freely.** URLs separate themselves; prose items are separated by **`---` on its own line**. Prose without a `---` is one item no matter how many bullets it contains — see step 1. Each item becomes its own workspace and its own `leader`, run concurrently; the ceiling and the rest of the mechanics are in *Fan-out*.
 
 - `--dry-run` — stop after Gate 1 (plan only, no code).
-- `--auto` — skip the *pauses* at the gates; `leader` runs the loop on its own. The git rules still hold.
+- `--auto` — skip the *pauses* at the gates; `leader` runs the loop on its own. The git rules still hold. It does **not** skip `CONTINUE`: that status pauses for nobody, and suppressing it is what made an unattended build carry one leader's context from the first task to the last.
 - `--here` — stay in the current checkout instead of an isolated worktree. Use only when you are already on the intended feature branch.
 - `--no-brainstorm` — skip the Gate 0 triage and run the ordinary intake, however vague the item looks.
 
@@ -44,15 +44,19 @@ develop (this skill — main thread, the only place that can ask the user)
 ├── Gate 0   intake ── or ──▶ brainstorm .. asks ✓   (triage picks the mode)
 ├── route    per item, once Gate 0 has settled what the item is
 ├── create-workspace                   isolated worktree (unless --here)
-├── leader ─────────────────────────▶  owns the loop, returns at each gate
+├── leader ─────────────────────────▶  owns the loop, returns at every boundary
 │   └── AWAITING_APPROVAL <plan path>
 ├── Gate 1   plan approval ........... asks ✓   (--dry-run stops here)
 ├── leader ─────────────────────────▶  re-dispatched with the approved plan
+│   ├── CONTINUE <ledger> task-N ──┐   asks nothing
+│   └───────────────◀──────────────┘   re-dispatched at once, fresh context
 │   └── BUILD_COMPLETE <ledger>
 └── Gate 3   PR / finish ............. asks ✓
 ```
 
 The gates live here because `AskUserQuestion` works only on the main thread. `leader` ends its run at a gate and is re-dispatched afterwards; state survives in files, so nothing is lost across the hand-off.
+
+**The `CONTINUE` edge is the same hand-off with nobody in it.** It loops straight back into a new `leader` without reaching a gate, which is what keeps a build from being one instance however long it runs. Most of a build's returns are this edge.
 
 With several work items, the same shape runs once per item and the leaders run **concurrently**:
 
@@ -186,6 +190,7 @@ Handle the return:
 
 | Return | What to do |
 |---|---|
+| `CONTINUE <ledger> <boundary>` | **Re-dispatch `leader` immediately. Ask the user nothing.** It has taken a boundary its ledger already covers, so there is no decision here and no artifact to show. Name the new dispatch `leader-<slug>-<boundary>` so the run's spend record attributes to a phase. |
 | `NEEDS_CLARIFICATION <questions>` | Put them to the user via `AskUserQuestion` (one at a time), write the answers into the seed-spec, re-dispatch `leader`. |
 | `AWAITING_APPROVAL <path> <what>` | **Gate 1** — show the user the artifact's contents and wait for approval or edits. Once approved, re-dispatch `leader` with the approved artifact. This can arrive **mid-build**, not only after the first plan: a review finding that invalidates the design sends `leader` back to `planner`, and a materially changed plan returns here rather than proceeding on a plan the user never saw. Say which finding forced it. |
 | `BUILD_COMPLETE <ledger>` | Continue to step 6. |
@@ -205,7 +210,11 @@ Three consequences, and they invert the intuition:
 | **Resuming costs a constant** | a re-dispatched leader starts from an almost empty context and re-reads the ledger and the plan. That is the whole cost, and it does not grow with how much work came before. |
 | **Length is the cost, not count** | every turn re-reads the **entire** cached prefix, and the prefix grows with each turn. A run's cache-read is therefore **quadratic in its turn count**: double the turns and it roughly quadruples; split one run into `k` shorter ones and it drops to about `1/k` of what it was. |
 
-So **do not avoid gates to save tokens** — a gate resets the context and is the cheapest thing in this loop. `--auto` keeps one leader running through the whole build and pays quadratically for it.
+So **do not avoid gates to save tokens** — a gate resets the context and is the cheapest thing in this loop.
+
+**`CONTINUE` is that reset without a human in it.** A gate does two things at once: it pauses for a person, and it ends the instance. `--auto` used to remove both, which is why one leader ran a whole build and paid quadratically for it. The status separates them — the pause is for the user, the ending is for the cost — so **`--auto` suppresses the pause and never the `CONTINUE`.** It is the mode where the status matters most, because it is the one with no gates left.
+
+Measured over one session: four leader instances took 200 turns and 36% of everything spent, against 23 implementers at 22% and every review lens together under 12%. The controller is the pipeline's largest single cost, and its length is the whole of it.
 
 **Batching answers is still right, for a smaller reason.** Each re-dispatch pays that constant again, so answering one question, re-dispatching, then answering the next pays it twice. When a return needs several answers — every question in a `NEEDS_CLARIFICATION`, every edit at a Gate — ask them one message at a time as the tools require, then **fold all the answers into the seed-spec and re-dispatch once.** A real saving, but a constant one against a quadratic: never trade a gate away to get it.
 
@@ -250,7 +259,7 @@ Every item carries its own `<slug>`, and every path derives from it — `docs/te
 
 Run **Gate 0 for every item first**, one at a time — in either mode, since both are interactive and neither can be parallelized. It is also where you learn whether two of the items collide (see below), worth knowing before any of them start building. An item that took the brainstorm mode may leave the gate as several items; those join the set and are routed with the rest.
 
-Then create the workspaces and dispatch **all leaders in one round**, so they run concurrently rather than one after another.
+Then create the workspaces and dispatch **every leader from one assistant message** — all the `Agent` calls together, not one message per item. That is what makes them run concurrently; separate messages run them one after another however the prose describes it.
 
 ### Handle returns as they arrive
 

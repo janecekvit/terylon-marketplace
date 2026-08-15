@@ -25,7 +25,7 @@ An `<item>` is either an **Azure DevOps pull request URL** (`dev.azure.com/{org}
 **Any number of items, mixed freely.** URLs separate themselves; prose checklists are separated by **`---` on its own line**. Prose without a `---` is one checklist however many bullets it holds. Each item becomes its own `tester`, run concurrently — the ceiling and the rest of the mechanics are in *Fan-out*.
 
 - `--dry-run` — verify and show the proposed writes, then stop. Nothing is written to the PR or the work item.
-- `--auto` — skip the *pause* at the write-back gate; the tester writes back on its own. The tick gate and the downgrade rules in the transports still hold.
+- `--auto` — skip the *pause* at the write-back gate; the write happens without asking. The tick gate and the downgrade rules in the transports still hold, and so does the two-dispatch split: the tester still ends after verifying and is re-dispatched to write, it just returns `CONTINUE` instead of waiting. The flag removes the pause, never the ending.
 
 There is no `--here`: the tester reads the repository under test **read-only** and builds fixtures in a throwaway directory elsewhere, so it needs no worktree of that repository.
 
@@ -42,14 +42,17 @@ There is no `--here`: the tester reads the repository under test **read-only** a
 test (this skill — main thread, the only place that can ask the user)
 ├── intake ............................. asks ✓  (which repo, where fixtures may go)
 ├── tester ──────────────────────────▶  phase 1: read plan + AC, triage, coverage, exercise
-│   └── AWAITING_WRITE_APPROVAL <result>
-├── write-back gate .................... asks ✓  (--dry-run stops here)
+│   ├── AWAITING_WRITE_APPROVAL <result>   consent needed
+│   └── CONTINUE <result> verify           write already approved; asks nobody
+├── write-back gate .................... asks ✓  (--dry-run stops here; --auto skips the pause)
 ├── tester ──────────────────────────▶  phase 2: write back through the two transports
 │   └── VERIFICATION_COMPLETE <report>
 └── token-spend report ................. measure-token-spend (main thread)
 ```
 
-The gate lives here because `AskUserQuestion` works only on the main thread. The tester ends its run at the gate and is re-dispatched afterwards; state survives in the result file, so nothing is lost across the hand-off — the same mechanic `develop` uses with `leader`.
+The gate lives here because `AskUserQuestion` works only on the main thread. The tester ends its run after verifying and is re-dispatched afterwards; state survives in the result file, so nothing is lost across the hand-off — the same mechanic `develop` uses with `leader`.
+
+**The ending is not the gate.** A gate does two things at once — it pauses for a person and it ends the instance — and `--auto` removes only the first. Verify reads the plan, the criteria, the diff and every per-claim subagent's return; the write needs the result file and nothing else, so it always starts from a fresh instance. The `CONTINUE` edge is that same hand-off with nobody in it.
 
 With several items, the same shape runs once per item and the testers run **concurrently**:
 
@@ -100,6 +103,7 @@ Dispatch **`Agent(terylon-test:tester)`** with **paths and identifiers** — the
 
 | Return | What to do |
 |---|---|
+| `CONTINUE <result-path> verify` | **Re-dispatch the tester to write from that result path immediately. Ask the user nothing.** It arrives only when the write was already approved — under `--auto`, or when the dispatch said so — so there is no gate here to host. Name the new dispatch `tester-<item>-write` so the run's spend record separates the two phases. |
 | `NEEDS_CLARIFICATION <questions>` | Put them to the user via `AskUserQuestion` (one at a time), fold the answers into the brief, re-dispatch the tester. |
 | `AWAITING_WRITE_APPROVAL <result-path>` | **Write-back gate** — read the result and show the user what would be written: the PR test plan regrouped, the acceptance-criteria ticks and downgrades, the coverage map between the two, and the evidence. Wait for consent. On consent, re-dispatch the tester to **write** from that result path. `--dry-run` **stops here**. |
 | `VERIFICATION_COMPLETE <report>` | The write-back is done (or there was nothing to write — a checklist with no URL). Continue to step 4. |
@@ -125,7 +129,7 @@ Every item carries its own result path and its own report; two runs must never s
 
 ### Sequential intakes, concurrent verification
 
-Run **intake for every item first**, one at a time — it is interactive and cannot be parallelized. Then dispatch **all testers in one round** so they verify concurrently.
+Run **intake for every item first**, one at a time — it is interactive and cannot be parallelized. Then dispatch **every tester from one assistant message** — all the `Agent` calls together — so they verify concurrently. One message per tester runs them one after another whatever the intent was.
 
 ### Handle returns as they arrive
 
@@ -143,6 +147,7 @@ Each tester fans out one subagent per independent claim, so a handful of PRs is 
 
 - **Writing the checking loop yourself.** The verification belongs to `tester`, which drives `verify-test-plan`. This skill only hosts the gate and measures.
 - **Letting the tester write before the gate.** Dispatch it to verify and return first; write only after consent (or `--auto`).
+- **Reading `--auto` as one dispatch.** It skips the pause, not the ending. The tester still verifies, ends, and is re-dispatched to write — it just returns `CONTINUE` rather than waiting to be asked.
 - **Holding ADO tools here.** This skill has none — all forge access is the tester's, through its two transports. The gate is about *consent*, not about this skill touching Azure DevOps.
 - **Pasting checklist contents into the dispatch.** Items travel by path or URL.
 - **Trying to prompt from the tester.** `AskUserQuestion` works only here. The tester returns `NEEDS_CLARIFICATION` and you do the asking.
@@ -154,8 +159,9 @@ Each tester fans out one subagent per independent claim, so a handful of PRs is 
 
 1. **Discovery:** `/terylon-test:test` is in autocomplete; the `tester` agent is dispatchable.
 2. **Frontmatter:** this skill has `AskUserQuestion` and `Agent`; it holds **no** `mcp__ado__*` and no `Edit`; no `permissionMode`, `hooks`, `mcpServers` or `disable-model-invocation`.
-3. **Gate held:** on a PR the tester returns `AWAITING_WRITE_APPROVAL`, the proposed writes are shown, and nothing reaches the PR or work item until the user consents. `--dry-run` stops there; `--auto` writes without the pause.
-4. **Two-phase dispatch:** the tester is dispatched to verify (no write), then re-dispatched to write only after consent — never one dispatch that both checks and writes.
-5. **Token spend:** after verification the run invokes `measure-token-spend` and writes `docs/terylon/monitoring/<session>-tokens.md` with per-tier and per-agent totals, surfacing the per-tier line; a fanned-out run attributes the tester subagents to the subagent tier.
-6. **Fan-out** with two PRs: two result paths, both testers dispatched in one round, each write-back gate hosted as it arrives, every question named by its PR. Eleven items are refused with a batching proposal; six draw a confirmation first.
-7. **Checklist, no URL:** verified and returned, nothing written.
+3. **Gate held:** on a PR without `--auto` the tester returns `AWAITING_WRITE_APPROVAL`, the proposed writes are shown, and nothing reaches the PR or work item until the user consents. `--dry-run` stops there.
+4. **Two-phase dispatch:** the tester is dispatched to verify (no write), then re-dispatched to write — never one dispatch that both checks and writes.
+5. **`--auto` keeps the split:** run a PR item with `--auto` and expect **two** tester dispatches, the first returning `CONTINUE <result-path> verify` and the second doing the write, with no question asked at either. One dispatch that both verified and wrote is the defect this checks for. The run's spend log carries a separate record per phase.
+6. **Token spend:** after verification the run invokes `measure-token-spend` and writes `docs/terylon/monitoring/<session>-tokens.md` with per-tier and per-agent totals, surfacing the per-tier line; a fanned-out run attributes the tester subagents to the subagent tier.
+7. **Fan-out** with two PRs: two result paths, both testers dispatched from one assistant message, each write-back gate hosted as it arrives, every question named by its PR. Eleven items are refused with a batching proposal; six draw a confirmation first.
+8. **Checklist, no URL:** verified and returned, nothing written.

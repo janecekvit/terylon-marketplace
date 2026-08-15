@@ -252,3 +252,51 @@ test("readAgentMeta returns both the type and the model, and survives a missing 
     assert.deepStrictEqual(measurer.readAgentMeta(metaPath), { type: "developer", model: "claude-sonnet-4-5" });
     assert.deepStrictEqual(measurer.readAgentMeta(path.join(root, "absent.meta.json")), { type: "unknown", model: null });
 });
+
+test("a response split across content blocks is counted once in the session report", () =>
+{
+    const root = fileSystem.mkdtempSync(path.join(operatingSystem.tmpdir(), "token-spend-split-"));
+    const sessionId = "sess";
+
+    writeJsonLines(path.join(root, sessionId + ".jsonl"), [{ type: "assistant", message: { id: "msg_m", usage: usage(1, 10, 1) } }]);
+
+    const subagentsDirectory = path.join(root, sessionId, "subagents");
+
+    // One API response, three records — each repeating the same usage block.
+    writeJsonLines(path.join(subagentsDirectory, "agent-a.jsonl"),
+    [
+        { type: "assistant", message: { id: "msg_a", model: "claude-opus-5", usage: usage(2, 500, 40) } },
+        { type: "assistant", message: { id: "msg_a", model: "claude-opus-5", usage: usage(2, 500, 40) } },
+        { type: "assistant", message: { id: "msg_a", model: "claude-opus-5", usage: usage(97, 500, 40) } },
+    ]);
+
+    fileSystem.writeFileSync(path.join(subagentsDirectory, "agent-a.meta.json"),
+        JSON.stringify({ agentType: "Explore", model: "claude-opus-5" }), "utf8");
+
+    const measurement = measurer.measureSession(root, sessionId);
+    const explore = measurement.subagents.find((entry) => entry.type === "Explore");
+
+    assert.strictEqual(explore.usage.output, 97);
+    assert.strictEqual(explore.usage.cacheRead, 500);
+    assert.strictEqual(explore.usage.cacheWrite, 40);
+});
+
+test("the main thread is deduplicated too, and assistantRecords still counts raw records", () =>
+{
+    const root = fileSystem.mkdtempSync(path.join(operatingSystem.tmpdir(), "token-spend-main-"));
+    const sessionId = "sess";
+
+    writeJsonLines(path.join(root, sessionId + ".jsonl"),
+    [
+        { type: "assistant", message: { id: "msg_a", usage: usage(4, 100, 10) } },
+        { type: "assistant", message: { id: "msg_a", usage: usage(60, 100, 10) } },
+    ]);
+
+    fileSystem.mkdirSync(path.join(root, sessionId, "subagents"), { recursive: true });
+
+    const measurement = measurer.measureSession(root, sessionId);
+
+    assert.strictEqual(measurement.main.output, 60);
+    assert.strictEqual(measurement.main.cacheRead, 100);
+    assert.strictEqual(measurement.main.assistantRecords, 2);
+});
