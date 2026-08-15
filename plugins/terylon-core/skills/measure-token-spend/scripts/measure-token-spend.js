@@ -5,16 +5,12 @@ const fileSystem = require("fs");
 const path = require("path");
 const operatingSystem = require("os");
 const oet = require("../../../shared/oet.js");
+const transcript = require("../../../shared/transcript.js");
 
-// Only assistant-turn records carry the model's own token usage. User, system, tool-result and
-// summary records must never be summed, or the total counts context as if it were spend.
-const ASSISTANT_RECORD_TYPE = "assistant";
-
-// The three usage counters that make up a record's token cost. Non-cached input is deliberately
-// left out: it is a rounding error against cache-read (about 1.4k in a 546M-cache-read session).
-const OUTPUT_FIELD = "output_tokens";
-const CACHE_READ_FIELD = "cache_read_input_tokens";
-const CACHE_WRITE_FIELD = "cache_creation_input_tokens";
+// Which records carry usage, which three counters make it up, and how a response's repeated records
+// are collapsed into one all live in shared/transcript.js — the hook reads transcripts too, and the
+// two must not answer any of those differently. Non-cached input is deliberately left out: it is a
+// rounding error against cache-read (about 1.4k in a 546M-cache-read session).
 
 const TRANSCRIPT_SUFFIX = ".jsonl";
 const META_SUFFIX = ".meta.json";
@@ -203,38 +199,15 @@ function sumUsage(transcriptPath)
         return totals;
     }
 
-    for (const line of content.split("\n"))
-    {
-        if (line.trim() === "") { continue; }
+    // The grouping lives in shared/transcript.js, so this report and the SubagentStop hook cannot
+    // drift apart on it. A whole file is read at once here, so there is no carry to thread through.
+    const summed = transcript.sumAssistantUsage(content, null);
 
-        let record;
-
-        try
-        {
-            record = JSON.parse(line);
-        }
-        catch
-        {
-            // A truncated final line from an agent that died mid-response is skipped, not fatal.
-            continue;
-        }
-
-        if (record.type !== ASSISTANT_RECORD_TYPE) { continue; }
-
-        const usage = record.message && record.message.usage;
-
-        if (!usage) { continue; }
-
-        totals.output += usage[OUTPUT_FIELD] || 0;
-        totals.cacheRead += usage[CACHE_READ_FIELD] || 0;
-        totals.cacheWrite += usage[CACHE_WRITE_FIELD] || 0;
-        totals.assistantRecords += 1;
-
-        if (totals.model === null && typeof record.message.model === "string")
-        {
-            totals.model = record.message.model;
-        }
-    }
+    totals.output = summed.totals.output;
+    totals.cacheRead = summed.totals.cacheRead;
+    totals.cacheWrite = summed.totals.cacheWrite;
+    totals.assistantRecords = summed.totals.assistantRecords;
+    totals.model = summed.totals.model;
 
     return totals;
 }

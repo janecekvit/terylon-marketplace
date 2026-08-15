@@ -34,7 +34,7 @@ code-reviewer
 ├── 1  create-workspace .......... optional, when `isolate` is set
 ├── 2  gather candidates:
 │   ├── code-review ─────────▶     the baseline reading
-│   ├── lenses, in one round:      ┐
+│   ├── lenses, all in one message: ┐
 │   │   ├── security               │ parallel, mutually independent
 │   │   ├── performance           │
 │   │   ├── tests                 │
@@ -75,7 +75,7 @@ code-review --scope=pr --base=<base> --head=<head> --repo=<repo>
 
 It returns structured YAML findings. This is the correctness-and-conventions reading.
 
-**(b) Lens panel — dispatch in parallel.** Send one subagent per lens via the `Agent` tool, all in the same round. They are mutually independent, so running them concurrently costs nothing but a little fan-out:
+**(b) Lens panel — dispatch them all in one message.** Send one subagent per lens via the `Agent` tool, **every call in the same assistant message**. That is the mechanism: calls issued in one message run at once, calls issued in separate messages run one after another and each costs a turn that re-reads your whole context. They are mutually independent, so there is nothing to serialize:
 
 - **`security`** — injection, authn/authz, secrets, data exposure, unsafe APIs.
 - **`performance`** — algorithmic complexity, N+1 queries, allocations on hot paths, blocking I/O, async misuse.

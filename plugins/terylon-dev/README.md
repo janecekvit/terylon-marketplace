@@ -32,14 +32,15 @@ develop (skill, main thread — the only place that can ask the user)
 │                             └── design document + 1..N approved seed-specs
 ├── route ............................... per item, after Gate 0 has settled what it is
 ├── create-workspace .................... from terylon-git (unless --here)
-└── leader ─────────────────────────────▶ owns the loop, returns at each gate
+└── leader ─────────────────────────────▶ owns the loop, ends at every boundary
     ├── planner ──▶ Explore              design + TDD plan
     │   └── AWAITING_APPROVAL ▶ Gate 1   plan approval (--dry-run stops here)
     ├── developer ──▶ debugger           per task, test-first (on a failing test)
     │   └── <repo-local specialist>      conditional — see below
+    ├── CONTINUE <ledger> task-N ───────▶ re-dispatched at once, asks nobody
     ├── security-reviewer     ┐
-    ├── performance-reviewer  │ one round, parallel, read-only
-    ├── architecture-reviewer │
+    ├── performance-reviewer  │ all four dispatched from one message,
+    ├── architecture-reviewer │ parallel, read-only
     ├── edge-case-reviewer    ┘
     │   └── <repo-local specialist>      conditional; capability gate below
     ├── refactorer                       simplify while tests stay green

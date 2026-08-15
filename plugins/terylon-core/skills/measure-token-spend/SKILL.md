@@ -30,6 +30,16 @@ node "${CLAUDE_PLUGIN_ROOT}/skills/measure-token-spend/scripts/measure-token-spe
 
 With no arguments it measures the **newest session across every project** — which, run at the end of a session, is the one that just finished. The script prints a markdown report; `--out` additionally writes it to a file.
 
+## One API response is counted once
+
+A transcript writes a single API response as **several `assistant` records** — one per content block (`thinking`, `text`, `tool_use`) — and **every one of them repeats that response's complete `usage`**. Summing records therefore counts one response two or three times.
+
+This reader groups records by `message.id` and counts each group once: `cache_read_input_tokens` and `cache_creation_input_tokens` are identical across a group so one is taken, and `output_tokens` grows across the group so the maximum is.
+
+**It did not always do this, and the figures it produced before were wrong by roughly a factor of two.** Worse, the factor was uneven — it scales with how many blocks a response carries, so a thinking-heavy agent inflated more than a mechanical one and the *ranking* was wrong, not merely the magnitude. Re-measuring one archived session: 16 441 400 OET as reported against 7 220 952 true, with per-agent factors from 1.91x to 2.89x.
+
+The grouping lives in `shared/transcript.js`, shared with the `SubagentStop` hook so the two cannot answer it differently.
+
 ## OET — the derived quantity, beside the raw ones
 
 The three buckets do not cost the same, and the largest by volume is not the largest by cost. **Output-equivalent tokens** weight them into one number proportional to spend:

@@ -184,3 +184,141 @@ test("resolveSubagentsDirectory falls back to cwd and session id when no transcr
     // Neither locator present: the hook has nothing to measure and says so rather than guessing.
     assert.strictEqual(recorder.resolveSubagentsDirectory({}), null);
 });
+
+test("a response split across content blocks is recorded once, not three times", () =>
+{
+    const workingDirectory = temporaryDirectory();
+    const transcript = path.join(workingDirectory, "sess.jsonl");
+    fileSystem.writeFileSync(transcript, "", "utf8");
+
+    const subagents = path.join(workingDirectory, "sess", "subagents");
+
+    // One API response, three records — thinking, text, tool_use — each repeating the same usage.
+    writeJsonLines(path.join(subagents, "agent-a.jsonl"),
+    [
+        { type: "assistant", message: { id: "msg_a", model: "claude-opus-5", usage: usage(1, 0, 49491) } },
+        { type: "assistant", message: { id: "msg_a", model: "claude-opus-5", usage: usage(1, 0, 49491) } },
+        { type: "assistant", message: { id: "msg_a", model: "claude-opus-5", usage: usage(183, 0, 49491) } },
+    ]);
+
+    runHook(JSON.stringify({ transcript_path: transcript, cwd: workingDirectory }), workingDirectory);
+
+    const eventsPath = path.join(workingDirectory, "docs", "terylon", "monitoring", "sess-spend.jsonl");
+    const events = fileSystem.readFileSync(eventsPath, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual(events[0].output, 183);
+    assert.strictEqual(events[0].cacheWrite, 49491);
+    assert.strictEqual(events[0].cacheRead, 0);
+});
+
+test("a message that grew between two invocations is counted once across both", () =>
+{
+    const workingDirectory = temporaryDirectory();
+    const transcript = path.join(workingDirectory, "sess.jsonl");
+    fileSystem.writeFileSync(transcript, "", "utf8");
+
+    const subagents = path.join(workingDirectory, "sess", "subagents");
+    const agentTranscript = path.join(subagents, "agent-a.jsonl");
+
+    writeJsonLines(agentTranscript, [{ type: "assistant", message: { id: "msg_a", usage: usage(1, 100, 200) } }]);
+
+    const payload = JSON.stringify({ transcript_path: transcript, cwd: workingDirectory });
+
+    runHook(payload, workingDirectory);
+
+    // The same response continues; its later records repeat the usage the first read already saw.
+    fileSystem.appendFileSync(agentTranscript,
+        JSON.stringify({ type: "assistant", message: { id: "msg_a", usage: usage(183, 100, 200) } }) + "\n", "utf8");
+
+    runHook(payload, workingDirectory);
+
+    const eventsPath = path.join(workingDirectory, "docs", "terylon", "monitoring", "sess-spend.jsonl");
+    const events = fileSystem.readFileSync(eventsPath, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+
+    assert.strictEqual(events.reduce((sum, event) => sum + event.output, 0), 183);
+    assert.strictEqual(events.reduce((sum, event) => sum + event.cacheRead, 0), 100);
+    assert.strictEqual(events.reduce((sum, event) => sum + event.cacheWrite, 0), 200);
+});
+
+test("a state file written before carries existed still records and does not throw", () =>
+{
+    const workingDirectory = temporaryDirectory();
+    const transcript = path.join(workingDirectory, "sess.jsonl");
+    fileSystem.writeFileSync(transcript, "", "utf8");
+
+    const subagents = path.join(workingDirectory, "sess", "subagents");
+    writeJsonLines(path.join(subagents, "agent-a.jsonl"), [{ type: "assistant", message: { id: "msg_a", usage: usage(10, 20, 30) } }]);
+
+    const monitoring = path.join(workingDirectory, "docs", "terylon", "monitoring");
+    fileSystem.mkdirSync(monitoring, { recursive: true });
+    fileSystem.writeFileSync(path.join(monitoring, "sess-spend.state.json"), JSON.stringify({ offsets: {} }) + "\n", "utf8");
+
+    const result = runHook(JSON.stringify({ transcript_path: transcript, cwd: workingDirectory }), workingDirectory);
+
+    assert.strictEqual(result.status, 0);
+
+    const events = fileSystem.readFileSync(path.join(monitoring, "sess-spend.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
+
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual(events[0].output, 10);
+});
+
+test("sumNewUsage keeps its two-argument form for callers that track no carry", () =>
+{
+    const root = temporaryDirectory();
+    const transcriptPath = path.join(root, "t.jsonl");
+
+    writeJsonLines(transcriptPath,
+    [
+        { type: "assistant", message: { id: "msg_a", usage: usage(1, 5, 5) } },
+        { type: "assistant", message: { id: "msg_a", usage: usage(9, 5, 5) } },
+    ]);
+
+    assert.strictEqual(recorder.sumNewUsage(transcriptPath, 0).totals.output, 9);
+});
+
+test("a working directory change inside one repository keeps one events file", () =>
+{
+    const repositoryRoot = temporaryDirectory();
+    fileSystem.mkdirSync(path.join(repositoryRoot, ".git"), { recursive: true });
+
+    // A linked worktree nested inside the checkout, as create-workspace makes them.
+    const worktree = path.join(repositoryRoot, ".claude", "worktrees", "feature");
+    fileSystem.mkdirSync(worktree, { recursive: true });
+    fileSystem.writeFileSync(path.join(worktree, ".git"), "gitdir: " + path.join(repositoryRoot, ".git"), "utf8");
+
+    const transcript = path.join(repositoryRoot, "sess.jsonl");
+    fileSystem.writeFileSync(transcript, "", "utf8");
+
+    const subagents = path.join(repositoryRoot, "sess", "subagents");
+    writeJsonLines(path.join(subagents, "agent-a.jsonl"), [{ type: "assistant", message: { id: "msg_a", usage: usage(10, 1000, 40) } }]);
+
+    runHook(JSON.stringify({ transcript_path: transcript, cwd: repositoryRoot }), repositoryRoot);
+    runHook(JSON.stringify({ transcript_path: transcript, cwd: worktree }), worktree);
+
+    const rootEvents = path.join(repositoryRoot, "docs", "terylon", "monitoring", "sess-spend.jsonl");
+    const worktreeEvents = path.join(worktree, "docs", "terylon", "monitoring", "sess-spend.jsonl");
+
+    assert.strictEqual(fileSystem.existsSync(rootEvents), true);
+    assert.strictEqual(fileSystem.existsSync(worktreeEvents), false);
+
+    const events = fileSystem.readFileSync(rootEvents, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+
+    assert.strictEqual(events.reduce((sum, event) => sum + event.output, 0), 10);
+    assert.strictEqual(events.reduce((sum, event) => sum + event.cacheRead, 0), 1000);
+});
+
+test("a working directory with no repository above it keeps today's location", () =>
+{
+    const workingDirectory = temporaryDirectory();
+    const transcript = path.join(workingDirectory, "sess.jsonl");
+    fileSystem.writeFileSync(transcript, "", "utf8");
+
+    const subagents = path.join(workingDirectory, "sess", "subagents");
+    writeJsonLines(path.join(subagents, "agent-a.jsonl"), [{ type: "assistant", message: { id: "msg_a", usage: usage(5, 0, 0) } }]);
+
+    runHook(JSON.stringify({ transcript_path: transcript, cwd: workingDirectory }), workingDirectory);
+
+    assert.strictEqual(fileSystem.existsSync(path.join(workingDirectory, "docs", "terylon", "monitoring", "sess-spend.jsonl")), true);
+});

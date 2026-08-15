@@ -92,7 +92,11 @@ Every turn re-reads the **entire** cached prefix, and the prefix grows with each
 
 A controller that ends and is re-dispatched starts a **new instance with fresh context**, not where the previous one stopped. Resuming costs re-reading the ledger and nothing else — a constant, and one that does not grow with how much work came before. (This is `Agent(…)`; `SendMessage` is the other mechanism and does retain full history — do not confuse them.)
 
-**So ending the run is an optimisation, not a loss.** Wherever the loop has a natural boundary — a phase completing, a question that must go to a human — take it, record the state in the ledger, and let the next controller start clean. The ledger exists for exactly this, and a controller that never ends is the one paying the most for its own history.
+**So ending the run is an optimisation, not a loss.** Wherever the loop has a natural boundary — a phase completing, a task finishing, a review round closing, a question that must go to a human — take it, record the state in the ledger, and let the next controller start clean. The ledger exists for exactly this, and a controller that never ends is the one paying the most for its own history.
+
+**The controller has a status for taking a boundary that needs nobody:** `CONTINUE <ledger-path> <boundary>`. It asks nothing, so it is not suppressed by `--auto` — and `--auto` is where it earns the most, because it is the mode in which every gate has been removed and no other boundary is left. The boundaries and the statuses beside it are in `leader`.
+
+Measured, this is the largest single cost in the loop: four controller instances in one session took 200 turns between them and 36% of everything the run spent, against 23 implementers at 22%.
 
 ## Dispatch hygiene
 

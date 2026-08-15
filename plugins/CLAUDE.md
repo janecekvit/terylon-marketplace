@@ -336,7 +336,7 @@ So the **dependency** edge still points down; only the **load** points up. Three
 | `terylon-dev` | `develop`, `brainstorm`, `write-plan`, `run-build-loop` | `leader`, `planner`, `developer`, `debugger`, `refactorer`, `security-reviewer`, `performance-reviewer`, `architecture-reviewer`, `edge-case-reviewer` |
 | `terylon-test` | `test`, `verify-test-plan`, `run-build-and-tests`, `run-ui-flows` | `tester` |
 
-`terylon-core` also ships the `SubagentStop` hook that records per-agent spend continuously, plus `shared/oet.js` and `shared/weights.json`.
+`terylon-core` also ships the `SubagentStop` hook that records per-agent spend continuously, plus `shared/oet.js`, `shared/weights.json` and `shared/transcript.js`. The last is the one place that reads a transcript's usage: the hook and `measure-token-spend` both call it, so neither can drift on how a response's repeated records are collapsed — a question they answered wrong, identically and in two copies, until the module existed.
 
 `terylon-ado` also ships the `.mcp.json` that registers the `ado` server. `terylon-github` ships no server at all — the `gh` CLI needs none.
 
@@ -383,7 +383,7 @@ develop (skill, main thread — holds the gates)
     ├── developer ──▶ debugger  (on a failing test)
     │   └── <repo-local specialist>    conditional; capability gate below
     ├── security-reviewer  ┐
-    ├── performance-reviewer│ parallel, read-only
+    ├── performance-reviewer│ all four from one message, read-only
     ├── architecture-reviewer
     ├── edge-case-reviewer ┘
     │   └── <repo-local specialist>    conditional; capability gate below
@@ -400,15 +400,26 @@ The `<repo-local specialist>` branches are **not ours**. A target repository may
 
 **`brainstorm` is Gate 0's second mode, not a step before it.** It ends where that gate ends — at an approved seed-spec — so making it a preceding step would put two intakes in a row. The seam against `planner` is what keeps them from overlapping: `brainstorm` settles *what and why* and may never name a file path, `planner` settles *how* and must.
 
-### Two measured limits on dispatched agents
+### One measured limit on dispatched agents
 
-Both were found by running this pipeline against itself rather than by reading the specification, and both make parts of the diagrams above **aspirational rather than descriptive**. Read them before trusting a fan-out drawn here.
+Found by running this pipeline against itself rather than by reading the specification.
 
 **A skill loaded by name carries instructions, not capability.** The `skills:` field lets an agent open a skill's prose; it does not hand over the tools that prose tells it to call. So **every agent must declare in its own `tools:` each tool the skills it loads will use** — the ADO namespace for an agent driving `update-pr-checklist`, `Bash(node *)` for one running `measure-token-spend`. The `tester` shipped a release documented as driving two ADO transports while declaring no ADO namespace at all, and its first real run returned `BLOCKED` for precisely that reason.
 
-**`Agent` in an agent's `tools:` did not grant nested dispatch.** Measured three times in one session — `tester` twice, `leader` once — a plugin agent dispatched through the `Agent` tool came up holding no `Agent`, no `Task` and no other dispatch tool; `leader` additionally lacked the `TodoWrite` its controller role assumes. The cause is **not established**, so this is a measurement and not a claim about the specification. The consequence is not small: **only the main thread was observed to hold a dispatch tool**, so wherever these files draw an agent fanning out under its own power, that step is unproven.
+**When a capability an agent needs really is absent**, it says so, degrades to in-context work, and marks anything that needed the missing capability unverifiable. It does not quietly substitute the nearest available evidence — a unit fixture modelling N subagents is not a run of N subagents, and reporting it as one is the failure `terylon-test` exists to prevent.
 
-An agent in that position **says the capability is absent, degrades to in-context work, and marks anything that needs a live fan-out unverifiable.** It does not quietly substitute the nearest available evidence — a unit fixture modelling N subagents is not a run of N subagents, and reporting it as one is the failure `terylon-test` exists to prevent.
+#### Retired: nested dispatch, and the tester's ADO namespace
+
+This section used to carry two further limits in the present tense. **Both were re-probed on 2026-08-14 against the installed plugins and neither holds.** They are recorded here as history so the next reader does not rediscover them from a stale claim.
+
+| Retired claim | What the probe returned |
+|---|---|
+| `Agent` in an agent's `tools:` does not grant nested dispatch; only the main thread was observed to hold a dispatch tool | `Agent=HELD` on both `terylon-dev:leader` and `terylon-test:tester`; the leader then **invoked** it and its child returned `PONG`. Proven by invocation, not by introspection. |
+| `tester` declares no ADO namespace and returns `BLOCKED` | `ADO_NAMESPACE: HELD` — fixed in a later release. |
+
+**The fan-outs drawn throughout these files are therefore descriptive, not aspirational.** They were qualified for as long as the first claim stood; that qualification is gone.
+
+One narrower finding from the same probe **does** still hold, and is not retired: `leader` reports `TODOWRITE: ABSENT`, so a controller cannot keep a visible task list of its own. The ledger is what it has instead, which is why `run-build-loop` specifies the ledger the way it does.
 
 Given several work items, `develop` runs this chain once per item with the leaders **concurrent** — one seed-spec, worktree and branch each. The shape does not change; it multiplies. Gates stay on the main thread and are hosted as each leader returns, which is also why every question has to name its work item.
 
@@ -420,7 +431,7 @@ test (skill, main thread — holds the write-back gate, reports token spend)
     ├── update-pr-checklist (read) ......... terylon-forge; the test plan, and the work item it links
     ├── update-work-item-checklist (read) .. terylon-forge; the acceptance criteria of that work item
     ├── verify-test-plan ................... engine: triage, coverage, routing, evidence
-    │   └── per-claim subagents            one round; claims are independent
+    │   └── per-claim subagents            all from one message; claims are independent
     │       ├── run-build-and-tests        the project's build and suite — a shell is enough
     │       ├── run-ui-flows               the interface, through browser automation
     │       └── <repo-local specialist>    conditional; capability gate below
