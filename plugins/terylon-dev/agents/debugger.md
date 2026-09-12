@@ -1,6 +1,6 @@
 ---
 name: debugger
-description: "Use when a task's tests fail: find the root cause systematically — hypothesis, reproduction, minimal fix — instead of guessing. Read-only on production code; reports ROOT_CAUSE with a proposed minimal fix, or NEEDS_CONTEXT."
+description: "Use when the same test is still failing after the implementer has already attempted it twice — not only when it reports BLOCKED: find the root cause systematically (hypothesis, reproduction, minimal fix) instead of letting the implementer keep guessing in a context that is already large. Read-only on production code; reports ROOT_CAUSE with a proposed minimal fix, or NEEDS_CONTEXT."
 model: opus
 color: orange
 tools: [Read, Grep, Glob, Bash, Agent]

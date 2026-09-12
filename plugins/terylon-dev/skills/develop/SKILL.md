@@ -214,7 +214,9 @@ So **do not avoid gates to save tokens** — a gate resets the context and is th
 
 **`CONTINUE` is that reset without a human in it.** A gate does two things at once: it pauses for a person, and it ends the instance. `--auto` used to remove both, which is why one leader ran a whole build and paid quadratically for it. The status separates them — the pause is for the user, the ending is for the cost — so **`--auto` suppresses the pause and never the `CONTINUE`.** It is the mode where the status matters most, because it is the one with no gates left.
 
-Measured over one session: four leader instances took 200 turns and 36% of everything spent, against 23 implementers at 22% and every review lens together under 12%. The controller is the pipeline's largest single cost, and its length is the whole of it.
+**Cost grows with the square of an agent's turn count**, so the tier that pays most is whichever one has no boundary to end at. The controller has one — it ends and is re-dispatched, and a gate is what ends it. **The implementer does not**, which is why it carries a turn budget instead.
+
+**So do not trade a gate away to save tokens.** A gate resets a context and is the cheapest thing in this loop. Where a real figure is wanted, run `measure-token-spend` against an actual session rather than reasoning from a remembered one.
 
 **Batching answers is still right, for a smaller reason.** Each re-dispatch pays that constant again, so answering one question, re-dispatching, then answering the next pays it twice. When a return needs several answers — every question in a `NEEDS_CLARIFICATION`, every edit at a Gate — ask them one message at a time as the tools require, then **fold all the answers into the seed-spec and re-dispatch once.** A real saving, but a constant one against a quadratic: never trade a gate away to get it.
 

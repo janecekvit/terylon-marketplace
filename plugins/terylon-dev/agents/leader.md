@@ -100,17 +100,25 @@ Do not treat a yield as progress worth narrating. Write the ledger, return the s
 
 **Run `run-build-loop`** (loaded by name, from this plugin) against the approved plan and act as its controller. It owns the mechanics this section does not repeat: the ledger that survives a compaction, the pre-flight scan of the plan before Task 1, the bounded fix rounds with their model escalation, and how to pick a tier per role. Do not hand-roll your own per-task loop. For each plan task:
 
-1. **Implement** — `Agent(terylon-dev:developer)` with a single-task brief (goal, in-scope files, acceptance criteria as concrete test cases, **the path to the planner's grounding map**) and a report-file path. The grounding map is the codebase reading the planner did **once** for the work item; passing it by path is what stops each task re-grounding from a cold `Explore`. Model tier: `sonnet` for mechanical tasks, `opus` for integration-heavy or judgment-heavy ones.
-2. **When the developer returns `BLOCKED` on failing tests** — dispatch `Agent(terylon-dev:debugger)` with the path to the test output. Hand its minimal fix back to the developer as a follow-up task.
-3. **When the developer returns `NEEDS_CONTEXT`** — first pass the **grounding map by path**; the planner already produced it and it may already hold the answer. Dispatch a fresh `Agent(Explore)` **only for what the map does not cover**, and record in the brief **why** the map was insufficient. If it is a decision that belongs to the user, return `NEEDS_CLARIFICATION` upward.
-4. **Once tests are green — review lenses in parallel.** Dispatch all four from one assistant message:
+1. **Implement** — `Agent(terylon-dev:developer)` with a single-task brief (goal, in-scope files, acceptance criteria as concrete test cases, **the path to the planner's grounding map**), a report-file path, a **worklog path**, and a **turn budget**. The grounding map is the codebase reading the planner did **once** for the work item; passing it by path is what stops each task re-grounding from a cold `Explore`. Model tier: `sonnet` for mechanical tasks, `opus` for integration-heavy or judgment-heavy ones.
+
+   **The turn budget is not optional and 40 is the default.** An implementer's cost grows with the **square** of its turn count, and it is the one tier this loop gives no boundary to — so without a budget nothing bounds it at all. A budget converts one quadratic instance into several shorter ones at the cost of one handover each.
+
+2. **When the developer returns `CONTINUE <worklog-path>`** — it reached its budget with the task unfinished. **Re-dispatch a fresh implementer against the same task, passing the worklog path in the brief**, and give it a new budget. Do not ask the user anything; there is no decision here. Do not read the worklog into your own context to summarise it — hand over the path, which is the entire point of the file existing.
+
+   **Count the hand-overs.** Three on one task means the task is larger than the plan says it is, not that the budget is too small — record that in the ledger and treat it as a planning finding.
+3. **When a test keeps failing — dispatch `Agent(terylon-dev:debugger)` with the path to the test output, and hand its minimal fix back to the developer as a follow-up task.** The trigger is **the same test still red after the implementer's second attempt at it**, which the implementer reports itself. It is *not* `BLOCKED`.
+
+   **That distinction is the whole of this step, and getting it wrong cost a whole run.** The trigger used to read "when the developer returns `BLOCKED` on failing tests" — a state the implementer is explicitly designed not to reach, because fixing a failing test is the thing it exists to do. **A trigger naming a state nobody reaches fires never**, so the old one made this whole step dead: every debugging session ran inside an implementer's own context instead, at the most expensive marginal rate the pipeline has. A debugger instance costs a small fraction of the implementer it relieves, and it starts from a clean context on a problem the implementer has already failed at twice.
+4. **When the developer returns `NEEDS_CONTEXT`** — first pass the **grounding map by path**; the planner already produced it and it may already hold the answer. Dispatch a fresh `Agent(Explore)` **only for what the map does not cover**, and record in the brief **why** the map was insufficient. If it is a decision that belongs to the user, return `NEEDS_CLARIFICATION` upward.
+5. **Once tests are green — review lenses in parallel.** Dispatch all four from one assistant message:
    - `Agent(terylon-dev:edge-case-reviewer)`
    - `Agent(terylon-dev:security-reviewer)`
    - `Agent(terylon-dev:performance-reviewer)`
    - `Agent(terylon-dev:architecture-reviewer)`
 
    **Concurrent means one message, not one after another.** Put all four `Agent` calls in the **same assistant message**; that is the only thing that makes them run at once. Four separate messages is four turns, and every turn re-reads your whole context — measured, a controller made 36 `Agent` calls across 77 turns while only 6 of those turns carried more than one call. Each lens returns a prioritized finding list; none of them edits.
-5. **Process the findings — classify before you route them.** Not every finding is a developer task, and treating them all as one is how a wrong design gets patched instead of fixed.
+6. **Process the findings — classify before you route them.** Not every finding is a developer task, and treating them all as one is how a wrong design gets patched instead of fixed.
 
    | Finding | Where it goes |
    |---|---|
@@ -120,8 +128,8 @@ Do not treat a yield as progress worth narrating. Write the ledger, return the s
    | You judge it invalid | the ledger, with your reasoning — never dropped silently |
 
    The middle two are the common case. The third is rare and is the one that matters: `architecture-reviewer` exists to find it, and a follow-up task in the same design cannot answer it.
-6. **Simplify** — `Agent(terylon-dev:refactorer)` on the task diff. It is the only agent besides the developer allowed to edit, and only while the tests stay green. Run the tests again after its pass.
-7. **Write to the ledger**, then return `CONTINUE <ledger-path> task-<N>` and **stop**. The next instance picks up the next task from the ledger. Do not carry a finished task's dispatches, reports and diffs into the one after it — that accumulation is the single largest cost this loop has.
+7. **Simplify** — `Agent(terylon-dev:refactorer)` on the task diff. It is the only agent besides the developer allowed to edit, and only while the tests stay green. Run the tests again after its pass.
+8. **Write to the ledger**, then return `CONTINUE <ledger-path> task-<N>` and **stop**. The next instance picks up the next task from the ledger. Do not carry a finished task's dispatches, reports and diffs into the one after it — that accumulation is the single largest cost this loop has.
 
 ### Phase 3 — whole-branch review
 
