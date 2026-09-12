@@ -90,7 +90,7 @@
     {
       "name": "terylon-dev",
       "source": "./plugins/terylon-dev",
-      "description": "Developer pipeline — from a vague idea or a user story to implemented, tested code through brainstorm → plan → build (TDD) → finish, with an autonomous leader agent, parallel review lenses, the plan format and the build loop. Requires terylon-git, terylon-forge, one adapter, and terylon-core.",
+      "description": "Developer pipeline — from a vague idea or a user story to implemented, tested code through brainstorm → plan → build (TDD) → finish, with an autonomous leader agent, parallel review lenses, the plan format and the build loop. Also dispatches long unattended background runs that commit after every step, so an interruption costs one step. Requires terylon-git, terylon-forge, one adapter, and terylon-core.",
       "category": "role",
       "keywords": [
         "developer",
@@ -99,6 +99,7 @@
         "planning",
         "brainstorming",
         "orchestration",
+        "unattended",
         "forge"
       ]
     },

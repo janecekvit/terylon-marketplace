@@ -333,10 +333,12 @@ So the **dependency** edge still points down; only the **load** points up. Three
 | `terylon-ado` | `forge-ops` (the ADO body) | — |
 | `terylon-github` | `forge-ops` (the GitHub body) | — |
 | `terylon-product` | `create-user-story`, `create-feature` | — |
-| `terylon-dev` | `develop`, `brainstorm`, `write-plan`, `run-build-loop` | `leader`, `planner`, `developer`, `debugger`, `refactorer`, `security-reviewer`, `performance-reviewer`, `architecture-reviewer`, `edge-case-reviewer` |
+| `terylon-dev` | `develop`, `brainstorm`, `write-plan`, `run-build-loop`, `background-run` | `leader`, `planner`, `developer`, `debugger`, `refactorer`, `security-reviewer`, `performance-reviewer`, `architecture-reviewer`, `edge-case-reviewer` |
 | `terylon-test` | `test`, `verify-test-plan`, `run-build-and-tests`, `run-ui-flows` | `tester` |
 
 `terylon-core` also ships the `SubagentStop` hook that records per-agent spend continuously, plus `shared/oet.js`, `shared/weights.json` and `shared/transcript.js`. The last is the one place that reads a transcript's usage: the hook and `measure-token-spend` both call it, so neither can drift on how a response's repeated records are collapsed — a question they answered wrong, identically and in two copies, until the module existed.
+
+`background-run` is the one component in `terylon-dev` that the pipeline never calls. It exercises git and the `claude --bg` CLI, so the *exercises* test alone would allow it in `terylon-git` — and that is exactly the failure mode the placement rule warns about, because `terylon-git` is a dependency of everything and would install it for every consumer. Its only audience is the operator driving this plugin, so it lives beside them. Being unreachable from `develop` is not evidence of a misplacement; it is a skill the operator invokes, not a persona the loop dispatches.
 
 `terylon-ado` also ships the `.mcp.json` that registers the `ado` server. `terylon-github` ships no server at all — the `gh` CLI needs none.
 
