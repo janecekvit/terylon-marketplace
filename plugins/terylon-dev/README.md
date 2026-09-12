@@ -70,7 +70,9 @@ The `<repo-local specialist>` branches are **not part of this plugin**. A target
 - **`write-plan`** — the implementation plan's format: header, global constraints, file map, task shape with interfaces, the no-placeholder rules and the self-review. Written for an implementer who sees only their own task. `planner` emits its artifacts in this format.
 - **`run-build-loop`** — the controller's mechanics for executing a plan: the ledger that survives a compaction, the pre-flight scan before the first task, the bounded fix rounds with their model escalation, and how to pick a tier per role. `leader` runs it rather than hand-rolling a per-task loop.
 
-The last two shipped in `terylon-core` until it moved them out. They moved here because nothing outside this plugin consumes them, and the root installs for everyone.
+- **`background-run`** — hands a long piece of work to a background agent and **writes the commit-after-every-step discipline into the prompt it dispatches**, so an interruption costs one step rather than the run. It reports the session id, the worktree and the branch, because `claude --bg` prints none of the last three. It stands outside the `develop` chain: it dispatches a session, not a persona, and nothing in the pipeline calls it.
+
+`write-plan` and `run-build-loop` shipped in `terylon-core` until it moved them out. They moved here because nothing outside this plugin consumes them, and the root installs for everyone. `background-run` is here for the same reason and not because it belongs to the pipeline: it exercises git and `claude --bg` and nothing else, so `terylon-git` could host it — but `terylon-git` installs for every consumer of every plugin, and the operator's own session is the only audience that wants this.
 
 **Agents:**
 
@@ -122,14 +124,17 @@ It used to reuse six skills from the `superpowers` plugin. Three were replaced b
 ```
 /terylon-dev:develop <item> [<item> …] [--auto | --dry-run] [--here] [--no-brainstorm]
 /terylon-dev:brainstorm <idea> [--no-decompose]
+/terylon-dev:background-run <work> [--auto | --dry-run]
 ```
 
-- `--dry-run` — stops after the plan is approved (a plan, no code)
-- `--auto` — skips the pauses at the gates; `leader` runs the whole loop on its own. The git rules still apply.
+- `--dry-run` — `develop`: stops after the plan is approved (a plan, no code). `background-run`: prints the composed prompt and the exact command, and dispatches nothing.
+- `--auto` — `develop`: skips the pauses at the gates; `leader` runs the whole loop on its own. `background-run`: dispatches without waiting for the confirmation. The git rules still apply to both.
 - `--here` — stay in the current checkout instead of an isolated worktree
 - `--no-brainstorm` — run the ordinary intake at Gate 0 however vague the item looks
 - `--no-decompose` — `brainstorm` only: one seed-spec, whatever the design contains
 
 **An item too vague to plan enters `brainstorm` instead of the intake.** Gate 0 triages on the item itself — an outcome and a way to know it is met means intake, a sentence of intent means brainstorm — and announces which mode it took. A brainstorm can turn one item into several, so the item count is restated before any workspace exists and each resulting item is routed on its own. Under `--auto` the mode is skipped and said to be skipped: it is a dialogue, and there is no unattended form of one.
+
+**`background-run` also triggers without being typed**, on the operator asking for work to leave the session — *run this in the background*, *dispatch this overnight*, *start it while I'm away*. It deliberately does **not** trigger on work merely looking long: length is a property of the work, dispatching is a property of the request, and a length trigger would hand an unsupervised agent a task the operator meant to watch. Its default pauses for confirmation before dispatching; `--auto` dispatches at once and `--dry-run` prints the composed prompt and stops. The reasoning is in that skill's `references/invocation-decision.md`.
 
 **Several items fan out.** An item is an ADO work item URL, a path to a seed-spec `brainstorm` already wrote, or a prose description; prose items are separated by `---` on its own line, and prose without a separator is one item however many bullets it contains. Up to ten, with a confirmation above five. Each gets its own seed-spec, worktree and `leader`, and the leaders run concurrently. Intake still happens one item at a time — it is interactive — but from there the builds proceed in parallel, and each leader's gate is hosted the moment it returns rather than at a barrier. Every question names the work item it belongs to, because with several builds live an unlabelled question gets answered against the wrong story. Worktrees stop being optional at that point, so `--here` is refused with more than one item.
