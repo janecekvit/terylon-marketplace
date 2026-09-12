@@ -60,7 +60,18 @@ The earlier table loaded this plugin with `claude --plugin-dir`, which points at
 
 **No step was taken beyond the install.** The dependencies came with it.
 
-**What this does not establish, precisely.** The source was a local path, not the git remote, because the marketplace's `ref` comes from `extraKnownMarketplaces` in settings and the committed declaration is `main` — `plugin marketplace add` takes no `--ref`, and an add whose source disagrees with the declaration is refused outright:
+**Measured from the git remote on 2026-09-12, once !103 was on `main`.** Into a fresh `CLAUDE_CONFIG_DIR`: `plugin marketplace add https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace` cloned it at `f2edb86`, `plugin install terylon-dev@terylon` reported *"Successfully installed … (+ 3 dependencies)"*, and the installer's cache holds `background-run` beside its four siblings. **No step beyond the install.** The clone was the last untested hop and it is tested.
+
+**One thing came out of it that is worth carrying forward.** Declaring the marketplace in `extraKnownMarketplaces` **with a `ref`** and then running `plugin marketplace add <url>` is **refused** by Claude Code `2.1.269`:
+
+```
+Cannot add marketplace "terylon": its network source differs from the one declared for it
+in settings (kind, target, or a fetch-shaping field such as headers / ref / path / sparsePaths)
+```
+
+`plugin marketplace add` takes no `--ref`, so the two cannot be made to match while the declaration pins one. The run above therefore used no declaration at all and let the add write its own. **The worker image does declare a `ref` and its build works** — it pins Claude Code `2.1.215`, which has no such check. That is a latent build failure waiting on a version bump, and it is recorded in `homelab/BACKLOG.md` rather than here, because it belongs to the image rather than to this skill.
+
+**What the earlier local-path run established, kept because it is the half this one does not repeat.** The source was a local path, not the git remote, because the marketplace's `ref` comes from `extraKnownMarketplaces` in settings and the committed declaration is `main` — `plugin marketplace add` takes no `--ref`, and an add whose source disagrees with the declaration is refused outright:
 
 ```
 Cannot add marketplace "terylon": its network source differs from the one declared for it
