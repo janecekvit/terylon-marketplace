@@ -78,7 +78,11 @@ Cannot add marketplace "terylon": its network source differs from the one declar
 in settings (kind, target, or a fetch-shaping field such as headers / ref / path / sparsePaths)
 ```
 
-So installing this branch from the git remote is not possible until it is on `main`. **The untested hop is the clone, and only the clone**: what happens after it — resolving the plugin, pulling its dependencies, landing the skill in the cache — is the table above. Once this merges, the confirmation is one command in a scratch config directory: add the marketplace by its URL and install `terylon-dev@terylon`, then check that `background-run` is among the cached skills.
+**That sentence originally continued "so installing this branch from the git remote is not possible until it is on `main`", and it was wrong.** `add` takes no `--ref`, but **the ref travels as a fragment on the URL**, and a declaration pinning `ref: <branch>` is matched by `add '<url>#<branch>'`. Proven on 2026-09-12 against a branch that had never been merged: the clone landed on the branch's own commit, and `plugin install` produced `terylon-dev` **1.3.0** with two dependencies that do not exist on `main`'s **1.9.3** — so it demonstrably came from the branch.
+
+**The mechanism was already known when that sentence was written**, having just been used to fix the worker image's own marketplace step. What was missing was going back to retest the claim it invalidated. A measurement that is not revisited after the thing it measured changes is a claim, and this file exists to hold measurements.
+
+**Use it for development only, and never commit the branch ref.** `services/claude-agent/claude-settings.json` declares `ref: main`, and that is what the worker image builds against; a branch ref there would build every worker off somebody's feature branch. The development form belongs in a scratch `CLAUDE_CONFIG_DIR` that touches nothing shared.
 
 ## Measured: the controlled interruption
 
