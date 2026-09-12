@@ -86,9 +86,11 @@ Two rules that decide the rest:
 
 **Turn count beats token price.** Cost and wall-clock scale with how many turns a subagent takes, and the cheapest models routinely take two to three times the turns on multi-step work — costing more in total. Keep a mid tier as the floor for reviewers and for any implementer working from prose rather than from code in the plan.
 
-## A long controller run is itself the cost
+## A long run is itself the cost, whichever agent is having it
 
-Every turn re-reads the **entire** cached prefix, and the prefix grows with each turn, so a controller's cache-read is **quadratic in its turn count**. Double a run's length and it roughly quadruples; split one run into `k` shorter ones and it drops to about `1/k`.
+Every turn re-reads the **entire** cached prefix, and the prefix grows with each turn, so **any** agent's cache-read is **quadratic in its turn count**. Double a run's length and it roughly quadruples; split one run into `k` shorter ones and it drops to about `1/k`.
+
+**This applies to every tier, and the controller is not the one it bites hardest.** It is stated here first because the controller is what this skill is about — and because the controller already has the fix: it ends at a boundary and is re-dispatched. **The implementer has no such boundary**, which is why it carries a turn budget instead, and why it is the tier to watch.
 
 A controller that ends and is re-dispatched starts a **new instance with fresh context**, not where the previous one stopped. Resuming costs re-reading the ledger and nothing else — a constant, and one that does not grow with how much work came before. (This is `Agent(…)`; `SendMessage` is the other mechanism and does retain full history — do not confuse them.)
 
@@ -96,7 +98,27 @@ A controller that ends and is re-dispatched starts a **new instance with fresh c
 
 **The controller has a status for taking a boundary that needs nobody:** `CONTINUE <ledger-path> <boundary>`. It asks nothing, so it is not suppressed by `--auto` — and `--auto` is where it earns the most, because it is the mode in which every gate has been removed and no other boundary is left. The boundaries and the statuses beside it are in `leader`.
 
-Measured, this is the largest single cost in the loop: four controller instances in one session took 200 turns between them and 36% of everything the run spent, against 23 implementers at 22%.
+**The shape, and it follows from the mechanism rather than from any run:**
+
+```text
+  why splitting a run is not a wash
+
+  one agent, N turns        turn 1 re-reads nothing
+                            turn 2 re-reads turn 1
+                            turn 3 re-reads turns 1-2          cost ∝ N²
+                            ...
+                            turn N re-reads turns 1..N-1
+
+  k agents, N/k turns each  each pays (N/k)², and there are k of them
+                            total ∝ k · N²/k² = N²/k       cost drops to ~1/k
+
+  SO THE SAVING IS THE SPLIT ITSELF, not the tier and not the model. Doubling
+  an agent's length roughly quadruples what it costs; halving it roughly
+  quarters it. What an agent WRITES is a rounding error against what it
+  RE-READS on every turn.
+```
+
+**Measure rather than reason from an example.** `measure-token-spend` reports a run's actual per-tier split; where a figure is needed, take it from there. No worked number is kept in this file, deliberately — the one that used to be here outlived the run it came from and aimed the loop at the wrong tier for as long as it survived.
 
 ## Dispatch hygiene
 
