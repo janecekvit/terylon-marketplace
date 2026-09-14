@@ -36,6 +36,33 @@ terylon-core .................. delegate-to-repo-agents, measure-token-spend
 
 ## Configuration
 
+## Authentication, and why it is pinned rather than left to the default
+
+**The server's own default is `interactive`, and in an unattended environment that default does not fail — it waits.** Measured across one pipeline run: twenty calls to this server, every one of them spending the full 1800-second tool timeout and returning nothing, **ten hours, a seventh of the run's entire elapsed time**. There was no browser, no `az` CLI and nobody to answer a login prompt, so the credential chain blocked until the caller gave up. An agent eventually wrote itself a note to stop calling Azure DevOps at all.
+
+So `-a` is passed explicitly. The default here is `pat`, which reads a base64-encoded Personal Access Token from `PERSONAL_ACCESS_TOKEN` and **fails in under a second** with a message naming the missing variable. A wrong configuration that says so immediately is worth far more than a right one that hangs.
+
+**The type is a variable with a default, so this plugin stays general.** `${VAR:-default}` expansion is supported in an MCP server's `args`, which is what lets a consumer pick `azcli` where the Azure CLI is signed in, `envvar` or `env` where a credential is already in the environment, or `interactive` where a human is genuinely present — without editing this file or overriding the whole server entry.
+
+What the default buys is that an unconfigured consumer **fails** rather than hangs. `interactive` is the server's own default and is the wrong one anywhere nobody can answer a prompt.
+
+| Variable | |
+|---|---|
+| `PERSONAL_ACCESS_TOKEN` | the PAT, base64-encoded **with a leading colon** — see below. Required, and the server names it if it is missing |
+
+**The encoding is `base64(":" + PAT)`, not `base64(PAT)`, and the difference is not visible in any error message.** The server's own wording is "base64-encoded Azure DevOps Personal Access Token", which reads as the token alone; what it actually wants is the Basic-auth form, where the token is the password and the user part is empty. Measured against a live organisation with the same valid token:
+
+```text
+  PERSONAL_ACCESS_TOKEN=$(printf %s "$PAT"   | base64 -w0)   -->  401
+  PERSONAL_ACCESS_TOKEN=$(printf ':%s' "$PAT" | base64 -w0)   -->  the work item
+```
+
+A 401 from a token that is correct is the second-worst failure this server has, behind the hang: it points the reader at their permissions rather than at their encoding.
+
+| `TERYLON_ADO_AUTHENTICATION` | the type: `pat` (default), `azcli`, `envvar`, `env` or `interactive`. Choose `interactive` only where a human is actually present to answer the prompt |
+
+**Do not put the token in this file or in any committed settings.** It is read from the environment, and the plugin never sees it.
+
 **`TERYLON_ADO_ORG` is required and has no default.** Set it in the consuming repository's `.claude/settings.json`:
 
 ```json
