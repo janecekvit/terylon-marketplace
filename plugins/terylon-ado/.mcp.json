@@ -2,7 +2,13 @@
   "mcpServers": {
     "ado": {
       "command": "npx",
-      "args": ["-y", "@azure-devops/mcp@2.9.0", "${TERYLON_ADO_ORG}"]
+      "args": [
+        "-y",
+        "@azure-devops/mcp@2.9.0",
+        "${TERYLON_ADO_ORG}",
+        "-a",
+        "${TERYLON_ADO_AUTHENTICATION:-pat}"
+      ]
     }
   }
 }
