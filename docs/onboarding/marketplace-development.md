@@ -28,7 +28,7 @@ Override `ref` in your **local** `.claude/settings.local.json`. It is gitignored
 .claude/settings.local.json  gitignored, yours    ref: feat/<your-branch>
 ```
 
-**Bump the version on the branch too.** The consumer-side fetch compares `plugin.json#version` and nothing else, so a branch whose version matches `main` installs nothing new — even though the ref is different. Patch on every further commit of the branch; minor on the branch's first commit.
+**Bump the version on the branch too.** The consumer-side fetch compares `plugin.json#version` and nothing else, so a branch whose version matches `main` installs nothing new — even though the ref is different. Which digit to move is stated under *Versioning* in [`plugins/CLAUDE.md`](../../plugins/CLAUDE.md).
 
 ## The cycle
 

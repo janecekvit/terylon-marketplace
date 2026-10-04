@@ -12,7 +12,7 @@ An edit to a skill in this repository does nothing for anyone until seven things
   │ 2  edit the skill / agent / manifest                                  │
   │        │                                                              │
   │ 3  BUMP plugins/<slug>/.claude-plugin/plugin.json#version             │
-  │        │                     patch within a branch, minor on a new one│
+  │        │                     which digit: plugins/CLAUDE.md           │
   │        │                                                              │
   │ 4  commit  (explicit user consent, every time)                        │
   │        │                                                              │

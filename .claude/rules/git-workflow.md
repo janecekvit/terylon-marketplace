@@ -6,7 +6,7 @@ These rules apply to **every** git operation in this repository. They override d
 >
 > The hook resolves the branch from the directory the operation targets — the worktree holding the edited file, or `git -C <path>` when given — not from `CLAUDE_PROJECT_DIR`. That variable keeps pointing at the original checkout, so reading it made the guard see `main` and refuse every write inside a linked worktree that was correctly on a feature branch.
 >
-> The hook is Node.js, chosen for startup latency — it runs on every tool call. See `.claude/rules/scripting.md`.
+> The hook is Node.js; why is stated in `.claude/rules/scripting.md`.
 
 ## Hard rules
 
@@ -53,4 +53,4 @@ Refuse the commit, explain that `main` is protected by this rule, and offer to c
 
 Every commit that changes a plugin must bump that plugin's `plugin.json#version` — consumers only re-fetch when this field changes.
 
-**Which digit is decided by the branch, not by the size of the change:** patch for every further commit on the branch you are on, minor for the first commit from a new branch, major only when the user explicitly asks. A branch that rewrites half a plugin still moves the patch digit. See `plugins/CLAUDE.md`.
+**Which digit moves is stated once, under *Versioning* in `plugins/CLAUDE.md`**, and is not repeated here.

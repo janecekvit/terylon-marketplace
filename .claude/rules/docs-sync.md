@@ -71,7 +71,7 @@ Symptom first — the symptom is the search term. Include failures in the toolin
 | Where | Do |
 |---|---|
 | In an **ADR** | do not edit the decision away. Mark it superseded and write the new one, so the reasoning that was overturned stays readable |
-| In any other article | replace the stale sentence outright. Two paragraphs that disagree are worse than either alone |
+| In any other article | replace the stale sentence outright — `claude-md-sync.md`, *How to update* |
 
 A constraint that turns out to be a tooling limitation dressed as a decision must be corrected **explicitly**, or the stale rationale keeps arguing against fixing it.
 
@@ -95,9 +95,7 @@ One thing is specific to this store and is stated here: **put the load-bearing f
 
 ## How to update
 
-- **Edit the affected sections only.** Do not rewrite an article to make room for a sentence.
-- **Replace a stale sentence rather than appending a new one.** Two paragraphs that disagree are worse than either alone: the reader cannot tell which is current, so they trust neither.
-- Label a fact's confidence in the form `claude-md-sync.md` prescribes. A reader who cannot tell a guess from a certainty either over-trusts the first or re-runs the second.
-- Keep every claim next to its evidence. A claim without how it was established invites the next person to simplify it away.
+**The editing rules both stores share are stated once, in `claude-md-sync.md`, under *How to update*; the form a fact's confidence is labelled in is there too, under *Something was VERIFIED*.** Two are specific to this store:
+
 - **Update the `## Where it lives` table when a file it names is renamed, moved or deleted.** That table is also the staleness detector, so a wrong row is worse than a missing one.
 - Keep the section's `README.md` index in agreement with what the article now says.

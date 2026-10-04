@@ -43,11 +43,11 @@ Each operation below maps to a recipe in `references/forge-ops.md`. The referenc
 | `reply-to-thread` | `repo_pull_request_thread_write(action="reply")` | address-pr-comments | Reply to an existing thread; does NOT change status. |
 | `update-thread-status` | `repo_pull_request_thread_write(action="update_status")` | *(none — exposed for completeness)* | Change a thread's status. Policy-guarded: never auto-resolve to `2` (fixed). |
 | `update-pr-description` | `repo_pull_request_write(action="update")` | write-pr-description | Overwrite the PR description field (**≤4000 chars, counted over the whole field**); Claude-region locate-or-append stays caller-side. |
-| `fetch-work-item` | `wit_work_item(action="get")` | create-user-story, create-feature | Fetch a work item with `expand="relations"`; HTML fields pass as-is. |
+| `fetch-work-item` | `wit_work_item(action="get")` | create-user-story, create-feature | Fetch a work item with `expand="relations"` and report it in the work-item keys (`type`, `title`, `description`, `acceptanceCriteria`, `parent`, `children`, `planning`, …); HTML fields pass as-is. |
 | `build-pr-diff` | — (git) | review-pr, write-pr-description, pr-reviewer | Build the local PR diff. TWO flag profiles — never `git diff HEAD`. |
-| `create-work-item` | `wit_work_item_write(action="create")` | create-user-story | Create a work item; set field values incl. Markdown `System.Description`. Cannot set the parent relation. |
-| `link-work-item-parent` | `wit_work_item_link_write(action="link")` | create-user-story | Link a work item as a child of a parent (`type: "parent"`). |
-| `update-work-item` | `wit_work_item_write(action="update")` | create-feature | Update fields on an existing work item (e.g. `System.Title`, `System.Description`). JSON-Patch; no `format` arg — HTML is the field default. |
+| `create-work-item` | `wit_work_item_write(action="create")` | create-user-story, create-feature | Create a work item from the work-item keys; every multiline key is written Markdown. Cannot set the parent relation. |
+| `link-work-item-parent` | `wit_work_item_link_write(action="link")` | create-user-story, create-feature | Link `child` under `parent` (`type: "parent"`), verified by reading the parent back. |
+| `update-work-item` | `wit_work_item_write(action="update")` | create-feature, update-work-item-checklist | Replace the given work-item keys on an existing item. JSON-Patch; the single form has no `format` arg, so the reference's `update_batch` form carries it. |
 | `create-pull-request` | `repo_pull_request_write(action="create")` | create-pr, develop (terylon-dev) | Create a PR (source→target); can associate work items at creation via `workItems` (space-separated IDs). |
 | `check-preconditions` | — (env + git) | create-pr | Verify the adapter can be used at all **before** any other call. |
 | `list-pull-requests` | `repo_pull_request(action="list")` | create-pr | List a branch's pull requests, filtered by source ref and status. Returns the normalised `isOpen` / `isDraft` / `author`; the raw numeric status stays here. |

@@ -28,7 +28,7 @@ the surrounding code.
 
 - **An adapter enabled** — `terylon-ado` or `terylon-github`. The port registers no server of its own: the adapter supplies `forge-ops`, and on Azure DevOps the `ado` MCP server with it. `resolve-forge` decides which one a run targets, and a missing adapter stops the run rather than being worked around.
 - The PR's repo cloned locally; current working directory is that clone (so `git diff` works against fetched refs).
-- **REQUIRED SUB-SKILL: `code-review`** (from `terylon-git`, loaded by name). This skill delegates review judgment to `code-review`; it handles only transport (PR URL → diff → ADO threads). `terylon-forge` declares `dependencies: ["terylon-git"]`, so the engine is always installed alongside it.
+- **REQUIRED SUB-SKILL: `code-review`** (from `terylon-git`, loaded by name). This skill delegates review judgment to `code-review`; it handles only transport (PR URL → diff → review threads on the forge). `terylon-forge` declares `dependencies: ["terylon-git"]`, so the engine is always installed alongside it.
 
 ## Workflow
 

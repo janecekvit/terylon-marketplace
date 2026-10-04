@@ -62,9 +62,9 @@ The adapter therefore **registers no MCP server at all**, and a repository that 
 | `reply-to-thread` | `gh api …/pulls/{n}/comments -F in_reply_to=<comment-id>` |
 | `update-thread-status` | GraphQL `resolveReviewThread` / `unresolveReviewThread` |
 | `update-pr-description` | `gh pr edit <n> --body-file <path>` |
-| `fetch-work-item` | `gh issue view <n> --json number,title,body,state,labels,comments,url` |
+| `fetch-work-item` | `gh issue view <n> --json number,title,body,state,labels,comments,url`, plus `gh api …/issues/{n}/sub_issues` for `children` — reported in the work-item keys |
 | `build-pr-diff` | git — identical to the ADO body, no forge involved |
-| `create-work-item` | `gh issue create --title --body-file --label` |
+| `create-work-item` | `gh label create` for any missing label, then `gh issue create --title --body-file --label` — the body composed from the work-item keys |
 | `link-work-item-parent` | `gh api repos/{owner}/{repo}/issues/{n}/sub_issues -F sub_issue_id=<database-id>` |
 | `update-work-item` | `gh issue edit <n> --body-file <path>` |
 | `create-pull-request` | `gh pr create --base --head --title --body-file` |
@@ -81,7 +81,7 @@ The adapter therefore **registers no MCP server at all**, and a repository that 
 
 Read `references/forge-ops.md` for each operation's exact arguments, JSON shape and gotchas.
 
-## The five asymmetries a transport must not paper over
+## The six asymmetries a transport must not paper over
 
 These are where the two bodies genuinely differ. The port declares the difference; this table says which side GitHub is on.
 
@@ -91,6 +91,7 @@ These are where the two bodies genuinely differ. The port declares the differenc
 | Acceptance criteria | a section of the issue **body** | there is no dedicated field. The port normalises both to markdown, so the section heading is the contract and a transport must not invent a second location |
 | Item type | a **label**, plus the sub-issue relation for hierarchy | nothing enforces it. A missing label is a convention violation, not an API error, so it fails silently |
 | Line breaks | soft-wrapped by the renderer | the "never hard-wrap" rule still holds. It is right on both, for different reasons |
+| Planning, estimate, priority | **not carried** — no area, iteration, points or priority field | a caller that drops them silently loses what the draft said. It names them before the write, and nothing invents a milestone or a label to stand in |
 | Thread status | resolvable only through **GraphQL** | the REST comment object has no status field. A transport asking for one gets nothing and must not read that as "unresolved" |
 
 **Identifiers are the other place to be careful.** GitHub carries two numbers for the same issue — the `number` a human sees and the `id` the database uses — and the sub-issue endpoint wants the second. Passing the first is accepted-looking and wrong.
@@ -109,6 +110,6 @@ These are where the two bodies genuinely differ. The port declares the differenc
 3. `post-pr-thread` with a path and a line creates an **inline** review comment on the right side; the same call without them creates a PR-wide comment.
 4. `reply-to-thread` attaches to the existing thread rather than starting a second one.
 5. `update-pr-description` replaces only the caller's marked region; content outside it survives.
-6. `create-work-item` produces an issue whose body carries the acceptance-criteria section as a markdown task list.
+6. `create-work-item` produces an issue whose body carries the acceptance-criteria section as a markdown task list. The recipes as written are exercised against a stand-in `gh` by `node --test tests/forge-port/forge-port.test.js` in the marketplace repository; a live repository is still the stronger proof.
 7. `link-work-item-parent` establishes the sub-issue relation, and it is verified by reading the parent back rather than from the create response.
 8. `build-pr-diff` produces the same output as the Azure DevOps body for the same branch — it is git, and nothing about it is forge-specific.

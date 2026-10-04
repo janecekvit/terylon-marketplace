@@ -77,7 +77,7 @@ Declaring without prose leaves an agent holding a skill it has no reason to open
 
 **Whenever something has a shape, draw it.** A call chain, a dependency graph, a set of cases and what each one selects, a state machine, a pipeline, a comparison across several options, a layout, a sequence of steps with branches — all of these are clearer as an ASCII diagram or a table than as prose, and none of them should be left as prose when a diagram or table would carry them. A reader who has to reconstruct a shape from three paragraphs will reconstruct it wrong.
 
-This is not a stylistic preference. Prose is **interpretable**; a table is not. "Patch within a branch, minor on a new one" reads as a guideline someone can weigh against how big the change feels — the same rule as a table keyed on the condition leaves nothing to weigh. That matters more here than in most repositories, because these documents are read as instructions by a model, and an instruction that can be interpreted eventually will be. Structure removes the room.
+This is not a stylistic preference. Prose is **interpretable**; a table is not. "Wrap repository files freely, but not what goes to Azure DevOps" reads as a guideline someone can weigh against how long the line feels — the same rule as a table keyed on the target leaves nothing to weigh. That matters more here than in most repositories, because these documents are read as instructions by a model, and an instruction that can be interpreted eventually will be. Structure removes the room.
 
 The rule holds for what this repo **generates** as well as for what it commits: pull request descriptions, work items, review findings, and answers in a session. Wherever there is a shape and the target renders markdown, draw it.
 
@@ -88,12 +88,13 @@ Two limits. A diagram that is wrong is worse than prose, because it is believed 
 Any rule with distinct cases becomes a table keyed on the condition, not a bulleted list:
 
 ```markdown
-| Situation | Digit |
+| Target | Wrapping |
 |---|---|
-| Another commit on the branch you are already on | **patch** |
-| First commit on a plugin from a new branch | **minor**, patch back to `0` |
-| Breaking change | **major** — only when the user says so |
+| Repository files — `SKILL.md`, agents, `README.md`, rules | wrap freely |
+| Azure DevOps — PR descriptions, thread comments, work items | **never hard-wrap** |
 ```
+
+The example is the wrapping rule this file already owns, on purpose: an example that reproduced a rule owned elsewhere would be a copy of it, and copies drift.
 
 Same for flags, recipe catalogues, tool mappings, and field encodings. Key column first, answer second. Prose stays for the reasoning that the table cannot carry.
 
@@ -175,9 +176,7 @@ Two things the drawing must show, because both have been got wrong here and neit
 
 ## Reference documents
 
-When a skill needs more than roughly 60 lines of API tables, request shapes, or enum encodings, move them to `references/<file>.md` **inside that skill** and link with the relative path `references/<file>.md`.
-
-When two or more skills in the same plugin genuinely need the same reference, lift it to `<plugin>/shared/<file>.md` and address it as `${CLAUDE_PLUGIN_ROOT}/shared/<file>.md`.
+**When a skill's tables outgrow it, and where a shared reference goes, is stated once in `plugins/CLAUDE.md`, under *Heavy reference*.**
 
 ## Writing style
 
@@ -189,8 +188,4 @@ When two or more skills in the same plugin genuinely need the same reference, li
 
 ## Language
 
-Every `.md` in this repo is written in **English** — skills, agents, reference documents, repo documentation, and these rules alike.
-
-This holds regardless of the language the work is discussed in. See the Language section in the root `CLAUDE.md`, which states the same rule for everything committed, not just markdown.
-
-There are no exceptions. A file that acquires a paragraph in another language is a defect, not a dialect.
+**Every `.md` here is English.** The rule covers everything committed, not only markdown, and is stated once, with its reason, in the root `CLAUDE.md`, under *Language*.

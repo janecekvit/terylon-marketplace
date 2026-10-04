@@ -83,8 +83,8 @@ Consumers only re-fetch when this field changes, so pushing to `main` without a 
 1. Create `plugins/terylon-<role>/` with the structure above.
 2. Add an entry to `.claude-plugin/marketplace.json#plugins[]` with `name`, `source: "./plugins/terylon-<role>"` (paths are resolved from the **repo root**, not from `plugins/`), `description`, `category`, `keywords`.
 3. Validate both manifests against JSONSchemaStore.
-4. Bump version when ready to ship.
-5. Open a PR against `main`. Never commit directly to `main` — work on a feature branch, and get explicit user consent for each commit.
+4. Bump the version on every commit — see *Versioning* above.
+5. Open a PR against `main`, following `.claude/rules/git-workflow.md`.
 
 ## Skill conventions
 
@@ -92,23 +92,7 @@ These conventions apply to every `SKILL.md` under `plugins/terylon-<role>/skills
 
 ### Frontmatter
 
-```yaml
----
-name: <skill-slug>                    # must match the directory name; kebab-case; verb-first preferred
-description: Use when <triggering condition with concrete symptoms>. Optional flags --auto and --dry-run.
-allowed-tools: Bash(az *), Bash(git *), Read, Grep, Glob, Edit, Write
----
-```
-
-The `description` field starts with `Use when …` and lists triggering conditions, never the
-internal workflow. (See [agentskills.io/specification](https://agentskills.io/specification).)
-
-**Never set `disable-model-invocation`.** It hides a skill from being loaded by name, and this
-marketplace is built on skills loading each other: `forge-ops` owns every ADO recipe, `code-review`
-owns the review judgment, and both exist precisely to be called by their transport skills. Hiding
-an engine makes it unreachable. A skill whose usual caller is another skill states that in its
-opening paragraph — the flag adds nothing that prose cannot say, and it takes away the calling
-mechanism.
+**The frontmatter rules for skills and agents — the fields, `description` starting with `Use when …`, and never setting `disable-model-invocation` — are stated once, in `.claude/rules/markdown.md`, under *Frontmatter*.**
 
 ### URL-input + `--auto` / `--dry-run` pattern
 
@@ -178,19 +162,13 @@ This footer is also used to detect prior skill runs on re-invocation (grep for
 after it). **The order is binding:** everything variable — version, model, effort — sits
 *after* that stable prefix, so detection never breaks when a model or effort tier changes.
 
-### Output formatting for Azure DevOps rendering
+### Output formatting for forge rendering
 
-When a skill emits markdown destined for Azure DevOps rendering — PR descriptions, PR thread comments, wiki posts — DO NOT hard-wrap paragraphs or bullets at 72 / 80 chars. ADO renders source line breaks verbatim (not as markdown soft wraps like GitHub does), so wrapping produces visibly choppy short lines in the rendered output. Emit one continuous line per paragraph and one continuous line per bullet; insert real `\n` only between distinct paragraphs / bullets / headings. Let the renderer wrap.
-
-This rule applies to any skill that writes to ADO via `mcp__ado__*` — `create-pr`, `review-pr`, `address-pr-comments`, `write-pr-description`, and any future ADO-writing skills.
+Markdown a skill writes to a forge is never hard-wrapped. **The rule, its reason and the skills it binds are stated once, in `.claude/rules/markdown.md`, under *Never hard-wrap ADO-bound markdown*.**
 
 ### Cross-skill references
 
-Refer to other skills by name only, no `@` paths:
-
-> **See also:** `review-pr` for the outbound direction.
-
-`@`-prefixed paths force-load the file into context immediately and waste tokens.
+**Skills are referenced by name, never by an `@` path or a `../` import — stated once, with the reason, in `.claude/rules/markdown.md`, under *Cross-references*.**
 
 ### Cross-skill composition (engine + transport)
 
@@ -368,6 +346,8 @@ The second is the one that erodes. A transport gains one platform-specific line 
 | `develop` | `create-pr` | forge | dev → forge |
 | `tester` | `update-pr-checklist`, `update-work-item-checklist` | forge | test → forge |
 | every transport, `pr-reviewer` | `resolve-forge` | forge | same plugin |
+| `develop`, `planner` | `resolve-forge` | forge | dev → forge |
+| `create-user-story`, `create-feature` | `resolve-forge` | forge | product → forge |
 | every transport, `pr-reviewer` | `forge-ops` | **an adapter** | **the port exception** — the adapter declares forge, not the reverse |
 | `develop`, `planner`, `developer` | `forge-ops` | **an adapter** | **the port exception** — enabled by the consumer, never declared |
 | `create-user-story`, `create-feature` | `forge-ops` | **an adapter** | **the port exception** |

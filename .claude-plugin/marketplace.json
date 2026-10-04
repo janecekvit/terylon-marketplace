@@ -77,7 +77,7 @@
     {
       "name": "terylon-product",
       "source": "./plugins/terylon-product",
-      "description": "Product owner / PM — authoring User Stories grounded in the codebase and Feature specifications with a UX section. Requires terylon-forge and the terylon-ado adapter: both skills are written against Azure DevOps fields today.",
+      "description": "Product owner / PM — authoring User Stories grounded in the codebase and Feature specifications with a UX section. Requires terylon-forge and one adapter, terylon-ado or terylon-github.",
       "category": "role",
       "keywords": [
         "product",

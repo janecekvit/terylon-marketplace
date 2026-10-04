@@ -20,7 +20,7 @@ It is a **skill and not an agent** for two reasons: it carries the slash command
 /terylon-test:test <item> [<item> …] [--auto | --dry-run]
 ```
 
-An `<item>` is either an **Azure DevOps pull request URL** (`dev.azure.com/{org}/{project}/_git/{repo}/pullrequest/<id>`), whose test plan — and the acceptance criteria of any work item it links — is verified and written back; or a **checklist** handed over directly (a path, or prose), which is verified and returned with nothing written.
+An `<item>` is either a **pull request URL from either forge** (`dev.azure.com/{org}/{project}/_git/{repo}/pullrequest/<id>` or `github.com/{owner}/{repo}/pull/<n>`), whose test plan — and the acceptance criteria of any work item it links — is verified and written back; or a **checklist** handed over directly (a path, or prose), which is verified and returned with nothing written.
 
 **Any number of items, mixed freely.** URLs separate themselves; prose checklists are separated by **`---` on its own line**. Prose without a `---` is one checklist however many bullets it holds. Each item becomes its own `tester`, run concurrently — the ceiling and the rest of the mechanics are in *Fan-out*.
 
@@ -109,7 +109,7 @@ Dispatch **`Agent(terylon-test:tester)`** with **paths and identifiers** — the
 | `VERIFICATION_COMPLETE <report>` | The write-back is done (or there was nothing to write — a checklist with no URL). Continue to step 4. |
 | `BLOCKED <reason>` | Show the reason and ask how to proceed. |
 
-**The write-back gate is the load-bearing one.** Ticking a box in Azure DevOps is an outward-facing, hard-to-reverse act — a pre-checked box renders as a static tick the next reader cannot toggle. Do not move past this gate without genuine consent. `--auto` may skip the *pause*, not the transports' tick gate or their downgrade reporting.
+**The write-back gate is the load-bearing one.** Ticking a box on the forge is an outward-facing, hard-to-reverse act — on Azure DevOps a pre-checked box renders as a static tick the next reader cannot toggle. Do not move past this gate without genuine consent. `--auto` may skip the *pause*, not the transports' tick gate or their downgrade reporting.
 
 #### Batch answers before re-dispatching
 
@@ -148,7 +148,7 @@ Each tester fans out one subagent per independent claim, so a handful of PRs is 
 - **Writing the checking loop yourself.** The verification belongs to `tester`, which drives `verify-test-plan`. This skill only hosts the gate and measures.
 - **Letting the tester write before the gate.** Dispatch it to verify and return first; write only after consent (or `--auto`).
 - **Reading `--auto` as one dispatch.** It skips the pause, not the ending. The tester still verifies, ends, and is re-dispatched to write — it just returns `CONTINUE` rather than waiting to be asked.
-- **Holding ADO tools here.** This skill has none — all forge access is the tester's, through its two transports. The gate is about *consent*, not about this skill touching Azure DevOps.
+- **Holding ADO tools here.** This skill has none — all forge access is the tester's, through its two transports. The gate is about *consent*, not about this skill touching the forge.
 - **Pasting checklist contents into the dispatch.** Items travel by path or URL.
 - **Trying to prompt from the tester.** `AskUserQuestion` works only here. The tester returns `NEEDS_CLARIFICATION` and you do the asking.
 - **Barriering the fan-out.** Host each write-back gate as it arrives.

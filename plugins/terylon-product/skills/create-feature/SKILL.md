@@ -1,7 +1,7 @@
 ---
 name: create-feature
 description: >-
-  Use when drafting, updating, reviewing, or validating an Azure DevOps Feature work item.
+  Use when drafting, updating, reviewing, or validating a Feature, on Azure DevOps or GitHub.
   Triggers on phrasings like "write a Feature", "draft a Feature spec", "update Feature N",
   "is this Feature ready", "review this Feature". Applies the Terylon Feature Specification
   Standard in this skill's references/.
@@ -12,15 +12,14 @@ allowed-tools: Read, Edit, Write, Bash(git *), Bash(gh *), mcp__plugin_terylon-a
 
 ## Overview
 
-Drafts, updates, and reviews Azure DevOps Features against the Terylon Feature Specification Standard. The standard itself - naming rules, the field template, the Definition of Ready, the quality bar - lives in `${CLAUDE_PLUGIN_ROOT}/skills/create-feature/references/feature-standard.md` and is the **single source of truth**. This skill does not restate it; it reads the rule at runtime and applies it. Always read that file at the start.
+Drafts, updates, and reviews Features against the Terylon Feature Specification Standard, on whichever forge the repository is hosted on — a work item on Azure DevOps, an issue on GitHub. It is written against the port's **work-item keys** and never names a platform field; where each key lives is the adapter's answer. The standard itself - naming rules, the field template, the Definition of Ready, the quality bar - lives in `${CLAUDE_PLUGIN_ROOT}/skills/create-feature/references/feature-standard.md` and is the **single source of truth**. This skill does not restate it; it reads the rule at runtime and applies it. Always read that file at the start.
 
 **Core discipline:** never fabricate the inputs a drafter can't know. Customer names, external references, business context, and real-world numbers are not yours to invent - gather them from the user (or mark `N/A` / `TBD` with a note). A confident-looking spec full of invented references is worse than one that flags its gaps.
 
 ## Prerequisites
 
-- **This skill is Azure DevOps only today.** It names ADO work-item fields with no GitHub counterpart, so it requires `terylon-ado@terylon`. Porting it to the port's vocabulary is separate work.
-- Forge access comes from that adapter. `terylon-forge`, the port, is auto-installed because this plugin declares `dependencies: ["terylon-forge"]`, but it ships no adapter. On Azure DevOps the server is namespaced `mcp__plugin_terylon-ado_ado__*` at runtime; the bare `mcp__ado__*` names below are shorthand for that form.
-- Platform mechanics (call shapes, field encodings) are owned by the **`forge-ops`** engine skill of the enabled adapter, `terylon-ado` or `terylon-github`. **Load `forge-ops` by name** for the exact recipes before the first platform call. Reference it by name only - it lives in a different plugin, so do not path into it (`${CLAUDE_PLUGIN_ROOT}` is local to `terylon-product`, and parent-directory relative imports are banned).
+- Forge access comes from an adapter. `terylon-forge`, the port, is auto-installed because this plugin declares `dependencies: ["terylon-forge"]`, but it ships no adapter. **`resolve-forge`** (in the port) decides which adapter a run targets — from a pasted Feature URL first, then `TERYLON_FORGE`, then the git remote — and a forge whose adapter is not enabled stops the run.
+- Platform mechanics (call shapes, where each key lives, field encodings) are owned by the **`forge-ops`** engine skill of that adapter, `terylon-ado` or `terylon-github`. **Load `forge-ops` by name** — plugin-qualified when both are enabled — for the exact recipes before the first platform call. Reference it by name only - it lives in a different plugin, so do not path into it (`${CLAUDE_PLUGIN_ROOT}` is local to `terylon-product`, and parent-directory relative imports are banned).
 - The standard this skill applies is `${CLAUDE_PLUGIN_ROOT}/skills/create-feature/references/feature-standard.md`, owned by this repo. Read it at the start of every run.
 
 ## Mode: write a new Feature
@@ -54,7 +53,7 @@ Run the Section 3 Definition of Ready checklist (see [Definition of Ready](#defi
 
 ### 5. Output
 
-Give the paste-ready artifact, then the readiness verdict and the specific list of what must happen before it's ready to break down into User Stories. If pushing to ADO, follow [Writing to ADO](#writing-to-ado).
+Give the paste-ready artifact, then the readiness verdict and the specific list of what must happen before it's ready to break down into User Stories. If pushing it to the forge, follow [Writing to the forge](#writing-to-the-forge).
 
 ## Mode: update or review an existing Feature
 
@@ -66,7 +65,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/create-feature/references/feature-standard.md
 
 ### 2. Fetch the work item
 
-If the user gave an ADO Feature ID, fetch the work item with the `fetch-work-item` operation to see the current title, description, state, assignees, and tags before drafting. For a pasted draft, skip this step.
+If the user gave a Feature id or URL, resolve the forge (`resolve-forge`), then fetch it with the `fetch-work-item` operation to see its current `title`, `description`, `isClosed` and `tags` before drafting. For a pasted draft, skip this step.
 
 ### 3. Title - check against Section 1
 
@@ -101,34 +100,54 @@ Run the Section 3 checklist (see below) against the current state. Mark each ite
 
 ### 7. Output
 
-A checklist verdict plus a concrete, ordered list of fixes. Suggest a compliant name rewrite if the title fails (sanctioned by Section 1), but don't rewrite field bodies unless asked - point to what to change. If pushing changes to ADO, follow [Writing to ADO](#writing-to-ado).
+A checklist verdict plus a concrete, ordered list of fixes. Suggest a compliant name rewrite if the title fails (sanctioned by Section 1), but don't rewrite field bodies unless asked - point to what to change. If pushing changes to the forge, follow [Writing to the forge](#writing-to-the-forge).
 
-## Writing to ADO
+## Writing to the forge
 
-Before updating the work item:
+```
+create-feature
+├── resolve-forge ........ which forge, and so which adapter      (terylon-forge)
+└── forge-ops ............ the adapter's body: recipes + key table (terylon-ado | terylon-github)
+    ├── fetch-work-item ........ review mode: the Feature as it stands
+    ├── create-work-item ....... a new Feature, from the keys
+    ├── update-work-item ....... an existing Feature, only the keys that changed
+    └── link-work-item-parent .. a new Feature under its Epic, read back
+```
 
+**The whole specification is the `description` key, on both forges.** The standard's seven fields — Acceptance criteria among them — are sections of one body, so a Feature passes no `acceptanceCriteria` key and every section reaches the forge in the order the standard lays out. That is what keeps the standard intact on a forge whose criteria have no field of their own.
+
+| Key | Value |
+|---|---|
+| `type` | `feature` |
+| `title` | the Section 1 title |
+| `description` | the drafted specification, all seven fields, **without** the footer |
+| `footer` | the footer line ([Footer](#footer)) |
+
+Any other key this run would carry — `tags`, `planning` under an Epic — is checked against the **Carried** column of the key table in `forge-ops` first. A key the forge does not carry is named in the draft before the write, never dropped silently and never replaced by an invented stand-in.
+
+Before writing to the item:
+
+0. **Resolve the forge, in either mode.** Invoke `resolve-forge` — with the Feature's URL in update mode, against the repository in create mode — and report its answer in one line. If nothing resolves or its adapter is not enabled, stop as it says; a new Feature has no fallback forge.
 1. **Show the draft and confirm.** Print the draft in plain Markdown. Ask: push as-is (placeholders included), revise first, or just leave the draft here? Do not write to the work item until the user confirms.
 2. **Confirm title edits separately.** Title edits are higher blast radius than description edits - get a separate yes for the name.
-3. **Always Markdown — never HTML.** In HTML a `- [ ]` line is a dead bullet, headings and tables need hand-written tags, and the Definition of Ready checklist stops being a checklist. Markdown renders all of it natively and matches what `create-user-story` already does.
+3. **Always Markdown — never HTML.** In HTML a `- [ ]` line is a dead bullet, headings and tables need hand-written tags, and the Definition of Ready checklist stops being a checklist. Hand the keys over as markdown; storing them so they render is the adapter's job, including converting an inherited HTML field the moment it is written.
 
-   | Mode | Operation | What it must carry |
+   | Mode | Operation | What it carries |
    |---|---|---|
-   | New Feature | `create-work-item` | `System.Description` as Markdown — send the draft as written |
-   | Update existing | `update-work-item` | the format path **and** the content in one call, format first |
+   | New Feature | `create-work-item` | the keys above, the draft as written |
+   | Update existing | `update-work-item` | only the keys that changed — `description`, and `title` once separately confirmed |
 
-   **Patch the format path every time, even when the field is already Markdown.** It is idempotent, and omitting it against an HTML field silently writes Markdown source into an HTML container, where a `- [ ]` renders as a dead bullet. The exact patch shape lives in the `update-work-item` recipe in `forge-ops` — read it there rather than writing it from memory: the tool surface changes between pinned server versions, and a stale parameter name rejects the whole call.
-4. **Do NOT hard-wrap.** ADO renders every source line break verbatim - it does not treat a single newline as a soft wrap the way GitHub does. Wrapping a paragraph or a bullet at 72 / 80 chars produces visibly choppy short lines in the rendered work item. Emit each paragraph and each bullet as **one continuous line**; insert a real line break only between distinct paragraphs, bullets, or headings. This applies to the Markdown draft and to the HTML you push.
+   **Take the call shape from the recipe, not from memory.** Where a forge keeps a per-field format, the `update-work-item` recipe in `forge-ops` sets it in the same call as the content; a write from memory can land Markdown source in an HTML container, where a `- [ ]` renders as a dead bullet. The tool surface changes between pinned versions, and a stale parameter name rejects the whole call.
+4. **Do NOT hard-wrap.** Azure DevOps renders every source line break verbatim - it does not treat a single newline as a soft wrap the way GitHub does. Wrapping a paragraph or a bullet at 72 / 80 chars produces visibly choppy short lines in the rendered item. Emit each paragraph and each bullet as **one continuous line**; insert a real line break only between distinct paragraphs, bullets, or headings. The rule binds on both forges.
 5. **Dashes:** in the body use only `-` or `–`, never an em-dash (`—`). The footer line below is the single exception - it is emitted from the template verbatim.
 
-The Azure DevOps calls themselves - fetching the Feature (`fetch-work-item`), creating one (`create-work-item`) and pushing an update (`update-work-item`) - are owned by the **`forge-ops`** engine skill. **Load `forge-ops` by name and take the call shapes from it**; this skill issues its own `mcp__plugin_terylon-ado_ado__*` calls following those recipes and names no tool of its own.
+The platform calls themselves - fetching the Feature (`fetch-work-item`), creating one (`create-work-item`) and pushing an update (`update-work-item`) - are owned by the **`forge-ops`** engine skill of the adapter `resolve-forge` named. **Load `forge-ops` by name and take the call shapes from it**; this skill issues its own platform calls following those recipes, names operations and keys, and names no tool or field of its own. Both surfaces sit in `allowed-tools` for that reason — an absent one is inert.
 
-Every write is Markdown. A new Feature is created with `format: "Markdown"`; an update patches `/multilineFieldsFormat/System.Description` alongside the content, because the update operation carries no per-field format. See step 3 and the `update-work-item` recipe.
-
-**Parenting.** `create-work-item` sets field values only - it cannot set the parent relation. To place the Feature under an Epic, follow with `link-work-item-parent`, where the **new Feature** is the subject and the Epic is what it links to. Getting the direction backwards makes the Epic a child of the Feature.
+**Parenting.** `create-work-item` sets the keys only - it cannot set the parent relation. To place the Feature under an Epic, follow with `link-work-item-parent`, with `child` = the **new Feature** and `parent` = the Epic, and confirm by reading the Epic back. Getting the direction backwards makes the Epic a child of the Feature. A refused link is reported as created-and-not-linked, and the Epic is recorded nowhere else.
 
 ## Footer
 
-End every artifact pushed to ADO with:
+End every artifact pushed to the forge with this line — the `footer` key, which the adapter places last:
 
 ```
 ---
@@ -154,7 +173,7 @@ Report which items are not yet met. A draft with `[needs input]` placeholders is
 
 ## When NOT to use this skill
 
-- For non-Feature ADO work items (Tasks, Bugs, Epics) - the standard is Feature-scoped. For User Stories use `create-user-story`.
+- For non-Feature items (Tasks, Bugs, Epics) - the standard is Feature-scoped. For User Stories use `create-user-story`.
 - For product strategy, brainstorming, or marketing copy - use a brainstorming workflow or the relevant prompt template.
 - For a change so small it is a single User Story - create the story directly under an existing Feature instead of wrapping it in a new one.
 
@@ -168,15 +187,18 @@ In Claude Code from the repo root:
 
 1. Run `/create-feature` (or ask "draft a feature spec") in a session — confirm the skill loads and reads the standard at `${CLAUDE_PLUGIN_ROOT}/skills/create-feature/references/feature-standard.md` before drafting.
 2. Pass a sample brief (e.g. "draft a feature: SIEM log forwarding for enterprise customers, depends on the platform team") and confirm the draft uses the Section 2 template verbatim (all seven fields, UX included), runs the Section 3 DoR check, and writes `[needs input]` for fields the brief didn't cover (not invented content).
-3. Given an existing ADO Feature ID, the review mode must call the `fetch-work-item` operation before commenting on the title or fields, and must report on the UX field's three edge states.
+3. Given an existing Feature id or URL on either forge, the review mode must call the `fetch-work-item` operation before commenting on the title or fields, and must report on the UX field's three edge states.
 4. Footer identity — a pushed Feature's footer reads `create-feature@<terylon-product version>`, resolved from this plugin's own `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json`.
-5. **Markdown rendering** — open a Feature this skill wrote: headings, tables and code spans render natively, and any `- [ ]` line is an interactive checkbox rather than a dead bullet. Equivalently, re-fetch it and confirm `multilineFieldsFormat["System.Description"]` reads `"markdown"`.
-6. **Conversion of an inherited HTML Feature** — run the update mode against a Feature whose description is HTML. Expect `multilineFieldsFormat` to read `"markdown"` afterwards and the body to render as Markdown. Verified on Feature #112, which was created as HTML before this rule existed.
+5. **Markdown rendering** — open a Feature this skill wrote: headings, tables and code spans render natively, and any `- [ ]` line is an interactive checkbox rather than a dead bullet. Equivalently, re-fetch it and confirm the `description` key comes back as the markdown that was sent.
+6. **Conversion of an inherited HTML Feature** — run the update mode against a Feature whose description is HTML, on Azure DevOps where a field can be. Expect the body to render as Markdown afterwards. Verified on Feature #112, which was created as HTML before this rule existed.
+7. **Every section of the standard survives the forge** — push a Feature on each forge and re-fetch it: all seven fields of Section 2 are present in the `description`, in the standard's order, and nothing of the specification was moved into a field or section of the forge's own choosing.
 
 ## Common mistakes
 
-- **Writing HTML at all.** Every multiline field this skill touches is Markdown. HTML costs the interactive checkboxes and forces hand-written `<p>` / `<ul><li>` tags for content ADO renders on its own.
-- **Updating without the format op.** The `update-work-item` operation takes no per-field `format`, so a Markdown body patched into a field still encoded as HTML renders as literal `#` and `-`. Always send the `/multilineFieldsFormat/` op alongside the content — it is idempotent when the field is already Markdown, and it is the repair when it is not.
-- **Forgetting the parent link.** `create-work-item` sets fields only. Without a following `link-work-item-parent`, the Feature is orphaned rather than sitting under its Epic.
+- **Writing HTML at all.** Every key this skill hands over is Markdown. HTML costs the interactive checkboxes and forces hand-written `<p>` / `<ul><li>` tags for content either forge renders on its own.
+- **Updating from memory instead of the recipe.** On a forge with per-field formats, a Markdown body written into a field still encoded as HTML renders as literal `#` and `-`. The `update-work-item` recipe sets the format with the content; follow it rather than reconstructing the call.
+- **Splitting the specification across keys.** The standard's Acceptance criteria are a section of the description, not the `acceptanceCriteria` key. Moving them out reorders the standard on one forge and not the other.
+- **Naming a platform field or tool here.** This skill names keys and operations; a field reference copied into it is a second place to fix, and it makes the skill one forge's.
+- **Forgetting the parent link.** `create-work-item` sets the keys only. Without a following `link-work-item-parent`, the Feature is orphaned rather than sitting under its Epic.
 - **Inventing what you cannot know.** Customer names, external references, real-world numbers. Mark `[needs input]` and say so in the readiness verdict.
-- **Hard-wrapping paragraphs or bullets.** ADO renders source line breaks verbatim; wrapping at 72 or 80 characters produces visibly choppy lines. One continuous line per paragraph and per bullet.
+- **Hard-wrapping paragraphs or bullets.** Azure DevOps renders source line breaks verbatim; wrapping at 72 or 80 characters produces visibly choppy lines. One continuous line per paragraph and per bullet, on both forges.
