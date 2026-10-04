@@ -1,10 +1,10 @@
 # terylon-product
 
-Skills for product owners and PMs: turning a short brief into Azure DevOps work items ready for implementation.
+Skills for product owners and PMs: turning a short brief into work items ready for implementation, on Azure DevOps or GitHub.
 
 ## Audience
 
-Product owners and PMs who write User Stories and Feature specifications into Azure DevOps.
+Product owners and PMs who write User Stories and Feature specifications, into Azure DevOps work items or GitHub issues.
 
 ## Where it sits
 
@@ -24,7 +24,14 @@ Swap `terylon-ado@terylon` for `terylon-github@terylon` on GitHub. **One of the 
 
 `terylon-forge` is the only declared dependency; the ones below it arrive with it. **An adapter is not declared and must be enabled by the consumer**, because the port ships none.
 
-> **Both skills here are written against Azure DevOps today.** They reach the forge through `forge-ops`, but their bodies still name Azure DevOps fields — work item types, the acceptance-criteria field, area and iteration paths — which have no counterpart in the GitHub body. Enable `terylon-github` and the transports in `terylon-forge` work; **these two do not**. Porting them is separate work and is not claimed here.
+**Both skills run on either forge.** They are written against the port's work-item keys and name no platform field; where each key lives, and which keys a forge does not carry, is the adapter's answer. On GitHub, area and iteration, story points and priority have no equivalent: the run names each one before it writes, and invents nothing in its place.
+
+What each forge's support rests on:
+
+| Forge | Proven by |
+|---|---|
+| Azure DevOps | a live run on 2026-10-04: a Feature drafted to the standard and a story under it, created from the keys, read back with every field and the parent link intact, then deleted |
+| GitHub | the adapter's contract and a fixture — `tests/forge-port/` in the marketplace repository runs the GitHub recipes against a stand-in `gh`. **No live GitHub repository has been run yet**; that run belongs to moving the marketplace onto GitHub |
 
 ## What it contains
 

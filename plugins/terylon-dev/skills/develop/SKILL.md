@@ -1,7 +1,7 @@
 ---
 name: develop
 description: >-
-  Use when implementing one or more user stories end-to-end — give Azure DevOps work-item URLs, a prose
+  Use when implementing one or more user stories end-to-end — give work-item or issue URLs from either forge, a prose
   description, or several prose items separated by --- on its own line. Several items fan out into
   concurrent leaders, one workspace each. Hosts the human gates and dispatches the leader agent, which
   owns the plan → build (TDD) → finish loop. Optional flags --auto, --dry-run, and --here.
@@ -20,7 +20,7 @@ It is a **skill and not an agent** for two reasons: it carries the slash command
 /terylon-dev:develop <item> [<item> …] [--auto | --dry-run] [--here] [--no-brainstorm]
 ```
 
-An `<item>` is an **Azure DevOps work item URL** (`dev.azure.com/{org}/{project}/_workitems/edit/<id>`), which is fetched and turned into a seed-spec; a **path to a seed-spec** that `brainstorm` already wrote, which is read as-is; or a **prose description**, which becomes the seed directly.
+An `<item>` is an **item URL from either forge** — an Azure DevOps work item (`dev.azure.com/{org}/{project}/_workitems/edit/<id>`) or a GitHub issue (`github.com/{owner}/{repo}/issues/<n>`) — which is fetched and turned into a seed-spec; a **path to a seed-spec** that `brainstorm` already wrote, which is read as-is; or a **prose description**, which becomes the seed directly.
 
 **Any number of items, of either kind, mixed freely.** URLs separate themselves; prose items are separated by **`---` on its own line**. Prose without a `---` is one item no matter how many bullets it contains — see step 1. Each item becomes its own workspace and its own `leader`, run concurrently; the ceiling and the rest of the mechanics are in *Fan-out*.
 
@@ -90,7 +90,7 @@ The split is **explicit, never inferred**:
 
 | Input | Items |
 |---|---|
-| Azure DevOps work item URLs | one per URL |
+| Item URLs — Azure DevOps work items or GitHub issues | one per URL |
 | A path to an existing seed-spec under `docs/terylon/intake/` | one per path — read it as the seed, never rewrite it |
 | Prose containing `---` on its own line | one per `---`-separated block |
 | Prose without `---` | exactly **1**, however many bullets it contains |
@@ -111,7 +111,7 @@ URLs and prose blocks may be mixed in one invocation.
 
 #### Per item
 
-- **ADO URL:** fetch the work item via the `fetch-work-item` recipe from the `forge-ops` engine and write a seed-spec to `docs/terylon/intake/<slug>-seed.md` — title, description, acceptance criteria, links.
+- **Item URL:** **resolve the forge first** — invoke `resolve-forge` with the URL and report its answer in one line; if its adapter is not enabled, stop for this item and name the plugin to enable, never falling back to the other adapter. Then fetch the item via the `fetch-work-item` recipe from that adapter's `forge-ops`, plugin-qualified, and write a seed-spec to `docs/terylon/intake/<slug>-seed.md` — title, description, acceptance criteria, links.
 - **Prose description:** write the prose to that same file as the seed.
 
 Derive `<slug>` from the item's topic and keep it consistent through the run. **Slugs must be unique across the run** — two items whose topics slugify the same way would share a seed-spec, which silently merges two builds into one. Disambiguate with the work item id (`<slug>-116`) or an ordinal, and say that you did.

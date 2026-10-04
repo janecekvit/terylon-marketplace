@@ -13,6 +13,7 @@ Internal Claude Code plugin marketplace distributed into product repositories th
 /docs/                             the engineering knowledge base — architecture, flows, runbooks, onboarding
 /docs/terylon/                     terylon working tree: intake, specs, plans, ledgers (gitignored)
 /docs/superpowers/                 the same, when those skills run directly (gitignored)
+/tests/                            local tests of what the plugins ship, across plugin boundaries — not distributed
 ```
 
 **All of `/plugins` is the distribution boundary.** Anything inside is consumed by other repos; anything outside stays local.
@@ -40,11 +41,11 @@ terylon-core                      the root — shared conventions + measurement;
 
 **`superpowers` is no longer a dependency.** The six skills `terylon-dev` used from it are gone: three were replaced by shorter equivalents (`write-plan` and `run-build-loop`, now in `terylon-dev`; `finish-branch` in `terylon-git`), and three were dropped because the personas already carried them in full.
 
-**A component lives in the lowest plugin that all of its consumers can reach.** Consumers are counted by plugin, not by file, and the test is what a component *exercises*, never who calls it — `delegate-to-repo-agents` is consumed by three plugins and calls no git, so it sits in the root; `write-plan` and `run-build-loop` are consumed only by `terylon-dev`, so they sit there rather than in a root that installs for everyone.
+**A component lives in the lowest plugin that all of its consumers can reach.** How consumers are counted, the test that decides it and the worked examples are stated once, in `plugins/CLAUDE.md`, under *Where a component belongs*.
 
-**Only one component in the marketplace is loaded up the dependency chain**, and it is `forge-ops`, reached from the port and from the two role plugins that also call it. It is a port and adapter relationship rather than an oversight, and the rules that keep it honest — the port declares no adapter, both adapters use one skill name, a transport that finds neither stops — are in `plugins/CLAUDE.md`.
+**Only one component in the marketplace is loaded up the dependency chain**, and it is `forge-ops`, reached from the port and from the two role plugins that also call it. It is a port and adapter relationship rather than an oversight, and the rules that keep it honest are stated once, in `plugins/CLAUDE.md`, under *The one exception: a port and its adapters*.
 
-Two boundaries run through this stack. Between `terylon-git` and `terylon-forge` the test is whether something reaches outside the repository: that is why the review pipeline is split, with `code-review` and `code-reviewer` local and `review-pr` and `pr-reviewer` carrying the findings outward. `terylon-test` splits on the same seam — `verify-test-plan` needs a shell and a repository, while the two `update-*-checklist` transports reach a forge and so live in `terylon-forge`. Between the port and the adapters the test is whether something **depends** on a platform: a transport that *issues* a `gh` subcommand or an `mcp__` tool call has crossed it and belongs in an adapter. Two things are not crossings — a transport's `allowed-tools` naming both surfaces, and a transport naming a difference the port declares — because hiding either is what makes a transport wrong. The rule with both carve-outs is in `plugins/CLAUDE.md`.
+Two boundaries run through this stack. Between `terylon-git` and `terylon-forge` the test is whether something reaches outside the repository: that is why the review pipeline is split, with `code-review` and `code-reviewer` local and `review-pr` and `pr-reviewer` carrying the findings outward. `terylon-test` splits on the same seam — `verify-test-plan` needs a shell and a repository, while the two `update-*-checklist` transports reach a forge and so live in `terylon-forge`. Between the port and the adapters the test is whether something **depends** on a platform: a transport that *issues* a `gh` subcommand or an `mcp__` tool call has crossed it and belongs in an adapter. What is **not** a crossing is stated once, in `plugins/CLAUDE.md`, beside the table of the two boundaries.
 
 Component layout, the placement rule in full, the dispatch chains and the table of every cross-plugin load: `plugins/CLAUDE.md`.
 
@@ -95,10 +96,56 @@ There are no exceptions. A file that acquires a paragraph in another language is
 
 The repo runs on **Windows and natively on Debian**. Everything scripted must work on both:
 
-- Hooks are **Node.js** — they run on every tool call, and Node starts in ~106 ms against pwsh's ~384 ms.
-- When PowerShell is what you are writing, invoke it as **`pwsh`**, never `powershell` (it does not exist on Debian).
-- Paths are case-sensitive, scripts use LF line endings, hooks have no dependencies.
+- Hooks are **Node.js**; PowerShell is invoked as **`pwsh`**, never `powershell`; paths are case-sensitive, scripts use LF line endings, hooks have no dependencies. **The reasons, and the startup latency measured behind the first, are in `.claude/rules/scripting.md`** and are not repeated here.
 - **Binaries go through Git LFS.** `.gitattributes` tracks images, PDFs and archives. The repo is text-only today, so the rules are dormant — they exist so the first binary lands as a pointer instead of a blob nobody notices until the clone is slow. Run `git lfs install` once per clone.
+
+## Testing
+
+Three suites under `/tests/`, none distributed. **Run the end-to-end harness before a change reaches `main`**, and before anything moves to a new host.
+
+| Suite | Command | Proves | Cost |
+|---|---|---|---|
+| contract + fixture | `node --test tests/forge-port/forge-port.test.js` | both `forge-ops` bodies declare the same work-item keys; the authoring skills name no platform field; the GitHub recipes, run verbatim against a stand-in `gh`, write what they should | free, seconds |
+| harness unit checks | `node --test tests/e2e/ref.test.js` | which ref the harness installs, and that a detached HEAD is refused rather than passed on as `HEAD` | free, milliseconds |
+| end-to-end | `node tests/e2e/run.js` | the marketplace installs from a git ref as a consumer installs it, everything loads, and the skills — followed by a model, headless — write the right things or refuse with the right reason | about **$2.60–3.25** per full run on sonnet, 4–8 min (measured 2026-10-04) |
+
+```
+node tests/e2e/run.js                                   all stages, this branch on origin
+node tests/e2e/run.js --source .                        the local checkout, served over http on 127.0.0.1
+node tests/e2e/run.js --stages install                  stage 1 only — free, no model reached
+node tests/e2e/run.js --teeth                           plant every defect; green only if each one turns it red
+node tests/e2e/run.js --stages author --scenarios github-story   one scenario
+```
+
+```
+run.js
+├── install ....... scratch CLAUDE_CONFIG_DIR; extraKnownMarketplaces + `marketplace add <url>#<ref>`;
+│                   every plugin installed; --strict validation; the init event's inventory
+│                   checked against every skill, agent, hook and MCP server the clone carries
+├── author ........ create-user-story, create-feature — two turns each (draft, then "push"),
+│                   on an Azure DevOps fixture and a GitHub fixture
+└── github-only ... develop, planner, create-feature, review-pr handed an Azure DevOps item
+                    with only terylon-github loaded; then the ado server made unreachable
+```
+
+| Stand-in | Reached through | Records |
+|---|---|---|
+| `tests/e2e/stubs/ado-mcp-stub.js` — the 2.9.0 work-item tools, typed | an `npx` shim first on `PATH`, which the adapter's `.mcp.json` launches | every `tools/call` |
+| `tests/forge-port/fake-gh.js` | a `gh` wrapper first on `PATH` | every invocation, and the issues it stores |
+
+**No credential appears anywhere in the harness.** Stage 1 runs in the scratch config, which holds no login — the init event it reads arrives before the first API call. The headless stages run under the operator's **own** Claude Code login, never read or copied, with the consumer-installed plugins loaded by `--plugin-dir`; forge tokens are stripped from their environment, and every forge call goes to a stand-in.
+
+Things that were measured, and bite:
+
+- **Haiku cannot carry these skills.** Authoring on haiku never loaded `forge-ops`; the GitHub-only refusals passed on one run and failed on the next. Every headless stage runs on sonnet; `--model` overrides it.
+- **`--strict-mcp-config` drops a `--plugin-dir` plugin's own `.mcp.json`**, so the `ado` server never starts. The harness keeps the account's claude.ai connectors out with `ENABLE_CLAUDEAI_MCP_SERVERS=false` instead, and fails any turn that sees another server.
+- **An agent's `skills:` are preloaded only when it is dispatched as a subagent.** Run as the session's own agent (`--agent`), `planner` could not load `resolve-forge` at all. The harness dispatches agents through the Agent tool, as `leader` does, and judges the subagent's own report.
+- **A model that cannot find a skill goes looking on disk**, and found the operator's own, older, installed copies. Reads of the operator's plugin cache are denied, and a turn that tried fails.
+- **`marketplace add` refuses `file://` and clones shallow**, so a local source is served through `git http-backend` on 127.0.0.1.
+- **`marketplace add` installs a branch or a tag, never a commit.** It clones with `--branch`, so a commit id is refused as a missing branch. From a detached checkout, pass `--ref`; without it the harness refuses in one line and names the branches pointing at HEAD. A defect that cannot be planted is reported `SETUP FAILED`, never as caught.
+- **A planted defect a capable model can see through proves nothing.** Stripping the criteria section from the GitHub recipe was missed: sonnet wrote it from the skill's template. The defects in `tests/e2e/lib/defects.js` change what only the plugin knows.
+
+The headless runs execute model-chosen shell commands in throwaway fixture repositories; run the harness where you would let an agent work. Transcripts, stub logs and `report.json` (every check, every run's cost) land in the output directory it prints.
 
 ## Rules
 
@@ -115,7 +162,8 @@ Details in `.claude/rules/`:
 In short:
 
 - Everything committed is in English, whatever language the work is discussed in.
-- Bump the version in `plugin.json` on every commit that changes the plugin — without it the consumer does not receive the change. **Patch within a branch, minor on a new branch, major only when the user asks.** The digit follows the branch, never the size of the change.
+- **Every rule has one owner; every other mention points at it without restating it.** Why, and what the first sweep found: `docs/architecture/every-rule-has-one-owner.md`.
+- Bump the version in `plugin.json` on every commit that changes the plugin — without it the consumer does not receive the change. **Which digit moves is stated once, under *Versioning* in `plugins/CLAUDE.md`.**
 - Work happens on a feature branch; `main` is reached only through a PR. Enforced by `.claude/hooks/git-guard.js`.
 - Every commit requires explicit user consent.
 - Skills are referenced **by name**, never by an `@` path or a `../` import.

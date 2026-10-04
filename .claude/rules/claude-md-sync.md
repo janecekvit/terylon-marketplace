@@ -10,6 +10,7 @@ paths:
   - ".claude/hooks/**"
   - ".claude/rules/**"
   - "docs/**"
+  - "tests/**"
   - ".gitignore"
   - ".gitattributes"
 ---

@@ -220,10 +220,32 @@ The `- 1` is load-bearing: this side stores the end one past the last covered li
 - Overwrites the whole `description` field; the Claude-region locate-or-append logic stays skill-side.
 - **`description` is capped at 4000 characters** and the cap counts the *whole* field, not just the region you are writing. Over the limit the call fails validation before reaching ADO (`too_big`), so nothing is written — the failure is safe but the work is wasted. Measure before calling, and remember that a locate-or-append write carries any content that was already there.
 
+### Work-item keys — the authoring contract
+
+`fetch-work-item`, `create-work-item` and `update-work-item` speak these keys, **key for key with the GitHub body**, so an authoring skill is written once against them. A skill never names a field reference; it names a key, and this table says where the key lives here. A row marked *not carried* is a **declared difference**: the caller states it before writing rather than dropping the value silently.
+
+| Key | Meaning | Here | Carried |
+|---|---|---|---|
+| `type` | the item's kind, in the port's vocabulary: `user-story`, `feature`, `epic` | `System.WorkItemType` — `User Story`, `Feature`, `Epic` | yes |
+| `title` | plain text | `System.Title` | yes |
+| `description` | markdown, everything but the criteria and the footer | `System.Description`, written `Markdown` | yes |
+| `acceptanceCriteria` | a markdown `- [ ]` list with no heading; absent when the item has none | `Microsoft.VSTS.Common.AcceptanceCriteria`, written `Markdown` | yes |
+| `footer` | the caller's finished footer line — **composed by the caller, only placed here** | appended last to `System.Description` | yes |
+| `parent` | id of the parent item, or `null` | `System.Parent` on a fetch; set only by `link-work-item-parent` | yes |
+| `children` | `[{ id, title, description }]` | the `System.LinkTypes.Hierarchy-Forward` relations, each fetched | yes |
+| `isClosed` | boolean | `System.State` is `Closed`, `Removed` or `Done` | yes |
+| `url` | the item's web URL | `_links.html.href` | yes |
+| `planning` | where the item sits in the team's plan; opaque to the caller, which copies it from a parent's fetch into a child's create | `System.AreaPath` and `System.IterationPath` | yes |
+| `estimate` | a number | `Microsoft.VSTS.Scheduling.StoryPoints` | yes |
+| `priority` | a number | `Microsoft.VSTS.Common.Priority` | yes |
+| `tags` | a list of strings | `System.Tags`, `; `-joined | yes |
+
+**The encoding is this body's business, not the caller's.** Every multiline key is written `Markdown` here, and a caller never passes a format: it hands over markdown and gets markdown rendered.
+
 ### `fetch-work-item`
-- **In:** `WI_ID`, `project`, `expand`. **Out:** WI fields + relations.
-- **Tools:** `wit_work_item(action="get")`. **Consumers:** create-user-story, create-feature.
-- Use `expand="relations"`; HTML fields pass as-is (§11).
+- **In:** `WI_ID`, `project`, `expand`. **Out:** the work-item keys above, plus the raw fields + relations they were read from.
+- **Tools:** `wit_work_item(action="get")` with `expand="relations"`, then one `get` per child for `children`. **Consumers:** create-user-story, create-feature.
+- Use `expand="relations"`; HTML fields pass as-is (§11), and `description` / `acceptanceCriteria` are reported with the encoding `multilineFieldsFormat` names, because an inherited HTML field is not markdown and must not be parsed as such.
 - **Gotcha — `multilineFieldsFormat` is empty under a `fields` filter.** The response reports which multiline fields are markdown in a `multilineFieldsFormat` object, and **that object comes back `{}` whenever the call passes an explicit `fields` list**, even for fields it asked for. It is populated under `expand`. Measured on a work item whose description and acceptance criteria are both markdown: the filtered fetch reported `{}` and the `expand` fetch reported both as `markdown`. **A check that confirms the format must use `expand`** — the filtered form fails it every time, and fails it in the direction that looks like a real defect.
 
 ### `fetch-work-items-batch`
@@ -253,20 +275,21 @@ The `- 1` is load-bearing: this side stores the end one past the last covered li
 - **TWO flag profiles — see §13.** Never `git diff HEAD`.
 
 ### `create-work-item`
-- **In:** `project` (resolved per *Resolving org / project without a URL* (§9) when not taken from a URL), `workItemType` (e.g. `"User Story"`), `fields: [{name, value, format?}]`. **Out:** new work item `id`.
+- **In:** `project` (resolved per *Resolving org / project without a URL* (§9) when not taken from a URL) and the work-item keys `type`, `title`, `description`, `footer`, and when given `acceptanceCriteria`, `planning`, `estimate`, `priority`, `tags`. **Out:** the new item's `id` and `url`.
 - **Tool:** `wit_work_item_write(action="create")`. **Consumers:** create-user-story, create-feature.
-- **Recipe:** set `System.Title`; `System.Description` with **`format: "Markdown"`**; `System.AreaPath` and `System.IterationPath` (inherited from the parent); optionally `Microsoft.VSTS.Scheduling.StoryPoints`, `Microsoft.VSTS.Common.Priority`, `System.Tags`.
+- **Recipe:** `workItemType` from `type`; `fields: [{name, value, format?}]` mapped through the key table — `System.Title`; `System.Description` = `description` + a blank line + `footer`, with **`format: "Markdown"`**; `Microsoft.VSTS.Common.AcceptanceCriteria` with **`format: "Markdown"`** when `acceptanceCriteria` is present; `System.AreaPath` and `System.IterationPath` from `planning`; `Microsoft.VSTS.Scheduling.StoryPoints`, `Microsoft.VSTS.Common.Priority`, `System.Tags` from `estimate`, `priority`, `tags`.
 - **Gotcha (parent):** sets *field values* only — it CANNOT set the parent relation. Link the parent in a separate step (`link-work-item-parent`).
 - **Gotcha (checkboxes):** `- [ ]` renders as an interactive checkbox **only when the field is written with `format: "Markdown"`**. ADO defaults every multiline field to HTML, where the same line is a plain bullet or a literal `[ ]`. Pass `format: "Markdown"` for **each** multiline field independently — `System.Description` and `Microsoft.VSTS.Common.AcceptanceCriteria` do not inherit from one another, and setting only the first leaves a story whose description renders and whose criteria do not.
 
 ### `link-work-item-parent`
-- **In:** `updates: [{ id: <childId>, linkToId: <parentId>, type: "parent" }]`. **Out:** linked work item.
-- **Tool:** `wit_work_item_link_write(action="link")`. **Consumers:** create-user-story.
-- **Recipe:** `id` is the work item being updated (the new story); `linkToId` is the Feature; `type: "parent"` makes the story a child of the Feature.
+- **In:** `child`, `parent` — two item ids, the same two keys on both bodies. **Out:** linked work item.
+- **Tool:** `wit_work_item_link_write(action="link")`. **Consumers:** create-user-story, create-feature.
+- **Recipe:** `updates: [{ id: <child>, linkToId: <parent>, type: "parent" }]` — `id` is the work item being updated (the new story); `linkToId` is the Feature; `type: "parent"` makes the story a child of the Feature.
+- **Verify by reading the parent back** — `fetch-work-item` on `parent` lists `child` among its `children`. The link response is trimmed (§3) and is not evidence.
 - **Alternative (one call, limited fields):** `wit_work_item_write(action="add_child")(parentId, workItemType, items:[{title, description, format, areaPath?, iterationPath?}])` creates AND links a child in one call — but supports only title/description/format/area/iteration, NOT StoryPoints/Priority/Tags. Use create-work-item + link-work-item-parent when any extra metadata is needed.
 
 ### `update-work-item`
-- **In:** `id`, `updates: [{ op, path, value }]` (JSON-Patch). **Out:** updated work item.
+- **In:** `id` and any of the work-item keys `title`, `description`, `acceptanceCriteria`, `footer`; each given key replaces what the item holds. **Out:** updated work item. The JSON-Patch below is how this body writes them — a caller passes keys, never patch paths.
 - **Tool:** `wit_work_item_write(action="update")` — or `action="update_batch"` with `batchUpdates: [{ id, op, path, value, format }]`. **Consumers:** create-feature, update-work-item-checklist.
 - **The two update forms are not equivalent, and only one can state a format.** `update_batch` accepts a per-op **`format`**; the single `update` does not. So rewriting a markdown multiline field — acceptance criteria, a description — goes through `update_batch` **even for one item**, or the write lands with no format stated and depends on whatever encoding the field already carries. Measured: `update_batch` with `format: "Markdown"` on a single-element array round-tripped the criteria with `multilineFieldsFormat` still `markdown`.
 - **Recipe:** patch existing fields — `op: "replace"` (or the schema default `add`, which ADO upserts), `path: "/fields/<FieldRef>"` (e.g. `/fields/System.Title`, `/fields/System.Description`), `value: "<new value>"`.
@@ -312,6 +335,7 @@ The `- 1` is load-bearing: this side stores the end one past the last covered li
 - **In:** nothing. **Out:** usable / not usable, with the reason.
 - **Tools:** none (environment + git). **Consumers:** create-pr, and any transport before its first call.
 - **Recipe:** `TERYLON_ADO_ORG` must be set — there is no default (§9) — and it must equal the organisation in the repository's remote, or every call goes to an organisation the remote does not describe. Report the mismatch and stop; do not "correct" either side.
+- **The `ado` server must be connected:** its `mcp__plugin_terylon-ado_ado__*` tools are present in the session. When they are absent the server failed to start or could not connect — say so and stop before the first call, as `resolve-forge` prescribes, and point at `check-access`.
 
 ### `list-pull-requests`
 - **In:** `repositoryId`, `project`, optional `sourceRefName` (full `refs/heads/<branch>`), `status`.

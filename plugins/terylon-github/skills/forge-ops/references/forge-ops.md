@@ -232,14 +232,49 @@ gh pr edit "$PR" --repo "$OWNER/$REPO" --body-file description.md
 
 Overwrites the whole body, so the caller's locate-or-append logic runs first. The limit is roughly 65 536 characters, far above anything this marketplace generates — **the brevity rules still apply**, because they exist for the reader.
 
+### Work-item keys — the authoring contract
+
+`fetch-work-item`, `create-work-item` and `update-work-item` speak these keys, **key for key with the Azure DevOps body**, so an authoring skill is written once against them. A skill never names a label, a body section or an endpoint; it names a key, and this table says where the key lives here. A row marked *not carried* is a **declared difference**: the caller states it before writing rather than dropping the value silently.
+
+| Key | Meaning | Here | Carried |
+|---|---|---|---|
+| `type` | the item's kind, in the port's vocabulary: `user-story`, `feature`, `epic` | a label — `user story`, `feature`, `epic` | yes — by convention only; nothing enforces a label |
+| `title` | plain text | `title` | yes |
+| `description` | markdown, everything but the criteria and the footer | the body, above the criteria section | yes |
+| `acceptanceCriteria` | a markdown `- [ ]` list with no heading; absent when the item has none | a `## Acceptance criteria` section of the body | yes |
+| `footer` | the caller's finished footer line — **composed by the caller, only placed here** | the body's last block, after the criteria section | yes |
+| `parent` | id of the parent item, or `null` | the sub-issue relation, read from `issues/{n}/parent` | yes — see `link-work-item-parent` for what is unconfirmed |
+| `children` | `[{ id, title, description }]` | `issues/{n}/sub_issues` | yes |
+| `isClosed` | boolean | `state == "CLOSED"` | yes |
+| `url` | the item's web URL | `url` | yes |
+| `planning` | where the item sits in the team's plan | — | **not carried.** GitHub has no area or iteration. A milestone is not one, and none is invented |
+| `estimate` | a number | — | **not carried.** No field, and a label is not invented for it |
+| `priority` | a number | — | **not carried.** Same reason |
+| `tags` | a list of strings | labels, which must exist in the repository first | yes |
+
+**The body is composed here, in one order**, so a reader of either side finds the same sections:
+
+```
+<description>
+
+## Acceptance criteria
+
+<acceptanceCriteria>
+
+<footer>
+```
+
+The criteria section is omitted when the item carries none — a Feature keeps its criteria inside its own description, as its standard lays out.
+
 ### `fetch-work-item`
 
 ```bash
 gh issue view "$ISSUE" --repo "$OWNER/$REPO" \
   --json number,title,body,state,labels,comments,url,assignees
+gh api "repos/$OWNER/$REPO/issues/$ISSUE/sub_issues" --jq '.[] | {id: .number, title, description: .body}'
 ```
 
-**Everything is in `body`.** There is no acceptance-criteria field, no work-item type field and no parent field; §6 says where each of those lives instead.
+**Everything is in `body`**; the keys above are read out of it. `acceptanceCriteria` is the `## Acceptance criteria` section up to the next heading of the same level or the footer, `description` is what stands above it, and `footer` is the trailing block that carries the sentinel (§11). `children` come from the sub-issue list, `type` from the labels.
 
 ### `build-pr-diff`
 
@@ -289,14 +324,41 @@ Both are two-dot, the author view. **Never `git diff HEAD`** — it picks up unr
 
 ### `create-work-item`
 
+- **In:** the work-item keys `type`, `title`, `description`, `footer`, and when given `acceptanceCriteria`, `tags` — written to `description.md`, `criteria.md` and `footer.md`. `planning`, `estimate` and `priority` are **not carried** here; the caller has already said so, and this recipe takes no argument for them. **Out:** the new issue's `id` and `url`.
+
 ```bash
-gh issue create --repo "$OWNER/$REPO" \
-  --title "$TITLE" --body-file issue.md --label "user story"
+# The body, in the one order the key table fixes. The criteria section is left out when there is none.
+{
+    cat description.md
+    if [ -s criteria.md ]
+    then
+        printf '\n## Acceptance criteria\n\n'
+        cat criteria.md
+    fi
+    printf '\n'
+    cat footer.md
+} > issue.md
+
+# An unknown label fails the whole create, so the type label and every tag must exist first.
+LABEL_ARGUMENTS=()
+for LABEL in "$TYPE_LABEL" "${TAGS[@]}"
+do
+    gh label list --repo "$OWNER/$REPO" --search "$LABEL" --json name --jq '.[].name' | grep -qxF "$LABEL" \
+        || gh label create "$LABEL" --repo "$OWNER/$REPO"
+    LABEL_ARGUMENTS+=(--label "$LABEL")
+done
+
+URL=$(gh issue create --repo "$OWNER/$REPO" --title "$TITLE" --body-file issue.md "${LABEL_ARGUMENTS[@]}")
+NUMBER="${URL##*/}"
 ```
 
-Prints the new issue's URL; the number is its last path segment. The type is the **label**, and nothing enforces it — see §6.
+`TYPE_LABEL` is the `type` key's label from the table: `user story`, `feature` or `epic`. Prints the new issue's URL; the number is its last path segment. The type is the **label**, and nothing enforces it — see §6.
+
+**Creating a missing label is a write to the repository**, not only to the issue. The caller's confirmation before the create covers it, and its draft names any label that does not yet exist.
 
 ### `link-work-item-parent`
+
+- **In:** `child`, `parent` — two issue numbers, the same two keys on both bodies. **Out:** the parent's children, read back.
 
 GitHub's sub-issue relation, and the one operation whose identifier is not the number:
 
@@ -311,15 +373,20 @@ gh api "repos/$OWNER/$REPO/issues/$PARENT/sub_issues" -F sub_issue_id="$CHILD_ID
 gh api "repos/$OWNER/$REPO/issues/$PARENT/sub_issues" --jq '.[].number'
 ```
 
-> **Not yet exercised against a live repository.** This is the youngest endpoint in the catalog and the only operation here whose shape has not been confirmed by running it. Confirm the response and the identifier before relying on it, and correct this file rather than working around it.
+**What is confirmed and what is not.** The call shape — the database id read first, sent typed with `-F`, the parent read back — is exercised by the fixture in `tests/forge-port/` of the marketplace repository, against a stand-in `gh` that refuses a string id and a number passed as an id. **The endpoint itself has not yet answered a live repository**; that run belongs to moving the marketplace onto GitHub. Correct this file from that run rather than working around it.
+
+**When the link cannot be made, the parent is a declared difference rather than a silent loss.** A repository whose host does not offer sub-issues refuses the call. The caller then reports the item as **created and not linked**, names the parent it was asked for, and does not record the relation anywhere else — a `Parent: #N` line in the body would be a second location that nothing reads and that drifts from the relation the moment someone sets it by hand.
 
 ### `update-work-item`
 
+- **In:** `id` and any of the work-item keys `title`, `description`, `acceptanceCriteria`, `footer`; each given key replaces what the item holds.
+
 ```bash
 gh issue edit "$ISSUE" --repo "$OWNER/$REPO" --body-file issue.md
+gh issue edit "$ISSUE" --repo "$OWNER/$REPO" --title "$TITLE"      # only when `title` is given
 ```
 
-Whole-body overwrite, so read, edit the region, write back. **No angle-bracket sanitising** — unlike Azure DevOps, which silently drops tag-shaped text on update, GitHub stores `feat/<slug>` verbatim. A transport that defensively rewrites placeholders for the other side produces uglier text here but never wrong text, so the defensive form is safe on both.
+Whole-body overwrite, so read the item with `fetch-work-item`, replace the keys that were given, and recompose the body in the order the key table fixes. **No angle-bracket sanitising** — unlike Azure DevOps, which silently drops tag-shaped text on update, GitHub stores `feat/<slug>` verbatim. A transport that defensively rewrites placeholders for the other side produces uglier text here but never wrong text, so the defensive form is safe on both.
 
 ### `create-pull-request`
 
@@ -467,14 +534,11 @@ esac
 
 ## 6. Where the fields live
 
-Azure DevOps has a field for each of these. GitHub has a body and some labels, and the port normalises the difference:
+Azure DevOps has a field for each of these; GitHub has a body and some labels. **Where each authoring key lives is the key table under §4**, *Work-item keys — the authoring contract*, and it is not repeated here. Two things the table does not carry:
 
 | Concept | GitHub location | Convention |
 |---|---|---|
-| Item type | a label — `user story`, `feature` | nothing enforces it; a missing label fails silently |
-| Acceptance criteria | a `## Acceptance criteria` section of the issue body | the heading is the contract; do not invent a second location |
-| Description | the rest of the body | markdown, natively |
-| Parent | the sub-issue relation | not a field on the child |
+| Item type | a label | nothing enforces it; a missing label fails silently |
 | State | `state`, plus `state_reason` | `OPEN` / `CLOSED`, coarser than an ADO workflow |
 
 **The section heading carries what a field carried.** A transport reading criteria locates the heading and takes everything to the next heading of the same level. One heading, one section, no duplicates — two copies drift and nothing marks which is current.

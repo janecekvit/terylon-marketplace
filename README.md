@@ -84,6 +84,6 @@ Everything else resolves at runtime: the forge from a pasted URL, then `TERYLON_
 
 ## Versioning
 
-Every `plugin.json` carries a `version`, and a consumer re-fetches **only** when that field changes — a push to `main` without a bump ships nothing. Which digit moves is decided by the branch rather than by the size of the change; the rule is in [`plugins/CLAUDE.md`](./plugins/CLAUDE.md).
+Every `plugin.json` carries a `version`, and a consumer re-fetches **only** when that field changes — a push to `main` without a bump ships nothing. Which digit moves is stated in [`plugins/CLAUDE.md`](./plugins/CLAUDE.md), under *Versioning*.
 
 Every slug carries the `terylon-` prefix, redundantly with the `@terylon` marketplace suffix, so that typing `/terylon` shows commands from every plugin in one filtered list.

@@ -77,6 +77,7 @@ So a transport can resolve a forge and still find no engine. **Say so and stop.*
 | The forge resolved, its adapter is installed | proceed |
 | The forge resolved, its adapter is **not** installed | stop. Name the forge, name the missing plugin, and say what to enable. Do **not** fall back to the other adapter, and do **not** issue calls of your own |
 | No forge resolved | stop. Say what was tried — URL, variable, remote — and ask |
+| The adapter is installed, but its transport is **unreachable** — on Azure DevOps the `ado` server's tools are absent from this session, because the server failed to start or could not connect | stop before the first call. Say the forge's server is unreachable, name the adapter, and point at its `check-access` where it has one. Do **not** fall back to the other adapter, and do not read the silence as "nothing there" |
 
 **Never hand-roll the mechanics.** A transport that issues its own platform calls because the engine was absent puts the call shapes in a second place, and the copy is the one that goes stale. The port exists to keep exactly one.
 
@@ -100,4 +101,5 @@ Say which forge you resolved and from what, in one line, before the first operat
 4. Given a `github.com` pull request URL in an Azure DevOps checkout with `TERYLON_FORGE=ado`, it returns `github` — the URL outranks both.
 5. With no remote and no variable, it stops and asks, naming all three sources it tried.
 6. With the forge resolved but its adapter not installed, it stops, names the plugin to enable, and issues no platform call.
-7. With both adapters enabled, the engine is addressed plugin-qualified.
+7. With `terylon-ado` enabled but the `ado` server unreachable, it stops, says the server is unreachable, and issues no platform call.
+8. With both adapters enabled, the engine is addressed plugin-qualified.

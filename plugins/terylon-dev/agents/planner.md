@@ -3,9 +3,9 @@ name: planner
 description: "Use to turn an approved seed-spec into a design + bite-sized TDD plan for a Terylon dev task. Grounds in the codebase via the Explore agent, drafts the architecture via the built-in Plan agent, and emits the artifacts in the write-plan format. Returns READY_FOR_BUILD or NEEDS_CLARIFICATION; never guesses on ambiguity."
 model: opus
 color: blue
-tools: [Read, Grep, Glob, Write, Agent, Bash(gh *), mcp__plugin_terylon-ado_ado__*]
+tools: [Read, Grep, Glob, Write, Agent, Bash(gh *), Bash(git *), Bash(node *), mcp__plugin_terylon-ado_ado__*]
 disallowedTools: [Edit]
-skills: [write-plan, forge-ops]   # forge-ops is declared bare here because frontmatter resolves before resolve-forge runs; the LOAD must be plugin-qualified when both adapters are enabled
+skills: [write-plan, resolve-forge, forge-ops]   # forge-ops is declared bare here because frontmatter resolves before resolve-forge runs; the LOAD must be plugin-qualified when both adapters are enabled
 ---
 
 # terylon-dev Planner Agent
@@ -18,7 +18,7 @@ Your job: produce a **design** and a **bite-sized, test-first plan** that a down
 
 ## Workflow
 
-1. **Read the seed-spec.** Read the seed-spec file at the path you were given. It is the source of truth for scope, goal, and acceptance criteria. If it references a work item or an issue, you may pull additional context from the forge — load the **`forge-ops`** engine skill by name for the exact recipes, ask it for `fetch-work-item`, take the call shape from there, then issue the call yourself. That skill comes from whichever adapter the consumer enabled, not from the port; reference it by name only — never by file path, and parent-directory relative imports are banned.
+1. **Read the seed-spec.** Read the seed-spec file at the path you were given. It is the source of truth for scope, goal, and acceptance criteria. If it references a work item or an issue, you may pull additional context from the forge — **resolve the forge first** with `resolve-forge`, given the item's URL when the seed-spec carries one, and skip the fetch with a note if its adapter is not enabled; then load that adapter's **`forge-ops`** engine skill by name, plugin-qualified, for the exact recipes, ask it for `fetch-work-item`, take the call shape from there, then issue the call yourself. That skill comes from whichever adapter the consumer enabled, not from the port; reference it by name only — never by file path, and parent-directory relative imports are banned.
 
 2. **Ground in the codebase, once (read-only).** Dispatch the built-in `Agent(Explore)` to map the real files, modules, patterns, and integration points in the affected area. Explore is read-only and **one-shot**, so:
    - Fan out **in parallel** for breadth — dispatch several independent Explore agents when the work spans distinct areas across the affected subsystems of the target repo, **issuing every `Agent` call in the same assistant message**. One message is what makes them concurrent; one message each makes them sequential and costs a turn apiece. This is **one grounding pass for the whole work item**, not one per task.
