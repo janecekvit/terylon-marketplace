@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "terylon",
-  "description": "Terylon — internal Claude Code plugin marketplace. Role-based plugins for development on top of Azure DevOps or GitHub.",
+  "description": "Terylon — a Claude Code plugin marketplace. Role-based plugins for development on top of Azure DevOps or GitHub.",
   "owner": {
     "name": "Vít Janeček"
   },
@@ -9,6 +9,8 @@
     {
       "name": "terylon-git",
       "source": "./plugins/terylon-git",
+      "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-git",
+      "repository": "https://github.com/janecekvit/terylon-marketplace",
       "description": "Git foundation — worktree isolation, the review engine, and the multi-lens code reviewer. No forge, no MCP server; works in any git repository. Requires terylon-core.",
       "category": "general",
       "keywords": [
@@ -22,6 +24,8 @@
     {
       "name": "terylon-core",
       "source": "./plugins/terylon-core",
+      "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-core",
+      "repository": "https://github.com/janecekvit/terylon-marketplace",
       "description": "The marketplace's root — the conventions every persona shares and per-agent token-spend measurement read from a session's own transcripts. No git, forge, or MCP dependency. Successor to terylon-metrics.",
       "category": "general",
       "keywords": [
@@ -37,6 +41,8 @@
     {
       "name": "terylon-forge",
       "source": "./plugins/terylon-forge",
+      "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-forge",
+      "repository": "https://github.com/janecekvit/terylon-marketplace",
       "description": "The forge port — pull request review, description, comment handling and checklist write-back, written against an operation catalog rather than one hosting platform. Ships no adapter: enable terylon-ado or terylon-github beside it. Successor to terylon-devops.",
       "category": "general",
       "keywords": [
@@ -50,6 +56,8 @@
     {
       "name": "terylon-ado",
       "source": "./plugins/terylon-ado",
+      "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-ado",
+      "repository": "https://github.com/janecekvit/terylon-marketplace",
       "description": "The Azure DevOps adapter — fills the terylon-forge port with ADO mechanics and registers the ADO MCP server. Requires the TERYLON_ADO_ORG environment variable; there is no default organisation.",
       "category": "general",
       "keywords": [
@@ -63,6 +71,8 @@
     {
       "name": "terylon-github",
       "source": "./plugins/terylon-github",
+      "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-github",
+      "repository": "https://github.com/janecekvit/terylon-marketplace",
       "description": "The GitHub adapter — fills the terylon-forge port with gh CLI mechanics. No MCP server and no token in configuration: authentication is whatever gh auth login already established.",
       "category": "general",
       "keywords": [
@@ -76,6 +86,8 @@
     {
       "name": "terylon-product",
       "source": "./plugins/terylon-product",
+      "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-product",
+      "repository": "https://github.com/janecekvit/terylon-marketplace",
       "description": "Product owner / PM — authoring User Stories grounded in the codebase and Feature specifications with a UX section. Requires terylon-forge and one adapter, terylon-ado or terylon-github.",
       "category": "role",
       "keywords": [
@@ -89,6 +101,8 @@
     {
       "name": "terylon-dev",
       "source": "./plugins/terylon-dev",
+      "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-dev",
+      "repository": "https://github.com/janecekvit/terylon-marketplace",
       "description": "Developer pipeline — from a vague idea or a user story to implemented, tested code through brainstorm → plan → build (TDD) → finish, with an autonomous leader agent, parallel review lenses, the plan format and the build loop. Also dispatches long unattended background runs that commit after every step, so an interruption costs one step. Requires terylon-git, terylon-forge, one adapter, and terylon-core.",
       "category": "role",
       "keywords": [
@@ -105,6 +119,8 @@
     {
       "name": "terylon-test",
       "source": "./plugins/terylon-test",
+      "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-test",
+      "repository": "https://github.com/janecekvit/terylon-marketplace",
       "description": "Tester — walks a pull request test plan and its linked item acceptance criteria, exercises what can be exercised, reconciles the two, and reports what cannot. Separates executed from asserted so a tick means something. Requires terylon-forge, one adapter, and terylon-core.",
       "category": "role",
       "keywords": [

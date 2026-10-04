@@ -1,12 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "terylon-test",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "Tester — walks a pull request test plan and its linked item acceptance criteria, exercises what can be exercised, reconciles the two, and reports what cannot. Separates executed from asserted so a tick means something. Requires terylon-forge, one adapter, and terylon-core.",
   "author": {
     "name": "Vít Janeček"
   },
-  "homepage": "https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace?path=/plugins/terylon-test",
+  "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-test",
+  "repository": "https://github.com/janecekvit/terylon-marketplace",
   "license": "MIT",
   "keywords": [
     "testing",

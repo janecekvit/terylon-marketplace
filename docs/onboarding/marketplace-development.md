@@ -6,13 +6,15 @@ Changing a skill and wanting to run it before it reaches `main`. The mechanism i
 
 Override `ref` in your **local** `.claude/settings.local.json`. It is gitignored; never commit it.
 
+**A feature branch exists only on Azure DevOps** — GitHub receives `main` and release tags, nothing else (see *How `main` reaches GitHub* in [`flows/change-to-consumer-repo.md`](../flows/change-to-consumer-repo.md)). So the override names the Azure DevOps remote rather than the public URL, and fetching it uses your git credential for Azure DevOps. The URL is not written here, because the organisation is not published; `git remote get-url origin` in your clone prints it.
+
 ```json
 {
   "extraKnownMarketplaces": {
     "terylon": {
       "source": {
         "source": "git",
-        "url": "https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace",
+        "url": "<the Azure DevOps remote: run  git remote get-url origin>",
         "ref": "feat/<your-branch>"
       },
       "autoUpdate": true

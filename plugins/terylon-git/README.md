@@ -49,7 +49,7 @@ The boundary is enforced by the same test in both directions. `delegate-to-repo-
     "terylon": {
       "source": {
         "source": "git",
-        "url": "https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace",
+        "url": "https://github.com/janecekvit/terylon-marketplace.git",
         "ref": "main"
       },
       "autoUpdate": true

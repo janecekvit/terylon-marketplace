@@ -69,7 +69,7 @@ With both adapters enabled the engine is addressed plugin-qualified — `terylon
     "terylon": {
       "source": {
         "source": "git",
-        "url": "https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace",
+        "url": "https://github.com/janecekvit/terylon-marketplace.git",
         "ref": "main"
       },
       "autoUpdate": true
@@ -84,4 +84,4 @@ With both adapters enabled the engine is addressed plugin-qualified — `terylon
 
 `terylon-forge`, `terylon-git` and `terylon-core` install automatically as dependencies.
 
-Note that the marketplace **source** stays on Azure DevOps — that is where this repository lives — while your work is on GitHub. The two are independent.
+The marketplace **source** is this public GitHub repository, fetched anonymously; your own repositories are reached through `gh`. The two are independent.

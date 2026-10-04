@@ -1,12 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "terylon-ado",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "The Azure DevOps adapter — fills the terylon-forge port with ADO mechanics and registers the ADO MCP server. Requires the TERYLON_ADO_ORG environment variable; there is no default organisation.",
   "author": {
     "name": "Vít Janeček"
   },
-  "homepage": "https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace?path=/plugins/terylon-ado",
+  "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-ado",
+  "repository": "https://github.com/janecekvit/terylon-marketplace",
   "license": "MIT",
   "keywords": [
     "azure-devops",

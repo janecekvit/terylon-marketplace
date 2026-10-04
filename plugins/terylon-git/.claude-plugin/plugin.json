@@ -1,12 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "terylon-git",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "description": "Git foundation — worktree isolation, the review engine, and the multi-lens code reviewer. No forge, no MCP server; works in any git repository. Requires terylon-core.",
   "author": {
     "name": "Vít Janeček"
   },
-  "homepage": "https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace?path=/plugins/terylon-git",
+  "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-git",
+  "repository": "https://github.com/janecekvit/terylon-marketplace",
   "license": "MIT",
   "keywords": [
     "git",

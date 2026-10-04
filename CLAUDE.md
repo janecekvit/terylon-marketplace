@@ -1,6 +1,6 @@
 # Terylon Marketplace
 
-Internal Claude Code plugin marketplace distributed into product repositories through `extraKnownMarketplaces`.
+Claude Code plugin marketplace distributed into product repositories through `extraKnownMarketplaces`. **Public on GitHub** (`janecekvit/terylon-marketplace`, MIT) and installed from there; reviewed and merged on a private Azure DevOps repository. See *Two remotes* below.
 
 @README.md
 
@@ -59,7 +59,18 @@ Component layout, the placement rule in full, the dispatch chains and the table 
 | Repo | `TerylonMarketplace` |
 | MCP server | `@azure-devops/mcp@2.9.0` (pinned) via `plugins/terylon-ado/.mcp.json` |
 
-**No organisation name is committed anywhere in this repository except inside its own URL.** The `source.url` in the setup snippets and the `homepage` in each manifest have to name it — that is the address you install the marketplace from, and a placeholder there would point at nothing. Everywhere else it is absent on purpose: example URLs in the recipes use `contoso`, and the migration notes describe the failure a hard-coded default caused without repeating the value that caused it.
+**No Azure DevOps organisation name is committed anywhere in this repository.** Until #273 it appeared inside the repository's own URL, in the setup snippets and each manifest's `homepage`, because that was the address you installed from. The address is now the public GitHub repository, so the exception is gone: a published file never links a reader to the private organisation, example URLs in the recipes use `contoso`, and the one snippet that must reach a feature branch on Azure DevOps (`docs/onboarding/marketplace-development.md`) tells the reader to run `git remote get-url origin` instead. Older commits still carry the URL; the history is published as it is.
+
+## Two remotes
+
+| Remote | Holds | Who moves it |
+|---|---|---|
+| `origin` — Azure DevOps, private | feature branches, pull requests, merges | pull requests only; `git-guard.js` refuses any push to `main` |
+| `github` — `github.com/janecekvit/terylon-marketplace`, public | `main` and release tags, nothing else | the operator, by hand, after each merge — never forced |
+
+**`main` is the same commit on both.** The commands, the check that both heads match and why an agent never makes the push are in `docs/flows/change-to-consumer-repo.md`, under *How `main` reaches GitHub*. Every manifest's `homepage` and `repository` name the GitHub repository.
+
+**Everything committed is published.** Before the first push the tree **and the full history** were scanned for secrets, private host and tailnet names, personal e-mail addresses and internal-only references (#273); nothing secret was found. Keep it that way: no host name, tailnet name, home directory, personal address or organisation name goes into a commit — measured records say *the operator's own host*, test fixtures use `alice` and `contoso`, and a plugin author is named without an e-mail address.
 
 **`.claude/settings.json` deliberately carries no `env` block.** It did briefly, and the reason it does not is the same reason `.mcp.json` lost its fallback, one level up: **this repository is the marketplace source.** Anyone who forks it to point at their own copy inherits its committed settings, and a committed `TERYLON_ADO_ORG` would hand them this owner's organisation — the very outcome removing the fallback was meant to prevent, reintroduced through a file nobody thinks of as code. Whoever works on this repository sets the variable in their **own** `~/.claude/settings.json`, where a personal default belongs and where a fork cannot inherit it.
 

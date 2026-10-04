@@ -1,12 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "terylon-forge",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "The forge port — pull request review, description, comment handling and checklist write-back, written against an operation catalog rather than one hosting platform. Ships no adapter: enable terylon-ado or terylon-github beside it. Successor to terylon-devops.",
   "author": {
     "name": "Vít Janeček"
   },
-  "homepage": "https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace?path=/plugins/terylon-forge",
+  "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-forge",
+  "repository": "https://github.com/janecekvit/terylon-marketplace",
   "license": "MIT",
   "keywords": [
     "pull-request",

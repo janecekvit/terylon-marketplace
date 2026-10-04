@@ -18,9 +18,11 @@ An edit to a skill in this repository does nothing for anyone until seven things
   │        │                                                              │
   │ 5  pull request ──▶ main    git-guard.js refuses any push to main     │
   └────────┼─────────────────────────────────────────────────────────────┘
-           │  merged
+           │  merged on Azure DevOps (private — where review happens)
+           │
+           │  5b the operator pushes that main, unchanged, to GitHub
            ▼
-  THE MARKETPLACE  —  this repository, on the ref the consumer tracks
+  THE MARKETPLACE  —  github.com/janecekvit/terylon-marketplace, on the ref the consumer tracks
            │
            │  6  the consumer's Claude Code refreshes the marketplace
            │     autoUpdate: true  ──▶  in the background
@@ -46,10 +48,35 @@ An edit to a skill in this repository does nothing for anyone until seven things
 | 3 | The version is bumped | **nothing** — it is a convention with no guard | **silently** |
 | 4 | Each commit has explicit consent | `git-workflow.md`, plus the hook | loudly |
 | 5 | `main` is reached only through a pull request | the hook refuses **any** push targeting `main`, from any branch — including `git push origin HEAD:main` from a feature branch | loudly |
-| 6 | The consumer refreshes | `autoUpdate: true` in their `extraKnownMarketplaces` entry | silently, if authentication for the background fetch is missing |
+| 5b | The merged `main` reaches GitHub | **nothing** — the operator pushes it by hand, see below | **silently** — Azure DevOps shows the merge, consumers see nothing |
+| 6 | The consumer refreshes | `autoUpdate: true` in their `extraKnownMarketplaces` entry | silently, if the background fetch cannot reach GitHub |
 | 7 | The plugin is enabled | `enabledPlugins` in the consumer's `.claude/settings.json` | loudly — the skill is simply absent |
 
-Two of the seven fail silently, and they are the two the runbook exists for.
+Three hops fail silently, and they are the ones the runbook exists for.
+
+## How `main` reaches GitHub
+
+**Two remotes, one history.** Azure DevOps is `origin` and stays where every pull request is reviewed and merged. GitHub is the second remote, `github`, and receives `main` exactly as Azure DevOps holds it — the same commits, never a rebased or squashed copy.
+
+```
+  origin  (Azure DevOps, private)          github  (GitHub, public)
+  feature branches, pull requests, merges   main and release tags only
+            │                                        ▲
+            └── main ──── pushed unchanged ──────────┘
+```
+
+| When | Command, run by the operator in their own clone |
+|---|---|
+| once per clone | `git remote add github https://github.com/janecekvit/terylon-marketplace.git` |
+| after every merge on Azure DevOps | `git fetch origin` then `git push github origin/main:refs/heads/main` |
+| to check | `git ls-remote origin refs/heads/main` and `git ls-remote github refs/heads/main` print the same commit |
+| on a release | `git tag -a v<date> origin/main` then `git push github v<date>`, and the release notes on GitHub |
+
+**The operator pushes, not an agent.** `.claude/hooks/git-guard.js` refuses any push that targets `main`, whichever remote it names — on purpose, since the rule it backs is that `main` moves only through a reviewed pull request, and the GitHub copy is that same `main`.
+
+**Never force this push.** A rejected push means GitHub's `main` holds a commit Azure DevOps does not. Find where it came from and bring it through a pull request; forcing would delete it from the public history.
+
+**Only `main` and tags go to GitHub.** A feature branch stays on Azure DevOps, so testing a branch before it merges points at that remote — see [`onboarding/marketplace-development.md`](../onboarding/marketplace-development.md).
 
 ## The version field is the whole contract
 
@@ -88,9 +115,9 @@ Two of the seven fail silently, and they are the two the runbook exists for.
 
 **Dependencies are not inherited, they are declared.** A consumer enabling `terylon-dev` gets `terylon-git`, `terylon-forge` and `terylon-core` automatically, because `terylon-dev` declares them. They get **no adapter**, because the port declares none on purpose — see [port-and-adapter-split](../architecture/port-and-adapter-split.md).
 
-**The marketplace source and the consumer's own forge are independent.** This repository lives on Azure DevOps whichever forge the consuming repositories are on. A GitHub-hosted product repository still fetches the marketplace over the Azure DevOps URL, and still authenticates to its own forge through `gh`.
+**The marketplace source and the consumer's own forge are independent.** Every consumer fetches the marketplace from the public GitHub repository, whichever forge its own repositories are on. An Azure DevOps-hosted product repository still installs from GitHub, and still authenticates to its own forge through the `ado` server.
 
-**Background updates need git-level credentials.** Azure DevOps has no documented equivalent of `GITHUB_TOKEN`, so an unattended background fetch relies on a credential helper being configured. Without one it fails quietly and the consumer stays on the version they had — which looks exactly like a forgotten bump. See [`runbooks/consumer-did-not-get-the-update.md`](../runbooks/consumer-did-not-get-the-update.md) for telling the two apart.
+**Background updates need no credential.** The marketplace is public, so an unattended fetch authenticates as nobody. What can still stop it quietly is the network — a proxy, an offline machine — and then the consumer stays on the version they had, which looks exactly like a forgotten bump. See [`runbooks/consumer-did-not-get-the-update.md`](../runbooks/consumer-did-not-get-the-update.md) for telling the causes apart.
 
 **The cache is keyed by version.** Installed plugins land under `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/`, so an old and a new version coexist on disk. Reading a skill from a cache directory and being surprised it is out of date usually means reading the wrong version's copy — check the directory name.
 
@@ -103,6 +130,7 @@ Two of the seven fail silently, and they are the two the runbook exists for.
 | `.claude/hooks/git-guard.js` | refuses `Edit` / `Write` / `git commit` on `main`, and any push targeting `main` from any branch |
 | `.claude/rules/git-workflow.md` | the branch, consent and bump rules the hook backs up |
 | `plugins/CLAUDE.md` | *Versioning* — the branch-scoped digit table in full |
-| `README.md` | the consumer-facing `settings.json` snippet |
+| `README.md` | the consumer-facing `settings.json` snippet, and *Where it is developed* — the two remotes for a public reader |
+| `git remote -v` in a clone | `origin` on Azure DevOps; `github` added by hand, once per clone, by whoever pushes `main` to GitHub |
 | `docs/onboarding/consumer-setup.md` | what a consuming repository configures, end to end |
 | `docs/onboarding/marketplace-development.md` | pointing a local checkout at a feature branch to test before merging |

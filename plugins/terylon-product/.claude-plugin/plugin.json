@@ -1,12 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "terylon-product",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "description": "Product owner / PM — authoring User Stories grounded in the codebase and Feature specifications with a UX section. Requires terylon-forge and one adapter, terylon-ado or terylon-github.",
   "author": {
     "name": "Vít Janeček"
   },
-  "homepage": "https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace?path=/plugins/terylon-product",
+  "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-product",
+  "repository": "https://github.com/janecekvit/terylon-marketplace",
   "license": "MIT",
   "keywords": [
     "product",

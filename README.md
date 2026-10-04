@@ -1,6 +1,6 @@
 # Terylon Marketplace
 
-Internal Claude Code plugin marketplace for the development workflow, on **Azure DevOps or on GitHub**.
+A [Claude Code](https://code.claude.com/docs) plugin marketplace for the whole development workflow — user stories and Feature specs, a test-first build pipeline with review agents, pull request review and checklist verification — on **Azure DevOps or on GitHub**. MIT licensed.
 
 Eight plugins, one dependency chain. You enable **two** of them: the role you work in, and the adapter for wherever your repositories are hosted. Everything else arrives as a dependency.
 
@@ -37,7 +37,17 @@ terylon-core (root — no dependencies)
 
 ## Quickstart
 
-Into `.claude/settings.json` of your product repository — commit it, it is shared with the team:
+**Try it in one session.** In Claude Code, inside the repository you want to work on:
+
+```text
+/plugin marketplace add janecekvit/terylon-marketplace
+/plugin install terylon-github@terylon
+/plugin install terylon-dev@terylon
+```
+
+Swap `terylon-github` for `terylon-ado` if that repository is on Azure DevOps, and `terylon-dev` for `terylon-product` or `terylon-test` for another role.
+
+**Share it with a team.** Into `.claude/settings.json` of your product repository — commit it, and everyone who opens the repository is offered the same plugins:
 
 ```json
 {
@@ -46,7 +56,7 @@ Into `.claude/settings.json` of your product repository — commit it, it is sha
     "terylon": {
       "source": {
         "source": "git",
-        "url": "https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace",
+        "url": "https://github.com/janecekvit/terylon-marketplace.git",
         "ref": "main"
       },
       "autoUpdate": true
@@ -87,3 +97,22 @@ Everything else resolves at runtime: the forge from a pasted URL, then `TERYLON_
 Every `plugin.json` carries a `version`, and a consumer re-fetches **only** when that field changes — a push to `main` without a bump ships nothing. Which digit moves is stated in [`plugins/CLAUDE.md`](./plugins/CLAUDE.md), under *Versioning*.
 
 Every slug carries the `terylon-` prefix, redundantly with the `@terylon` marketplace suffix, so that typing `/terylon` shows commands from every plugin in one filtered list.
+
+## Where it is developed
+
+```
+  feature branch ──▶ pull request, reviewed and merged on a private Azure DevOps repository
+                            │
+                            ▼  main, pushed unchanged
+  github.com/janecekvit/terylon-marketplace   ◀── what you install from
+```
+
+This GitHub repository is the **public home** of the marketplace and the address you install from. Changes are reviewed in a private Azure DevOps repository, and each merged `main` is pushed here as it stands, so the history on both is the same history. How that push is made is in [`docs/flows/change-to-consumer-repo.md`](./docs/flows/change-to-consumer-repo.md).
+
+## Security
+
+Report a vulnerability privately, as [`SECURITY.md`](./SECURITY.md) describes — not in a public issue.
+
+## Licence
+
+[MIT](./LICENSE), copyright Vít Janeček.

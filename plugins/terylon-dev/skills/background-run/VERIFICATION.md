@@ -60,7 +60,7 @@ The earlier table loaded this plugin with `claude --plugin-dir`, which points at
 
 **No step was taken beyond the install.** The dependencies came with it.
 
-**Measured from the git remote on 2026-09-12, once !103 was on `main`.** Into a fresh `CLAUDE_CONFIG_DIR`: `plugin marketplace add https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace` cloned it at `f2edb86`, `plugin install terylon-dev@terylon` reported *"Successfully installed … (+ 3 dependencies)"*, and the installer's cache holds `background-run` beside its four siblings. **No step beyond the install.** The clone was the last untested hop and it is tested.
+**Measured from the git remote on 2026-09-12, once !103 was on `main`.** Into a fresh `CLAUDE_CONFIG_DIR`: `plugin marketplace add <the repository's Azure DevOps URL>` cloned it at `f2edb86`, `plugin install terylon-dev@terylon` reported *"Successfully installed … (+ 3 dependencies)"*, and the installer's cache holds `background-run` beside its four siblings. **No step beyond the install.** The clone was the last untested hop and it is tested.
 
 **One thing came out of it that is worth carrying forward.** Declaring the marketplace in `extraKnownMarketplaces` **with a `ref`** and then running `plugin marketplace add <url>` is **refused** by Claude Code `2.1.269`:
 
