@@ -3,8 +3,7 @@
   "name": "terylon",
   "description": "Terylon — internal Claude Code plugin marketplace. Role-based plugins for development on top of Azure DevOps or GitHub.",
   "owner": {
-    "name": "Vít Janeček",
-    "email": "vit.janecek@outlook.com"
+    "name": "Vít Janeček"
   },
   "plugins": [
     {
