@@ -9,6 +9,8 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 ```
 /.claude-plugin/marketplace.json   root manifest
 /LICENSE                           MIT, copyright the operator — every plugin manifest says "license": "MIT"
+/SECURITY.md                       how to report a vulnerability — GitHub private vulnerability reporting
+/.github/workflows/ci.yml          unit suites + the free e2e install stage, on every PR and push to main
 /plugins/<slug>/                   one directory per plugin
 /plugins/CLAUDE.md                 authoring conventions — read before editing a plugin
 /docs/                             the engineering knowledge base — architecture, flows, runbooks, onboarding
@@ -114,6 +116,8 @@ The repo runs on **Windows and natively on Debian**. Everything scripted must wo
 ## Testing
 
 Three suites under `/tests/`, none distributed. **Run the end-to-end harness before a change reaches `main`**, and before anything moves to a new host.
+
+**GitHub Actions runs the free part on every pull request and every push to `main`** (`.github/workflows/ci.yml`): `node --test "**/*.test.js"` and the `install` stage, with Claude Code pinned to the version last measured. The stage needs no secret — measured on 2026-10-04 with an empty environment and an empty `HOME`: 82 checks green, $0, and each install-stage planted defect (`skill-frontmatter`, `hook-path`, `mcp-organisation`) turned it red. A CI checkout is a detached HEAD, which the harness refuses, so the job names the commit as a local branch and passes `--ref`. The model-driven stages stay manual; why is in `README.md`, under *Continuous integration*.
 
 | Suite | Command | Proves | Cost |
 |---|---|---|---|

@@ -13,6 +13,7 @@ paths:
   - "tests/**"
   - ".gitignore"
   - ".gitattributes"
+  - ".github/**"
 ---
 
 # CLAUDE.md sync
