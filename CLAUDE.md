@@ -8,6 +8,7 @@ Internal Claude Code plugin marketplace distributed into product repositories th
 
 ```
 /.claude-plugin/marketplace.json   root manifest
+/LICENSE                           MIT, copyright the operator — every plugin manifest says "license": "MIT"
 /plugins/<slug>/                   one directory per plugin
 /plugins/CLAUDE.md                 authoring conventions — read before editing a plugin
 /docs/                             the engineering knowledge base — architecture, flows, runbooks, onboarding

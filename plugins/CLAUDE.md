@@ -25,7 +25,7 @@ plugins/terylon-<role>/
   "description": "<one sentence>",
   "author": { "name": "Vít Janeček", "email": "vit.janecek@outlook.com" },
   "homepage": "https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace?path=/plugins/terylon-<role>",
-  "license": "Proprietary",
+  "license": "MIT",
   "keywords": ["<topic>", "<topic>"]
 }
 ```
