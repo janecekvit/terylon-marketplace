@@ -168,7 +168,7 @@ test("non-assistant records are excluded from an event's totals", () =>
 test("projectSlug matches Claude Code's project folder naming on both platforms", () =>
 {
     assert.strictEqual(recorder.projectSlug("D:\\Git\\TerylonMarketplace"), "D--Git-TerylonMarketplace");
-    assert.strictEqual(recorder.projectSlug("/home/vitja/git/repo"), "-home-vitja-git-repo");
+    assert.strictEqual(recorder.projectSlug("/home/alice/git/repo"), "-home-alice-git-repo");
 });
 
 test("resolveSubagentsDirectory falls back to cwd and session id when no transcript path is given", () =>

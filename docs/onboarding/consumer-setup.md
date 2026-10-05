@@ -13,7 +13,7 @@ Into `.claude/settings.json` of the product repository. **Commit it** — it is 
     "terylon": {
       "source": {
         "source": "git",
-        "url": "https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace",
+        "url": "https://github.com/janecekvit/terylon-marketplace.git",
         "ref": "main"
       },
       "autoUpdate": true
@@ -83,27 +83,25 @@ Everything else resolves on its own:
 
 A `TERYLON_ADO_PROJECT` override exists for the rare repository whose git remote is not its Azure DevOps project. Normally you never set it, and setting it to work around a wrong organisation hides the real problem.
 
-**The marketplace source and your work are independent.** `extraKnownMarketplaces.terylon.source.url` is where this repository lives — leave it, or fork it and point at your fork. It stays on Azure DevOps even when your own repositories are on GitHub.
+**The marketplace source and your work are independent.** `extraKnownMarketplaces.terylon.source.url` is where this repository lives — the public GitHub repository, whichever forge your own repositories are on. Leave it, or fork it and point at your fork.
 
 ## Authentication — two separate things
 
 ```
    the MARKETPLACE SOURCE                    YOUR OWN FORGE
-   (this repository, on Azure DevOps)        (wherever your work lives)
+   (this repository, public on GitHub)       (wherever your work lives)
             │                                        │
-   git credential helper                    ADO   ──▶ the ado server's own Entra login
-   (git-credential-manager / a PAT          GitHub ──▶ gh auth login
-    in ~/.git-credentials)
+   no credential — an anonymous clone       ADO   ──▶ the ado server's own Entra login
+                                            GitHub ──▶ gh auth login
 ```
 
 | Path | How |
 |---|---|
-| Manual install or update of the marketplace | Claude Code uses the existing git credential helper — both `git-credential-manager` (Entra ID) and a PAT in `~/.git-credentials` work |
-| **Automatic background update** | Azure DevOps has no documented equivalent of `GITHUB_TOKEN`. Use a git-level credential helper, or stay on `ref: main` and run `/plugin marketplace update` by hand |
+| Install, manual update and **automatic background update** of the marketplace | an anonymous `git clone` of a public repository — nothing to configure |
 | Azure DevOps API calls | the MCP server's own interactive Entra login |
 | GitHub API calls | `gh auth login` |
 
-The background-update gap is the one that bites: it fails quietly, and the result looks exactly like a forgotten version bump. [`runbooks/consumer-did-not-get-the-update.md`](../runbooks/consumer-did-not-get-the-update.md) separates the two.
+A background update can still fail quietly when the machine cannot reach `github.com`, and the result looks exactly like a forgotten version bump. [`runbooks/consumer-did-not-get-the-update.md`](../runbooks/consumer-did-not-get-the-update.md) separates the two.
 
 ## Never commit `TERYLON_ADO_ORG` into a marketplace
 

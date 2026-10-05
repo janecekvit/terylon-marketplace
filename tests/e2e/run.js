@@ -155,6 +155,17 @@ function isUrl(source)
     return /^[a-z][a-z0-9+.-]*:\/\//i.test(source);
 }
 
+// A github.com repository URL without the .git suffix.
+const GITHUB_URL_WITHOUT_SUFFIX = /^https:\/\/github\.com\/[^/]+\/[^/]+?(?<!\.git)\/?$/i;
+
+// `marketplace add` records a github.com URL with `.git` appended, then refuses the add because the
+// recorded source no longer matches the extraKnownMarketplaces entry the install stage declared
+// with the URL as typed. Measured on 2026-10-05 (2.1.289). Declare the form it records.
+function withGitSuffix(source)
+{
+    return GITHUB_URL_WITHOUT_SUFFIX.test(source) ? source.replace(/\/?$/, ".git") : source;
+}
+
 // The two command wrappers the stand-ins are reached through, first on the PATH of every run.
 function createBinDirectory(workDirectory)
 {
@@ -239,7 +250,7 @@ function main()
     const ref = resolved.ref;
     const outDirectory = options.out || fileSystem.mkdtempSync(path.join(os.tmpdir(), "terylon-e2e-"));
     const requestedSource = options.source || git(["remote", "get-url", "origin"]);
-    const source = isUrl(requestedSource) ? requestedSource : path.resolve(requestedSource);
+    const source = isUrl(requestedSource) ? withGitSuffix(requestedSource) : path.resolve(requestedSource);
     const report = { startedAt: new Date().toISOString(), source, ref, models: options.model || DEFAULT_MODELS, passes: [] };
 
     process.stdout.write(`terylon e2e — ${source}#${ref}, stages ${options.stages.join(",")}, model ${options.model || JSON.stringify(DEFAULT_MODELS)}, out ${outDirectory}\n`);

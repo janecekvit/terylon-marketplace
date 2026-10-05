@@ -1,0 +1,71 @@
+# Every pull request and every push to main: the unit suites, then the end-to-end harness's free
+# install stage. The model-driven stages (author, github-only) are not run here — they need a
+# Claude login and cost about $3 a run; the README says why, under "Continuous integration".
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The Claude Code the install stage was last measured against. Raise it deliberately, in its own
+  # commit, after the stage passes locally on the new version.
+  CLAUDE_CODE_VERSION: 2.1.289
+
+jobs:
+  unit:
+    name: Unit suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: node --test
+        run: node --test "**/*.test.js"
+
+  install:
+    name: End-to-end install stage (free, no model)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Claude Code
+        run: npm install --global "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+
+      # marketplace add installs a branch or a tag, never a commit, and a CI checkout is a detached
+      # HEAD. Name the checked-out commit as a local branch and install that branch.
+      - name: Name the commit under test
+        run: git switch --create ci/under-test
+
+      # No Claude login and no forge token exist here, and none is needed: the stage installs into
+      # a scratch CLAUDE_CONFIG_DIR and reads the init event, which arrives before any API call.
+      - name: node tests/e2e/run.js --stages install
+        run: node tests/e2e/run.js --source . --ref ci/under-test --stages install --out "${RUNNER_TEMP}/e2e"
+
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-install-report
+          path: ${{ runner.temp }}/e2e
+          if-no-files-found: ignore

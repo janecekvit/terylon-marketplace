@@ -105,7 +105,7 @@ Going that route, each consumer needs the Azure CLI installed and logged in (`az
     "terylon": {
       "source": {
         "source": "git",
-        "url": "https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace",
+        "url": "https://github.com/janecekvit/terylon-marketplace.git",
         "ref": "main"
       },
       "autoUpdate": true

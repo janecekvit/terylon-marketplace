@@ -1,6 +1,6 @@
 # Terylon Marketplace
 
-Internal Claude Code plugin marketplace distributed into product repositories through `extraKnownMarketplaces`.
+Claude Code plugin marketplace distributed into product repositories through `extraKnownMarketplaces`. **Public on GitHub** (`janecekvit/terylon-marketplace`, MIT) and installed from there; reviewed and merged on a private Azure DevOps repository. See *Two remotes* below.
 
 @README.md
 
@@ -8,6 +8,9 @@ Internal Claude Code plugin marketplace distributed into product repositories th
 
 ```
 /.claude-plugin/marketplace.json   root manifest
+/LICENSE                           MIT, copyright the operator — every plugin manifest says "license": "MIT"
+/SECURITY.md                       how to report a vulnerability — GitHub private vulnerability reporting
+/.github/workflows/ci.yml          unit suites + the free e2e install stage, on every PR and push to main
 /plugins/<slug>/                   one directory per plugin
 /plugins/CLAUDE.md                 authoring conventions — read before editing a plugin
 /docs/                             the engineering knowledge base — architecture, flows, runbooks, onboarding
@@ -58,7 +61,18 @@ Component layout, the placement rule in full, the dispatch chains and the table 
 | Repo | `TerylonMarketplace` |
 | MCP server | `@azure-devops/mcp@2.9.0` (pinned) via `plugins/terylon-ado/.mcp.json` |
 
-**No organisation name is committed anywhere in this repository except inside its own URL.** The `source.url` in the setup snippets and the `homepage` in each manifest have to name it — that is the address you install the marketplace from, and a placeholder there would point at nothing. Everywhere else it is absent on purpose: example URLs in the recipes use `contoso`, and the migration notes describe the failure a hard-coded default caused without repeating the value that caused it.
+**No Azure DevOps organisation name is committed anywhere in this repository.** Until #273 it appeared inside the repository's own URL, in the setup snippets and each manifest's `homepage`, because that was the address you installed from. The address is now the public GitHub repository, so the exception is gone: a published file never links a reader to the private organisation, example URLs in the recipes use `contoso`, and the one snippet that must reach a feature branch on Azure DevOps (`docs/onboarding/marketplace-development.md`) tells the reader to run `git remote get-url origin` instead. Older commits still carry the URL; the history is published as it is.
+
+## Two remotes
+
+| Remote | Holds | Who moves it |
+|---|---|---|
+| `origin` — Azure DevOps, private | feature branches, pull requests, merges | pull requests only; `git-guard.js` refuses any push to `main` |
+| `github` — `github.com/janecekvit/terylon-marketplace`, public | `main` and release tags, nothing else | the operator, by hand, after each merge — plain; forced exactly once, on the first push, over the `LICENSE` commit GitHub generated |
+
+**`main` is the same commit on both.** The commands, the check that both heads match and why an agent never makes the push are in `docs/flows/change-to-consumer-repo.md`, under *How `main` reaches GitHub*. Every manifest's `homepage` and `repository` name the GitHub repository.
+
+**Everything committed is published.** Before the first push the tree **and the full history** were scanned for secrets, private host and tailnet names, personal e-mail addresses and internal-only references (#273); nothing secret was found. Keep it that way: no host name, tailnet name, home directory, personal address or organisation name goes into a commit — measured records say *the operator's own host*, test fixtures use `alice` and `contoso`, and a plugin author is named without an e-mail address.
 
 **`.claude/settings.json` deliberately carries no `env` block.** It did briefly, and the reason it does not is the same reason `.mcp.json` lost its fallback, one level up: **this repository is the marketplace source.** Anyone who forks it to point at their own copy inherits its committed settings, and a committed `TERYLON_ADO_ORG` would hand them this owner's organisation — the very outcome removing the fallback was meant to prevent, reintroduced through a file nobody thinks of as code. Whoever works on this repository sets the variable in their **own** `~/.claude/settings.json`, where a personal default belongs and where a fork cannot inherit it.
 
@@ -103,6 +117,8 @@ The repo runs on **Windows and natively on Debian**. Everything scripted must wo
 
 Three suites under `/tests/`, none distributed. **Run the end-to-end harness before a change reaches `main`**, and before anything moves to a new host.
 
+**GitHub Actions runs the free part on every pull request and every push to `main`** (`.github/workflows/ci.yml`): `node --test "**/*.test.js"` and the `install` stage, with Claude Code pinned to the version last measured. The stage needs no secret — measured on 2026-10-04 with an empty environment and an empty `HOME`: 82 checks green, $0, and each install-stage planted defect (`skill-frontmatter`, `hook-path`, `mcp-organisation`) turned it red. A CI checkout is a detached HEAD, which the harness refuses, so the job names the commit as a local branch and passes `--ref`. The model-driven stages stay manual; why is in `README.md`, under *Continuous integration*.
+
 | Suite | Command | Proves | Cost |
 |---|---|---|---|
 | contract + fixture | `node --test tests/forge-port/forge-port.test.js` | both `forge-ops` bodies declare the same work-item keys; the authoring skills name no platform field; the GitHub recipes, run verbatim against a stand-in `gh`, write what they should | free, seconds |
@@ -143,6 +159,7 @@ Things that were measured, and bite:
 - **A model that cannot find a skill goes looking on disk**, and found the operator's own, older, installed copies. Reads of the operator's plugin cache are denied, and a turn that tried fails.
 - **`marketplace add` refuses `file://` and clones shallow**, so a local source is served through `git http-backend` on 127.0.0.1.
 - **`marketplace add` installs a branch or a tag, never a commit.** It clones with `--branch`, so a commit id is refused as a missing branch. From a detached checkout, pass `--ref`; without it the harness refuses in one line and names the branches pointing at HEAD. A defect that cannot be planted is reported `SETUP FAILED`, never as caught.
+- **`marketplace add` records a github.com URL with `.git` appended**, then refuses the add — *"its source doesn't match its extraKnownMarketplaces entry"* — when the declaration names the URL without it. `run.js` appends the suffix before declaring (measured 2026-10-05). The `owner/repo` shorthand is recorded as a `github` source instead, and installs cleanly.
 - **A planted defect a capable model can see through proves nothing.** Stripping the criteria section from the GitHub recipe was missed: sonnet wrote it from the skill's template. The defects in `tests/e2e/lib/defects.js` change what only the plugin knows.
 
 The headless runs execute model-chosen shell commands in throwaway fixture repositories; run the harness where you would let an agent work. Transcripts, stub logs and `report.json` (every check, every run's cost) land in the output directory it prints.

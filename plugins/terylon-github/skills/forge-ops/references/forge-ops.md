@@ -243,7 +243,7 @@ Overwrites the whole body, so the caller's locate-or-append logic runs first. Th
 | `description` | markdown, everything but the criteria and the footer | the body, above the criteria section | yes |
 | `acceptanceCriteria` | a markdown `- [ ]` list with no heading; absent when the item has none | a `## Acceptance criteria` section of the body | yes |
 | `footer` | the caller's finished footer line — **composed by the caller, only placed here** | the body's last block, after the criteria section | yes |
-| `parent` | id of the parent item, or `null` | the sub-issue relation, read from `issues/{n}/parent` | yes — see `link-work-item-parent` for what is unconfirmed |
+| `parent` | id of the parent item, or `null` | the sub-issue relation, read from `issues/{n}/parent` | yes — confirmed live, see `link-work-item-parent` |
 | `children` | `[{ id, title, description }]` | `issues/{n}/sub_issues` | yes |
 | `isClosed` | boolean | `state == "CLOSED"` | yes |
 | `url` | the item's web URL | `url` | yes |
@@ -373,7 +373,7 @@ gh api "repos/$OWNER/$REPO/issues/$PARENT/sub_issues" -F sub_issue_id="$CHILD_ID
 gh api "repos/$OWNER/$REPO/issues/$PARENT/sub_issues" --jq '.[].number'
 ```
 
-**What is confirmed and what is not.** The call shape — the database id read first, sent typed with `-F`, the parent read back — is exercised by the fixture in `tests/forge-port/` of the marketplace repository, against a stand-in `gh` that refuses a string id and a number passed as an id. **The endpoint itself has not yet answered a live repository**; that run belongs to moving the marketplace onto GitHub. Correct this file from that run rather than working around it.
+**Confirmed live on 2026-10-05**, on the marketplace's own public repository (#273): `create-user-story` created a story and linked it under a Feature with exactly the two calls above — the database id read with `--jq .id`, sent typed with `-F` — and the parent read back listed the child; `issues/{n}/parent` on the child named the Feature. The POST answers with the **parent** issue, so `--jq .number` on it prints the parent's number, not the child's. The fixture in `tests/forge-port/` still guards the call shape offline, against a stand-in `gh` that refuses a string id and a number passed as an id.
 
 **When the link cannot be made, the parent is a declared difference rather than a silent loss.** A repository whose host does not offer sub-issues refuses the call. The caller then reports the item as **created and not linked**, names the parent it was asked for, and does not record the relation anywhere else — a `Parent: #N` line in the body would be a second location that nothing reads and that drifts from the relation the moment someone sets it by hand.
 

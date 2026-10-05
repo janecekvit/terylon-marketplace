@@ -50,7 +50,7 @@ It declares `terylon-forge`, which is therefore installed automatically. The por
     "terylon": {
       "source": {
         "source": "git",
-        "url": "https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace",
+        "url": "https://github.com/janecekvit/terylon-marketplace.git",
         "ref": "main"
       },
       "autoUpdate": true
