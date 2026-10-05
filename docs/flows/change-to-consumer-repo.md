@@ -68,13 +68,16 @@ Three hops fail silently, and they are the ones the runbook exists for.
 | When | Command, run by the operator in their own clone |
 |---|---|
 | once per clone | `git remote add github https://github.com/janecekvit/terylon-marketplace.git` |
-| after every merge on Azure DevOps | `git fetch origin` then `git push github origin/main:refs/heads/main` |
+| **once ever — the first push** | `git fetch origin` then `git push --force github origin/main:refs/heads/main` |
+| after every later merge on Azure DevOps | `git fetch origin` then `git push github origin/main:refs/heads/main` — plain, never forced |
 | to check | `git ls-remote origin refs/heads/main` and `git ls-remote github refs/heads/main` print the same commit |
 | on a release | `git tag -a v<date> origin/main` then `git push github v<date>`, and the release notes on GitHub |
 
 **The operator pushes, not an agent.** `.claude/hooks/git-guard.js` refuses any push that targets `main`, whichever remote it names — on purpose, since the rule it backs is that `main` moves only through a reviewed pull request, and the GitHub copy is that same `main`.
 
-**Never force this push.** A rejected push means GitHub's `main` holds a commit Azure DevOps does not. Find where it came from and bring it through a pull request; forcing would delete it from the public history.
+**The first push is forced, once.** The GitHub repository was created holding a single commit — GitHub's generated `LICENSE` — that the Azure DevOps history does not have, so the first `main` from Azure DevOps cannot fast-forward over it. Forcing replaces that one commit with the reviewed history, whose own `LICENSE` is the same MIT licence. It is made after the #273 merge, by the operator.
+
+**Never force any later push.** A rejected push means GitHub's `main` holds a commit Azure DevOps does not. Find where it came from and bring it through a pull request; forcing would delete it from the public history.
 
 **Only `main` and tags go to GitHub.** A feature branch stays on Azure DevOps, so testing a branch before it merges points at that remote — see [`onboarding/marketplace-development.md`](../onboarding/marketplace-development.md).
 

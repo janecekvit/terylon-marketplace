@@ -68,7 +68,7 @@ Component layout, the placement rule in full, the dispatch chains and the table 
 | Remote | Holds | Who moves it |
 |---|---|---|
 | `origin` — Azure DevOps, private | feature branches, pull requests, merges | pull requests only; `git-guard.js` refuses any push to `main` |
-| `github` — `github.com/janecekvit/terylon-marketplace`, public | `main` and release tags, nothing else | the operator, by hand, after each merge — never forced |
+| `github` — `github.com/janecekvit/terylon-marketplace`, public | `main` and release tags, nothing else | the operator, by hand, after each merge — plain; forced exactly once, on the first push, over the `LICENSE` commit GitHub generated |
 
 **`main` is the same commit on both.** The commands, the check that both heads match and why an agent never makes the push are in `docs/flows/change-to-consumer-repo.md`, under *How `main` reaches GitHub*. Every manifest's `homepage` and `repository` name the GitHub repository.
 

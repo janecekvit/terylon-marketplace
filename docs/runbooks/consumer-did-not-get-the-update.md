@@ -55,7 +55,7 @@ Cheapest discriminating check first.
 | **B** — no `autoUpdate` | Add `"autoUpdate": true` as a **sibling** of `source` in the consumer's `extraKnownMarketplaces.<name>` entry — not inside `source`. Until then they must run `/plugin marketplace update` by hand |
 | **C** — wrong `ref` | Point `source.ref` at the branch you merged into, normally `main`. A `settings.local.json` overriding `ref` for local testing outranks the committed file and is the usual culprit |
 | **D** — the background fetch cannot reach the marketplace | The marketplace is public on GitHub, so no credential is involved: look for a proxy, a firewall or an offline machine, and run `/plugin marketplace update` by hand once it can reach `github.com` |
-| **F** — merged on Azure DevOps, not pushed to GitHub | Push `main` to GitHub as [`flows/change-to-consumer-repo.md`](../flows/change-to-consumer-repo.md) describes under *How `main` reaches GitHub*, then check that both heads print the same commit |
+| **F** — merged on Azure DevOps, not pushed to GitHub | Push `main` to GitHub as [`flows/change-to-consumer-repo.md`](../flows/change-to-consumer-repo.md) describes under *How `main` reaches GitHub*, then check that both heads print the same commit. If GitHub's `main` is still the single `LICENSE` commit GitHub generated, this is the first push and takes the one-time `--force` row there; any other rejection is never forced |
 | **E** — the wrong plugin was bumped | Bump every plugin the change touched. A consumer fetches per plugin, so a bumped port with an unbumped adapter ships the half that was written against the half that did not arrive |
 
 After any of these, confirm from the consumer's side: the cache directory for the new version exists, and a fresh session picks it up.
