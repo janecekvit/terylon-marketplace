@@ -2,7 +2,7 @@
 
 Every claim `SKILL.md` makes about the tooling is in one of the tables below. **A claim not in the first table has not been measured**, and the skill's prose should not be quoted as evidence for it.
 
-Measured on 2026-09-10 and 2026-09-11 in the `terylon-dev` session on TerylonLab, Claude Code `2.1.268`, uid `10004`.
+Measured on 2026-09-10 and 2026-09-11 in the `terylon-dev` session on the operator's own Debian host, Claude Code `2.1.268`, uid `10004`.
 
 **Everything below was measured while this skill was called `dispatch-unattended`.** It was renamed before it shipped, so no measurement is of a different thing — but the name in a transcript from those days is the old one, and a reader comparing the two should not have to wonder.
 
@@ -54,13 +54,13 @@ The earlier table loaded this plugin with `claude --plugin-dir`, which points at
 
 | Step | Result |
 |---|---|
-| `claude plugin marketplace add /work/terylon-marketplace` | `Successfully added marketplace: terylon` |
+| `claude plugin marketplace add <path to a local clone>` | `Successfully added marketplace: terylon` |
 | `claude plugin install terylon-dev@terylon` | `Successfully installed plugin: terylon-dev@terylon (scope: user) (+ 3 dependencies: terylon-git, terylon-forge, terylon-core)` |
 | the installer's own cache | `brainstorm develop **background-run** run-build-loop write-plan` |
 
 **No step was taken beyond the install.** The dependencies came with it.
 
-**Measured from the git remote on 2026-09-12, once !103 was on `main`.** Into a fresh `CLAUDE_CONFIG_DIR`: `plugin marketplace add https://dev.azure.com/janecekvit/Dev/_git/TerylonMarketplace` cloned it at `f2edb86`, `plugin install terylon-dev@terylon` reported *"Successfully installed … (+ 3 dependencies)"*, and the installer's cache holds `background-run` beside its four siblings. **No step beyond the install.** The clone was the last untested hop and it is tested.
+**Measured from the git remote on 2026-09-12, once !103 was on `main`.** Into a fresh `CLAUDE_CONFIG_DIR`: `plugin marketplace add <the repository's Azure DevOps URL>` cloned it at `f2edb86`, `plugin install terylon-dev@terylon` reported *"Successfully installed … (+ 3 dependencies)"*, and the installer's cache holds `background-run` beside its four siblings. **No step beyond the install.** The clone was the last untested hop and it is tested.
 
 **One thing came out of it that is worth carrying forward.** Declaring the marketplace in `extraKnownMarketplaces` **with a `ref`** and then running `plugin marketplace add <url>` is **refused** by Claude Code `2.1.269`:
 
@@ -86,7 +86,7 @@ in settings (kind, target, or a fetch-shaping field such as headers / ref / path
 
 ## Measured: the controlled interruption
 
-**The story's last acceptance criterion — *a real long run dispatched through it, interrupted deliberately, loses one step and no more* — is met.** Measured on 2026-09-11 in the `terylon-dev` session on TerylonLab, against a scratch repository whose step boundary was one document.
+**The story's last acceptance criterion — *a real long run dispatched through it, interrupted deliberately, loses one step and no more* — is met.** Measured on 2026-09-11 in the `terylon-dev` session on the operator's own Debian host, against a scratch repository whose step boundary was one document.
 
 A run was dispatched through the skill's own shape — `claude --bg --worktree us156-interrupt`, with the commit-each-step block in the prompt — and told to write documents `01.md` onward, one commit per document.
 
