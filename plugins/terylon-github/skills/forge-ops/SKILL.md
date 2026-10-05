@@ -110,6 +110,6 @@ These are where the two bodies genuinely differ. The port declares the differenc
 3. `post-pr-thread` with a path and a line creates an **inline** review comment on the right side; the same call without them creates a PR-wide comment.
 4. `reply-to-thread` attaches to the existing thread rather than starting a second one.
 5. `update-pr-description` replaces only the caller's marked region; content outside it survives.
-6. `create-work-item` produces an issue whose body carries the acceptance-criteria section as a markdown task list. The recipes as written are exercised against a stand-in `gh` by `node --test tests/forge-port/forge-port.test.js` in the marketplace repository; a live repository is still the stronger proof.
+6. `create-work-item` produces an issue whose body carries the acceptance-criteria section as a markdown task list. The recipes as written are exercised against a stand-in `gh` by `node --test tests/forge-port/forge-port.test.js` in the marketplace repository, and were confirmed live on 2026-10-05 against the marketplace's own GitHub repository: the story's criteria landed as an interactive task list under `## Acceptance criteria`.
 7. `link-work-item-parent` establishes the sub-issue relation, and it is verified by reading the parent back rather than from the create response.
 8. `build-pr-diff` produces the same output as the Azure DevOps body for the same branch — it is git, and nothing about it is forge-specific.
