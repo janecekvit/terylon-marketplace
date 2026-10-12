@@ -42,7 +42,7 @@ terylon-core .................. delegate-to-repo-agents, measure-token-spend
 gh auth login
 ```
 
-That is the entire configuration. There is **no organisation environment variable** and nothing to set in `settings.json`: GitHub carries the owner in every URL and in the git remote, so the adapter derives it at runtime. The asymmetry with `terylon-ado`, which needs `TERYLON_ADO_ORG` before its server can start, is real and belongs to the platform rather than to the port.
+That is the entire configuration. There is **no organisation environment variable** and nothing to set in `settings.json`: GitHub carries the owner in every URL and in the git remote, so the adapter derives it at runtime. The asymmetry with `terylon-ado`, which needs `ADO_ORGANIZATION` in every call to its server, is real and belongs to the platform rather than to the port.
 
 ## Why the CLI rather than an MCP server
 

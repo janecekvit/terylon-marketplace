@@ -61,7 +61,7 @@ An empty result is step 4: stop and ask. The variable outranks the remote; a pas
 
 | `FORGE` | Adapter plugin | Engine skill | Server |
 |---|---|---|---|
-| `ado` | `terylon-ado` | `terylon-ado:forge-ops` | the `ado` MCP server, needs `TERYLON_ADO_ORG` |
+| `ado` | `terylon-ado` | `terylon-ado:forge-ops` | the user-scope `ado` MCP server, registered by `terylon-ado`'s `connect`; needs `ADO_ORGANIZATION` |
 | `github` | `terylon-github` | `terylon-github:forge-ops` | none — the `gh` CLI |
 
 **Address the engine plugin-qualified whenever this skill returned a value.** Both adapters ship a skill named `forge-ops`; with only one installed the bare name resolves, but with both enabled it is ambiguous, and the qualified form is correct in either case.
@@ -77,7 +77,7 @@ So a transport can resolve a forge and still find no engine. **Say so and stop.*
 | The forge resolved, its adapter is installed | proceed |
 | The forge resolved, its adapter is **not** installed | stop. Name the forge, name the missing plugin, and say what to enable. Do **not** fall back to the other adapter, and do **not** issue calls of your own |
 | No forge resolved | stop. Say what was tried — URL, variable, remote — and ask |
-| The adapter is installed, but its transport is **unreachable** — on Azure DevOps the `ado` server's tools are absent from this session, because the server failed to start or could not connect | stop before the first call. Say the forge's server is unreachable, name the adapter, and point at its `check-access` where it has one. Do **not** fall back to the other adapter, and do not read the silence as "nothing there" |
+| The adapter is installed, but its transport is **unreachable** — on Azure DevOps the `ado` server's tools are absent from this session, because `connect` never registered it, nobody signed in, or it could not connect | stop before the first call. Say the forge's server is unreachable, name the adapter, and point at its `check-access` where it has one. Do **not** fall back to the other adapter, and do not read the silence as "nothing there" |
 
 **Never hand-roll the mechanics.** A transport that issues its own platform calls because the engine was absent puts the call shapes in a second place, and the copy is the one that goes stale. The port exists to keep exactly one.
 

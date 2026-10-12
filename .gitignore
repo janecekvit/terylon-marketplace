@@ -17,3 +17,8 @@ Thumbs.db
 .vs/
 .vscode/
 *.user
+
+# The engine lays its own declarations beside a mod it loads from a watched folder; written again
+# each load, never committed.
+plugins/*/.claude-plugin/types/
+plugins/*/tsconfig.json

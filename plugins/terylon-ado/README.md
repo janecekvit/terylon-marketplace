@@ -1,6 +1,6 @@
 # terylon-ado
 
-The **Azure DevOps adapter**. It fills the `terylon-forge` port with ADO mechanics and registers the Azure DevOps MCP server.
+The **Azure DevOps adapter**. It fills the `terylon-forge` port with ADO mechanics and registers Microsoft's remote Azure DevOps MCP server, through its `connect` skill.
 
 ## Audience
 
@@ -24,80 +24,72 @@ terylon-core .................. delegate-to-repo-agents, measure-token-spend
 
 `terylon-forge` is the only declared dependency; everything below it arrives with it.
 
-**The load edge points the other way.** The port's transports load `forge-ops` — this plugin's one skill — while the dependency in `plugin.json` points from here up to the port. That inversion is deliberate and is the whole reason a GitHub repository can use the same transports without an Azure DevOps server: see *Where a component belongs* in `plugins/CLAUDE.md`.
+**The load edge points the other way.** The port's transports load `forge-ops` — this plugin's engine skill — while the dependency in `plugin.json` points from here up to the port. That inversion is deliberate and is the whole reason a GitHub repository can use the same transports without an Azure DevOps server: see *Where a component belongs* in `plugins/CLAUDE.md`.
 
 ## What it contains
 
-**Skill:**
+**Skills:**
 
-- **`forge-ops`** — the ADO body of the port. Every operation's exact tool name and argument shape, URL parsing, `repositoryId` resolution, PR and work-item metadata, diff recipes, thread and comment shapes, field encodings, eligibility flags and prior-run detection. Knowledge only: the caller issues its own calls and stamps its own footer.
+| Skill | What it does |
+|---|---|
+| **`forge-ops`** | the ADO body of the port. Every operation's exact tool name and argument shape, URL parsing, `repositoryId` resolution, PR and work-item metadata, diff recipes, thread and comment shapes, field encodings, eligibility flags and prior-run detection. Knowledge only: the caller issues its own calls and stamps its own footer |
+| **`connect`** | registers the `ado` server at the **user scope** from the environment — `node "${CLAUDE_PLUGIN_ROOT}/skills/connect/scripts/connect.js" [--check]`. Idempotent: an unchanged registration is left alone and keeps its sign-in; a changed one is removed and added again, and needs a new sign-in |
+| **`check-access`** | read-only: whether the four variables are set and well-formed, and whether the user-scope `ado` registration matches them. It makes no request and prints no id |
 
-**MCP server:** the `ado` server, declared in `.mcp.json` and pinned to `@azure-devops/mcp@2.9.0`. At runtime its tools are namespaced `mcp__plugin_terylon-ado_ado__*`.
+**MCP server:** none shipped in the plugin. The `ado` server is **Microsoft's remote Azure DevOps MCP server at `https://mcp.dev.azure.com`**, registered at the user scope by `connect` and signed in once as the owner, over OAuth (#332). Its tools are `mcp__ado__*`. It keeps the action-based tool surface of the local server's 2.9.0 release and adds `orgName` to every tool; it has no identity lookup, so reviewers are named by e-mail, and WIQL is offered only in its Insiders channel.
+
+**`shared/ado-server.js`** is the one place the wanted registration is computed, shared by `connect` and `check-access`, and it records the measurement below.
 
 ## Configuration
 
-## Authentication, and why it is pinned rather than left to the default
+Four variables, all set in your **own** `~/.claude/settings.json` under `env` — never in a repository, because they are configuration and this marketplace is published:
 
-**The server's own default is `interactive`, and in an unattended environment that default does not fail — it waits.** Measured across one pipeline run: twenty calls to this server, every one of them spending the full 1800-second tool timeout and returning nothing, **ten hours, a seventh of the run's entire elapsed time**. There was no browser, no `az` CLI and nobody to answer a login prompt, so the credential chain blocked until the caller gave up. An agent eventually wrote itself a note to stop calling Azure DevOps at all.
+| Variable | What | Default |
+|---|---|---|
+| `ADO_ORGANIZATION` | the organisation's **bare name** — the first path segment of `https://dev.azure.com/`**`contoso`**`/…`, not the URL. Passed as `orgName` in every tool call, never in the server's URL | **none — required** |
+| `ADO_PROJECT` | the project, passed as `project` where a call needs one. Set it only for the rare repository whose git remote is not its ADO project | the git remote, or the URL you pass |
+| `ADO_MCP_CLIENT_ID` | the client id of the owner's own Entra app registration: a public client, redirect `http://localhost:3118/callback`, delegated permissions on the *Azure DevOps MCP* enterprise app, admin-consented | **none — required** |
+| `ADO_MCP_TENANT_ID` | the tenant the app registration lives in | **none — required** |
 
-So `-a` is passed explicitly. The default here is `pat`, which reads a base64-encoded Personal Access Token from `PERSONAL_ACCESS_TOKEN` and **fails in under a second** with a message naming the missing variable. A wrong configuration that says so immediately is worth far more than a right one that hangs.
-
-**The type is a variable with a default, so this plugin stays general.** `${VAR:-default}` expansion is supported in an MCP server's `args`, which is what lets a consumer pick `azcli` where the Azure CLI is signed in, `envvar` or `env` where a credential is already in the environment, or `interactive` where a human is genuinely present — without editing this file or overriding the whole server entry.
-
-What the default buys is that an unconfigured consumer **fails** rather than hangs. `interactive` is the server's own default and is the wrong one anywhere nobody can answer a prompt.
-
-| Variable | |
-|---|---|
-| `PERSONAL_ACCESS_TOKEN` | the PAT, base64-encoded **with a leading colon** — see below. Required, and the server names it if it is missing |
-
-**The encoding is `base64(":" + PAT)`, not `base64(PAT)`, and the difference is not visible in any error message.** The server's own wording is "base64-encoded Azure DevOps Personal Access Token", which reads as the token alone; what it actually wants is the Basic-auth form, where the token is the password and the user part is empty. Measured against a live organisation with the same valid token:
-
-```text
-  PERSONAL_ACCESS_TOKEN=$(printf %s "$PAT"   | base64 -w0)   -->  401
-  PERSONAL_ACCESS_TOKEN=$(printf ':%s' "$PAT" | base64 -w0)   -->  the work item
-```
-
-A 401 from a token that is correct is the second-worst failure this server has, behind the hang: it points the reader at their permissions rather than at their encoding.
-
-| `TERYLON_ADO_AUTHENTICATION` | the type: `pat` (default), `azcli`, `envvar`, `env` or `interactive`. Choose `interactive` only where a human is actually present to answer the prompt |
-
-**Do not put the token in this file or in any committed settings.** It is read from the environment, and the plugin never sees it.
-
-**`TERYLON_ADO_ORG` is required and has no default.** Set it in the consuming repository's `.claude/settings.json`:
-
-```json
-{
-  "env": {
-    "TERYLON_ADO_ORG": "your-organisation"
-  }
-}
-```
-
-It is the bare organisation **name** — the first path segment of `https://dev.azure.com/`**`your-organisation`**`/…` — not the URL. The MCP server takes it as a positional argument and reads it at startup, before any git command can run, which is why it is the one value that cannot be derived.
-
-**There used to be a hard-coded default, and it was removed.** A consumer who forgot the variable did not fail: the server silently targeted whichever organisation the marketplace author happened to use, and failed later, at the first call, with an authorization error naming an organisation nobody had chosen. A missing required value must fail where it is missing.
+**`ADO_ORGANIZATION` has no default, and must not get one.** There used to be a hard-coded default organisation, and it was removed: a consumer who forgot the variable did not fail, they silently targeted whichever organisation the marketplace author happened to use, and found out at the first call from an authorization error naming an organisation nobody had chosen. A missing required value must fail where it is missing.
 
 Everything else derives at runtime:
 
 | Value | Where it comes from |
 |---|---|
-| Organisation | `TERYLON_ADO_ORG` — required |
-| Project / repo | the consuming repository's `git remote`, or any URL you paste |
+| Organisation | `ADO_ORGANIZATION` — required |
+| Project / repo | `ADO_PROJECT`, else the consuming repository's `git remote`, or any URL you paste |
 | PR / work-item target | the URL you pass the skill |
-
-`TERYLON_ADO_PROJECT` overrides the project for the rare repository whose git remote is not its ADO project. Normally you never set it.
 
 ## Authentication
 
-Left at the package's own default — `.mcp.json` passes no `-a` argument. Outside GitHub Codespaces that default is `interactive`, an MSAL loopback login against the consumer's own Entra identity, so no tenant or secret is baked into the repository.
+**OAuth, as the owner, through the app registration the two ids name.** `connect` registers this, at the user scope:
 
-**If a session fails with `AADSTS70007: unsupported mode 'query'` before any Azure DevOps call is made**, that is [microsoft/azure-devops-mcp#1451](https://github.com/microsoft/azure-devops-mcp/issues/1451) — the interactive flow asked Entra for an authorization code with `response_mode=query` while Microsoft's app registration permitted only `fragment` / `form_post`. The issue is closed but names no fixed version, so whether the pinned `2.9.0` carries the fix is **unverified here**. The workaround is to add `"-a", "azcli"` back to the args, which takes the token from the consumer's own `az login` via `AzureCliCredential` instead.
+| Field | Value |
+|---|---|
+| `type` | `http` |
+| `url` | `https://mcp.dev.azure.com` — the root, with no organisation |
+| `oauth.clientId` | `ADO_MCP_CLIENT_ID` |
+| `oauth.callbackPort` | `3118` |
+| `oauth.authServerMetadataUrl` | `https://login.microsoftonline.com/<ADO_MCP_TENANT_ID>/v2.0/.well-known/openid-configuration` |
+| `oauth.scopes` | `https://mcp.dev.azure.com/.default offline_access` |
 
-Going that route, each consumer needs the Azure CLI installed and logged in (`az login`) against a tenant with access to their organisation. `AzureCliCredential` uses the active `az` tenant; if that is not the one backing the organisation, append `-t <tenant-guid>` to the args to pin it.
+Two of those values are forced, and each was found by failing:
 
-**The server version is pinned** — `@azure-devops/mcp@2.9.0`, not a floating `latest`. `npx -y <pkg>` without a version resolves to whatever is newest when each consumer starts a session, so two people on the same marketplace commit can hold different tool sets, and a breaking release reaches everyone at once with nothing in this repository having changed. The recipes in `forge-ops` are written against a known tool surface; the pin is what makes them a contract rather than a hope. Raise it deliberately, in its own commit, after checking the recipes still hold.
+- **The root URL, never the organisation's.** `https://mcp.dev.azure.com/<org>` fails sign-in with `AADSTS9010010`: its RFC 8707 resource does not match the `.default` scope. The organisation travels as `orgName` in each call instead.
+- **The metadata is pinned to the tenant.** The root's own metadata names the `organizations` authority, which a single-tenant app registration cannot use.
+
+**Why it is not in a `.mcp.json`.** Measured on Claude Code 2.1.296 with a probe plugin: inside a plugin `.mcp.json`'s `oauth` block neither `${VAR}` nor `${user_config.KEY}` is substituted — the authorization URL carried `client_id=${user_config.clientId}` literally, while the same server's `url` was substituted. The client and tenant ids are configuration, not code, so they cannot be committed into the plugin either. `shared/ado-server.js` records the measurement; **repeat it on a newer Claude Code**, and when `oauth` is substituted the server can move back into the plugin.
+
+**Sign in once, in an interactive session:** `/mcp` → `ado` → **Authenticate**, and finish the browser sign-in. `/mcp` shows the state — `ado` connected, or *Needs authentication*. On a remote box, forward the callback port first — `ssh -L 3118:localhost:3118 <box>` — and open the link in the PC's browser.
+
+**A headless run cannot sign in in a browser.** Its token comes from Terylon's connector through its proxy (Terylon work item #337), not from this plugin.
+
+**Writes need an interactive session, or a permission rule.** A write through `ado` from a headless `claude -p` was refused by the auto-mode classifier as a write to an external system; in an interactive session, or with an operator's permission rule allowing it, it goes through. The server cannot commit or push — `git push` is separate.
 
 ## Setup
+
+In the consuming repository's `.claude/settings.json`:
 
 ```json
 {
@@ -114,13 +106,26 @@ Going that route, each consumer needs the Azure CLI installed and logged in (`az
   "enabledPlugins": {
     "terylon-ado@terylon": true,
     "terylon-dev@terylon": true
-  },
-  "env": {
-    "TERYLON_ADO_ORG": "your-organisation"
   }
 }
 ```
 
+In your **own** `~/.claude/settings.json`:
+
+```json
+{
+  "env": {
+    "ADO_ORGANIZATION": "contoso",
+    "ADO_MCP_CLIENT_ID": "00000000-0000-0000-0000-000000000000",
+    "ADO_MCP_TENANT_ID": "00000000-0000-0000-0000-000000000000"
+  }
+}
+```
+
+Then run the `connect` skill once, start a new session, and sign in through `/mcp`. `check-access` says what is still missing.
+
 `terylon-forge`, `terylon-git` and `terylon-core` install automatically as dependencies.
 
-> **Migrating from `terylon-devops`.** That plugin no longer exists; it split into the port and this adapter. Replace `"terylon-devops@terylon"` with **both** `"terylon-ado@terylon"` and whichever role plugins you already had. The transports kept their names, so nothing that loaded `create-pr` or `review-pr` changes. Two things do: the engine skill `ado-mcp` is now `forge-ops`, and the MCP namespace `mcp__plugin_terylon-devops_ado__*` is now `mcp__plugin_terylon-ado_ado__*`.
+> **Migrating from the local server.** Until #332 this plugin launched the local Azure DevOps MCP server itself, from a `.mcp.json`, with a personal access token. The variables that configured it — the old organisation, project and authentication-type variables and the token — are now **ignored**: set `ADO_ORGANIZATION` (and `ADO_PROJECT` if you used the project override) and the two ids, run `connect`, and sign in. The tool namespace `mcp__plugin_terylon-ado_ado__*` is now `mcp__ado__*`. The full list of renamed names is in `docs/onboarding/migrating.md`.
+
+> **Migrating from `terylon-devops`.** That plugin no longer exists; it split into the port and this adapter. Replace `"terylon-devops@terylon"` with **both** `"terylon-ado@terylon"` and whichever role plugins you already had. The transports kept their names, so nothing that loaded `create-pr` or `review-pr` changes. Two things do: the engine skill `ado-mcp` is now `forge-ops`, and the MCP namespace `mcp__plugin_terylon-devops_ado__*` is now `mcp__ado__*`.

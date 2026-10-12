@@ -528,7 +528,7 @@ case "$REMOTE" in
 esac
 ```
 
-**There is no organisation environment variable here**, and none is needed: GitHub carries the owner in every URL and in the remote, so nothing has to be configured before the first command runs. That asymmetry with `TERYLON_ADO_ORG` is real and is the adapter's, not the port's.
+**There is no organisation environment variable here**, and none is needed: GitHub carries the owner in every URL and in the remote, so nothing has to be configured before the first command runs. That asymmetry with `ADO_ORGANIZATION` is real and is the adapter's, not the port's.
 
 ---
 

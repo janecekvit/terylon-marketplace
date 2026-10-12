@@ -77,7 +77,7 @@ Every rule file in `.claude/rules/` and every orientation file — the root `CLA
 |---|---|
 | the *In short* list in the root `CLAUDE.md` | one line per rule, no argument, under a pointer to the rule files — the orientation its reader needs |
 | "every commit that changes a plugin bumps its version" in `.claude/rules/git-workflow.md` and the root `CLAUDE.md` | the requirement, in the form the committer needs at the moment of committing; the digit rule and its argument are only pointed at |
-| `TERYLON_ADO_ORG` is required, in the README quickstart, the onboarding pages and the runbook | requirement-form for each reader; the argument lives once in the root `CLAUDE.md`, as `docs/architecture/README.md` already records |
+| `ADO_ORGANIZATION` is required (`TERYLON_ADO_ORG` until #332), in the README quickstart, the onboarding pages and the runbook | requirement-form for each reader; the argument lives once in the root `CLAUDE.md`, as `docs/architecture/README.md` already records |
 | "keep every claim next to its evidence" in `docs/README.md` | the article author's form of it, with what an article must carry; the editing rule itself is owned by `claude-md-sync.md` |
 | the `terylon-` slug prefix in `README.md` and `plugins/CLAUDE.md` | the README states what a consumer gets from it; the authoring rule and its reason are in `plugins/CLAUDE.md` only |
 | the dependency facts (`terylon-dev` declaring `terylon-git` and `terylon-core` directly) in every orienting document | facts, not rules — and `.claude/rules/markdown.md` requires every orienting document to carry them |

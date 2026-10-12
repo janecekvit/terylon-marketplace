@@ -26,7 +26,7 @@ plugins/terylon-<role>/
   "author": { "name": "Vít Janeček" },
   "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-<role>",
   "repository": "https://github.com/janecekvit/terylon-marketplace",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "keywords": ["<topic>", "<topic>"]
 }
 ```
@@ -34,6 +34,7 @@ plugins/terylon-<role>/
 ## Naming
 
 - Every plugin slug is `terylon-<role>` — lowercase, kebab-case, role is a short noun (no `-engineer` / `-developer` suffix).
+- **`terylon-os` is the product's own plugin** (#332): not a role on a team but Terylon itself, the agentic OS extension — its `/mcp` server and the skills that mirror the server's prompts — and its mod is `terylon-pane`. It was `terylon` until the operator's rename of 2026-10-12, because `terylon@terylon` collided with the marketplace's name and broke this rule.
 - The `terylon-` prefix is intentionally redundant with the `@terylon` marketplace suffix. Reason: Claude Code's slash-command autocomplete filters by the per-plugin slug shown in the tag column. Putting `terylon` into every slug means a user can type `/terylon` and see every command from every Terylon-marketplace plugin in one filtered list, without having to remember per-role slugs.
 - Slug must match the directory name AND the `name` field in `plugin.json` AND the `name` in the corresponding entry of `marketplace.json`.
 
@@ -124,19 +125,28 @@ if the file layout shifts.
 ### External MCP server prerequisites
 
 When a skill calls tools from a third-party MCP server (e.g. `mcp__ado__*` from
-`@azure-devops/mcp`), the skill MUST:
+Microsoft's remote Azure DevOps MCP server), the skill MUST:
 
 - List the server in its `## Prerequisites` section with a one-line install hint.
 - Include the relevant `mcp__<server>__*` wildcard in the frontmatter `allowed-tools`.
 - Document the consumer-facing setup snippet in the plugin's `README.md` (not in
   every skill — one source of truth per plugin).
 
-**Plugin-level `.mcp.json`:** when the marketplace serves a single organisation (or another
-fixed-config server), prefer dropping a `.mcp.json` at the plugin root over per-skill
-`Prerequisites` snippets — consumers get the server automatically when they enable the
-plugin. See `plugins/terylon-ado/.mcp.json` for the canonical example.
+**Plugin-level `.mcp.json`:** for a fixed-config server, prefer dropping a `.mcp.json` at
+the plugin root over per-skill `Prerequisites` snippets — consumers get the server
+automatically when they enable the plugin. See `plugins/terylon-os/.mcp.json` for the canonical
+example: one HTTP server, its URL from a variable, no `oauth` block.
 
-**A server belongs to the plugin whose boundary it matches, not to the plugin whose skills call it.** The `ado` server sits in `terylon-ado` rather than in the port that uses it, because a GitHub repository enabling the port must not start it. When a server would install for consumers who cannot authenticate to it, that server marks a plugin boundary.
+**The exception: a server that needs per-person OAuth client configuration is registered at
+the user scope by a script, not shipped in a `.mcp.json`.** Inside a plugin `.mcp.json`'s
+`oauth` block neither `${VAR}` nor `${user_config.KEY}` is substituted (measured on Claude
+Code 2.1.296), and a client or tenant id is configuration that a published marketplace must
+not commit. `terylon-ado`'s `connect` skill is the worked example: it registers the `ado`
+server with `claude mcp add-json --scope user` from the environment, idempotently, and
+`plugins/terylon-ado/shared/ado-server.js` records the measurement — repeat it on a newer
+Claude Code before keeping the exception.
+
+**A server belongs to the plugin whose boundary it matches, not to the plugin whose skills call it.** The `ado` server's registration sits in `terylon-ado` rather than in the port that uses it, because a GitHub repository enabling the port must not start it. When a server would install for consumers who cannot authenticate to it, that server marks a plugin boundary.
 
 ### Footer for posted comments
 
@@ -188,7 +198,7 @@ and `terylon-forge` declares `dependencies: ["terylon-git"]` so the engine is al
 present. A split like this is the normal outcome when an engine has no forge dependency:
 put it in the lowest plugin that can host it, and let the transports depend upwards.
 
-**A transport names operations, never tools.** The engine owns the tool surface; a transport that restates a call shape becomes a second place to fix when the surface moves — and it moves. `@azure-devops/mcp` 2.9.0 consolidated every tool into action-based forms, renaming all but one of them and turning `projectName` into `project`; because every schema is `additionalProperties: false`, each stale name fails the whole call rather than degrading. The marketplace had those names copied across nine files and would have failed on first contact.
+**A transport names operations, never tools.** The engine owns the tool surface; a transport that restates a call shape becomes a second place to fix when the surface moves — and it moves. `@azure-devops/mcp` 2.9.0 consolidated every tool into action-based forms, renaming all but one of them and turning `projectName` into `project`; because every schema is `additionalProperties: false`, each stale name fails the whole call rather than degrading. The marketplace had those names copied across nine files and would have failed on first contact. It moved again with #332: Microsoft's remote server kept that action-based surface but added `orgName` to every tool, dropped the identity lookup and moved the namespace to `mcp__ado__*` — and again only `forge-ops` changed.
 
 So a transport writes ``the `update-pr-description` operation``, not the tool it resolves to. When the server changes, one file changes.
 
@@ -196,7 +206,7 @@ For platform mechanics, `forge-ops` is the canonical engine — and there are **
 
 | Body | Plugin | Mechanism |
 |---|---|---|
-| Azure DevOps | `terylon-ado` | the `ado` MCP server, `mcp__plugin_terylon-ado_ado__*` |
+| Azure DevOps | `terylon-ado` | the `ado` MCP server, `mcp__ado__*` |
 | GitHub | `terylon-github` | the `gh` CLI |
 
 Every transport in `terylon-forge`, plus `create-user-story` and `create-feature` in `terylon-product` and `develop` and `planner` in `terylon-dev`, delegates to it. Inside the port, `resolve-forge` names the adapter; a caller outside the port that has not run it loads `forge-ops` **by name** — plugin-qualified when both adapters are enabled — and then issues its own calls following the recipes. `terylon-git` is deliberately absent from that list; it has no forge access at all. The footer and version are always resolved by the calling skill, never by `forge-ops`.
@@ -230,6 +240,18 @@ The two write-backs carry different content for the same reason: the pull reques
 
 ---
 
+## A mod
+
+**A mod is a plugin whose hooks are a module, not commands**: `hooks/hooks.json` names one TypeScript file under `modules`, exporting `register(on, options)`, and the engine runs it inside the session — drawing a pane, posting a prompt, calling an MCP server. `terylon-pane` is the first here (#332). Its state contract is `types/index.d.ts`, named in `plugin.json` as `types`; it ships an empty `skills/` like every plugin.
+
+- **`$` never crosses an import.** `claude plugin validate` refuses a module that hands `$` to a function in another file, so every function that calls `$` lives in `register.tsx` and the files it imports are pure (`terylon-pane/hooks/queue.ts`, `signals.ts`, `copy.ts`). That split is also what makes them readable without a session.
+- **Every outward call goes through one allow-list.** A mod that can reach a server with gates names the tools it may call and refuses the rest by name, as `terylon-pane/hooks/terylon.ts` does; the gate list is copied from the server, not derived, so a renamed gate fails a test instead of slipping through.
+- **Tests sit beside it, its teeth at the root.** `claude plugin test <mod>` runs `tests/*.test.ts` against the engine with no session and no network, the world beneath stubbed by the test's own `on`; `tests/<mod>/mutations.test.js` plants mutations and requires each to turn them red. A test finds `Text` by its text: only `Box`, `Button`, `Input` and `Select` keep a `key`.
+- **Never commit `.claude-plugin/types/` or a mod's `tsconfig.json`**: the engine writes both for the version it runs, and `.gitignore` keeps them out.
+- **Validate as well as test**: `claude plugin validate plugins/<mod>` reports what the module hooks, calls, reads and writes — the list a reviewer checks against what the README claims.
+
+---
+
 ## Plugin overview
 
 ```
@@ -239,11 +261,15 @@ terylon-core (root — no dependencies)
            ▲
            └── terylon-forge  [terylon-git]          the port; ships no adapter
                   ▲
-                  ├── terylon-ado      [terylon-forge]   adapter: forge-ops + the ado MCP server
+                  ├── terylon-ado      [terylon-forge]   adapter: forge-ops; connect registers the ado server
                   ├── terylon-github   [terylon-forge]   adapter: forge-ops over the gh CLI
                   ├── terylon-product  [terylon-forge]
                   ├── terylon-dev      [terylon-git, terylon-forge, terylon-core]
                   └── terylon-test     [terylon-forge, terylon-core]
+
+terylon-os (no dependencies)                       Terylon itself: /mcp + a skill per prompt
+    ▲
+    └── terylon-pane  [terylon-os]                 a mod: the Desktop pane over that server
 ```
 
 | Slug | Audience | Dependencies |
@@ -256,12 +282,14 @@ terylon-core (root — no dependencies)
 | `terylon-product` | product owner / PM | `terylon-forge` |
 | `terylon-dev` | developers | `terylon-git`, `terylon-forge`, `terylon-core` |
 | `terylon-test` | anyone holding a checklist that decides something | `terylon-forge`, `terylon-core` |
+| `terylon-os` | the owner of a Terylon — its `/mcp` server and the skills mirroring its prompts | none |
+| `terylon-pane` | the owner of a Terylon, in Desktop — a mod drawing the pane | `terylon-os` |
 
 `terylon-product` reaches everything below it transitively. `terylon-dev` and `terylon-test` declare `terylon-core` **directly** as well: both load `measure-token-spend` whether or not git or a forge is in play, and `terylon-dev` additionally declares `terylon-git`, because `leader` dispatches `code-reviewer` whether or not a forge is.
 
 **The two adapters are siblings of the role plugins, not layers under them.** Nothing declares an adapter: the consumer enables the one their repositories are hosted on, and the port arrives as its dependency. A consumer therefore enables **two** keys — a role plugin and an adapter.
 
-`terylon-forge` **replaced `terylon-devops`**, which no longer exists. That plugin mixed two things: the transports, which were portable and are now the port, and the Azure DevOps mechanics, which were not and are now `terylon-ado`. The engine skill `ado-mcp` became `forge-ops`, and the MCP namespace moved with the server, from `mcp__plugin_terylon-devops_ado__*` to `mcp__plugin_terylon-ado_ado__*`.
+`terylon-forge` **replaced `terylon-devops`**, which no longer exists. That plugin mixed two things: the transports, which were portable and are now the port, and the Azure DevOps mechanics, which were not and are now `terylon-ado`. The engine skill `ado-mcp` became `forge-ops`, and the MCP namespace moved with the server, from `mcp__plugin_terylon-devops_ado__*` to `mcp__plugin_terylon-ado_ado__*` — and since #332, when the server became Microsoft's remote one registered at the user scope, to `mcp__ado__*`.
 
 `terylon-core` is the **root**, not a second leaf. It needs neither git nor a forge, only a shell and the local session transcripts, and every other plugin sits on it. It **replaced `terylon-metrics`**, which no longer exists, and its arrival removed the `superpowers` dependency: `write-plan` and `run-build-loop` replaced two of those skills, `finish-branch` in `terylon-git` a third, and the remaining three were dropped because `developer`, `refactorer` and `debugger` already carried them in their own prose. A skill that only restates what the persona says costs cache-write to load and buys nothing.
 
@@ -319,7 +347,7 @@ So the **dependency** edge still points down; only the **load** points up. Three
 
 `background-run` is the one component in `terylon-dev` that the pipeline never calls. It exercises git and the `claude --bg` CLI, so the *exercises* test alone would allow it in `terylon-git` — and that is exactly the failure mode the placement rule warns about, because `terylon-git` is a dependency of everything and would install it for every consumer. Its only audience is the operator driving this plugin, so it lives beside them. Being unreachable from `develop` is not evidence of a misplacement; it is a skill the operator invokes, not a persona the loop dispatches.
 
-`terylon-ado` also ships the `.mcp.json` that registers the `ado` server. `terylon-github` ships no server at all — the `gh` CLI needs none.
+`terylon-ado` also ships `connect`, which registers the `ado` server at the user scope — not a `.mcp.json`, because the server's OAuth client configuration cannot be substituted there (see *External MCP server prerequisites*). `terylon-github` ships no server at all — the `gh` CLI needs none.
 
 Two boundaries, and they are different in kind:
 
@@ -328,7 +356,7 @@ Two boundaries, and they are different in kind:
 | the forge | `terylon-git` and `terylon-forge` | does it reach outside the repository? Everything in `terylon-git` exercises git and nothing more; that is why the review pipeline is split, with `code-review` and `code-reviewer` local and `review-pr` and `pr-reviewer` carrying the findings outward |
 | the platform | `terylon-forge` and the adapters | does it **depend** on a platform? A transport that issues a `gh` subcommand or an `mcp__` tool call has crossed it and belongs in an adapter |
 
-The second is the one that erodes. A transport gains one platform-specific line at a time, each defensible on its own, until the port is a port in name only. **Grep before finishing a change to a transport** — and grep for the runtime forms, `mcp__plugin_terylon-ado_ado__*` rather than `mcp__ado__`, or the check passes because it cannot fire.
+The second is the one that erodes. A transport gains one platform-specific line at a time, each defensible on its own, until the port is a port in name only. **Grep before finishing a change to a transport** — and grep for the runtime forms, `mcp__ado__*` rather than `mcp__ado__`, or the check passes because it cannot fire.
 
 **Two things are not crossings, and a grep that flags them is miscalibrated.** A transport's `allowed-tools` names both surfaces on purpose, since an absent one is inert and the grant cannot be resolved at runtime. And a transport **naming** a difference the port declares — that one forge numbers what the other words, that one wants a leading slash — is the port doing its job; hiding those is what makes a transport wrong. What must not appear is a transport *issuing* a platform call, or reading a raw platform field instead of the normalised value the operation returns.
 

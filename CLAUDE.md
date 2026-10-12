@@ -1,6 +1,6 @@
 # Terylon Marketplace
 
-Claude Code plugin marketplace distributed into product repositories through `extraKnownMarketplaces`. **Public on GitHub** (`janecekvit/terylon-marketplace`, MIT) and installed from there; reviewed and merged on a private Azure DevOps repository. See *Two remotes* below.
+Claude Code plugin marketplace distributed into product repositories through `extraKnownMarketplaces`. **Public on GitHub** (`janecekvit/terylon-marketplace`, Apache-2.0) and installed from there; reviewed and merged on a private Azure DevOps repository. See *Two remotes* below.
 
 @README.md
 
@@ -8,7 +8,8 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 
 ```
 /.claude-plugin/marketplace.json   root manifest
-/LICENSE                           MIT, copyright the operator — every plugin manifest says "license": "MIT"
+/LICENSE                           Apache-2.0, the canonical text (MIT until 2026-10-12) — every plugin manifest says "license": "Apache-2.0"
+/NOTICE                            the copyright notice Apache-2.0 carries: Terylon Marketplace, copyright the operator
 /SECURITY.md                       how to report a vulnerability — GitHub private vulnerability reporting
 /.github/workflows/ci.yml          unit suites + the free e2e install stage, on every PR and push to main
 /plugins/<slug>/                   one directory per plugin
@@ -27,12 +28,17 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 terylon-core                      the root — shared conventions + measurement; no git, no forge, no MCP
 └── terylon-git                   + git; no forge, no MCP server
     └── terylon-forge             the forge port — the PR workflow, written against operations; ships no adapter
-        ├── terylon-ado           adapter: the ADO body of forge-ops + the ado MCP server
+        ├── terylon-ado           adapter: the ADO body of forge-ops; connect registers the remote ado server
         ├── terylon-github        adapter: the GitHub body of forge-ops, over the gh CLI; no server
         ├── terylon-product       + user stories, Feature specs
         ├── terylon-dev           + the build pipeline (declares terylon-git and terylon-core directly)
         └── terylon-test          + verifying a test plan and acceptance criteria (declares terylon-core directly)
+
+terylon-os                        Terylon itself, the agentic OS extension: its /mcp server + one skill per prompt; no dependencies
+└── terylon-pane                  a mod: the Desktop pane over that server — queue, add, done-signal, memory
 ```
+
+**`terylon-os` and its mod `terylon-pane` stand outside the chain** (#332): it is the owner's product, not a role in the development workflow, and it needs nothing below it. It was `terylon` until the operator renamed it on 2026-10-12 — `terylon@terylon` collided with the marketplace's name, and every other plugin is `terylon-<area>`; its server is still named `terylon`, so its tools are `mcp__plugin_terylon-os_terylon__*`. `terylon-pane` is the marketplace's first **mod** — a hooks module the engine runs in a session, drawing a pane — and `plugins/CLAUDE.md` says how one is written and tested, under *A mod*.
 
 `terylon-dev` declares `terylon-git` directly as well as through `terylon-forge`, because its `leader` dispatches `code-reviewer` whether or not a forge is in play. `terylon-dev` and `terylon-test` declare `terylon-core` directly for the same reason: both invoke `measure-token-spend`, which has nothing to do with git or a forge.
 
@@ -56,10 +62,10 @@ Component layout, the placement rule in full, the dispatch chains and the table 
 
 | | |
 |---|---|
-| Organisation | **not recorded here** — each person sets `TERYLON_ADO_ORG` in their own settings |
+| Organisation | **not recorded here** — each person sets `ADO_ORGANIZATION` in their own settings |
 | Project | `Dev` |
 | Repo | `TerylonMarketplace` |
-| MCP server | `@azure-devops/mcp@2.9.0` (pinned) via `plugins/terylon-ado/.mcp.json` |
+| MCP server | Microsoft's remote server at `https://mcp.dev.azure.com`, over OAuth — registered at the user scope as `ado` by `terylon-ado`'s `connect` skill (#332); tools `mcp__ado__*` |
 
 **No Azure DevOps organisation name is committed anywhere in this repository.** Until #273 it appeared inside the repository's own URL, in the setup snippets and each manifest's `homepage`, because that was the address you installed from. The address is now the public GitHub repository, so the exception is gone: a published file never links a reader to the private organisation, example URLs in the recipes use `contoso`, and the one snippet that must reach a feature branch on Azure DevOps (`docs/onboarding/marketplace-development.md`) tells the reader to run `git remote get-url origin` instead. Older commits still carry the URL; the history is published as it is.
 
@@ -74,9 +80,9 @@ Component layout, the placement rule in full, the dispatch chains and the table 
 
 **Everything committed is published.** Before the first push the tree **and the full history** were scanned for secrets, private host and tailnet names, personal e-mail addresses and internal-only references (#273); nothing secret was found. Keep it that way: no host name, tailnet name, home directory, personal address or organisation name goes into a commit — measured records say *the operator's own host*, test fixtures use `alice` and `contoso`, and a plugin author is named without an e-mail address.
 
-**`.claude/settings.json` deliberately carries no `env` block.** It did briefly, and the reason it does not is the same reason `.mcp.json` lost its fallback, one level up: **this repository is the marketplace source.** Anyone who forks it to point at their own copy inherits its committed settings, and a committed `TERYLON_ADO_ORG` would hand them this owner's organisation — the very outcome removing the fallback was meant to prevent, reintroduced through a file nobody thinks of as code. Whoever works on this repository sets the variable in their **own** `~/.claude/settings.json`, where a personal default belongs and where a fork cannot inherit it.
+**`.claude/settings.json` deliberately carries no `env` block.** It did briefly, and the reason it does not is the same reason the organisation lost its fallback, one level up: **this repository is the marketplace source.** Anyone who forks it to point at their own copy inherits its committed settings, and a committed `ADO_ORGANIZATION` would hand them this owner's organisation — the very outcome removing the fallback was meant to prevent, reintroduced through a file nobody thinks of as code. The same holds for `ADO_MCP_CLIENT_ID` and `ADO_MCP_TENANT_ID`, which name the owner's own Entra app registration and tenant: they are configuration, not code. Whoever works on this repository sets all three in their **own** `~/.claude/settings.json`, where a personal value belongs and where a fork cannot inherit it — and `connect` registers the server from them at the user scope, which is also why the plugin ships no `.mcp.json` for it (the measurement is in `plugins/terylon-ado/shared/ado-server.js`).
 
-**`TERYLON_ADO_ORG` is required and has no default.** The `.mcp.json` passes `${TERYLON_ADO_ORG}` bare: unset, the server does not target anything. It used to carry a hard-coded default, which meant a consumer who forgot the variable did not fail — they silently targeted whichever organisation the marketplace author happened to use, and found out at the first call, from an authorization error naming an organisation nobody had chosen. A missing required value must fail where it is missing.
+**`ADO_ORGANIZATION` is required and has no default.** It is the bare name, and every `mcp__ado__*` call passes it as `orgName` — never in the server's URL. Unset, no call targets anything. The organisation used to carry a hard-coded default, which meant a consumer who forgot the variable did not fail — they silently targeted whichever organisation the marketplace author happened to use, and found out at the first call, from an authorization error naming an organisation nobody had chosen. A missing required value must fail where it is missing.
 
 Project and repo still derive from the consuming repository's git remote at runtime, and a GitHub-hosted repository sets nothing at all: `terylon-github` reads the owner from the remote and authenticates through `gh`. See *Point it at your forge* in `README.md`.
 
@@ -115,13 +121,16 @@ The repo runs on **Windows and natively on Debian**. Everything scripted must wo
 
 ## Testing
 
-Three suites under `/tests/`, none distributed. **Run the end-to-end harness before a change reaches `main`**, and before anything moves to a new host.
+Five suites under `/tests/`, none distributed, and a mod's own tests beside it. **Run the end-to-end harness before a change reaches `main`**, and before anything moves to a new host.
 
-**GitHub Actions runs the free part on every pull request and every push to `main`** (`.github/workflows/ci.yml`): `node --test "**/*.test.js"` and the `install` stage, with Claude Code pinned to the version last measured. The stage needs no secret — measured on 2026-10-04 with an empty environment and an empty `HOME`: 82 checks green, $0, and each install-stage planted defect (`skill-frontmatter`, `hook-path`, `mcp-organisation`) turned it red. A CI checkout is a detached HEAD, which the harness refuses, so the job names the commit as a local branch and passes `--ref`. The model-driven stages stay manual; why is in `README.md`, under *Continuous integration*.
+**GitHub Actions runs the free part on every pull request and every push to `main`** (`.github/workflows/ci.yml`): `node --test "**/*.test.js"` and the `install` stage, with Claude Code pinned to the version last measured. The stage needs no secret — measured on 2026-10-04 with an empty environment and an empty `HOME`: 82 checks green, $0, and each install-stage planted defect (`skill-frontmatter`, `hook-path`, `mcp-organisation`) turned it red. Since #332 the stage has 104 checks — `terylon-ado`'s `connect` registering `ado` against the stand-in, `ado` and `terylon-os`'s `terylon` connecting — and `connect-client-id` replaced `mcp-organisation` (measured 2026-10-11: caught, 1 failing check). A CI checkout is a detached HEAD, which the harness refuses, so the job names the commit as a local branch and passes `--ref`. The model-driven stages stay manual; why is in `README.md`, under *Continuous integration*.
 
 | Suite | Command | Proves | Cost |
 |---|---|---|---|
 | contract + fixture | `node --test tests/forge-port/forge-port.test.js` | both `forge-ops` bodies declare the same work-item keys; the authoring skills name no platform field; the GitHub recipes, run verbatim against a stand-in `gh`, write what they should | free, seconds |
+| terylon-pane mod | `claude plugin test plugins/terylon-pane` | the pane's queue, story, add, done-signal, catch-up, memory and every frame, on the desktop, the terminal and the phone, against a Terylon answering from memory; no button calls a gate | free, seconds; no session, no network |
+| terylon-pane teeth | `node --test tests/terylon-pane/mutations.test.js` | each planted mutation — no done-signal, no catch-up, the guard opened, a waiting item approving — turns the mod's tests red; skips where the `claude` CLI is absent | free, about a minute |
+| terylon-os plugin | `node --test tests/terylon-os/terylon-os-plugin.test.js` | the `terylon-os` plugin's one server is `${TERYLON_URL}/mcp` with no header or token, every prompt Terylon's `/mcp` serves has exactly one skill mirroring it, and nothing published names a host | free, milliseconds |
 | harness unit checks | `node --test tests/e2e/ref.test.js` | which ref the harness installs, and that a detached HEAD is refused rather than passed on as `HEAD` | free, milliseconds |
 | end-to-end | `node tests/e2e/run.js` | the marketplace installs from a git ref as a consumer installs it, everything loads, and the skills — followed by a model, headless — write the right things or refuse with the right reason | about **$2.60–3.25** per full run on sonnet, 4–8 min (measured 2026-10-04) |
 
@@ -146,7 +155,8 @@ run.js
 
 | Stand-in | Reached through | Records |
 |---|---|---|
-| `tests/e2e/stubs/ado-mcp-stub.js` — the 2.9.0 work-item tools, typed | an `npx` shim first on `PATH`, which the adapter's `.mcp.json` launches | every `tools/call` |
+| `tests/e2e/stubs/mcp-http-stub.js` `/ado/mcp` — the remote Azure DevOps server's work-item tools, typed, refusing any call without `orgName` | the server `ado`: in the install stage registered by `terylon-ado`'s own `connect` into the scratch config; in a headless run given by `--mcp-config` under `--strict-mcp-config` | every `tools/call`, per scenario |
+| `tests/e2e/stubs/mcp-http-stub.js` `/terylon/mcp` — Terylon's `/mcp`, connecting and offering nothing | the `terylon-os` plugin's own server, `TERYLON_URL` pointing at it | nothing |
 | `tests/forge-port/fake-gh.js` | a `gh` wrapper first on `PATH` | every invocation, and the issues it stores |
 
 **No credential appears anywhere in the harness.** Stage 1 runs in the scratch config, which holds no login — the init event it reads arrives before the first API call. The headless stages run under the operator's **own** Claude Code login, never read or copied, with the consumer-installed plugins loaded by `--plugin-dir`; forge tokens are stripped from their environment, and every forge call goes to a stand-in.
@@ -154,7 +164,7 @@ run.js
 Things that were measured, and bite:
 
 - **Haiku cannot carry these skills.** Authoring on haiku never loaded `forge-ops`; the GitHub-only refusals passed on one run and failed on the next. Every headless stage runs on sonnet; `--model` overrides it.
-- **`--strict-mcp-config` drops a `--plugin-dir` plugin's own `.mcp.json`**, so the `ado` server never starts. The harness keeps the account's claude.ai connectors out with `ENABLE_CLAUDEAI_MCP_SERVERS=false` instead, and fails any turn that sees another server.
+- **`--strict-mcp-config` drops a `--plugin-dir` plugin's own `.mcp.json`** (measured 2026-10-04). Until #332 that kept the harness off it, because the `ado` server was a plugin's; since #332 `ado` is a user-scope server, so a headless run takes the stand-in by `--mcp-config` **under** `--strict-mcp-config` — which also keeps the operator's own, real `ado` out of the run. The account's claude.ai connectors stay out with `ENABLE_CLAUDEAI_MCP_SERVERS=false`, and any turn that sees another server fails.
 - **An agent's `skills:` are preloaded only when it is dispatched as a subagent.** Run as the session's own agent (`--agent`), `planner` could not load `resolve-forge` at all. The harness dispatches agents through the Agent tool, as `leader` does, and judges the subagent's own report.
 - **A model that cannot find a skill goes looking on disk**, and found the operator's own, older, installed copies. Reads of the operator's plugin cache are denied, and a turn that tried fails.
 - **`marketplace add` refuses `file://` and clones shallow**, so a local source is served through `git http-backend` on 127.0.0.1.

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "terylon-os",
+  "version": "0.1.2",
+  "description": "Terylon itself — the owner's MCP endpoint (/mcp) as a server, and one skill per prompt it serves: briefing, hand-over, merge-gate, add-goal, review-plan, show-story. Works in any session, the terminal, SSH and Remote Control alike. Requires the TERYLON_URL environment variable; there is no default address.",
+  "author": {
+    "name": "Vít Janeček"
+  },
+  "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-os",
+  "repository": "https://github.com/janecekvit/terylon-marketplace",
+  "license": "Apache-2.0",
+  "keywords": [
+    "terylon",
+    "mcp",
+    "leader",
+    "briefing",
+    "merge-gate"
+  ]
+}

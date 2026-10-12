@@ -1,6 +1,6 @@
 # Terylon Marketplace
 
-A [Claude Code](https://code.claude.com/docs) plugin marketplace for the whole development workflow — user stories and Feature specs, a test-first build pipeline with review agents, pull request review and checklist verification — on **Azure DevOps or on GitHub**. MIT licensed.
+A [Claude Code](https://code.claude.com/docs) plugin marketplace for the whole development workflow — user stories and Feature specs, a test-first build pipeline with review agents, pull request review and checklist verification — on **Azure DevOps or on GitHub**. Apache-2.0 licensed.
 
 Eight plugins, one dependency chain. You enable **two** of them: the role you work in, and the adapter for wherever your repositories are hosted. Everything else arrives as a dependency.
 
@@ -30,6 +30,8 @@ terylon-core (root — no dependencies)
 | `terylon-product` | product owner / PM — user stories, Feature specs | `terylon-forge` |
 | `terylon-dev` | developers — brainstorm → plan → build (TDD) → finish | `terylon-git`, `terylon-forge`, `terylon-core` |
 | `terylon-test` | anyone holding a checklist — verifies a test plan and acceptance criteria against the artifact | `terylon-forge`, `terylon-core` |
+
+**Outside the chain**, for the owner of a Terylon: `terylon-os` — Terylon, the agentic OS extension: its own `/mcp` server and one skill per prompt it serves, in any session, SSH and Remote Control included. See [`plugins/terylon-os/README.md`](./plugins/terylon-os/README.md).
 
 `terylon-core` is the **root**: no git, no forge, no MCP server, and everything else sits on it. `terylon-git` is deliberately forge-agnostic — everything in it exercises git and nothing more.
 
@@ -76,7 +78,7 @@ Then point it at your forge:
 | Your repositories are on | Do |
 |---|---|
 | **GitHub** | `gh auth login`, once per machine. Nothing else — the owner comes from the git remote and the adapter registers no server |
-| **Azure DevOps** | set `TERYLON_ADO_ORG` to your bare organisation **name**. It is required and has no default |
+| **Azure DevOps** | set `ADO_ORGANIZATION` (your bare organisation **name** — required, no default), `ADO_MCP_CLIENT_ID` and `ADO_MCP_TENANT_ID` (your own Entra app registration and its tenant) in your **own** `~/.claude/settings.json`; run `terylon-ado`'s `connect` skill once, then sign in once in `/mcp` → `ado` → **Authenticate** |
 
 Everything else resolves at runtime: the forge from a pasted URL, then `TERYLON_FORGE`, then the git remote's host; the project and repository from the remote; the target from the URL you pass a skill.
 
@@ -132,4 +134,4 @@ Report a vulnerability privately, as [`SECURITY.md`](./SECURITY.md) describes �
 
 ## Licence
 
-[MIT](./LICENSE), copyright Vít Janeček.
+[Apache-2.0](./LICENSE), copyright Vít Janeček; see [NOTICE](./NOTICE).

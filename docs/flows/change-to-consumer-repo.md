@@ -75,7 +75,7 @@ Three hops fail silently, and they are the ones the runbook exists for.
 
 **The operator pushes, not an agent.** `.claude/hooks/git-guard.js` refuses any push that targets `main`, whichever remote it names — on purpose, since the rule it backs is that `main` moves only through a reviewed pull request, and the GitHub copy is that same `main`.
 
-**The first push is forced, once.** The GitHub repository was created holding a single commit — GitHub's generated `LICENSE` — that the Azure DevOps history does not have, so the first `main` from Azure DevOps cannot fast-forward over it. Forcing replaces that one commit with the reviewed history, whose own `LICENSE` is the same MIT licence. It is made after the #273 merge, by the operator.
+**The first push is forced, once.** The GitHub repository was created holding a single commit — GitHub's generated `LICENSE` — that the Azure DevOps history does not have, so the first `main` from Azure DevOps cannot fast-forward over it. Forcing replaces that one commit with the reviewed history, whose own `LICENSE` was the same MIT licence (MIT until 2026-10-12; Apache-2.0 since, the operator's decision). It is made after the #273 merge, by the operator.
 
 **Never force any later push.** A rejected push means GitHub's `main` holds a commit Azure DevOps does not. Find where it came from and bring it through a pull request; forcing would delete it from the public history.
 

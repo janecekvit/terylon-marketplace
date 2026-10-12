@@ -44,7 +44,7 @@ First hit wins. **There is no default and no guess.**
 
 | Resolved | Adapter plugin | Engine skill | Server |
 |---|---|---|---|
-| `ado` | `terylon-ado` | `terylon-ado:forge-ops` | the `ado` MCP server; needs `TERYLON_ADO_ORG` |
+| `ado` | `terylon-ado` | `terylon-ado:forge-ops` | the user-scope `ado` MCP server, registered by `terylon-ado`'s `connect`; needs `ADO_ORGANIZATION` |
 | `github` | `terylon-github` | `terylon-github:forge-ops` | none — the `gh` CLI |
 
 **Address the engine plugin-qualified whenever a forge resolved.** Both adapters ship a skill named `forge-ops`. With one installed the bare name resolves; with both enabled it is ambiguous, and the qualified form is correct in either case.
@@ -99,7 +99,7 @@ A wrong resolution is cheap to correct at that point and expensive afterwards, b
 
 **Defaulting to `ado` because this marketplace grew up there is the mistake this flow exists to prevent.** Step 4 is to stop, not to fall back.
 
-**`TERYLON_ADO_ORG` is not part of resolution.** Resolution picks the platform; the organisation is a separate required value with no default, read by the MCP server at startup — before any git command runs. An unset one produces an authorization error naming an organisation nobody chose. See [`runbooks/ado-mcp-authorization-error.md`](../runbooks/ado-mcp-authorization-error.md).
+**`ADO_ORGANIZATION` is not part of resolution.** Resolution picks the platform; the organisation is a separate required value with no default, passed as `orgName` in every `mcp__ado__*` call — never derived from the remote and never part of the server's URL. An unset one fails the first call rather than targeting an organisation nobody chose. See [`runbooks/ado-mcp-authorization-error.md`](../runbooks/ado-mcp-authorization-error.md).
 
 ## Where it lives
 
@@ -108,6 +108,6 @@ A wrong resolution is cheap to correct at that point and expensive afterwards, b
 | `plugins/terylon-forge/skills/resolve-forge/SKILL.md` | `resolve-forge` — the precedence, the node reader, the adapter table, the stop conditions |
 | `plugins/terylon-ado/skills/forge-ops/SKILL.md` | the Azure DevOps body — the recipes and the asymmetry table |
 | `plugins/terylon-github/skills/forge-ops/SKILL.md` | the GitHub body — the same catalog over `gh`, and the matching asymmetry table |
-| `plugins/terylon-ado/.mcp.json` | registers the `ado` server; `${TERYLON_ADO_ORG}` is passed bare |
+| `plugins/terylon-ado/skills/connect/SKILL.md` | `connect` — registers the remote `ado` server at the user scope, from `ADO_MCP_CLIENT_ID` and `ADO_MCP_TENANT_ID` |
 | `plugins/terylon-forge/.claude-plugin/plugin.json` | `dependencies` — `terylon-git` only; declaring an adapter here would break the port |
 | `docs/architecture/port-and-adapter-split.md` | why the port ships no adapter, and the three rules that keep the arrangement honest |

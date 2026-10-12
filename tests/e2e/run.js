@@ -142,6 +142,24 @@ function serveLocal(localPath, ref, workDirectory)
     return `http://127.0.0.1:${fileSystem.readFileSync(portFile, "utf8").trim()}/marketplace.git`;
 }
 
+// The two remote MCP servers' stand-in (stubs/mcp-http-stub.js), one per pass; its base address.
+function startMcpStub(workDirectory)
+{
+    const portFile = path.join(workDirectory, "mcp-stub.port");
+    const server = childProcess.spawn(process.execPath, [path.join(__dirname, "stubs", "mcp-http-stub.js"), portFile], { stdio: "ignore" });
+
+    servers.push(server);
+
+    const deadline = Date.now() + 10000;
+
+    while (!fileSystem.existsSync(portFile) && Date.now() < deadline)
+    {
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+    }
+
+    return `http://127.0.0.1:${fileSystem.readFileSync(portFile, "utf8").trim()}`;
+}
+
 function stopServers()
 {
     for (const server of servers)
@@ -166,13 +184,13 @@ function withGitSuffix(source)
     return GITHUB_URL_WITHOUT_SUFFIX.test(source) ? source.replace(/\/?$/, ".git") : source;
 }
 
-// The two command wrappers the stand-ins are reached through, first on the PATH of every run.
+// The command wrapper the GitHub stand-in is reached through, first on the PATH of every run. The
+// Azure DevOps stand-in needs none since #332: it is an HTTP server, registered as `ado`.
 function createBinDirectory(workDirectory)
 {
     const binDirectory = path.join(workDirectory, "bin");
 
     fileSystem.mkdirSync(binDirectory, { recursive: true });
-    fileSystem.writeFileSync(path.join(binDirectory, "npx"), `#!/bin/sh\nexec node "${path.join(__dirname, "stubs", "npx-shim.js")}" "$@"\n`, { mode: 0o755 });
     fileSystem.writeFileSync(path.join(binDirectory, "gh"), `#!/bin/sh\nexec node "${path.join(REPOSITORY_ROOT, "tests", "forge-port", "fake-gh.js")}" "$@"\n`, { mode: 0o755 });
 
     return binDirectory;
@@ -199,14 +217,15 @@ function runOnce({ source, ref, stages, scenarios, model, budget, workDirectory,
     fileSystem.mkdirSync(workDirectory, { recursive: true });
 
     const binDirectory = createBinDirectory(workDirectory);
-    const installed = installStage({ source, ref, workDirectory, binDirectory, check, log });
+    const mcpBase = startMcpStub(workDirectory);
+    const installed = installStage({ source, ref, workDirectory, binDirectory, mcpBase, check, log });
 
     if (installed === null || installed.installPaths === undefined)
     {
         return { checks, runs };
     }
 
-    const context = { installed, binDirectory, workDirectory, model, models: Object.fromEntries(Object.entries(DEFAULT_MODELS).map(([key, value]) => [key, model || value])), budget, scenarios, check, log, recordRun };
+    const context = { installed, binDirectory, mcpBase, workDirectory, model, models: Object.fromEntries(Object.entries(DEFAULT_MODELS).map(([key, value]) => [key, model || value])), budget, scenarios, check, log, recordRun };
 
     if (stages.includes("author"))
     {

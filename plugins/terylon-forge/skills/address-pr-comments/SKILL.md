@@ -3,7 +3,7 @@ name: address-pr-comments
 description: Use when the user provides a pull request URL from either forge (dev.azure.com/…/pullrequest/N
   or github.com/…/pull/N) for THEIR OWN PR and asks to apply / address / incorporate the review comments left by others.
   Optional flags --auto and --dry-run.
-allowed-tools: Bash(git *), Read, Grep, Glob, Edit, Write, Bash(gh *), mcp__plugin_terylon-ado_ado__*
+allowed-tools: Bash(git *), Read, Grep, Glob, Edit, Write, Bash(gh *), mcp__ado__*
 ---
 
 # Pull Request — Address Reviewer Comments

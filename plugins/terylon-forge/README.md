@@ -13,7 +13,7 @@ terylon-core ............. the shared conventions, token-spend measurement
            ▲
            └── terylon-forge  ← you are here
                   ▲
-                  ├── terylon-ado ....... adapter: ADO mechanics + the ado MCP server
+                  ├── terylon-ado ....... adapter: ADO mechanics; connect registers the ado server
                   ├── terylon-github .... adapter: gh CLI mechanics, no server
                   ├── terylon-product ... user stories, Feature specs
                   ├── terylon-dev ....... the build pipeline
@@ -88,7 +88,7 @@ or
 }
 ```
 
-Per-adapter configuration lives in each adapter's README: `terylon-ado` needs `TERYLON_ADO_ORG` and has no default; `terylon-github` needs `gh auth login` and no configuration at all.
+Per-adapter configuration lives in each adapter's README: `terylon-ado` needs `ADO_ORGANIZATION`, which has no default, plus its own `connect` and a one-time OAuth sign-in in `/mcp`; `terylon-github` needs `gh auth login` and no configuration at all.
 
 ## Usage
 
@@ -111,4 +111,4 @@ Worktree isolation and the local review engine come from `terylon-git`, installe
 /terylon-git:code-review
 ```
 
-> **Migrating from `terylon-devops`.** That plugin no longer exists. It split in two: the transports and the agent came here, the Azure DevOps mechanics and the MCP server went to `terylon-ado`. Replace `"terylon-devops@terylon"` with `"terylon-ado@terylon"` — the port installs as its dependency. The transports kept their names; the engine skill `ado-mcp` is now `forge-ops`, and the MCP namespace `mcp__plugin_terylon-devops_ado__*` is now `mcp__plugin_terylon-ado_ado__*`.
+> **Migrating from `terylon-devops`.** That plugin no longer exists. It split in two: the transports and the agent came here, the Azure DevOps mechanics and the MCP server went to `terylon-ado`. Replace `"terylon-devops@terylon"` with `"terylon-ado@terylon"` — the port installs as its dependency. The transports kept their names; the engine skill `ado-mcp` is now `forge-ops`, and the MCP namespace `mcp__plugin_terylon-devops_ado__*` is now `mcp__ado__*`.

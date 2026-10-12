@@ -68,7 +68,7 @@ It is a table, never a bullet list:
 | File | Role |
 |---|---|
 | `plugins/terylon-forge/skills/resolve-forge/SKILL.md` | `resolve-forge` — the four-step precedence and the stop condition |
-| `plugins/terylon-ado/.mcp.json` | registers the `ado` server; passes `${TERYLON_ADO_ORG}` bare |
+| `plugins/terylon-ado/shared/ado-server.js` | `wantedServer` — the user-scope `ado` registration that `connect` writes and `check-access` compares |
 ```
 
 **The Role column leads with the type or symbol**, not with a description of the file. `resolve-forge — the four-step precedence` tells a reader what to open and what to look for inside it; "the forge logic" does not.

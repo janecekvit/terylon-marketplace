@@ -14,9 +14,11 @@
 //              the harness never reads, copies or passes a credential. It loads the plugins the
 //              consumer install produced, by --plugin-dir, and isolates them from the operator's
 //              own plugins with --setting-sources project, and from the account's claude.ai
-//              connectors with ENABLE_CLAUDEAI_MCP_SERVERS=false. --strict-mcp-config is not used:
-//              measured on 2026-10-04 (2.1.289), it drops a --plugin-dir plugin's own .mcp.json too,
-//              so the ado server never started and every Azure DevOps scenario ran without it.
+//              connectors with ENABLE_CLAUDEAI_MCP_SERVERS=false. The Azure DevOps stand-in arrives by
+//              --mcp-config as `ado`, under --strict-mcp-config, so the operator's own user-scope `ado`
+//              — the real server — is never loaded beside it (#332). That flag also drops a
+//              --plugin-dir plugin's own .mcp.json (measured 2026-10-04, 2.1.289); since #332 no
+//              plugin a scenario needs ships one.
 //
 
 const childProcess = require("child_process");
@@ -28,11 +30,12 @@ const HEADLESS_TIMEOUT_MILLISECONDS = 15 * 60 * 1000;
 // The tools a headless run may use without a prompt. Everything else is denied (dontAsk).
 // Bash is broad because the GitHub recipes compose bodies with shell; every forge command it can
 // reach on this PATH is a stand-in.
-const HEADLESS_ALLOWED_TOOLS = ["Bash", "Read", "Grep", "Glob", "Write", "Edit", "Skill", "Agent", "mcp__plugin_terylon-ado_ado__*"];
+const HEADLESS_ALLOWED_TOOLS = ["Bash", "Read", "Grep", "Glob", "Write", "Edit", "Skill", "Agent", "mcp__ado__*"];
 
 // Environment variables that could carry a real forge credential. Stripped from every run, so a
 // stand-in is the only thing a run can talk to.
-const CREDENTIAL_VARIABLES = ["PERSONAL_ACCESS_TOKEN", "AZURE_DEVOPS_EXT_PAT", "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "TERYLON_FORGE", "TERYLON_ADO_PROJECT"];
+// The two Azure DevOps token names are an operator machine's leftovers from before #332, still stripped.
+const CREDENTIAL_VARIABLES = ["PERSONAL_ACCESS_TOKEN", "AZURE_DEVOPS_EXT_PAT", "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "TERYLON_FORGE", "ADO_PROJECT"];
 
 function operatorPluginDirectory()
 {
@@ -168,7 +171,7 @@ function readInventory({ configDirectory, cwd, env, debugFile, transcript })
 }
 
 // One headless turn. `resume` continues an earlier session, which is how a run answers "push".
-function runHeadless({ prompt, cwd, env, pluginDirectories, model, budget, resume, agent, transcript })
+function runHeadless({ prompt, cwd, env, pluginDirectories, mcpConfig, model, budget, resume, agent, transcript })
 {
     const argumentList = ["-p", prompt, "--output-format", "stream-json", "--verbose",
         "--model", model,
@@ -186,6 +189,11 @@ function runHeadless({ prompt, cwd, env, pluginDirectories, model, budget, resum
     for (const directory of pluginDirectories)
     {
         argumentList.push("--plugin-dir", directory);
+    }
+
+    if (mcpConfig !== undefined)
+    {
+        argumentList.push("--mcp-config", mcpConfig, "--strict-mcp-config");
     }
 
     if (resume !== undefined)

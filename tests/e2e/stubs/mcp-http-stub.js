@@ -1,21 +1,24 @@
 #!/usr/bin/env node
 //
-// ado-mcp-stub — a stand-in for `@azure-devops/mcp@2.9.0`, for the end-to-end harness.
+// mcp-http-stub — the end-to-end harness's stand-ins for the two remote MCP servers the
+// marketplace's plugins talk to, over Streamable HTTP on 127.0.0.1 (#332):
 //
-// It speaks MCP over stdio (newline-delimited JSON-RPC), exposes the work-item tools of the
-// pinned 2.9.0 surface under the same names, keeps a small item store, and appends every
-// tools/call to E2E_ADO_LOG so the harness can assert what was written. It holds no credential
-// and talks to nothing.
+//   POST /ado/mcp?state=<file>&log=<file>   Microsoft's remote Azure DevOps server: the work-item
+//                                           tools of its surface under the same names, a small item
+//                                           store, and every tools/call appended to the log
+//   POST /terylon/mcp                       Terylon's /mcp: it answers initialize and lists nothing
 //
-// It refuses to start without an organisation argument, as the real server does, so a
-// `.mcp.json` that stops passing `${TERYLON_ADO_ORG}` turns the harness red instead of loading.
+// It refuses a tools/call without `orgName`, as the remote server does: the server is addressed at
+// its root, so a recipe that stops passing the organisation turns the harness red instead of reaching
+// some default. It holds no credential and talks to nothing. Once listening it writes its port to the
+// file named by its one argument, as git-http-server.js does.
 //
-// State: E2E_ADO_STATE, a JSON file { nextId, items: { "<id>": { fields, formats, parent, children } } }.
+// State: the `state` file, JSON { nextId, items: { "<id>": { fields, formats, parent, children } } }.
 //
 "use strict";
 
 const fileSystem = require("fs");
-const readline = require("readline");
+const http = require("http");
 
 // The fields every created item gets unless the create names them.
 const DEFAULT_STATE = "New";
@@ -23,27 +26,27 @@ const DEFAULT_STATE = "New";
 // A multiline field that may carry a per-field format.
 const MULTILINE_FIELDS = ["System.Description", "Microsoft.VSTS.Common.AcceptanceCriteria", "Microsoft.VSTS.TCM.ReproSteps"];
 
-const organisation = process.argv[2];
-
-if (organisation === undefined || organisation === "" || organisation.startsWith("-"))
-{
-    process.stderr.write("Fatal error in main(): no organisation was passed to the Azure DevOps MCP server\n");
-    process.exit(1);
-}
+// The request being answered: its organisation, and the scenario's state and log files.
+let organisation = "";
+let statePath = "";
+let logPath = "";
 
 function readState()
 {
-    return JSON.parse(fileSystem.readFileSync(process.env.E2E_ADO_STATE, "utf8"));
+    return JSON.parse(fileSystem.readFileSync(statePath, "utf8"));
 }
 
 function writeState(state)
 {
-    fileSystem.writeFileSync(process.env.E2E_ADO_STATE, JSON.stringify(state, null, 2));
+    fileSystem.writeFileSync(statePath, JSON.stringify(state, null, 2));
 }
 
 function record(name, argumentsObject)
 {
-    fileSystem.appendFileSync(process.env.E2E_ADO_LOG, JSON.stringify({ tool: name, arguments: argumentsObject }) + "\n");
+    if (logPath !== "")
+    {
+        fileSystem.appendFileSync(logPath, JSON.stringify({ tool: name, arguments: argumentsObject }) + "\n");
+    }
 }
 
 function itemUrl(project, id)
@@ -165,7 +168,7 @@ function applyPatch(state, id, operations)
     item.rev = (item.rev || 1) + 1;
 }
 
-// The typed parameters of the 2.9.0 surface, as far as the marketplace's recipes use them. A model
+// The typed parameters of the remote server's surface, as far as the marketplace's recipes use them. A model
 // reads these schemas; untyped, it passes arrays as JSON strings, which the real server's validation
 // would refuse. So they are typed, and a value of the wrong type is refused here the same way.
 const FIELD = { type: "object", properties: { name: { type: "string" }, value: {}, format: { type: "string" } }, required: ["name", "value"] };
@@ -175,11 +178,11 @@ const CHILD = { type: "object", properties: { title: { type: "string" }, descrip
 
 const PARAMETERS =
 {
-    wit_work_item: { id: { type: "number" }, ids: { type: "array", items: { type: "number" } }, workItemId: { type: "number" }, project: { type: "string" }, expand: { type: "string" }, fields: { type: "array", items: { type: "string" } }, top: { type: "number" }, skip: { type: "number" } },
-    wit_work_item_write: { project: { type: "string" }, workItemType: { type: "string" }, fields: { type: "array", items: FIELD }, id: { type: "number" }, updates: { type: "array", items: PATCH }, batchUpdates: { type: "array", items: PATCH }, parentId: { type: "number" }, items: { type: "array", items: CHILD } },
-    wit_work_item_link_write: { project: { type: "string" }, projectId: { type: "string" }, repositoryId: { type: "string" }, pullRequestId: { type: "number" }, workItemId: { type: "number" }, updates: { type: "array", items: LINK } },
-    wit_work_item_comment_write: { project: { type: "string" }, workItemId: { type: "number" }, commentId: { type: "number" }, text: { type: "string" }, format: { type: "string" } },
-    repo_repository: { project: { type: "string" }, repositoryNameOrId: { type: "string" } },
+    wit_work_item: { orgName: { type: "string" }, id: { type: "number" }, ids: { type: "array", items: { type: "number" } }, workItemId: { type: "number" }, project: { type: "string" }, expand: { type: "string" }, fields: { type: "array", items: { type: "string" } }, top: { type: "number" }, skip: { type: "number" } },
+    wit_work_item_write: { orgName: { type: "string" }, project: { type: "string" }, workItemType: { type: "string" }, fields: { type: "array", items: FIELD }, id: { type: "number" }, updates: { type: "array", items: PATCH }, batchUpdates: { type: "array", items: PATCH }, parentId: { type: "number" }, items: { type: "array", items: CHILD } },
+    wit_work_item_link_write: { orgName: { type: "string" }, project: { type: "string" }, projectId: { type: "string" }, repositoryId: { type: "string" }, pullRequestId: { type: "number" }, workItemId: { type: "number" }, updates: { type: "array", items: LINK } },
+    wit_work_item_comment_write: { orgName: { type: "string" }, project: { type: "string" }, workItemId: { type: "number" }, commentId: { type: "number" }, text: { type: "string" }, format: { type: "string" } },
+    repo_repository: { orgName: { type: "string" }, project: { type: "string" }, repositoryNameOrId: { type: "string" } },
 };
 
 // Refuses what typed validation refuses: an array passed as a string, a number passed as text.
@@ -209,7 +212,7 @@ function validate(name, input)
     return null;
 }
 
-// Every tool takes an `action`; the per-action parameters follow the 2.9.0 surface.
+// Every tool takes an `action` and `orgName`; the per-action parameters follow the remote surface.
 const TOOLS =
 {
     wit_work_item:
@@ -373,6 +376,13 @@ function callTool(name, input)
         return { isError: true, content: [{ type: "text", text: `Unknown tool: ${name}` }] };
     }
 
+    if (typeof (input || {}).orgName !== "string" || input.orgName.trim() === "")
+    {
+        return { isError: true, content: [{ type: "text", text: "MCP error -32602: orgName is required: the server is addressed at its root, so every call names its organisation" }] };
+    }
+
+    organisation = input.orgName;
+
     const invalid = validate(name, input || {});
 
     if (invalid !== null)
@@ -395,60 +405,115 @@ function callTool(name, input)
     }
 }
 
-function respond(id, result)
+// One JSON-RPC message to the Azure DevOps stand-in, or null for a notification.
+function answerAdo(message)
 {
-    process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\n");
-}
-
-function respondError(id, code, message)
-{
-    process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } }) + "\n");
-}
-
-const input = readline.createInterface({ input: process.stdin });
-
-input.on("line", (line) =>
-{
-    let message;
-
-    try
-    {
-        message = JSON.parse(line);
-    }
-    catch
-    {
-        // Not a JSON-RPC line; the protocol has nothing to answer.
-        return;
-    }
-
     if (message.id === undefined)
     {
-        return;
+        return null;
     }
 
     if (message.method === "initialize")
     {
-        respond(message.id,
+        return { jsonrpc: "2.0", id: message.id, result: { protocolVersion: (message.params && message.params.protocolVersion) || "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "Azure DevOps MCP Server (e2e stub)", version: "remote" } } };
+    }
+
+    if (message.method === "tools/list")
+    {
+        return { jsonrpc: "2.0", id: message.id, result: { tools: listTools() } };
+    }
+
+    if (message.method === "tools/call")
+    {
+        return { jsonrpc: "2.0", id: message.id, result: callTool(message.params.name, message.params.arguments) };
+    }
+
+    if (message.method === "ping")
+    {
+        return { jsonrpc: "2.0", id: message.id, result: {} };
+    }
+
+    return { jsonrpc: "2.0", id: message.id, error: { code: -32601, message: `Method not found: ${message.method}` } };
+}
+
+// Terylon's /mcp, as far as an install needs it: it connects, and offers nothing.
+function answerTerylon(message)
+{
+    if (message.id === undefined)
+    {
+        return null;
+    }
+
+    if (message.method === "initialize")
+    {
+        return { jsonrpc: "2.0", id: message.id, result: { protocolVersion: (message.params && message.params.protocolVersion) || "2025-06-18", capabilities: { tools: {}, prompts: {} }, serverInfo: { name: "terylon (e2e stub)", version: "0" } } };
+    }
+
+    if (message.method === "tools/list")
+    {
+        return { jsonrpc: "2.0", id: message.id, result: { tools: [] } };
+    }
+
+    if (message.method === "prompts/list")
+    {
+        return { jsonrpc: "2.0", id: message.id, result: { prompts: [] } };
+    }
+
+    return { jsonrpc: "2.0", id: message.id, result: {} };
+}
+
+const server = http.createServer((request, response) =>
+{
+    const address = new URL(request.url, "http://127.0.0.1");
+    const answer = address.pathname === "/ado/mcp" ? answerAdo : address.pathname === "/terylon/mcp" ? answerTerylon : null;
+
+    if (answer === null)
+    {
+        response.writeHead(404).end();
+        return;
+    }
+
+    if (request.method !== "POST")
+    {
+        response.writeHead(405, { Allow: "POST" }).end();
+        return;
+    }
+
+    let body = "";
+
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () =>
+    {
+        statePath = address.searchParams.get("state") || "";
+        logPath = address.searchParams.get("log") || "";
+
+        let message;
+
+        try
         {
-            protocolVersion: (message.params && message.params.protocolVersion) || "2025-06-18",
-            capabilities: { tools: {} },
-            serverInfo: { name: "Azure DevOps MCP Server (e2e stub)", version: "2.9.0" },
-        });
-    }
-    else if (message.method === "tools/list")
-    {
-        respond(message.id, { tools: listTools() });
-    }
-    else if (message.method === "tools/call")
-    {
-        respond(message.id, callTool(message.params.name, message.params.arguments));
-    }
-    else if (message.method === "ping")
-    {
-        respond(message.id, {});
-    }
-    else
-    {
-        respondError(message.id, -32601, `Method not found: ${message.method}`);
-    }
+            message = JSON.parse(body);
+        }
+        catch
+        {
+            response.writeHead(400).end();
+            return;
+        }
+
+        const messages = Array.isArray(message) ? message : [message];
+        const answers = messages.map(answer).filter((reply) => reply !== null);
+
+        if (answers.length === 0)
+        {
+            response.writeHead(202).end();
+            return;
+        }
+
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify(Array.isArray(message) ? answers : answers[0]));
+    });
+});
+
+server.listen(0, "127.0.0.1", () =>
+{
+    fileSystem.writeFileSync(process.argv[2], String(server.address().port));
 });

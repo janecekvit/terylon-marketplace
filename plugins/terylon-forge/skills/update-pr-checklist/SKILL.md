@@ -5,7 +5,7 @@ description: >-
   test plan", "tick off what was actually verified", "publish the verification". Reads the items out
   and writes results in: which were checked, which were not, and why. Does no checking of its own;
   the caller supplies the outcome.
-allowed-tools: Read, Grep, Glob, Write, Bash(gh *), Bash(node *), mcp__plugin_terylon-ado_ado__*
+allowed-tools: Read, Grep, Glob, Write, Bash(gh *), Bash(node *), mcp__ado__*
 ---
 
 # update-pr-checklist

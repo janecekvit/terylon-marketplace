@@ -4,7 +4,7 @@ description: >-
   Use when another Terylon skill needs Azure DevOps MCP mechanics — URL/ID parsing,
   repo-id resolution, PR/work-item metadata, diffs, threads/comments, eligibility,
   and the ADO posting conventions. Internal mechanics library for other skills, not a user command.
-allowed-tools: Read, Grep, Glob, Bash(git *), mcp__plugin_terylon-ado_ado__*
+allowed-tools: Read, Grep, Glob, Bash(git *), mcp__ado__*
 ---
 
 # forge-ops — Azure DevOps MCP engine
@@ -27,7 +27,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/forge-ops/references/forge-ops.md
 
 ## Operation catalog
 
-Each operation below maps to a recipe in `references/forge-ops.md`. The reference is the contract; the table is the index. `mcp__ado__*` is the documented short name; at runtime the terylon-ado-provided server is namespaced `mcp__plugin_terylon-ado_ado__*` — callers issue the namespaced form.
+Each operation below maps to a recipe in `references/forge-ops.md`. The reference is the contract; the table is the index. The tools are `mcp__ado__*`: Microsoft's remote Azure DevOps MCP server, registered at the user scope as `ado` by the `connect` skill (#332). **Every call carries `orgName`** — the bare organisation from `ADO_ORGANIZATION` or the URL — because the server is addressed at its root and never at an organisation.
 
 | Operation | Tool(s) | Used by | Purpose |
 |---|---|---|---|
@@ -52,7 +52,7 @@ Each operation below maps to a recipe in `references/forge-ops.md`. The referenc
 | `check-preconditions` | — (env + git) | create-pr | Verify the adapter can be used at all **before** any other call. |
 | `list-pull-requests` | `repo_pull_request(action="list")` | create-pr | List a branch's pull requests, filtered by source ref and status. Returns the normalised `isOpen` / `isDraft` / `author`; the raw numeric status stays here. |
 | `resolve-current-user` | — (git config) | address-pr-comments, pr-reviewer | Who the run is acting as, in the form `author` is reported in. |
-| `resolve-identity` | `core_get_identity_ids` | create-pr | Turn an email or display name into the identifier reviewer operations take. |
+| `resolve-identity` | — (the email itself) | create-pr | The remote server has no identity lookup; `update_reviewers` takes an email address as the reviewer id. A display name is asked back as an email. |
 | `add-reviewers` | `repo_pull_request_write(action="update_reviewers")` | create-pr | Add optional reviewers. Cannot make one required. |
 | `set-auto-merge` | `repo_pull_request_write(action="update")` | create-pr | Set auto-complete with a merge strategy. Merges immediately when policies already pass. |
 | `item-comments-read` | `wit_work_item(action="list_comments")` | update-work-item-checklist | Read an item's comments; also the item half of prior-run detection. |
@@ -68,7 +68,7 @@ Each operation below maps to a recipe in `references/forge-ops.md`. The referenc
 
 ## Delegation contract
 
-`forge-ops` centralizes **knowledge** only. Every transport skill still issues its own `mcp__ado__*` (runtime: `mcp__plugin_terylon-ado_ado__*`) tool calls following these recipes.
+`forge-ops` centralizes **knowledge** only. Every transport skill still issues its own `mcp__ado__*` tool calls following these recipes, each with `orgName`.
 
 - **Every caller is cross-plugin now.** The transports (`create-pr`, `review-pr`, `write-pr-description`, `address-pr-comments`, the two `update-*-checklist` skills, the `pr-reviewer` agent) live in `terylon-forge`; `create-user-story` and `create-feature` are in `terylon-product`; `develop` and `planner` are in `terylon-dev`. None of them is a sibling of this skill.
 - **So they load it by name** — `forge-ops`, plugin-qualified as `terylon-ado:forge-ops` once `resolve-forge` has answered and always when both adapters are enabled. **Never with a path or `@`**: `${CLAUDE_PLUGIN_ROOT}` is plugin-local and would resolve to the *caller's* plugin, and parent-directory relative imports are banned.

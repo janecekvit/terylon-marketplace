@@ -2,62 +2,100 @@
 
 const { test } = require("node:test");
 const assert = require("node:assert");
-const { describeToken, AUTHENTICATION_TYPES } = require("./check-access.js");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 
-const encode = (value) => Buffer.from(value, "utf8").toString("base64");
+const { describe } = require("./check-access.js");
+const server = require("../../../shared/ado-server.js");
 
-test("an absent token is reported missing rather than wrong", () =>
+// Ids shaped like the real ones and belonging to nobody.
+const CLIENT_ID = "11111111-2222-4333-8444-555555555555";
+const TENANT_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+
+function configurationDirectory(servers)
 {
-    assert.strictEqual(describeToken(undefined).status, "MISS ");
-    assert.strictEqual(describeToken("").status, "MISS ");
-});
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "check-access-"));
 
-test("the Basic-auth form is accepted", () =>
-{
-    const described = describeToken(encode(":abc123"));
-
-    assert.strictEqual(described.status, "ok   ");
-    assert.match(described.detail, /6 characters after the colon/);
-});
-
-test("a bare token is refused, and the message says how to encode it", () =>
-{
-    // THE CASE THIS SCRIPT EXISTS FOR. This value is a correct token encoded
-    // the obvious way, and Azure DevOps answers 401 to it -- which reads as a
-    // permissions problem and is not one.
-    const described = describeToken(encode("abc123"));
-
-    assert.strictEqual(described.status, "WRONG");
-    assert.match(described.detail, /Basic-auth form/);
-    assert.match(described.detail, /base64/);
-});
-
-test("a colon with no token after it is refused", () =>
-{
-    assert.strictEqual(describeToken(encode(":")).status, "WRONG");
-});
-
-test("a value that is not base64 at all is refused", () =>
-{
-    // Buffer.from ignores what it cannot decode rather than throwing, so this
-    // is caught by the round trip and not by an exception. Without that round
-    // trip a raw PAT pasted in unencoded would decode to bytes, fail the
-    // leading-colon test, and be reported with the wrong reason.
-    assert.strictEqual(describeToken("not base64 !!!").status, "WRONG");
-});
-
-test("the token is never echoed back", () =>
-{
-    const secret = "s3cr3t-token-value";
-
-    for (const value of [encode(`:${secret}`), encode(secret), "not base64 !!!"])
+    if (servers !== undefined)
     {
-        assert.ok(!describeToken(value).detail.includes(secret),
-            "the reported detail must never contain the token");
+        fs.writeFileSync(path.join(directory, ".claude.json"), JSON.stringify({ mcpServers: servers }));
+    }
+
+    return directory;
+}
+
+function environment(overrides, directory)
+{
+    return {
+        CLAUDE_CONFIG_DIR: directory,
+        ADO_ORGANIZATION: "contoso",
+        ADO_MCP_CLIENT_ID: CLIENT_ID,
+        ADO_MCP_TENANT_ID: TENANT_ID,
+        ...overrides,
+    };
+}
+
+test("a missing organisation, client id or tenant is named, and there is no default for any", () =>
+{
+    const directory = configurationDirectory();
+
+    for (const variable of ["ADO_ORGANIZATION", "ADO_MCP_CLIENT_ID", "ADO_MCP_TENANT_ID"])
+    {
+        const described = describe(environment({ [variable]: undefined }, directory));
+
+        assert.strictEqual(described.failed, true, variable);
+        assert.ok(described.lines.some(line => line.includes(variable) && line.includes("MISS")), variable);
     }
 });
 
-test("the authentication types are the ones the server accepts", () =>
+test("an organisation given as a URL is refused: it goes into every call as a bare name", () =>
 {
-    assert.deepStrictEqual(AUTHENTICATION_TYPES, ["pat", "azcli", "envvar", "env", "interactive"]);
+    const described = describe(environment({ ADO_ORGANIZATION: "https://dev.azure.com/contoso" }, configurationDirectory()));
+
+    assert.strictEqual(described.failed, true);
+    assert.ok(described.lines.some(line => line.includes("bare name")));
+});
+
+test("an id that is not a GUID is refused", () =>
+{
+    const described = describe(environment({ ADO_MCP_CLIENT_ID: "my-app" }, configurationDirectory()));
+
+    assert.strictEqual(described.failed, true);
+    assert.ok(described.lines.some(line => line.includes("not a GUID")));
+});
+
+test("no registration, or one that differs, sends the reader to connect", () =>
+{
+    const absent = describe(environment({}, configurationDirectory()));
+    const other = describe(environment({}, configurationDirectory({ ado: { type: "http", url: "https://mcp.dev.azure.com/contoso" } })));
+
+    assert.strictEqual(absent.failed, true);
+    assert.ok(absent.lines.some(line => line.includes("run the connect skill")));
+    assert.strictEqual(other.failed, true);
+    assert.ok(other.lines.some(line => line.includes("differs")));
+});
+
+test("the registration connect makes passes, at the root URL with the tenant's pinned metadata", () =>
+{
+    const wanted = server.wantedServer(environment({}, "")).server;
+    const described = describe(environment({}, configurationDirectory({ ado: wanted })));
+
+    assert.strictEqual(described.failed, false, described.lines.join("\n"));
+    assert.strictEqual(wanted.url, "https://mcp.dev.azure.com");
+    assert.strictEqual(wanted.oauth.authServerMetadataUrl, `https://login.microsoftonline.com/${TENANT_ID}/v2.0/.well-known/openid-configuration`);
+    assert.strictEqual(wanted.oauth.callbackPort, 3118);
+    assert.strictEqual(wanted.oauth.scopes, "https://mcp.dev.azure.com/.default offline_access");
+});
+
+test("no id is ever printed", () =>
+{
+    const directory = configurationDirectory();
+
+    for (const overrides of [{}, { ADO_MCP_TENANT_ID: "not-a-guid" }, { ADO_ORGANIZATION: undefined }])
+    {
+        const text = describe(environment(overrides, directory)).lines.join("\n");
+
+        assert.ok(!text.includes(CLIENT_ID) && !text.includes(TENANT_ID), "an id reached the report");
+    }
 });

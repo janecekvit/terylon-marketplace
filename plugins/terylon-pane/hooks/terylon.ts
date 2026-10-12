@@ -1,0 +1,88 @@
+// The pane's one way to Terylon: $.mcp.call on the terylon server, through an allow-list.
+// The pane reads, adds a task and proposes a memory edit. It never calls one of the owner's gates:
+// those are confirmed by the person in Terylon's form or in the console, and the pane links there.
+
+// The server `terylon` as the terylon-os plugin registers it (measured on 2.1.296), then as a session that
+// added it by hand names it.
+export const SERVER_CANDIDATES = ['plugin:terylon-os:terylon', 'terylon'] as const
+
+// Every tool the pane may call: what it reads, the one task it adds, the one memory edit it proposes.
+export const PANE_TOOLS: ReadonlySet<string> = new Set([
+  'briefing',
+  'work_in_flight',
+  'stories_list',
+  'events_since',
+  'story_get',
+  'policy_get',
+  'goals_list',
+  'memory_get',
+  'tasks_add',
+  'memory_propose',
+])
+
+// The owner's gates (Terylon, src/Terylon.Web.Host/Mcp/McpGates.cs): never the pane's, whatever it is asked.
+export const GATE_TOOLS: readonly string[] = [
+  'plan_approve',
+  'plan_rethink',
+  'story_merge',
+  'story_return',
+  'story_unblock',
+  'story_abandon',
+  'story_stop',
+  'story_accept',
+  'leader_pause',
+  'leader_resume',
+]
+
+// A server the session does not have, in the words $.mcp.call rejects with.
+export const MISSING_SERVER = /not (found|connected|configured)|no (such|mcp) server|unknown server|is not a server/i
+
+// The status a refusal or an error carries in Terylon's text answer: "Refused (403): ...".
+const STATUS_IN_TEXT = /\((\d{3})\)/
+
+export type TerylonAnswer =
+  | { kind: 'ok'; value: Record<string, unknown> }
+  | { kind: 'refused'; status: number | null; sentence: string; console: string | null; value: Record<string, unknown> }
+  | { kind: 'no-server' }
+  | { kind: 'unreachable'; reason: string }
+
+export class GateRefusedError extends Error {}
+
+export function assertPaneTool(tool: string): void {
+  if (GATE_TOOLS.includes(tool) || !PANE_TOOLS.has(tool)) {
+    throw new GateRefusedError(`terylon-pane never calls ${tool}: the person decides it in the console`)
+  }
+}
+
+function parseText(text: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(text)
+
+    return parsed !== null && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : { value: parsed }
+  } catch {
+    // A text answer that is not JSON is the server's sentence; keep it as one.
+    return { sentence: text }
+  }
+}
+
+export function readResult(result: { content: readonly { type: string; text?: string }[]; isError?: boolean; structuredContent?: unknown }): TerylonAnswer {
+  const structured = result.structuredContent
+  const text = result.content.map(block => block.text ?? '').join('')
+  const value =
+    structured !== null && typeof structured === 'object' ? (structured as Record<string, unknown>) : parseText(text)
+
+  if (result.isError !== true) {
+    return { kind: 'ok', value }
+  }
+
+  const refused = typeof value.refused === 'string' ? value.refused : typeof value.sentence === 'string' ? value.sentence : text
+  const status = typeof value.status === 'number' ? value.status : Number(STATUS_IN_TEXT.exec(text)?.[1] ?? NaN)
+
+  return {
+    kind: 'refused',
+    status: Number.isFinite(status) ? status : null,
+    sentence: refused,
+    console: typeof value.console === 'string' ? value.console : null,
+    value,
+  }
+}

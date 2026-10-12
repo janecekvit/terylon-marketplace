@@ -9,7 +9,7 @@ What to do when something is broken. One symptom per file.
 | Runbook | Symptom |
 |---|---|
 | [consumer-did-not-get-the-update](./consumer-did-not-get-the-update.md) | "I changed a skill, merged it, and the product repository still runs the old one" |
-| [ado-mcp-authorization-error](./ado-mcp-authorization-error.md) | an authorization or "not found" error naming an Azure DevOps organisation nobody chose — or the `ado` tools missing entirely |
+| [ado-mcp-authorization-error](./ado-mcp-authorization-error.md) | an authorization or "not found" error naming an Azure DevOps organisation nobody chose, the `ado` sign-in failing or waiting in `/mcp` — or the `ado` tools missing entirely |
 
 ## Writing one
 

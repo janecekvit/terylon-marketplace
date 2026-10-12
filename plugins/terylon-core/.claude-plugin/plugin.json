@@ -1,14 +1,14 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "terylon-core",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "description": "The marketplace's root — the conventions every persona shares and per-agent token-spend measurement read from a session's own transcripts. No git, forge, or MCP dependency. Successor to terylon-metrics.",
   "author": {
     "name": "Vít Janeček"
   },
   "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-core",
   "repository": "https://github.com/janecekvit/terylon-marketplace",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "keywords": [
     "claude-code",
     "conventions",

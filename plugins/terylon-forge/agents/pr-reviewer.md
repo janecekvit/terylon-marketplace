@@ -3,7 +3,7 @@ name: pr-reviewer
 description: "Use when auditing someone else's pull request, on Azure DevOps or GitHub — checks eligibility, builds the PR diff, dispatches code-reviewer for the thorough review, and posts the confirmed findings back to the PR. Trigger: 'review this PR', a foreign PR URL."
 model: opus
 color: red
-tools: [Bash(git *), Read, Grep, Glob, Write, Agent, Bash(gh *), mcp__plugin_terylon-ado_ado__*]
+tools: [Bash(git *), Read, Grep, Glob, Write, Agent, Bash(gh *), mcp__ado__*]
 disallowedTools: [Edit]
 skills: [resolve-forge, forge-ops, create-workspace]   # forge-ops is declared bare here because frontmatter resolves before resolve-forge runs; the LOAD must be plugin-qualified
 ---

@@ -1,200 +1,89 @@
 #!/usr/bin/env node
 //
-// Report whether this environment can reach Azure DevOps, and name what is
-// missing when it cannot.
+// Report whether this environment can reach Azure DevOps through the remote MCP server, and name
+// what is missing when it cannot (#332).
 //
-// WHY THIS EXISTS. The server's own failure messages are accurate and not
-// actionable. "PERSONAL_ACCESS_TOKEN is not set or empty" does not say what
-// shape the value wants, and a token encoded the obvious way answers 401 --
-// which sends a reader to check permissions, scopes and organisation, every
-// place except the one line that is wrong.
+// WHAT IT CHECKS. The four variables — the organisation and project every call carries, the client
+// and tenant ids the server is registered with — and whether the user-scope server `ado` is registered
+// exactly as they say. It makes no network call: whether the owner has signed in is what /mcp shows
+// (`ado` connected, or "Needs authentication"), and an OAuth token is nothing a script should read.
 //
-// IT NEVER WRITES AND NEVER PRINTS THE TOKEN. AGENTS.md states the rule for
-// this repository's drivers: name the credential that is missing and refuse.
-// A script that configures a secret is a script that has read one.
+// IT NEVER WRITES AND NEVER PRINTS AN ID. AGENTS.md states the rule for this repository's drivers:
+// name what is missing and refuse. `connect` is the one script that registers anything.
 
 "use strict";
 
-const https = require("node:https");
+const path = require("node:path");
 
-const ORGANISATION_VARIABLE = "TERYLON_ADO_ORG";
-const TOKEN_VARIABLE = "PERSONAL_ACCESS_TOKEN";
-const AUTHENTICATION_VARIABLE = "TERYLON_ADO_AUTHENTICATION";
-
-// The authentication types the server accepts. 'pat' is this plugin's default
-// because it is the only one that fails immediately when unconfigured.
-const AUTHENTICATION_TYPES = ["pat", "azcli", "envvar", "env", "interactive"];
+const server = require(path.join(__dirname, "..", "..", "..", "shared", "ado-server.js"));
 
 const OK = "ok   ";
 const MISSING = "MISS ";
-const WRONG = "WRONG";
 
-/**
- * Whether a base64 value decodes to a Basic-auth credential with an empty user.
- *
- * THE LEADING COLON IS THE WHOLE CHECK. Azure DevOps Basic auth puts the token
- * in the password field and leaves the user empty, so the credential is
- * ":" + token. The server documents the variable as "base64-encoded Personal
- * Access Token", which reads as the token alone -- and that spelling returns
- * 401 from a token that is otherwise valid.
- */
-function describeToken(rawValue)
+/** One line per thing checked, and whether all of them hold. */
+function describe(environment)
 {
-    if (!rawValue)
-    {
-        return { status: MISSING, detail: "not set" };
-    }
-
-    let decoded;
-
-    try
-    {
-        decoded = Buffer.from(rawValue, "base64").toString("utf8");
-    }
-    catch
-    {
-        return { status: WRONG, detail: "it is not valid base64" };
-    }
-
-    // A round trip is the only reliable test: Buffer.from ignores what it
-    // cannot decode rather than throwing, so a value that is not base64 at all
-    // decodes to something rather than failing.
-    if (Buffer.from(decoded, "utf8").toString("base64").replace(/=+$/, "")
-        !== rawValue.replace(/=+$/, ""))
-    {
-        return { status: WRONG, detail: "it is not valid base64" };
-    }
-
-    if (!decoded.startsWith(":"))
-    {
-        return {
-            status: WRONG,
-            detail: "it decodes to a bare token. Azure DevOps wants the "
-                + "Basic-auth form, so encode \":\" + the token -- "
-                + "printf ':%s' \"$PAT\" | base64 -w0",
-        };
-    }
-
-    if (decoded.length === 1)
-    {
-        return { status: WRONG, detail: "it decodes to a colon and nothing else" };
-    }
-
-    return { status: OK, detail: `set, ${decoded.length - 1} characters after the colon` };
-}
-
-/** One authenticated request, to say whether the credential actually works. */
-function callAzureDevOps(organisation, credential)
-{
-    return new Promise((resolve) =>
-    {
-        const request = https.request(
-            {
-                host: "dev.azure.com",
-                path: `/${encodeURIComponent(organisation)}/_apis/projects?api-version=7.1`,
-                method: "GET",
-                headers: { Authorization: `Basic ${credential}` },
-                timeout: 20000,
-            },
-            (response) =>
-            {
-                let body = "";
-
-                response.on("data", (chunk) => { body += chunk; });
-                response.on("end", () => resolve({ status: response.statusCode, body }));
-            });
-
-        request.on("timeout", () =>
-        {
-            request.destroy();
-            resolve({ status: 0, body: "the request timed out" });
-        });
-
-        request.on("error", (failure) => resolve({ status: 0, body: failure.message }));
-        request.end();
-    });
-}
-
-async function main(argv)
-{
-    const live = argv.includes("--live");
-    const organisation = process.env[ORGANISATION_VARIABLE];
-    const token = describeToken(process.env[TOKEN_VARIABLE]);
-    const authentication = process.env[AUTHENTICATION_VARIABLE] ?? "pat";
-
     const lines = [];
+    const context = server.callContext(environment);
+    const wanted = server.wantedServer(environment);
     let failed = false;
 
-    if (organisation)
+    if (context.problems.length === 0)
     {
-        lines.push(`  ${OK} ${ORGANISATION_VARIABLE.padEnd(26)} ${organisation}`);
+        lines.push(`  ${OK} ${server.ORGANIZATION_VARIABLE.padEnd(20)} set, passed as orgName in every call`);
     }
-    else
+
+    lines.push(context.project === ""
+        ? `  ${OK} ${server.PROJECT_VARIABLE.padEnd(20)} not set: each call takes the project from the git remote or the URL`
+        : `  ${OK} ${server.PROJECT_VARIABLE.padEnd(20)} set, passed as project`);
+
+    for (const problem of [...context.problems, ...wanted.problems])
     {
         failed = true;
-        lines.push(`  ${MISSING} ${ORGANISATION_VARIABLE.padEnd(26)} not set, and it has no default`);
+        lines.push(`  ${MISSING} ${problem}`);
     }
 
-    lines.push(`  ${token.status === OK ? OK : token.status} ${TOKEN_VARIABLE.padEnd(26)} ${token.detail}`);
-
-    if (token.status !== OK)
+    if (wanted.problems.length === 0)
     {
-        failed = true;
-    }
+        lines.push(`  ${OK} ${server.CLIENT_ID_VARIABLE.padEnd(20)} set`);
+        lines.push(`  ${OK} ${server.TENANT_ID_VARIABLE.padEnd(20)} set`);
 
-    if (AUTHENTICATION_TYPES.includes(authentication))
-    {
-        const suffix = process.env[AUTHENTICATION_VARIABLE] ? "" : " (the default)";
+        const registered = server.registeredServer(server.userConfigurationPath(environment));
 
-        lines.push(`  ${OK} ${AUTHENTICATION_VARIABLE.padEnd(26)} ${authentication}${suffix}`);
-    }
-    else
-    {
-        failed = true;
-        lines.push(`  ${WRONG} ${AUTHENTICATION_VARIABLE.padEnd(26)} ${authentication} is not one of `
-            + AUTHENTICATION_TYPES.join(", "));
-    }
-
-    if (live && !failed)
-    {
-        const answer = await callAzureDevOps(organisation, process.env[TOKEN_VARIABLE]);
-
-        if (answer.status === 200)
+        if (registered === null)
         {
-            let count = "?";
-
-            try { count = String(JSON.parse(answer.body).count); } catch { /* shape is not the point */ }
-
-            lines.push(`  ${OK} ${"live call".padEnd(26)} 200, ${count} projects visible`);
+            failed = true;
+            lines.push(`  ${MISSING} no user-scope server '${server.SERVER_NAME}': run the connect skill`);
+        }
+        else if (!server.sameServer(registered, wanted.server))
+        {
+            failed = true;
+            lines.push(`  ${MISSING} the user-scope server '${server.SERVER_NAME}' differs from these variables: run the connect skill`);
         }
         else
         {
-            failed = true;
-            lines.push(`  ${WRONG} ${"live call".padEnd(26)} ${answer.status || "no response"} -- `
-                + (answer.status === 401
-                    ? "the credential was refused. Check the token has not expired and that its scopes cover work items"
-                    : answer.body.slice(0, 120)));
+            lines.push(`  ${OK} ${"server".padEnd(20)} '${server.SERVER_NAME}' registered at ${server.SERVER_URL}, as configured`);
         }
     }
-    else if (live)
-    {
-        lines.push(`  ---- ${"live call".padEnd(26)} skipped, because the configuration above is incomplete`);
-    }
 
-    console.log(`Azure DevOps access\n\n${lines.join("\n")}\n`);
+    return { lines, failed };
+}
 
-    if (failed)
-    {
-        console.log("Set what is missing in the environment. Nothing here writes it for you, and no\n"
-            + "token belongs in a committed file.\n");
-    }
+function main(environment)
+{
+    const { lines, failed } = describe(environment);
+
+    console.log(`Azure DevOps access (remote MCP server, OAuth)\n\n${lines.join("\n")}\n`);
+    console.log(failed
+        ? "Set what is missing in your own ~/.claude/settings.json (env), then run the connect skill.\n"
+        : "Then /mcp shows whether 'ado' is signed in; sign in there once if it says it needs authentication.\n");
 
     return failed ? 1 : 0;
 }
 
 if (require.main === module)
 {
-    main(process.argv.slice(2)).then((code) => { process.exitCode = code; });
+    process.exitCode = main(process.env);
 }
 
-module.exports = { describeToken, AUTHENTICATION_TYPES };
+module.exports = { describe };

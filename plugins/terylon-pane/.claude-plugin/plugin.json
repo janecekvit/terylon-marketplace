@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "terylon-pane",
+  "version": "0.1.2",
+  "description": "The Terylon pane in Claude Desktop — a mod: the leader's queue every 30 s, add a task, the done-signal and the catch-up summary posted into the session, and the leader's memory with edits proposed to the console. It approves nothing. Requires terylon-os.",
+  "author": {
+    "name": "Vít Janeček"
+  },
+  "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-pane",
+  "repository": "https://github.com/janecekvit/terylon-marketplace",
+  "license": "Apache-2.0",
+  "keywords": [
+    "terylon",
+    "mod",
+    "pane",
+    "desktop",
+    "leader"
+  ],
+  "dependencies": [
+    "terylon-os"
+  ],
+  "types": "./types/index.d.ts"
+}

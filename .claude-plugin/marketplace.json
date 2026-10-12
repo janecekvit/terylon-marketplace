@@ -7,6 +7,36 @@
   },
   "plugins": [
     {
+      "name": "terylon-os",
+      "source": "./plugins/terylon-os",
+      "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-os",
+      "repository": "https://github.com/janecekvit/terylon-marketplace",
+      "description": "Terylon itself — the owner's MCP endpoint (/mcp) as a server, and one skill per prompt it serves: briefing, hand-over, merge-gate, add-goal, review-plan, show-story. Works in any session, the terminal, SSH and Remote Control alike. Requires the TERYLON_URL environment variable; there is no default address.",
+      "category": "general",
+      "keywords": [
+        "terylon",
+        "mcp",
+        "leader",
+        "briefing",
+        "merge-gate"
+      ]
+    },
+    {
+      "name": "terylon-pane",
+      "source": "./plugins/terylon-pane",
+      "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-pane",
+      "repository": "https://github.com/janecekvit/terylon-marketplace",
+      "description": "The Terylon pane in Claude Desktop — a mod: the leader's queue every 30 s, add a task, the done-signal and the catch-up summary posted into the session, and the leader's memory with edits proposed to the console. It approves nothing. Requires terylon.",
+      "category": "general",
+      "keywords": [
+        "terylon",
+        "mod",
+        "pane",
+        "desktop",
+        "leader"
+      ]
+    },
+    {
       "name": "terylon-git",
       "source": "./plugins/terylon-git",
       "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-git",
@@ -58,7 +88,7 @@
       "source": "./plugins/terylon-ado",
       "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-ado",
       "repository": "https://github.com/janecekvit/terylon-marketplace",
-      "description": "The Azure DevOps adapter — fills the terylon-forge port with ADO mechanics and registers the ADO MCP server. Requires the TERYLON_ADO_ORG environment variable; there is no default organisation.",
+      "description": "The Azure DevOps adapter — fills the terylon-forge port with ADO mechanics over Microsoft's remote Azure DevOps MCP server (https://mcp.dev.azure.com), signed in with OAuth as the owner. The connect skill registers it from ADO_MCP_CLIENT_ID and ADO_MCP_TENANT_ID; every call carries ADO_ORGANIZATION. No default organisation.",
       "category": "general",
       "keywords": [
         "azure-devops",

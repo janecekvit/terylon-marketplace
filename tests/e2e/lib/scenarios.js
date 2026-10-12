@@ -14,8 +14,9 @@
 //                 terylon-ado — before any forge call. Then, with terylon-ado loaded but its server
 //                 unreachable, create-user-story must stop with that reason and write nothing.
 //
-// The stand-ins: tests/e2e/stubs/ado-mcp-stub.js, reached through the npx shim the adapter's
-// .mcp.json launches, and tests/forge-port/fake-gh.js as `gh`. Neither holds a credential.
+// The stand-ins: tests/e2e/stubs/mcp-http-stub.js, the remote Azure DevOps server's surface over
+// HTTP, given to each run as the server `ado` by --mcp-config (#332), and tests/forge-port/fake-gh.js
+// as `gh`. Neither holds a credential.
 //
 
 const childProcess = require("child_process");
@@ -145,9 +146,18 @@ function pluginDirectories(context, include)
 
 function headlessTurn(context, scenario, turn, options)
 {
+    // The run's `ado`: the stand-in with this scenario's state and log, or an address nothing answers.
+    const mcpConfig = path.join(scenario.directory, `mcp-${turn}.json`);
+    const adoUrl = options.adoMode === "unreachable"
+        ? "http://127.0.0.1:9/mcp"
+        : `${context.mcpBase}/ado/mcp?state=${encodeURIComponent(scenario.files.adoState)}&log=${encodeURIComponent(scenario.files.adoLog)}`;
+
+    fileSystem.writeFileSync(mcpConfig, JSON.stringify({ mcpServers: { ado: { type: "http", url: adoUrl } } }));
+
     const outcome = runHeadless(
     {
         ...options,
+        mcpConfig,
         cwd: scenario.repository,
         model: context.models[scenario.name] || context.models[scenario.stage],
         budget: context.budget,
@@ -155,17 +165,13 @@ function headlessTurn(context, scenario, turn, options)
         env:
         {
             PATH: context.binDirectory + path.delimiter + process.env.PATH,
-            E2E_BIN_DIR: context.binDirectory,
-            E2E_ADO_MODE: options.adoMode || "stub",
-            E2E_ADO_STATE: scenario.files.adoState,
-            E2E_ADO_LOG: scenario.files.adoLog,
             FAKE_GH_STATE: scenario.files.ghState,
             FAKE_GH_LOG: scenario.files.ghLog,
-            TERYLON_ADO_ORG: "contoso",
+            ADO_ORGANIZATION: "contoso",
         },
     });
 
-    const foreignServers = outcome.init === null ? [] : (outcome.init.mcp_servers || []).filter((server) => !server.name.startsWith("plugin:terylon-"));
+    const foreignServers = outcome.init === null ? [] : (outcome.init.mcp_servers || []).filter((server) => server.name !== "ado" && !server.name.startsWith("plugin:terylon-"));
 
     const leaked = outcome.timeline.filter((entry) => entry.kind === "tool" && JSON.stringify(entry.input || {}).includes(operatorPluginDirectory()));
 
@@ -248,7 +254,7 @@ function storyOnAdo(context)
     const first = headlessTurn(context, scenario, 1, { prompt, pluginDirectories: plugins });
     const { check } = context;
 
-    check("author", "ado-story: the ado MCP server connected", first.init !== null && (first.init.mcp_servers || []).some((server) => server.name === "plugin:terylon-ado:ado" && server.status === "connected"), JSON.stringify(first.init && first.init.mcp_servers));
+    check("author", "ado-story: the ado MCP server connected", first.init !== null && (first.init.mcp_servers || []).some((server) => server.name === "ado" && server.status === "connected"), JSON.stringify(first.init && first.init.mcp_servers));
     check("author", "ado-story: the draft turn writes nothing", adoWrites(scenario).length === 0, JSON.stringify(adoWrites(scenario)).slice(0, 300));
 
     if (first.result === null)
@@ -449,7 +455,7 @@ function unreachableServer(context)
         adoMode: "unreachable",
     });
     const { check } = context;
-    const server = outcome.init === null ? undefined : (outcome.init.mcp_servers || []).find((candidate) => candidate.name === "plugin:terylon-ado:ado");
+    const server = outcome.init === null ? undefined : (outcome.init.mcp_servers || []).find((candidate) => candidate.name === "ado");
 
     check("github-only", "ado-unreachable: the ado server is reported failed", server !== undefined && server.status !== "connected", JSON.stringify(server));
     check("github-only", "ado-unreachable: it says the Azure DevOps server is unreachable", UNREACHABLE_PATTERN.test(outcome.text) && /ado|azure devops/i.test(outcome.text), outcome.text.trim().slice(-300));

@@ -110,7 +110,7 @@
       "Bash(git switch -c *)",
       "Bash(git stash*)",
       "Bash(git restore --staged *)",
-      "mcp__plugin_terylon-ado_ado__*"
+      "mcp__ado__*"
     ],
     "deny": [
       "Bash(git push origin main)",

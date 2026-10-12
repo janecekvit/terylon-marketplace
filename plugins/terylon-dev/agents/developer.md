@@ -3,7 +3,7 @@ name: developer
 description: "Use as the per-task implementer in a build: implement ONE plan task test-first (TDD red-green-refactor) following the target repo's conventions, run the covering tests, commit, and self-review. Bounded — hands over at a turn budget rather than running a whole task in one context. Reports DONE / DONE_WITH_CONCERNS / CONTINUE / NEEDS_CONTEXT / BLOCKED."
 model: sonnet
 color: green
-tools: [Read, Grep, Glob, Edit, Write, Bash, Agent, mcp__plugin_terylon-ado_ado__*]
+tools: [Read, Grep, Glob, Edit, Write, Bash, Agent, mcp__ado__*]
 skills: [delegate-to-repo-agents, forge-ops]   # forge-ops is declared bare here because frontmatter resolves before resolve-forge runs; the LOAD must be plugin-qualified when both adapters are enabled
 ---
 

@@ -11,7 +11,7 @@
 `terylon-devops` held two kinds of thing in one plugin, and only one of them was portable:
 
 ```
-terylon-devops
+terylon-devops                                                 BEFORE — until PR 68
 ├── review-pr, write-pr-description, address-pr-comments,      portable — a pull request
 │   update-pr-checklist, update-work-item-checklist            is a pull request everywhere
 └── ado-mcp + .mcp.json                                        Azure DevOps only
@@ -21,6 +21,8 @@ terylon-devops
 The transports were about pull requests. The engine underneath them was about Azure DevOps. Nothing in the plugin's shape said which was which, so the boundary eroded one line at a time: a transport would grow a `projectName`, then a raw ADO field read, each defensible on its own.
 
 The forcing failure is the `.mcp.json`. A plugin that registers a server registers it for **everyone who enables the plugin**. A GitHub-hosted repository that wanted `review-pr` got an Azure DevOps MCP server it has no account on — starting at every session, failing at the first call, configured through a variable its owner has no value for.
+
+The argument outlived the file that forced it. Since #332 `terylon-ado` ships no `.mcp.json`: its `connect` skill registers Microsoft's remote server at the user scope, because a plugin `.mcp.json` does not substitute the per-person OAuth client configuration (`plugins/terylon-ado/shared/ado-server.js` records the measurement). The registration still belongs to the adapter alone — only a person who enabled `terylon-ado` has `connect` to run — so the boundary drawn here holds unchanged.
 
 ## The alternatives
 
@@ -36,14 +38,16 @@ The forcing failure is the `.mcp.json`. A plugin that registers a server registe
 **The port carries the workflow and declares the operations. The adapters carry the mechanics and implement them. `terylon-forge` declares no adapter, ever.**
 
 ```
-                terylon-git
+                terylon-git                                              as of #332
                     ▲
                 terylon-forge          the port — transports, pr-reviewer, resolve-forge
                     ▲                  declares: terylon-git.  Ships: no adapter.
        ┌────────────┴────────────┐
-   terylon-ado              terylon-github        the adapters — one skill each,
+   terylon-ado              terylon-github        the adapters — each with an engine,
    forge-ops (ADO body)     forge-ops (gh body)   both named forge-ops
-   + .mcp.json (ado server) no server
+   + connect: registers     no server
+     the ado server at the
+     user scope
 
    dependency edge points DOWN  ──▶  adapter declares the port
    load edge points UP          ──▶  a transport loads forge-ops from an adapter
@@ -107,16 +111,17 @@ The upward load is the price and it is paid knowingly. The general placement rul
 
 **Resolving once does not settle a run.** Several items in one run may name different forges. Resolve per item.
 
-**The old namespace is gone.** `mcp__plugin_terylon-devops_ado__*` became `mcp__plugin_terylon-ado_ado__*` when the server moved with the adapter, and `ado-mcp` became `forge-ops`. A grep written against the old prefix passes because it cannot fire — see `onboarding/migrating.md`.
+**The old namespace is gone.** `mcp__plugin_terylon-devops_ado__*` became `mcp__plugin_terylon-ado_ado__*` when the server moved with the adapter — and `mcp__ado__*` when #332 moved it to Microsoft's remote server, registered at the user scope — and `ado-mcp` became `forge-ops`. A grep written against the old prefix passes because it cannot fire — see `onboarding/migrating.md`.
 
 ## Where it lives
 
 | File | Role |
 |---|---|
 | `plugins/terylon-forge/skills/resolve-forge/SKILL.md` | `resolve-forge` — the four-step precedence, the adapter table, and the stop conditions |
-| `plugins/terylon-ado/skills/forge-ops/SKILL.md` | the Azure DevOps body of the catalog, over `mcp__plugin_terylon-ado_ado__*` |
+| `plugins/terylon-ado/skills/forge-ops/SKILL.md` | the Azure DevOps body of the catalog, over `mcp__ado__*` |
 | `plugins/terylon-github/skills/forge-ops/SKILL.md` | the GitHub body of the same catalog, over the `gh` CLI |
-| `plugins/terylon-ado/.mcp.json` | registers the `ado` server; passes `${TERYLON_ADO_ORG}` bare, with no default |
+| `plugins/terylon-ado/skills/connect/SKILL.md` | `connect` — registers the remote `ado` server at the user scope; the adapter ships no `.mcp.json` since #332 |
+| `plugins/terylon-ado/shared/ado-server.js` | `wantedServer` — the registration `connect` writes, and the measurement that keeps it out of a `.mcp.json` |
 | `plugins/terylon-forge/.claude-plugin/plugin.json` | `dependencies` — declares `terylon-git` and **no adapter**; the constraint above is enforced here or nowhere |
 | `plugins/CLAUDE.md` | *The one exception: a port and its adapters*, and the cross-plugin load table with its three upward rows |
 | `docs/flows/forge-resolution.md` | the resolution walked step by step, including what a run does when it finds no adapter |

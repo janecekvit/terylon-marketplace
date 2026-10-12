@@ -5,7 +5,7 @@ description: >-
   Triggers on phrasings like "write a Feature", "draft a Feature spec", "update Feature N",
   "is this Feature ready", "review this Feature". Applies the Terylon Feature Specification
   Standard in this skill's references/.
-allowed-tools: Read, Edit, Write, Bash(git *), Bash(gh *), mcp__plugin_terylon-ado_ado__*
+allowed-tools: Read, Edit, Write, Bash(git *), Bash(gh *), mcp__ado__*
 ---
 
 # Create Feature

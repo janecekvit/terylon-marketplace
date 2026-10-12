@@ -3,7 +3,7 @@ name: leader
 description: "Use as the autonomous build controller: receives an approved seed-spec or plan path, dispatches planner / developer / debugger / refactorer / review lenses, reads their reports, and decides the next round. Returns CONTINUE / AWAITING_APPROVAL / NEEDS_CLARIFICATION / BUILD_COMPLETE / BLOCKED. Ends at every boundary the ledger already covers, and is re-dispatched fresh. Cannot prompt the user — gates live on the main thread."
 model: opus
 color: purple
-tools: [Read, Grep, Glob, Write, Bash(git *), Bash(node *), Agent, mcp__plugin_terylon-ado_ado__*]
+tools: [Read, Grep, Glob, Write, Bash(git *), Bash(node *), Agent, mcp__ado__*]
 disallowedTools: [Edit]
 skills: [run-build-loop, write-plan, measure-token-spend]
 ---

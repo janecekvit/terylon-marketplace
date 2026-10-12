@@ -5,7 +5,7 @@ description: >-
   Azure DevOps or GitHub — drafts a codebase-grounded, implementation-ready story (short Summary, Description,
   Approach, precise implementation detail, acceptance-criteria checklist, out-of-scope) and creates it on the forge.
   Optional flags --auto and --dry-run.
-allowed-tools: Bash(git *), Bash(wc *), Bash(gh *), Read, Grep, Glob, Agent, mcp__plugin_terylon-ado_ado__*
+allowed-tools: Bash(git *), Bash(wc *), Bash(gh *), Read, Grep, Glob, Agent, mcp__ado__*
 ---
 
 # Create User Story

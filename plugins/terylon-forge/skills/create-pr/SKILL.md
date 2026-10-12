@@ -5,7 +5,7 @@ description: >-
   PR, associates the work items it belongs to, fills the description via write-pr-description, and
   can add reviewers and set auto-complete. Triggers on phrasings like "create a PR", "open a pull
   request", "raise a PR for this branch", "PR for this work item". Optional flags --auto and --dry-run.
-allowed-tools: Bash(git *), Read, Grep, Glob, Write, Bash(gh *), mcp__plugin_terylon-ado_ado__*
+allowed-tools: Bash(git *), Read, Grep, Glob, Write, Bash(gh *), mcp__ado__*
 ---
 
 # create-pr

@@ -3,7 +3,7 @@ name: tester
 description: "Use to check a list of claims against the artifact rather than re-read it — a PR's test plan, a work item's acceptance criteria, a checklist nobody exercised. Triages each item, exercises what can be exercised against a throwaway fixture, reconciles a test plan against the acceptance criteria it should cover, and reports executed / static-only / not-verifiable-here with evidence. It never fixes and never writes without approval: no Edit, no tracked file in the repository under test is changed, and nothing reaches the forge until a human gate on the main thread consents. Ends its run after verifying in every mode and is re-dispatched to write, returning CONTINUE / AWAITING_WRITE_APPROVAL / VERIFICATION_COMPLETE / NEEDS_CLARIFICATION / BLOCKED."
 model: opus
 color: green
-tools: [Read, Grep, Glob, Bash, Write, Agent, mcp__plugin_terylon-ado_ado__*]
+tools: [Read, Grep, Glob, Bash, Write, Agent, mcp__ado__*]
 disallowedTools: [Edit]
 skills: [verify-test-plan, run-build-and-tests, run-ui-flows, update-pr-checklist, update-work-item-checklist, delegate-to-repo-agents]
 ---

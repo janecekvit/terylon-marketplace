@@ -3,7 +3,7 @@ name: review-pr
 description: Use when the user provides a pull request URL from either forge (dev.azure.com/…/pullrequest/N
   or github.com/…/pull/N) and asks for a code review, or asks to post review comments / suggestions to it.
   Optional flags --auto and --dry-run.
-allowed-tools: Bash(git *), Bash(gh *), Read, Grep, Glob, Write, Agent, mcp__plugin_terylon-ado_ado__*
+allowed-tools: Bash(git *), Bash(gh *), Read, Grep, Glob, Write, Agent, mcp__ado__*
 ---
 
 # Pull Request Code Review

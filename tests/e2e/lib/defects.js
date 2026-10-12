@@ -43,13 +43,13 @@ const DEFECTS =
             replaceIn(path.join(root, "plugins", "terylon-product", "skills", "create-user-story", "SKILL.md"), "description: >-\n", "description: [unclosed\n");
         },
     },
-    "mcp-organisation":
+    "connect-client-id":
     {
-        description: "the Azure DevOps adapter stops passing the organisation to its server (terylon-ado .mcp.json)",
+        description: "the Azure DevOps adapter registers its server without the owner's client id (terylon-ado connect)",
         stages: ["install"],
         plant(root)
         {
-            replaceIn(path.join(root, "plugins", "terylon-ado", ".mcp.json"), "\"${TERYLON_ADO_ORG}\",\n", "");
+            replaceIn(path.join(root, "plugins", "terylon-ado", "shared", "ado-server.js"), "                clientId,\n", "");
         },
     },
     "hook-path":

@@ -6,7 +6,7 @@ description: >-
   the PR if a URL is given, on either forge. Triggers on phrasings like "write PR
   description", "generate PR summary", "summarize my changes for PR". Optional
   flags --auto and --dry-run.
-allowed-tools: Bash(git *), Bash(gh *), Bash(wc *), Read, Grep, Glob, Write, mcp__plugin_terylon-ado_ado__*
+allowed-tools: Bash(git *), Bash(gh *), Bash(wc *), Read, Grep, Glob, Write, mcp__ado__*
 ---
 
 # Pull Request — Write the Description
@@ -38,7 +38,7 @@ can post it back via the `update-pr-description` operation.
 
 - Local clone of the repo checked out (the skill reads the diff locally via `git`).
   `git fetch` will run automatically as part of the workflow.
-- Forge access is used only in PR-URL mode, and comes from whichever adapter is enabled: `terylon-ado` registers the `ado` MCP server, namespaced `mcp__plugin_terylon-ado_ado__*` at runtime, while `terylon-github` needs only an authenticated `gh`. This skill holds both surfaces and uses the one `resolve-forge` names.
+- Forge access is used only in PR-URL mode, and comes from whichever adapter is enabled: `terylon-ado` registers the `ado` MCP server, namespaced `mcp__ado__*` at runtime, while `terylon-github` needs only an authenticated `gh`. This skill holds both surfaces and uses the one `resolve-forge` names.
 
 ## Platform mechanics — delegated to `forge-ops`
 

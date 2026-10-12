@@ -22,30 +22,25 @@ This file is the single source of truth; when a recipe changes, it changes here 
 
 ## 2. MCP server prerequisites & tool namespace
 
-All ADO calls use tools from the `ado` MCP server, declared in `plugins/terylon-ado/.mcp.json`. No plugin declares this one as a dependency: the consumer enables it, and the port would install an Azure DevOps server everywhere if it declared it.
+All ADO calls use tools from the `ado` MCP server: **Microsoft's remote Azure DevOps MCP server at `https://mcp.dev.azure.com`, over OAuth as the owner** (#332). It is registered at the user scope by this plugin's `connect` skill from `ADO_MCP_CLIENT_ID` and `ADO_MCP_TENANT_ID`, and signed in once in `/mcp`; `shared/ado-server.js` says why it is not shipped in a `.mcp.json`. No plugin declares this one as a dependency: the consumer enables it, and the port would install an Azure DevOps server everywhere if it declared it.
 
-**Tool namespace — documented vs runtime:**
+**Tool namespace:** `mcp__ado__<tool>` (e.g. `mcp__ado__repo_pull_request` with `action="get"`) — a user-scope server named `ado`. This is the form you call and the form each calling skill's `allowed-tools` names. Until #332 the plugin launched the server itself and its tools were `mcp__plugin_terylon-ado_ado__*`; that name no longer resolves.
 
-- This document writes tool names in the short documented form `mcp__ado__*` (e.g. `repo_pull_request(action="get")`).
-- **At runtime the server is namespaced by its providing plugin: `mcp__plugin_terylon-ado_ado__*`** (e.g. `mcp__plugin_terylon-ado_ado__repo_pull_request(action="get")`). This is the form you actually call, and the form that must appear in each calling skill's `allowed-tools`.
-- The two are the same tool. The bare `mcp__ado__*` names in this document are shorthand for the namespaced runtime form.
+**Every call carries `orgName`**, the bare organisation name — from the URL being worked on, else `ADO_ORGANIZATION` (§9). The server is addressed at its **root**: `https://mcp.dev.azure.com/<org>` fails sign-in with AADSTS9010010, its resource not matching the `.default` scope, so the organisation cannot live in the address and lives in the call. A call without `orgName` is refused.
 
-**WIT tool-name drift:** the `wit_*` tools were added in a later version of `@azure-devops/mcp` and the names drifted between versions. The comment-listing tool is `wit_work_item(action="list_comments")`; the pre-2.9.0 `wit_list_work_item_comments` does not exist at runtime. Verify the exact names installed locally with the inspector:
-
-```
-npx @azure-devops/mcp --list-tools
-```
+**Write from the live tool list, not from memory.** The remote server is Microsoft's and moves without a release here. `/mcp` → `ado` lists the tools; the schemas the recipes below follow were read from the live server on 2026-10-11.
 
 ---
 
-## 3. Tool catalog — the 2.9.0 surface
+## 3. Tool catalog — the remote server's surface
 
-The pinned server is **`@azure-devops/mcp@2.9.0`**, which consolidated the whole surface into **action-based tools**: one tool per resource, an `action` parameter selecting the operation. Call them in the runtime namespace `mcp__plugin_terylon-ado_ado__*`.
+The remote server keeps the **action-based tools** of the local server's 2.9.0 consolidation: one tool per resource, an `action` parameter selecting the operation, and every one taking **`orgName`**. Call them as `mcp__ado__*`.
 
 **Three things break silently when a call is written from memory of the old surface**, and all three fail the whole call rather than degrading:
 
 | Trap | Consequence |
 |---|---|
+| `orgName` is missing | the call is refused: the server has no organisation of its own |
 | Every schema is `additionalProperties: false` | one unknown parameter rejects the entire call |
 | `projectName` became **`project`** | the old name is now an unknown parameter — see above |
 | The old one-tool-per-operation names are **gone** | `repo_update_pull_request` and its siblings do not resolve at all; the migration table below has every one |
@@ -55,18 +50,20 @@ The pinned server is **`@azure-devops/mcp@2.9.0`**, which consolidated the whole
 | Tool | Actions | Key parameters |
 |---|---|---|
 | `repo_repository` | `get`, `list` | `repositoryNameOrId`, `project` |
-| `repo_pull_request` | `get`, `list`, `list_by_commits` | `pullRequestId`, `repositoryId`, `project`, `includeWorkItemRefs?`, `includeChangedFiles?`, `status?`, `sourceRefName?` |
+| `repo_pull_request` | `get`, `list`, `list_by_commits`, `get_changes` | `pullRequestId`, `repositoryId`, `project`, `includeWorkItemRefs?`, `includeChangedFiles?`, `status?`, `sourceRefName?` |
 | `repo_pull_request_thread` | `list`, `list_comments` | `repositoryId`, `pullRequestId` (**both required**), `project`, `threadId` (for `list_comments`), `status?` |
 | `wit_work_item` | `get`, `get_batch`, `list_comments`, `my`, `list_revisions`, `list_for_iteration`, `get_type` | see the per-action parameter table below |
-| `wit_query` | `get`, `get_results`, `wiql` | `wiql`, `project`, `top?` |
-| `core_get_identity_ids` | — (no action) | `searchFilter` |
+| `wit_query` | `get`, `get_results`, `search`, `list` | `project`, `top?` — a WIQL query is `wit_query_by_wiql`, offered to MCP Insiders only |
+| `search_workitem` | — (no action) | `searchText` (**required**), `project?`, `top?` |
+
+**There is no identity lookup on the remote server** — the local server's `core_get_identity_ids` is not offered. `update_reviewers` takes an email address as a reviewer id, which is what `resolve-identity` hands on.
 
 ### Writes
 
 | Tool | Actions | Key parameters |
 |---|---|---|
 | `repo_pull_request_write` | `create`, `update`, `update_reviewers`, `vote` | `repositoryId`, `project`, `sourceRefName`, `targetRefName`, `title`, `description` (**≤4000**), `workItems?`, `isDraft?`, `autoComplete?`, `mergeStrategy?`, `reviewerIds?`, `reviewerAction?` |
-| `repo_pull_request_thread_write` | `create`, `reply`, `update_status` | `repositoryId`, `pullRequestId` (**both required**), `content`, `threadId`, `filePath?`, `rightFileStartLine?`, `rightFileEndLine?`, `status?` |
+| `repo_pull_request_thread_write` | `create`, `reply`, `update`, `update_status` | `repositoryId`, `pullRequestId` (**both required**), `content`, `threadId`, `filePath?`, `rightFileStartLine?`, `rightFileEndLine?`, `status?` |
 | `wit_work_item_write` | `create`, `update`, `update_batch`, `add_child` | `workItemType`, `fields[]`, `id`, `updates[]`, `parentId`, `items[]` |
 | `wit_work_item_comment_write` | `add`, `update` | `workItemId`, `text`, `commentId` (for `update`), `format?` |
 | `wit_work_item_link_write` | `link`, `unlink`, `link_to_pull_request`, `add_artifact_link` | `updates[]`, `projectId` / `repositoryId` (**GUIDs**), `pullRequestId`, `workItemId` |
@@ -124,7 +121,7 @@ Several writes return a trimmed object that does not contain the field the call 
 
 ## 4. Operation catalog
 
-One subsection per operation: its IN/OUT contract, the tool(s) it uses, and which skills consume it. Full mechanics (recipes, JSON shapes, gotchas) are in the cited sections below.
+One subsection per operation: its IN/OUT contract, the tool(s) it uses, and which skills consume it. Full mechanics (recipes, JSON shapes, gotchas) are in the cited sections below. **Every call below also carries `orgName`** (§2); the recipes leave it out of each argument list rather than repeat it thirty times.
 
 ### `parse-pr-url`
 - **In:** PR URL string. **Out:** `org`, `project`, `repoName`, `prId`.
@@ -134,7 +131,7 @@ One subsection per operation: its IN/OUT contract, the tool(s) it uses, and whic
 ### `parse-item-url`
 - **In:** WI URL string or bare number. **Out:** `org`, `project`, `WI_ID`.
 - **Tools:** none. **Consumers:** create-user-story, create-feature.
-- **Recipe:** §9. Bare number → use directly; `org` / `project` come from the resolution order in *Resolving org / project without a URL* (§9) — `TERYLON_ADO_ORG` for the org, git remote for the project.
+- **Recipe:** §9. Bare number → use directly; `org` / `project` come from the resolution order in *Resolving org / project without a URL* (§9) — `ADO_ORGANIZATION` for the org, `ADO_PROJECT` or the git remote for the project.
 
 ### `parse-vstfs`
 - **In:** `vstfs://` artifact-link URL. **Out:** `projectGuid`, `repoGuid`, `prId`.
@@ -334,8 +331,8 @@ The `- 1` is load-bearing: this side stores the end one past the last covered li
 ### `check-preconditions`
 - **In:** nothing. **Out:** usable / not usable, with the reason.
 - **Tools:** none (environment + git). **Consumers:** create-pr, and any transport before its first call.
-- **Recipe:** `TERYLON_ADO_ORG` must be set — there is no default (§9) — and it must equal the organisation in the repository's remote, or every call goes to an organisation the remote does not describe. Report the mismatch and stop; do not "correct" either side.
-- **The `ado` server must be connected:** its `mcp__plugin_terylon-ado_ado__*` tools are present in the session. When they are absent the server failed to start or could not connect — say so and stop before the first call, as `resolve-forge` prescribes, and point at `check-access`.
+- **Recipe:** `ADO_ORGANIZATION` must be set — there is no default (§9) — and it must equal the organisation in the repository's remote, or every call goes to an organisation the remote does not describe. Report the mismatch and stop; do not "correct" either side.
+- **The `ado` server must be connected:** its `mcp__ado__*` tools are present in the session. When they are absent it is not registered or not signed in — say so and stop before the first call, as `resolve-forge` prescribes, and point at `check-access` and `connect`; the sign-in is the owner's, in `/mcp`.
 
 ### `list-pull-requests`
 - **In:** `repositoryId`, `project`, optional `sourceRefName` (full `refs/heads/<branch>`), `status`.
@@ -348,11 +345,11 @@ The `- 1` is load-bearing: this side stores the end one past the last covered li
 - **Why it is an operation:** the ownership gate needs "am I the author", and the answer is a platform question. Without it a transport reaches for a platform command of its own and crosses the port boundary to ask something the port should have answered.
 
 ### `resolve-identity`
-- **In:** an email or display name. **Out:** identity GUIDs. **Tool:** `core_get_identity_ids`. **Consumers:** create-pr.
-- **Gotcha:** reviewer operations take **GUIDs, never emails**. Zero or several matches is a stop-and-ask, never a guess.
+- **In:** an email or display name. **Out:** the reviewer id `update_reviewers` takes. **Tool:** none — the remote server has no identity lookup. **Consumers:** create-pr.
+- **Recipe:** an email passes as-is: `reviewerIds` takes email addresses. A display name is not resolvable here — ask for the email, never guess one.
 
 ### `add-reviewers`
-- **In:** `repositoryId`, `pullRequestId`, `project`, `reviewerIds` (GUIDs), `reviewerAction: "add"`.
+- **In:** `orgName`, `repositoryId`, `pullRequestId`, `project`, `reviewerIds` (emails or ids), `reviewerAction: "add"`.
 - **Out:** updated reviewers. **Tool:** `repo_pull_request_write(action="update_reviewers")`. **Consumers:** create-pr.
 - **Gotcha:** the request body carries `{ id }` only, so every reviewer added here is **optional** — required comes from a branch policy. On read-back an optional reviewer **omits** `isRequired` rather than reporting `false`; never test for an explicit `false`.
 
@@ -401,7 +398,7 @@ repo_repository(action="get")(repositoryNameOrId=<repoName>, project=<project>)
 
 ## 7. Request shapes
 
-2.9.0 takes **flat parameters**, not the nested request bodies the REST API uses. The old `comments[]` array and `threadContext` object are gone from the write side; both survive on the **read** side, which is why §8 still matters.
+The server takes **flat parameters**, not the nested request bodies the REST API uses. The old `comments[]` array and `threadContext` object are gone from the write side; both survive on the **read** side, which is why §8 still matters.
 
 ### Inline suggestion thread
 
@@ -426,7 +423,7 @@ The same call **without** `filePath` and without the `rightFile*` parameters. Th
 
 ### Reply to a thread
 
-`repo_pull_request_thread_write(action="reply")` with `threadId` and `content`. **No `parentCommentId`** — 2.9.0 dropped it, and a reply attaches to the thread rather than to a comment within it.
+`repo_pull_request_thread_write(action="reply")` with `threadId` and `content`. **No `parentCommentId`** — the consolidated surface dropped it, and a reply attaches to the thread rather than to a comment within it.
 
 ### Update a thread's status
 
@@ -472,7 +469,7 @@ It **cannot set the parent relation** — link it afterwards with `wit_work_item
 
 `filePath` MUST start with `/`, use forward slashes, and have no leading dot (e.g. `/src/foo.cpp`, never `./src/foo.cpp` or `src\foo.cpp`).
 
-**Write side (anchoring a new thread to a line).** 2.9.0 takes these as **flat parameters** — `rightFileStartLine`, `rightFileEndLine`, `rightFileStartOffset`, `rightFileEndOffset` — not as the nested `threadContext` object of the REST API and of pre-2.9.0 tools. The arithmetic is unchanged:
+**Write side (anchoring a new thread to a line).** The server takes these as **flat parameters** — `rightFileStartLine`, `rightFileEndLine`, `rightFileStartOffset`, `rightFileEndOffset` — not as the nested `threadContext` object of the REST API and of pre-2.9.0 tools. The arithmetic is unchanged:
 
 - Single line `N` → `rightFileStartLine = N`, `rightFileEndLine = N+1`.
 - Span `N..M` inclusive → `rightFileStartLine = N`, `rightFileEndLine = M+1`.
@@ -552,13 +549,12 @@ When there is no URL to parse — a bare work-item number, or a skill grounding 
 | Source | Supplies | Precedence |
 |---|---|---|
 | An explicit URL argument | `org`, `project`, `repo`, `id` | highest — a pasted URL always wins |
-| `TERYLON_ADO_ORG` / `TERYLON_ADO_PROJECT` env vars | `org`, `project` | override |
+| `ADO_ORGANIZATION` / `ADO_PROJECT` env vars | `org`, `project` | override |
 | `git remote get-url origin` of the consuming repository | `org`, `project`, `repo` | the normal path |
-| `az devops configure --defaults` | `org`, `project` | last resort |
 
-**`org` must equal the server's startup organisation.** The `ado` server is launched with `${TERYLON_ADO_ORG}` (see the plugin `.mcp.json`), so it can only talk to that one organisation. Take `org` from that variable — the same source the server used — rather than from the remote, so the two never disagree. Derive `project` and `repo` from the remote.
+**`org` is passed in every call as `orgName`.** The remote server is addressed at its root and holds no organisation of its own, so the call says which. Take it from `ADO_ORGANIZATION` — the owner's configuration — and check it equals the remote's (`check-preconditions`), so the two never disagree. Derive `project` and `repo` from the remote unless `ADO_PROJECT` says otherwise.
 
-**There is no fallback.** With `TERYLON_ADO_ORG` unset the server has no organisation to talk to, so **stop and say the variable is unset** rather than guessing one. The variable used to carry a hard-coded default, and the failure that produced was worse than this one: calls went to a real organisation nobody had chosen — whichever one the marketplace author happened to use — and failed later, on authorization, naming an org the consumer had never heard of.
+**There is no fallback.** With `ADO_ORGANIZATION` unset there is no organisation to name, so **stop and say the variable is unset** rather than guessing one. The variable used to carry a hard-coded default, and the failure that produced was worse than this one: calls went to a real organisation nobody had chosen — whichever one the marketplace author happened to use — and failed later, on authorization, naming an org the consumer had never heard of.
 
 Deriving `project` / `repo` from the git remote, in bash:
 
@@ -583,8 +579,8 @@ case "$REMOTE" in
 esac
 REPO="${REPO%.git}"
 
-ORG="${TERYLON_ADO_ORG:?TERYLON_ADO_ORG is not set - no default organisation exists}"
-PROJECT="${TERYLON_ADO_PROJECT:-$PROJECT}"
+ORG="${ADO_ORGANIZATION:?ADO_ORGANIZATION is not set - no default organisation exists}"
+PROJECT="${ADO_PROJECT:-$PROJECT}"
 ```
 
 In PowerShell:
@@ -605,8 +601,8 @@ if     ($REMOTE -match '/_git/([^/]+)') { $REPO = $Matches[1] }   # HTTPS
 elseif ($REMOTE -match '/([^/]+)$')     { $REPO = $Matches[1] }   # SSH: last segment
 if ($REPO) { $REPO = $REPO -replace '\.git$', '' }
 
-$ORG     = if ($env:TERYLON_ADO_ORG)     { $env:TERYLON_ADO_ORG }     else { throw "TERYLON_ADO_ORG is not set - no default organisation exists" }
-$PROJECT = if ($env:TERYLON_ADO_PROJECT) { $env:TERYLON_ADO_PROJECT } else { $PROJECT }
+$ORG     = if ($env:ADO_ORGANIZATION) { $env:ADO_ORGANIZATION } else { throw "ADO_ORGANIZATION is not set - no default organisation exists" }
+$PROJECT = if ($env:ADO_PROJECT)      { $env:ADO_PROJECT }      else { $PROJECT }
 ```
 
 ---
@@ -811,4 +807,4 @@ Every caller that delegates its ADO recipes to this file:
 - `create-feature` (terylon-product) — loads `forge-ops` by name.
 - `develop` (terylon-dev) — loads `forge-ops` by name.
 
-Each caller still issues its own `mcp__ado__*` (runtime `mcp__plugin_terylon-ado_ado__*`) calls following these recipes; delegation centralizes the **knowledge**, not the calls. The footer/version is always resolved by the calling skill (§16).
+Each caller still issues its own `mcp__ado__*` calls, each with `orgName`, following these recipes; delegation centralizes the **knowledge**, not the calls. The footer/version is always resolved by the calling skill (§16).

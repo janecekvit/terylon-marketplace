@@ -10,8 +10,9 @@
 //   claude plugin install <plugin>@terylon, for every plugin    what enabling a key does
 //
 // Then: every manifest validates under --strict; the init event lists every plugin, every skill
-// and every agent the clone carries; every MCP server connects; every hook registers and its
-// command runs and exits 0 on an empty payload.
+// and every agent the clone carries; every MCP server connects — terylon-ado's `ado` after its own
+// connect skill registered it in the scratch config, against the stand-in; every hook registers and
+// its command runs and exits 0 on an empty payload.
 //
 
 const childProcess = require("child_process");
@@ -20,6 +21,10 @@ const path = require("path");
 const { readInventory, cleanEnvironment } = require("./claude.js");
 
 const MARKETPLACE_NAME = "terylon";
+
+// Ids shaped like an app registration's and a tenant's, belonging to nobody: what connect registers.
+const FIXTURE_CLIENT_ID = "11111111-2222-4333-8444-555555555555";
+const FIXTURE_TENANT_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 
 function run(command, argumentList, options)
 {
@@ -84,7 +89,7 @@ function declaredInventory(marketplaceDirectory)
     return plugins;
 }
 
-function installStage({ source, ref, workDirectory, binDirectory, check, log })
+function installStage({ source, ref, workDirectory, binDirectory, mcpBase, check, log })
 {
     const configDirectory = path.join(workDirectory, "consumer-config");
     const settingsFile = path.join(workDirectory, "consumer-settings.json");
@@ -158,11 +163,38 @@ function installStage({ source, ref, workDirectory, binDirectory, check, log })
         }
     }
 
-    // The loaded inventory, with the stub Azure DevOps server on PATH so its declaration can connect.
+    // terylon-ado's own connect skill registers `ado` in the scratch config, pointed at the stand-in.
     const debugFile = path.join(workDirectory, "inventory-debug.log");
     const adoState = path.join(workDirectory, "inventory-ado-state.json");
+    const adoUrl = `${mcpBase}/ado/mcp?state=${encodeURIComponent(adoState)}&log=${encodeURIComponent(path.join(workDirectory, "inventory-ado-calls.jsonl"))}`;
 
     fileSystem.writeFileSync(adoState, JSON.stringify({ nextId: 1, items: {} }));
+
+    if (installPaths["terylon-ado"] !== null && installPaths["terylon-ado"] !== undefined)
+    {
+        const connected = run(process.execPath, [path.join(installPaths["terylon-ado"], "skills", "connect", "scripts", "connect.js")],
+        {
+            env: cleanEnvironment({ CLAUDE_CONFIG_DIR: configDirectory, ADO_ORGANIZATION: "contoso", ADO_MCP_CLIENT_ID: FIXTURE_CLIENT_ID, ADO_MCP_TENANT_ID: FIXTURE_TENANT_ID, ADO_MCP_URL_FOR_TESTS: adoUrl }),
+            cwd: projectDirectory,
+        });
+        let registered = null;
+
+        try
+        {
+            registered = JSON.parse(fileSystem.readFileSync(path.join(configDirectory, ".claude.json"), "utf8")).mcpServers.ado;
+        }
+        catch
+        {
+            // Nothing registered: the check below fails by name.
+        }
+
+        check("install", "terylon-ado: connect registers the ado server", connected.status === 0 && registered !== null && registered !== undefined, (connected.stdout + connected.stderr).trim().split("\n").pop());
+        check("install", "terylon-ado: the registration carries the client id and the tenant's pinned metadata",
+            registered !== null && registered !== undefined && registered.oauth !== undefined
+                && registered.oauth.clientId === FIXTURE_CLIENT_ID
+                && registered.oauth.authServerMetadataUrl === `https://login.microsoftonline.com/${FIXTURE_TENANT_ID}/v2.0/.well-known/openid-configuration`,
+            JSON.stringify(registered && registered.oauth));
+    }
 
     const inventory = readInventory(
     {
@@ -173,11 +205,8 @@ function installStage({ source, ref, workDirectory, binDirectory, check, log })
         env:
         {
             PATH: binDirectory + path.delimiter + process.env.PATH,
-            E2E_BIN_DIR: binDirectory,
-            E2E_ADO_MODE: "stub",
-            E2E_ADO_STATE: adoState,
-            E2E_ADO_LOG: path.join(workDirectory, "inventory-ado-calls.jsonl"),
-            TERYLON_ADO_ORG: "contoso",
+            ADO_ORGANIZATION: "contoso",
+            TERYLON_URL: `${mcpBase}/terylon`,
         },
     });
 
@@ -231,6 +260,13 @@ function installStage({ source, ref, workDirectory, binDirectory, check, log })
 
             check("install", `${plugin.name}: ${hook.event} hook runs and exits 0 on an empty payload`, hookRun.status === 0, hookRun.status === 0 ? "" : `exit ${hookRun.status}: ${hookRun.stderr.trim().split("\n")[0]}`);
         }
+    }
+
+    if (declared.some((plugin) => plugin.name === "terylon-ado"))
+    {
+        const ado = loadedServers.find((candidate) => candidate.name === "ado");
+
+        check("install", "terylon-ado: the ado server connects", ado !== undefined && ado.status === "connected", ado === undefined ? "not declared at runtime" : `status ${ado.status}`);
     }
 
     const loadErrors = debugLog.split("\n").filter((line) => /\[ERROR\]/.test(line) && /plugin|skill|agent|hook|mcp|frontmatter/i.test(line));
