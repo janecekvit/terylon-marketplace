@@ -1,52 +1,185 @@
 # terylon-pane
 
-**The Terylon pane in Claude Desktop** — a mod: a hooks module (`hooks/register.tsx`) the engine runs in a session, drawing one pane beside the transcript. It shows, asks and posts; **it never approves**. Built to the approved S15 canvas (#331), with its copy in Czech, the owner's language; story titles stay as filed.
+**The Terylon band and pane in Claude Desktop**: a mod, which is a hooks module (`hooks/register.tsx`) that the engine runs in a session. It draws one row above the prompt, the status line, and **one** pane beside the transcript.
+
+- **It shows, asks, answers and posts, but never approves.**
+- It is built to the approved S15 canvas, page *v2*, the band and the pane (#331, #332 c9).
+- **The interface is English**: the band, the tabs, card titles, buttons, hints, empty states, errors and *Reason: …* (the operator's choice of 2026-10-12, on #332, replacing the Czech of S15).
+- **The content is in the language Terylon sent it in**, untranslated: story titles, the leader's questions, memory entries, rules.
+- The prompts the pane posts into the session are the owner's own words to Claude, in Czech.
+
+```
+terylon-os          Terylon's /mcp server and the skills mirroring its prompts; no dependencies
+    ▲
+    └── terylon-pane   ← you are here
+```
+
+Where it stands beside the rest of Terylon: [One source of truth, reached from two places](../../docs/architecture/one-source-of-truth-reached-from-two-places.md).
 
 ## Audience
 
-The owner of a Terylon, in a **local** session on the PC: the desktop app's Code tab, or a terminal. It requires the plugin `terylon-os`, which brings the `/mcp` server it reads — `dependencies` installs it. An SSH or Remote Control session needs no mod at all: the plugin's skills and tools do everything the pane does, asked in words.
+This is for the owner of a Terylon, working in a **local** session on the PC: the desktop app's Code tab, or a terminal.
+
+- It requires the plugin `terylon-os`, which brings the `/mcp` server the pane reads. `dependencies` installs it.
+- An SSH or Remote Control session needs no mod at all: the plugin's skills and tools do everything the pane does, asked in words.
 
 ## What it does
 
-```text
-                                                                        as of #332
+```
+                                                                        as of #332 c9
 
   every 30 s ──▶ terylon /mcp: briefing · work_in_flight · stories_list · events_since
        │           through ONE allow-list (hooks/terylon.ts) that refuses every gate tool
-       ├──▶ the pane: ČEKÁ NA TEBE · BĚŽÍ · VE FRONTĚ · HOTOVO DNES, each decision a Link
-       ├──▶ the done-signal: $.prompt.submit ONCE per story and verdict commit, and a toast
-       └──▶ the status line: "Terylon · 3 běží · 2 čekají"
-  session start, away > 2 h ──▶ ONE catch-up summary and a band; > 2 000 events: a link instead
-  Přidat ──▶ tasks_add ──▶ a plan that WAITS for the owner in the console
-  Paměť  ──▶ memory_get; an edit is memory_propose ──▶ CONFIRMED in the console's memory gate
+       ├──▶ the band, what calls for you:  Terylon · Waiting 3 · Running 2 · Queue 2                 Open
+       ├──▶ the status line, the machine:  Agentic OS ● ok · $5.50 of $20 today · 2/4 slots
+       ├──▶ ONE pane, opened by the band or a command, NEVER by itself:
+       │      Queue ─── Waiting for you ──▶ a question answered here (question_answer) · a story · a plan
+       │       │        Running · Queued · Done today ──▶ a story ──▶ its goal ──▶ a story …  ‹ back
+       │      Goals ─── goals_list · plans_list ──▶ a goal · a plan; a new goal is goal_add
+       │      Bell ──── notices_list · leader_status · metrics, read only
+       │      Memory ── the rules the machine enforces, the leader's memory; an edit is memory_propose
+       │                  ──▶ CONFIRMED in the console
+       │      Status ── the machine in one word, slots, cost, every problem with How to fix, diagnostics
+       └──▶ the done-signal: $.prompt.submit ONCE per story and verdict commit, and a toast
+  session start, away > 2 h ──▶ ONE catch-up summary; the band says it until ✕
+  Add ──▶ tasks_add ──▶ a plan that WAITS for the owner in the console
 ```
 
-| Screen | From the canvas |
-|---|---|
-| The queue: waiting for you, running with step and cost, queued or held with the reason, done today | Main |
-| One running story: step n of m, cost against budget, the run's question, *Shrň mi to v session* | Story |
-| Adding a task: title, criteria, goal, after; sending, added, refused, no answer in 10 s, paused | Add (A–D) |
-| No server, empty, unreachable and stale, refused, Terylon's error, too far behind | Empty-Error (E–H) |
-| The done-signal and the catch-up summary posted into the session | DoneSignal, CatchUp |
-| The phone (no `Input`): a read-only queue, and *Přidat úkol…* posts a request into the session | Phone-Remote-Pane, -Add |
-| The leader's memory, an edit proposed and confirmed in the console | added by the owner on #331 |
+**The band and the status line split the work, and neither repeats the other** (the operator's round 3 on #332):
 
-**The done-signal** goes into the session once per story and verdict commit (kept in `$.store`; a new commit is a new signal), for a story verified and waiting for its merge, merged, accepted, abandoned, blocked or stuck. `$.prompt.submit` queues it as a turn of its own once the session is idle, so it never interrupts a running turn; the pane need not be open. A disabled mod posts nothing, and the catch-up summary covers the gap.
+| Where | Says | Never says |
+|---|---|---|
+| the band above the prompt | what calls for the owner: waiting, running, queued, an alert or a problem, and *Open* | the spend or the slots |
+| the status line | the health of Agentic OS: well with today's spend and the slots in use, or the one worst problem | what waits for the owner |
 
-**The catch-up summary** is posted once on a return after more than two hours away: done, waiting for you, running, stuck, spend — transitions only, never a brief, a specification or a memory text. The signals of the gap are inside it, not posted on their own. More than 2 000 events behind, the pane posts nothing and the band links the console's history.
+- The band is one row, cut at its end, so it survives a pane docked beside the transcript.
+- A value is coloured only when it differs from calm: *Waiting* above 0 is `warning`, *Running* above 0 is `suggestion`, a stuck story or an alert is `warning`.
+- **Its button is always *Open*, and does the same thing every time**: it opens the pane on the tab the owner last used, the queue the first time. A problem is said in the band and in the status line; how to fix it is on the Status tab, a press away, never chosen for the owner.
+
+| State | The band says | Its button | The status line says |
+|---|---|---|---|
+| calm, or something waits | `Terylon · Waiting N · Running N · Queue N` | Open | `Agentic OS ● ok · $x of $y today · a/b slots` |
+| an alert | the counts, then `· N alerts` | Open | `Agentic OS ⚠ N alerts` |
+| the leader paused | `Leader paused since HH:MM · Waiting N · Queue N` | Open | `Agentic OS ⚠ leader paused` |
+| Terylon does not answer | `not answering since HH:MM` with the last numbers, `retrying every minute` | Open | `Agentic OS ⚠ not answering since HH:MM` |
+| a call Claude Code did not allow | `Claude Code refused the pane's call · allow rules missing` | Open | `Agentic OS ⚠ not allowed · /terylon-pane` |
+| no server, refused, Terylon's error | the cause, said plainly | Open | the cause, said plainly |
+| a survey holds the band | nothing: the mod yields | — | unchanged |
+
+**The status line says only the worst problem**, in this order: a call Claude Code refused, the connection (no server, refused, an error, not answering), the leader paused, the alerts. It is cut at 60 characters, so it fits beside the model's name.
+
+**An alert is a fault of the machine:** an unhandled notice from `gatus`, `unit` or `host`, any `incident:` key, or a `production` or `backup` notice that says it failed. The briefing, the leader's questions and news, and a newer image published are not alerts; they wait for the owner in the bell. The list is `ALERT_SOURCES` in `hooks/health.ts`, and a test holds it.
+
+**The pane opens only from the band's button or a command:** `/terylon-pane`, its alias `/terylon`, or `/terylon-memory`, which opens the same pane on its Memory tab. There is one pane: the memory is a tab of it, not a second pane. The button always opens the pane on its queue. In a broken state, that queue starts with a card saying what happened, *Reason: …*, and the step that fixes it.
+
+**Every row is one line.** Its kind (*question*, *merge*, *plan*, *held* …) sits in a fixed column in `subtle`, so the titles start under one another. The title is cut at its end, never the ↗ beside it, and a press opens the whole text under the row. A card with nothing in it stays, saying so quietly (*Nothing running.*), so the state is always visible.
+
+**Everything in the pane opens.** Every row is a press away from its whole subject, and ‹ walks back the way the owner came. A gate (merge, approve, return, unblock, pause, stop) is always a link to the console, never a button:
+
+| Screen | What it shows | Reads |
+|---|---|---|
+| Queue | waiting for you (questions, merges, plans, blocked), running with step and cost, queued or held, done today | briefing, work_in_flight, stories_list |
+| A story | progress, the phases its timeline proves, the run's question, the environment, the verdict with its checks and overrun, criteria, what happened | story_get |
+| A question | the question whole, its own (a)/(b)/(c) choices to press, an answer to type, *Talk it over with Claude in the session* | question_answer |
+| Goals | open goals by priority with their questions, the closed ones a press away, every plan with its stories, a new goal | goals_list, plans_list, goal_add |
+| A goal, a plan | the goal's stories, questions and plans; a plan's stories in order | goal_get, plans_list |
+| Bell | notices that need the owner (press for the body), what the machine did, whether the leader runs, the last 30 days | notices_list, leader_status, metrics |
+| Memory | the rules the machine enforces (each with who enforces it, pressed for its artefact), a card per memory file with *Edit* and *Remove* on each entry, the proposals waiting in the console | memory_get, memory_propose |
+| Status | **Agentic OS** in one word (*ok*, *not allowed*, *not answering*, *paused*, *N alerts*), since when, the last answer, *Refresh*; **Slots**, the policy's and the runs in them; **Cost**, today against the daily limit and the last 30 days; **Problems**, each a card with *Reason: …* and *How to fix* in steps: the allow rules for a refused call, the tailnet and `TERYLON_URL` to check, *Resume in the console ↗* for a pause, the notice's own words for an alert; **Diagnostics**, the mod's version, `TERYLON_URL`, the server that answered, the debug log | everything above, metrics |
+| New task | title, criteria, goal, after; sent, refused, no answer in 10 s, paused | tasks_add |
+
+**The pane cannot show who is working inside a run, or the tokens spent.** `/mcp` does not report them yet, so the story screen says so quietly instead of guessing; its phases are derived from the timeline.
+
+**The done-signal** goes into the session once per story and verdict commit. It covers a story that is verified and waiting for its merge, merged, accepted, abandoned, blocked or stuck.
+
+- Which signals were sent is kept in `$.store`, so a new commit is a new signal.
+- `$.prompt.submit` queues it as a turn of its own once the session is idle, so it never interrupts a running turn. The pane need not be open.
+- A disabled mod posts nothing, and the catch-up summary covers the gap.
+
+**The catch-up summary** is posted once, on a return after more than two hours away: done, waiting for you, running, stuck, spend.
+
+- It carries transitions only, never a brief, a specification or a memory text.
+- The signals of the gap are inside it, not posted on their own.
+- More than 2 000 events behind, the pane posts nothing and the band links the console's history instead.
 
 ## Setup
 
-`terylon-os` must reach your Terylon — set `TERYLON_URL` as its README says. Then, at a terminal prompt:
+`terylon-os` must reach your Terylon: set `TERYLON_URL` as its README says. Then, at a terminal prompt:
 
 ```text
 /plugin install terylon-pane@terylon
 ```
 
-A mod installed at the user scope from a terminal loads in the desktop app's local sessions too. Open the pane with `/terylon` and the memory with `/terylon-memory`.
+A mod installed at the user scope from a terminal loads in the desktop app's local sessions too.
+
+**Allow the pane's seventeen tools, or it reads nothing.** The pane calls Terylon on its own timer, outside any turn of the model's, and Claude Code puts that call through the same permission check as the model's:
+
+- In auto mode, the classifier has no request to judge the call by, and gives no verdict.
+- In the default mode, there is no one to ask.
+
+Either way the call is refused, and only an allow rule lets it through. Add these to `~/.claude/settings.json`; the pane shows the same block when it is refused:
+
+```json
+"permissions": {
+  "allow": [
+    "mcp__plugin_terylon-os_terylon__briefing",
+    "mcp__plugin_terylon-os_terylon__work_in_flight",
+    "mcp__plugin_terylon-os_terylon__stories_list",
+    "mcp__plugin_terylon-os_terylon__events_since",
+    "mcp__plugin_terylon-os_terylon__story_get",
+    "mcp__plugin_terylon-os_terylon__policy_get",
+    "mcp__plugin_terylon-os_terylon__goals_list",
+    "mcp__plugin_terylon-os_terylon__goal_get",
+    "mcp__plugin_terylon-os_terylon__plans_list",
+    "mcp__plugin_terylon-os_terylon__notices_list",
+    "mcp__plugin_terylon-os_terylon__leader_status",
+    "mcp__plugin_terylon-os_terylon__metrics",
+    "mcp__plugin_terylon-os_terylon__memory_get",
+    "mcp__plugin_terylon-os_terylon__tasks_add",
+    "mcp__plugin_terylon-os_terylon__goal_add",
+    "mcp__plugin_terylon-os_terylon__question_answer",
+    "mcp__plugin_terylon-os_terylon__memory_propose"
+  ]
+}
+```
+
+**Four of these tools write, and none of them is a gate:**
+
+| Tool | What it does | Why it is not a gate |
+|---|---|---|
+| `tasks_add` | adds a task | the task becomes a plan that waits for the owner's approval |
+| `goal_add` | adds a goal | the leader turns it into a plan that waits for approval |
+| `question_answer` | answers the leader's question | it completes the brief and approves nothing |
+| `memory_propose` | proposes a memory edit | the owner confirms the edit in the console |
+
+**Never allow the server as a whole** (`mcp__plugin_terylon-os_terylon`): that would let the model call the owner's gates without asking too. The list is the pane's own allow-list, `PANE_TOOLS` in `hooks/terylon.ts`. A test holds the block to that list and to no gate, and a planted gate in either turns the tests red.
+
+## Debugging
+
+**Every failed call goes to the debug log**, in the engine's own words, with the tool and the server: start a session with `claude --debug` and look for `terylon-pane:`. The band names the state and the pane's card says why under *Reason:*, so a stale number is never the only clue.
+
+| The band or the card says | It means | Do |
+|---|---|---|
+| Claude Code refused the pane's call | no allow rule names the tool; the call never left the PC | add the rules above, then *Try again* |
+| not answering since HH:MM / TerylonLab does not answer | the call left and nothing answered | read *Reason:*, then `tailscale status` and `TERYLON_URL` |
+| no terylon server | `terylon-os` is not installed, or its server is not connected | `claude mcp list` |
+| refused: not the owner | Terylon answered, but not to its owner | sign this PC into the tailnet with your own account |
 
 ## Tests
 
-`claude plugin test plugins/terylon-pane` runs `tests/*.test.ts` against the engine with no session and no network: a Terylon answering from memory (`tests/fixtures.ts`) records every call. `tests/terylon-pane/mutations.test.js`, at the repository root, plants mutations — the done-signal removed, the catch-up removed, the guard opened to a gate, a waiting item approving from the pane — and each must turn those tests red.
+`claude plugin test plugins/terylon-pane` runs `tests/*.test.ts` and `tests/*.test.tsx` against the engine, with no session and no network:
 
-Type-check against the engine's declarations: the engine lays them in `.claude-plugin/types/` when it loads the mod from a folder it watches, and `tsc -p plugins/terylon-pane` then reads them.
+- A Terylon answering from memory (`tests/fixtures.ts`) records every call.
+- Every view is tested on the terminal and on the desktop, colours and labels included.
+- The band is held to its states, to *Open* reopening the last tab on every one of them, and to yielding to a survey; the Status tab to each state with its fix in steps; the status line to each problem, their order, what is an alert and its 60 characters.
+- The pane is held to opening only when asked and only once, to one-line rows that keep their kind and ↗ on a title over 200 characters, to quiet empty cards, to walking from row to subject and back, and to pressing every button without one gate call.
+
+**Run it with the engine the desktop app runs.** A `claude` on `PATH` older than the desktop's may not know `plugin test`, and may refuse the module in `plugin validate` for a rule the desktop's engine no longer holds.
+
+Two more checks live at the repository root:
+
+- `tests/terylon-pane/mutations.test.js` plants mutations, and each must turn the tests red. It covers the done-signal, the catch-up, a refusal of Claude Code's taken for the tailnet, the debug log silenced and the reason hidden. It also covers the band ignoring a survey, the band showing the spend again or a *Fix*, *Open* forgetting the tab, the Status tab missing the fix step for a refused call, the status line counting the briefing as an alert or no longer saying the health, the pane opening by itself, a repeated notice shown each time on the machine card, `/terylon-memory` opening a second pane, a waiting count drawn calm, a row's title no longer cut, an empty card saying nothing, a pressed choice that no longer fills the answer, a gate among the pane's tools or its allow rules, the guard opened to a gate, and a waiting item approving from the pane.
+- `tests/terylon-pane/commands.test.js` holds every command the mod registers to a name that no skill of the mod or of `terylon-os` takes.
+- `tests/terylon-pane/version.test.js` holds the version the Status tab says to the one `plugin.json` ships.
+
+To type-check against the engine's declarations: the engine lays them in `.claude-plugin/types/` when it loads the mod from a folder it watches, and `tsc -p plugins/terylon-pane` then reads them.

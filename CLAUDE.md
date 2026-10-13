@@ -35,7 +35,7 @@ terylon-core                      the root — shared conventions + measurement;
         └── terylon-test          + verifying a test plan and acceptance criteria (declares terylon-core directly)
 
 terylon-os                        Terylon itself, the agentic OS extension: its /mcp server + one skill per prompt; no dependencies
-└── terylon-pane                  a mod: the Desktop pane over that server — queue, add, done-signal, memory
+└── terylon-pane                  a mod: the band above the prompt and the Desktop pane over that server
 ```
 
 **`terylon-os` and its mod `terylon-pane` stand outside the chain** (#332): it is the owner's product, not a role in the development workflow, and it needs nothing below it. It was `terylon` until the operator renamed it on 2026-10-12 — `terylon@terylon` collided with the marketplace's name, and every other plugin is `terylon-<area>`; its server is still named `terylon`, so its tools are `mcp__plugin_terylon-os_terylon__*`. `terylon-pane` is the marketplace's first **mod** — a hooks module the engine runs in a session, drawing a pane — and `plugins/CLAUDE.md` says how one is written and tested, under *A mod*.
@@ -128,8 +128,10 @@ Five suites under `/tests/`, none distributed, and a mod's own tests beside it. 
 | Suite | Command | Proves | Cost |
 |---|---|---|---|
 | contract + fixture | `node --test tests/forge-port/forge-port.test.js` | both `forge-ops` bodies declare the same work-item keys; the authoring skills name no platform field; the GitHub recipes, run verbatim against a stand-in `gh`, write what they should | free, seconds |
-| terylon-pane mod | `claude plugin test plugins/terylon-pane` | the pane's queue, story, add, done-signal, catch-up, memory and every frame, on the desktop, the terminal and the phone, against a Terylon answering from memory; no button calls a gate | free, seconds; no session, no network |
-| terylon-pane teeth | `node --test tests/terylon-pane/mutations.test.js` | each planted mutation — no done-signal, no catch-up, the guard opened, a waiting item approving — turns the mod's tests red; skips where the `claude` CLI is absent | free, about a minute |
+| terylon-pane mod | `claude plugin test plugins/terylon-pane` | the band in every state and yielding to a survey; the status line with the health of Agentic OS and only its worst problem; the Status tab with every problem's fix in steps; one pane, opening only when asked; one-line rows and quiet empty cards; the queue, a story, a question answered, goals, plans, the bell and the memory, each row opening its subject and ‹ walking back; colours and labels on the desktop and the terminal; no button calls a gate | free, seconds; no session, no network |
+| terylon-pane teeth | `node --test tests/terylon-pane/mutations.test.js` | each planted mutation — no done-signal, no catch-up, the band ignoring a survey or showing the spend, the status line counting the briefing as an alert, the pane opening by itself, a gate among the pane's tools, the guard opened, a waiting item approving — turns the mod's tests red; skips where the `claude` CLI is absent | free, about a minute |
+| terylon-pane commands | `node --test tests/terylon-pane/commands.test.js` | no command the mod registers shares a name with a skill of the mod or of `terylon-os` | free, milliseconds |
+| terylon-pane version | `node --test tests/terylon-pane/version.test.js` | the version the Status tab says is the one `plugin.json` ships | free, milliseconds |
 | terylon-os plugin | `node --test tests/terylon-os/terylon-os-plugin.test.js` | the `terylon-os` plugin's one server is `${TERYLON_URL}/mcp` with no header or token, every prompt Terylon's `/mcp` serves has exactly one skill mirroring it, and nothing published names a host | free, milliseconds |
 | harness unit checks | `node --test tests/e2e/ref.test.js` | which ref the harness installs, and that a detached HEAD is refused rather than passed on as `HEAD` | free, milliseconds |
 | end-to-end | `node tests/e2e/run.js` | the marketplace installs from a git ref as a consumer installs it, everything loads, and the skills — followed by a model, headless — write the right things or refuse with the right reason | about **$2.60–3.25** per full run on sonnet, 4–8 min (measured 2026-10-04) |

@@ -1,25 +1,67 @@
-// terylon-pane: the Terylon pane in Claude Desktop (S7, #332), built to the approved S15 canvas.
+// terylon-pane: the Terylon band and pane in Claude Desktop (S7, #332), built to the approved S15 canvas, page v2.
 //
 //   every 30 s ──▶ $.mcp.call terylon: briefing · work_in_flight · stories_list · events_since
 //        │            (through callTerylon's allow-list: NEVER a gate tool)
-//        ├──▶ the pane: waiting for you · running · queued or held · done today
-//        ├──▶ the done-signal: $.prompt.submit once per story and verdict commit, and a toast
-//        └──▶ the status line
-//   session start, away > 2 h ──▶ ONE catch-up summary, and a band above the prompt
+//        ├──▶ the band above the prompt, what calls for the owner: Terylon · Waiting · Running · Queue   [Open | Fix]
+//        ├──▶ the status line, the machine's health and spend: Agentic OS ● ok · $x of $y today · a/b slots
+//        ├──▶ the pane, opened by the band or /terylon-pane, never by itself:
+//        │      Fronta ── Čeká na tebe ──▶ question (question_answer) · story · plan
+//        │        │       Běží · Ve frontě · Hotovo dnes ──▶ story ──▶ goal ──▶ story …
+//        │      Cíle ──── goals_list · plans_list ──▶ goal · plan ──▶ story; a new goal is goal_add
+//        │      Zvonek ── notices_list · leader_status · metrics, read only
+//        │      Paměť ─── the memory pane: memory_get; an edit is memory_propose, confirmed in the console
+//        └──▶ the done-signal: $.prompt.submit once per story and verdict commit, and a toast
+//   session start, away > 2 h ──▶ ONE catch-up summary, and the band says it until dismissed
 //   "Přidat" ──▶ tasks_add, which becomes a plan the owner approves in the console
-//   "Paměť"  ──▶ memory_get; an edit is memory_propose, confirmed by the owner in the console
 //
 // The mod holds no rule the endpoint does not: every decision is a Link to the console.
 
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { PaneAdd, PaneBand, PaneMemory, PaneSnapshot, PaneStory, PaneView } from '../types'
+import type {
+  PaneAdd,
+  PaneAnswer,
+  PaneBand,
+  PaneBell,
+  PaneGoal,
+  PaneGoals,
+  PaneMemory,
+  PaneScreen,
+  PaneSnapshot,
+  PaneStory,
+  PaneView,
+} from '../types'
 
 import { COPY } from './copy'
-import { MISSING_SERVER, SERVER_CANDIDATES, assertPaneTool, readResult } from './terylon'
+import { alertCount, healthLine, stateWord } from './health'
+import type { Health } from './health'
+import { MISSING_SERVER, NOT_ALLOWED, SERVER_CANDIDATES, allowRules, assertPaneTool, readResult } from './terylon'
 import type { TerylonAnswer } from './terylon'
-import { clock, consoleLink, doneTodayItems, header, list, money, number, queuedItems, runningItems, text, waitingItems } from './queue'
+import {
+  alertItems,
+  bellView,
+  clock,
+  consoleLink,
+  dayBudget,
+  doneTodayItems,
+  firstLine,
+  goalItems,
+  header,
+  hostName,
+  list,
+  number,
+  pausedOf,
+  planItems,
+  questionChoices,
+  questionItems,
+  queuedItems,
+  runningItems,
+  spend,
+  storyView,
+  text,
+  waitingItems,
+} from './queue'
 import {
   CATCH_UP_AFTER_MS,
   CATCH_UP_MOST_EVENTS,
@@ -36,13 +78,19 @@ import type { Candidate, Verdict } from './signals'
 
 type Json = Record<string, unknown>
 
-// The pane's ids, and the commands that open them.
+// The pane's id: ONE pane, the memory one of its tabs. No command the mod registers shares a skill's name: the skill would win (a node test holds it).
 export const PANE = 'terylon'
-export const MEMORY_PANE = 'terylon-memory'
+
+// The mod's version, said on the Status tab: a node test holds it to plugin.json.
+export const MOD_VERSION = '1.0.1'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
 export const RETRY_MS = 60000
+
+// How many criteria and timeline rows a story shows before "další N ▾".
+const CRITERIA_SHOWN = 2
+const TIMELINE_SHOWN = 4
 
 // What the store keeps across sessions: where the pane last read the events, when, and what it signalled.
 const STORE_LAST_SEQ = 'lastSeq'
@@ -53,25 +101,47 @@ const EMPTY_SNAPSHOT: PaneSnapshot = {
   connection: 'connecting',
   problem: null,
   fetchedAt: null,
+  failingSince: null,
   header: '',
+  runningUsd: '0.00',
+  dayBudget: null,
+  slots: 0,
+  slotsUsed: 0,
   paused: null,
+  pausedSince: null,
+  notices: 0,
+  alerts: 0,
+  alertNotices: [],
+  server: null,
   waiting: [],
   running: [],
   queued: [],
   doneToday: [],
+  questions: [],
 }
+
+const QUEUE: PaneScreen = { screen: 'queue' }
 
 const EMPTY_ADD: PaneAdd = { phase: 'form', title: '', criteria: '', goal: '', after: '', goals: [], stories: [], sentence: null, link: null }
 
-const EMPTY_MEMORY: PaneMemory = { phase: 'loading', files: [], pending: 0, edit: null, sentence: null }
+const EMPTY_MEMORY: PaneMemory = { phase: 'loading', files: [], rules: [], pending: 0, edit: null, sentence: null, proposed: [] }
+
+const EMPTY_GOALS: PaneGoals = { phase: 'loading', sentence: null, open: [], closed: [], plans: [], draft: '', adding: 'idle', addSentence: null }
+
+const EMPTY_BELL: PaneBell = { phase: 'loading', sentence: null, unhandledCount: 0, unhandled: [], handled: [], leader: { isPaused: false, text: '' }, metrics: [] }
 
 const snapshot = atom({ plugin: 'terylon-pane', key: 'snapshot' } as const, EMPTY_SNAPSHOT)
-const view = atom({ plugin: 'terylon-pane', key: 'view' } as const, { screen: 'queue' } as PaneView)
+const view = atom({ plugin: 'terylon-pane', key: 'view' } as const, { stack: [QUEUE] } as PaneView)
 const story = atom({ plugin: 'terylon-pane', key: 'story' } as const, null as PaneStory | null)
 const add = atom({ plugin: 'terylon-pane', key: 'add' } as const, EMPTY_ADD)
 const quick = atom({ plugin: 'terylon-pane', key: 'quick' } as const, '')
 const band = atom({ plugin: 'terylon-pane', key: 'band' } as const, null as PaneBand)
 const memory = atom({ plugin: 'terylon-pane', key: 'memory' } as const, EMPTY_MEMORY)
+const answer = atom({ plugin: 'terylon-pane', key: 'answer' } as const, null as PaneAnswer | null)
+const goals = atom({ plugin: 'terylon-pane', key: 'goals' } as const, EMPTY_GOALS)
+const goal = atom({ plugin: 'terylon-pane', key: 'goal' } as const, null as PaneGoal | null)
+const bell = atom({ plugin: 'terylon-pane', key: 'bell' } as const, EMPTY_BELL)
+const open = atom({ plugin: 'terylon-pane', key: 'open' } as const, [] as string[])
 
 // What the last answers were: the module's own, lost on a reload and refilled by the next poll.
 let lastFlight: Json = {}
@@ -80,6 +150,7 @@ let lastStories: Json[] = []
 let policy: Json | null = null
 let lastAttemptAt = 0
 let isPolling = false
+let answeringServer: string | null = null
 
 // Calls one of the pane's tools on whichever terylon server the session has, through the allow-list.
 async function callTerylon($: EngineInterface, tool: string, args: Record<string, unknown> = {}): Promise<TerylonAnswer> {
@@ -90,9 +161,19 @@ async function callTerylon($: EngineInterface, tool: string, args: Record<string
 
   for (const server of SERVER_CANDIDATES) {
     try {
-      return readResult((await $.mcp.call(server, tool, args)) as never)
+      const result = readResult((await $.mcp.call(server, tool, args)) as never)
+      answeringServer = server
+
+      return result
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
+
+      // Every failure, in the engine's own words, for `claude --debug`: the pane shows only the last one.
+      $.ui.log(`terylon-pane: ${tool} on ${server} failed: ${message}`, { to: 'debug' })
+
+      if (NOT_ALLOWED.test(message)) {
+        return { kind: 'not-allowed', reason: message }
+      }
 
       if (MISSING_SERVER.test(message)) {
         missing += 1
@@ -107,6 +188,21 @@ async function callTerylon($: EngineInterface, tool: string, args: Record<string
   return missing === SERVER_CANDIDATES.length ? { kind: 'no-server' } : { kind: 'unreachable', reason }
 }
 
+// What a failed call says, in one line: the leader's sentence, Terylon's refusal, or the engine's words.
+function why(answered: TerylonAnswer): string {
+  switch (answered.kind) {
+    case 'ok':
+      return text(answered.value.sentence) ?? ''
+    case 'refused':
+      return answered.sentence
+    case 'not-allowed':
+    case 'unreachable':
+      return answered.reason
+    default:
+      return COPY.noServerTitle
+  }
+}
+
 async function baseUrl($: EngineInterface): Promise<string> {
   return ((await $.env.get('TERYLON_URL')) ?? '').replace(/\/+$/, '')
 }
@@ -115,21 +211,51 @@ function zoneOffset(now: number): number {
   return new Date(now).getTimezoneOffset()
 }
 
-async function failed($: EngineInterface, answer: TerylonAnswer, tool: string): Promise<void> {
+function healthOf(current: PaneSnapshot, offset: number): Health {
+  return {
+    connection: current.connection,
+    failingSince: current.failingSince === null ? null : clock(new Date(current.failingSince).toISOString(), offset),
+    isPaused: current.paused !== null,
+    alerts: current.alerts,
+    runningUsd: current.runningUsd,
+    dayBudget: current.dayBudget,
+    slotsUsed: current.slotsUsed,
+    slots: current.slots,
+  }
+}
+
+// Something the owner should look at: the connection, the leader paused, an alert.
+function hasProblem(current: PaneSnapshot): boolean {
+  return (current.connection !== 'ok' && current.connection !== 'connecting') || current.paused !== null || current.alerts > 0
+}
+
+// THE STATUS LINE: the worst of the machine's health, or its spend when all is well.
+async function showHealth($: EngineInterface): Promise<void> {
+  const current = await readSnapshot($)
+
+  $.ui.status(healthLine(healthOf(current, zoneOffset(await $.clock.now()))))
+}
+
+async function failed($: EngineInterface, answered: TerylonAnswer, tool: string, now: number): Promise<void> {
   await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => {
-    switch (answer.kind) {
+    const failingSince = current.failingSince ?? now
+
+    switch (answered.kind) {
       case 'no-server':
-        return { ...current, connection: 'no-server', problem: null }
+        return { ...current, connection: 'no-server', problem: null, failingSince }
+      case 'not-allowed':
+        return { ...current, connection: 'not-allowed', problem: answered.reason, failingSince }
       case 'unreachable':
-        return { ...current, connection: 'unreachable', problem: answer.reason }
+        return { ...current, connection: 'unreachable', problem: answered.reason, failingSince }
       case 'refused':
-        return answer.status === 403
-          ? { ...current, connection: 'refused', problem: answer.sentence }
-          : { ...current, connection: 'error', problem: `${tool}: ${answer.status ?? answer.sentence}` }
+        return answered.status === 403 || answered.status === 401
+          ? { ...current, connection: 'refused', problem: `${answered.sentence} (${answered.status})`, failingSince }
+          : { ...current, connection: 'error', problem: `${tool}: ${answered.status ?? ''} ${answered.sentence}`.replace(/\s+/g, ' '), failingSince }
       default:
         return current
     }
   })
+  await showHealth($)
 }
 
 // One read of the queue. Returns false when Terylon did not answer as the owner's.
@@ -140,23 +266,29 @@ async function refresh($: EngineInterface): Promise<boolean> {
   const flight = await callTerylon($, 'work_in_flight')
 
   if (flight.kind !== 'ok') {
-    await failed($, flight, 'work_in_flight')
+    await failed($, flight, 'work_in_flight', now)
     return false
   }
 
   const briefing = await callTerylon($, 'briefing')
 
   if (briefing.kind !== 'ok') {
-    await failed($, briefing, 'briefing')
+    await failed($, briefing, 'briefing', now)
     return false
   }
 
   const stories = await callTerylon($, 'stories_list')
 
   if (stories.kind !== 'ok') {
-    await failed($, stories, 'stories_list')
+    await failed($, stories, 'stories_list', now)
     return false
   }
+
+  // The bell, for the alerts the status line counts; a bell that does not answer keeps the last count.
+  const notices = await callTerylon($, 'notices_list')
+  const previous = await readSnapshot($)
+  const alerts = notices.kind === 'ok' ? alertCount(notices.value) : previous.alerts
+  const alertNotices = notices.kind === 'ok' ? alertItems(notices.value, now, zoneOffset(now)) : previous.alertNotices
 
   if (policy === null) {
     const answered = await callTerylon($, 'policy_get')
@@ -171,23 +303,31 @@ async function refresh($: EngineInterface): Promise<boolean> {
   const offset = zoneOffset(now)
   const running = runningItems(lastFlight, offset)
   const inFlight = new Set(running.map(item => item.story))
-  const leader = (lastBriefing.leader ?? null) as Json | null
-  const isPaused = lastFlight.paused === true
+  const paused = pausedOf((lastBriefing.leader ?? null) as Json | null, lastFlight.paused === true, offset)
 
   await update($, snapshot, (): PaneSnapshot => ({
     connection: 'ok',
     problem: null,
     fetchedAt: now,
+    failingSince: null,
     header: header(lastFlight, policy),
-    paused: isPaused ? COPY.paused(clock(leader?.pausedAt, offset), text(leader?.reason) ?? text(leader?.pauseReason)) : null,
+    runningUsd: spend(lastFlight),
+    dayBudget: dayBudget(policy),
+    slots: number(lastFlight.slots) ?? number(policy?.slots) ?? 0,
+    slotsUsed: running.length,
+    paused: paused === null ? null : COPY.paused(paused.since, paused.reason),
+    pausedSince: paused?.since ?? null,
+    notices: number(lastBriefing.unhandledNotices) ?? 0,
+    alerts,
+    alertNotices,
+    server: answeringServer,
     waiting: waitingItems(lastBriefing, base),
     running,
     queued: queuedItems(lastStories, inFlight),
     doneToday: doneTodayItems(lastStories, now, offset),
+    questions: questionItems(lastBriefing),
   }))
-
-  const current = await read($, snapshot)
-  $.ui.status(COPY.status(current.running.length, current.waiting.length))
+  await showHealth($)
 
   return true
 }
@@ -274,7 +414,7 @@ async function tick($: EngineInterface, isStart: boolean): Promise<void> {
 
   try {
     const now = await $.clock.now()
-    const connection = (await read($, snapshot)).connection
+    const connection = (await readSnapshot($)).connection
 
     if (!isStart && connection === 'unreachable' && now - lastAttemptAt < RETRY_MS) {
       return
@@ -331,56 +471,234 @@ async function tick($: EngineInterface, isStart: boolean): Promise<void> {
   }
 }
 
+// A value the host kept from an earlier version of the mod, across a reload, may lack what this one draws.
+async function readSnapshot($: EngineInterface): Promise<PaneSnapshot> {
+  return { ...EMPTY_SNAPSHOT, ...(await read($, snapshot)) }
+}
+
+async function readMemory($: EngineInterface): Promise<PaneMemory> {
+  return { ...EMPTY_MEMORY, ...(await read($, memory)) }
+}
+
+function stackOf(value: PaneView): PaneScreen[] {
+  return Array.isArray(value.stack) && value.stack.length > 0 ? value.stack : [QUEUE]
+}
+
+// NAVIGATION: a stack of screens. A tab starts it over, a row pushes, ‹ pops back to where the owner came from.
+async function show($: EngineInterface, screen: PaneScreen, isTab: boolean): Promise<void> {
+  await update($, view, (current: PaneView): PaneView => ({ stack: isTab ? [screen] : [...stackOf(current), screen] }))
+  await load($, screen)
+}
+
+async function back($: EngineInterface): Promise<void> {
+  await update($, view, (current: PaneView): PaneView => ({ stack: stackOf(current).length > 1 ? stackOf(current).slice(0, -1) : [QUEUE] }))
+
+  const current = await read($, view)
+  await load($, stackOf(current)[stackOf(current).length - 1] ?? QUEUE)
+}
+
+async function load($: EngineInterface, screen: PaneScreen): Promise<void> {
+  switch (screen.screen) {
+    case 'story':
+      return openStory($, screen.story)
+    case 'question':
+      return openQuestion($, screen.question)
+    case 'goals':
+    case 'plan':
+      return loadGoals($)
+    case 'goal':
+      return openGoal($, screen.goal)
+    case 'bell':
+      return loadBell($)
+    case 'memory':
+      return openMemory($)
+    case 'status':
+      return loadBell($)
+    default:
+      return undefined
+  }
+}
+
+// The band's button and the commands: the one pane, on the tab asked for, never opened by itself.
+async function openPane($: EngineInterface, screen: PaneScreen): Promise<void> {
+  await update($, view, (): PaneView => ({ stack: [screen] }))
+  await $.ui.open({ id: PANE, title: COPY.title })
+  await load($, screen)
+}
+
+// The band's Open: the pane where the owner left it, the queue the first time; never a tab chosen for them.
+async function reopenPane($: EngineInterface): Promise<void> {
+  const stack = stackOf(await read($, view))
+
+  await $.ui.open({ id: PANE, title: COPY.title })
+  await load($, stack[stack.length - 1] ?? QUEUE)
+}
+
+async function toggle($: EngineInterface, key: string): Promise<void> {
+  await update($, open, (current: string[]): string[] => (current.includes(key) ? current.filter(item => item !== key) : [...current, key]))
+}
+
 async function openStory($: EngineInterface, id: number): Promise<void> {
-  await update($, view, (): PaneView => ({ screen: 'story', story: id }))
+  await update($, story, (): PaneStory | null => null)
 
   const answered = await callTerylon($, 'story_get', { story: id })
   const now = await $.clock.now()
-  const base = await baseUrl($)
-  const document = answered.kind === 'ok' ? answered.value : {}
   const inFlight = list(lastFlight.stories).find(item => number(item.id) === id) ?? {}
-  const progress = (inFlight.progress ?? document.progress ?? null) as Json | null
-  const step = number(progress?.step)
-  const steps = number(progress?.steps)
-  const startedAt = Date.parse(String(inFlight.startedAt ?? document.startedAt ?? ''))
-  const elapsed = Number.isNaN(startedAt) ? '?' : `${Math.floor((now - startedAt) / 3600000)} h ${Math.floor(((now - startedAt) % 3600000) / 60000)} min`
-  const pullRequest = (document.pullRequest ?? null) as Json | null
-  const question = list(lastBriefing.questionsOpen).find(item => item.subject === `story/${id}`) ?? null
-  const budget = number(inFlight.budgetUsd ?? document.budgetUsd)
+  const question = (await readSnapshot($)).questions.find(item => item.subject === `story/${id}`) ?? null
 
-  await update($, story, (): PaneStory | null => ({
-    story: id,
-    title: `#${id} ${text(document.title) ?? text(inFlight.title) ?? ''}`.trim(),
-    meta: COPY.storyMeta(elapsed, number(inFlight.attempt ?? document.attempt) ?? 1, text(pullRequest?.branch)),
-    step: step !== null && steps !== null ? COPY.step(step, steps, text(progress?.current)) : COPY.noStep,
-    fraction: step !== null && steps !== null && steps > 0 ? step / steps : null,
-    cost: COPY.costOf(money(inFlight.costUsd ?? document.costUsd), budget === null ? null : budget.toFixed(0)),
-    question: question === null ? null : text(question.text),
-    questionLink: question === null ? null : consoleLink(base, `question&question=${number(question.id) ?? 0}`),
+  if (answered.kind !== 'ok' && Object.keys(inFlight).length === 0) {
+    await update($, story, (): PaneStory | null => ({ ...storyView(id, {}, {}, null, now, zoneOffset(now)), phase: 'error', sentence: why(answered) }))
+    return
+  }
+
+  const document = answered.kind === 'ok' ? answered.value : {}
+  await update($, story, (): PaneStory | null => storyView(id, document, inFlight, question, now, zoneOffset(now)))
+}
+
+async function openQuestion($: EngineInterface, id: number): Promise<void> {
+  await update($, answer, (): PaneAnswer | null => ({ question: id, text: '', choice: null, phase: 'form', sentence: null }))
+}
+
+// AN ANSWER IS NOT A GATE: question_answer only completes the brief; the leader takes it from there.
+async function sendAnswer($: EngineInterface): Promise<void> {
+  const form = await read($, answer)
+
+  if (form === null) {
+    return
+  }
+
+  // A pressed choice fills the answer, so what is sent is always what the owner sees in it.
+  const reply = form.text.trim()
+
+  if (reply === '') {
+    return
+  }
+
+  await update($, answer, (current: PaneAnswer | null): PaneAnswer | null => (current === null ? null : { ...current, phase: 'sending' }))
+
+  const answered = await callTerylon($, 'question_answer', { question: form.question, answer: reply })
+  const isAccepted = answered.kind === 'ok' && answered.value.accepted === true
+  const isPending = answered.kind === 'ok' && answered.value.accepted == null
+
+  await update($, answer, (current: PaneAnswer | null): PaneAnswer | null =>
+    current === null
+      ? null
+      : {
+          ...current,
+          phase: isAccepted || isPending ? 'answered' : 'refused',
+          sentence: isPending ? COPY.timeout(answered.kind === 'ok' ? text(answered.value.commandId) : null) : why(answered),
+        })
+
+  if (isAccepted) {
+    await refresh($)
+  }
+}
+
+async function loadGoals($: EngineInterface): Promise<void> {
+  const goalsAnswer = await callTerylon($, 'goals_list')
+  const plansAnswer = await callTerylon($, 'plans_list')
+  const base = await baseUrl($)
+  const questions = (await readSnapshot($)).questions
+
+  if (goalsAnswer.kind !== 'ok') {
+    await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, phase: 'error', sentence: why(goalsAnswer) }))
+    return
+  }
+
+  const items = goalItems(goalsAnswer.value, questions)
+  const plans = plansAnswer.kind === 'ok' ? planItems(plansAnswer.value, base) : []
+
+  await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, phase: 'ok', sentence: plansAnswer.kind === 'ok' ? null : why(plansAnswer), open: items.open, closed: items.closed, plans }))
+}
+
+// A NEW GOAL: goal_add; the leader breaks it into a plan that waits for the owner in the console.
+async function addGoal($: EngineInterface): Promise<void> {
+  const title = (await read($, goals)).draft.trim()
+
+  if (title === '') {
+    return
+  }
+
+  await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, adding: 'sending', addSentence: null }))
+
+  const answered = await callTerylon($, 'goal_add', { title })
+  const isAccepted = answered.kind === 'ok' && answered.value.accepted !== false
+
+  await update($, goals, (current: PaneGoals): PaneGoals => ({
+    ...current,
+    adding: isAccepted ? 'added' : 'refused',
+    addSentence: answered.kind === 'ok' && answered.value.accepted == null ? COPY.timeout(text(answered.value.commandId)) : why(answered),
+    draft: isAccepted ? '' : current.draft,
   }))
+
+  if (isAccepted) {
+    await loadGoals($)
+  }
+}
+
+async function openGoal($: EngineInterface, id: number): Promise<void> {
+  await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'loading', sentence: null, title: '', meta: '', stories: [] }))
+
+  const answered = await callTerylon($, 'goal_get', { goal: id })
+
+  if (answered.kind !== 'ok') {
+    await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'error', sentence: why(answered), title: '', meta: '', stories: [] }))
+    return
+  }
+
+  const document = answered.value
+
+  await update($, goal, (): PaneGoal | null => ({
+    goal: id,
+    phase: 'ok',
+    sentence: null,
+    title: text(document.title) ?? `#${id}`,
+    meta: COPY.goalMeta(`P${number(document.priority) ?? 2}`, COPY.stateText(String(document.state ?? ''))),
+    stories: list(document.storyList).map(item => ({ id: number(item.id) ?? 0, title: `#${number(item.id) ?? 0} ${text(item.title) ?? ''}`.trim(), state: COPY.stateText(String(item.state ?? '')) })),
+  }))
+
+  if ((await read($, goals)).phase !== 'ok') {
+    await loadGoals($)
+  }
+}
+
+async function loadBell($: EngineInterface): Promise<void> {
+  const notices = await callTerylon($, 'notices_list')
+
+  if (notices.kind !== 'ok') {
+    await update($, bell, (current: PaneBell): PaneBell => ({ ...current, phase: 'error', sentence: why(notices) }))
+    return
+  }
+
+  const leader = await callTerylon($, 'leader_status')
+  const metrics = await callTerylon($, 'metrics')
+  const now = await $.clock.now()
+
+  await update($, bell, (): PaneBell =>
+    bellView(notices.value, leader.kind === 'ok' ? leader.value : null, metrics.kind === 'ok' ? metrics.value : null, now, zoneOffset(now)))
 }
 
 async function openAdd($: EngineInterface, title: string): Promise<void> {
-  const goals = await callTerylon($, 'goals_list')
-  const choices = goals.kind === 'ok'
-    ? list(goals.value.goals)
-        .filter(goal => !['done', 'closed', 'abandoned'].includes(String(goal.state)))
-        .map(goal => ({ value: String(number(goal.id) ?? 0), label: `${text(goal.title) ?? ''}` }))
+  const goalsAnswer = await callTerylon($, 'goals_list')
+  const choices = goalsAnswer.kind === 'ok'
+    ? list(goalsAnswer.value.goals)
+        .filter(item => !['done', 'closed', 'abandoned', 'dropped'].includes(String(item.state)))
+        .map(item => ({ value: String(number(item.id) ?? 0), label: `${text(item.title) ?? ''}` }))
     : []
   const stories = lastStories
     .filter(item => !['merged', 'abandoned'].includes(String(item.state)))
     .map(item => ({ value: String(number(item.id) ?? 0), label: `#${number(item.id) ?? 0} ${text(item.title) ?? ''}` }))
 
   await update($, add, (): PaneAdd => ({ ...EMPTY_ADD, title, goal: choices[0]?.value ?? '', goals: choices, stories: [{ value: '', label: COPY.nothingBefore }, ...stories] }))
-  await update($, view, (): PaneView => ({ screen: 'add' }))
+  await update($, view, (current: PaneView): PaneView => ({ stack: [...stackOf(current), { screen: 'add' }] }))
 }
 
 // ADD A TASK: tasks_add proposes; the plan it becomes waits for the owner in the console.
 async function sendTask($: EngineInterface): Promise<void> {
   const form = await read($, add)
-  const goal = Number(form.goal)
+  const goalId = Number(form.goal)
 
-  if (form.title.trim() === '' || !Number.isInteger(goal) || goal < 1) {
+  if (form.title.trim() === '' || !Number.isInteger(goalId) || goalId < 1) {
     return
   }
 
@@ -399,13 +717,13 @@ async function sendTask($: EngineInterface): Promise<void> {
     task.after = [after]
   }
 
-  const answered = await callTerylon($, 'tasks_add', { goal, tasks: [task] })
+  const answered = await callTerylon($, 'tasks_add', { goal: goalId, tasks: [task] })
   const base = await baseUrl($)
   const isPaused = lastFlight.paused === true
 
   await update($, add, (current: PaneAdd): PaneAdd => {
     if (answered.kind === 'ok' && answered.value.accepted === true) {
-      return { ...current, phase: 'added', sentence: text(answered.value.sentence), link: consoleLink(base, `plan&goal=${goal}`) }
+      return { ...current, phase: 'added', sentence: text(answered.value.sentence), link: consoleLink(base, `plan&goal=${goalId}`) }
     }
 
     if (answered.kind === 'ok' && answered.value.accepted == null) {
@@ -421,28 +739,39 @@ async function sendTask($: EngineInterface): Promise<void> {
 }
 
 async function openMemory($: EngineInterface): Promise<void> {
-  await update($, memory, (): PaneMemory => EMPTY_MEMORY)
+  await update($, memory, (current: PaneMemory): PaneMemory => ({ ...EMPTY_MEMORY, proposed: current.proposed ?? [] }))
 
   const answered = await callTerylon($, 'memory_get')
 
   if (answered.kind !== 'ok') {
-    await update($, memory, (current: PaneMemory): PaneMemory => ({ ...current, phase: 'error', sentence: answered.kind === 'refused' ? answered.sentence : answered.kind }))
+    await update($, memory, (current: PaneMemory): PaneMemory => ({ ...current, phase: 'error', sentence: why(answered) }))
     return
   }
 
-  const files = list(answered.value.files).map(file => ({
-    file: text(file.file) ?? '',
-    heading: text(file.file) ?? '',
-    entries: Array.isArray(file.entries) ? file.entries.filter((entry): entry is string => typeof entry === 'string') : [],
-    text: text(file.text),
+  // Each entry and rule as the leader stored it, in whatever language that was: only the frame around it is the pane's.
+  const files = list(answered.value.files).map(file => {
+    const name = text(file.file) ?? ''
+
+    return {
+      file: name,
+      heading: name === 'owner' ? COPY.memoryOwner : name.replace(/^topic:/, ''),
+      entries: Array.isArray(file.entries) ? file.entries.filter((entry): entry is string => typeof entry === 'string') : [],
+      text: text(file.text),
+    }
+  })
+
+  const rules = list(answered.value.rules).map(rule => ({
+    rule: text(rule.rule) ?? '',
+    enforcedBy: text(rule.enforcedBy) ?? '',
+    artefact: text(rule.artefact) ?? '',
   }))
 
-  await update($, memory, (): PaneMemory => ({ phase: 'ok', files, pending: list(answered.value.proposals).length, edit: null, sentence: null }))
+  await update($, memory, (current: PaneMemory): PaneMemory => ({ ...current, phase: 'ok', files, rules, pending: list(answered.value.proposals).length, edit: null, sentence: null }))
 }
 
 // A MEMORY EDIT IS A PROPOSAL: memory_propose, then the owner confirms it in the console's memory gate.
 async function proposeMemory($: EngineInterface): Promise<void> {
-  const state = await read($, memory)
+  const state = await readMemory($)
   const edit = state.edit
 
   if (edit === null || edit.why.trim() === '' || (edit.action !== 'remove' && edit.text.trim() === '')) {
@@ -465,12 +794,19 @@ async function proposeMemory($: EngineInterface): Promise<void> {
 
   await update($, memory, (current: PaneMemory): PaneMemory => {
     if (answered.kind === 'ok') {
-      return { ...current, phase: 'proposed', sentence: answered.value.gate === 'checking' ? COPY.memoryChecking : COPY.memoryProposed }
+      const shown = edit.action === 'remove' ? edit.oldText ?? '' : edit.text.trim()
+
+      return {
+        ...current,
+        phase: 'proposed',
+        sentence: answered.value.gate === 'checking' ? COPY.memoryChecking : COPY.memoryProposed,
+        proposed: [...(current.proposed ?? []), COPY.memoryProposedItem(edit.action === 'remove' ? COPY.memoryRemove : edit.action === 'add' ? COPY.memoryAdd : COPY.memoryEdit, edit.file, shown)],
+      }
     }
 
     const value = answered.kind === 'refused' ? answered.value : {}
 
-    return { ...current, phase: 'refused', sentence: text(value.refusal) ?? (answered.kind === 'refused' ? answered.sentence : answered.kind) }
+    return { ...current, phase: 'refused', sentence: text(value.refusal) ?? why(answered) }
   })
 }
 
@@ -484,217 +820,620 @@ function bar(fraction: number | null): string {
   return `${'█'.repeat(filled)}${'░'.repeat(20 - filled)}`
 }
 
+// The way back, named for where it leads.
+function backLabel(stack: readonly PaneScreen[]): string {
+  const previous = stack[stack.length - 2] ?? QUEUE
+
+  switch (previous.screen) {
+    case 'goals':
+      return `‹ ${COPY.tabGoals}`
+    case 'bell':
+      return `‹ ${COPY.tabBell(0)}`
+    case 'memory':
+      return `‹ ${COPY.tabMemory}`
+    case 'status':
+      return `‹ ${COPY.tabStatus(false)}`
+    case 'story':
+      return `‹ #${previous.story}`
+    case 'goal':
+      return `‹ ${COPY.goalOf(previous.goal)}`
+    case 'plan':
+      return `‹ ${COPY.plan(previous.plan)}`
+    case 'question':
+      return COPY.back
+    default:
+      return `‹ ${COPY.tabQueue}`
+  }
+}
+
+type Elements = ReturnType<EngineInterface['ui']['resolve']>
+
+type Tone = 'text' | 'inactive' | 'subtle' | 'suggestion' | 'success' | 'warning' | 'error'
+
+// A Kraken card: a round subtle border, a bold title left and a quiet hint right, then its rows with air between
+// them. On the terminal, where every gap is a whole line, the rows stay together and only the title stands apart.
+function card(elements: Elements, key: string, title: unknown, hint: string | null, children: unknown[], isRoomy: boolean): unknown {
+  const { Box, Text } = elements
+
+  return (
+    <Box key={key} flexDirection="column" borderStyle="round" borderColor="subtle" paddingX={1} gap={1}>
+      <Box flexDirection="row" justifyContent="space-between">
+        {typeof title === 'string' ? <Text bold>{title}</Text> : title}
+        {hint !== null && <Text color="subtle">{hint}</Text>}
+      </Box>
+      <Box flexDirection="column" gap={isRoomy ? 1 : 0}>
+        {children}
+      </Box>
+    </Box>
+  )
+}
+
+// The width of a row's kind column, in cells: every title starts under the one above it. A card whose kinds are
+// wider ("orchestrator") takes its widest, up to KIND_WIDEST, past which a kind is cut.
+const KIND_WIDTH = 12
+const KIND_WIDEST = 14
+
+export function kindWidth(kinds: readonly string[]): number {
+  return Math.min(KIND_WIDEST, Math.max(KIND_WIDTH, ...kinds.map(kind => kind.length)))
+}
+
+type Row = {
+  key: string
+  kind: string | null
+  kindTone?: Tone
+  kindColumn?: number
+  title: string
+  titleTone?: Tone
+  detail?: string | null
+  detailTone?: Tone
+  link?: string | null
+  onPress: () => unknown
+  body?: unknown
+}
+
+// One row, always one line: the kind in its own column, the title cut at its end, never the detail or the ↗.
+// The kind sits outside the Button, since a native desktop Button draws its children in its own colour.
+function row(elements: Elements, input: Row): unknown {
+  const { Box, Text, Button, Link } = elements
+
+  return (
+    <Box key={`row-${input.key}`} flexDirection="column">
+      <Box flexDirection="row" gap={1}>
+        {input.kind !== null && (
+          <Box width={input.kindColumn ?? KIND_WIDTH} flexShrink={0}>
+            <Text color={input.kindTone ?? 'subtle'} wrap="truncate-end">{input.kind}</Text>
+          </Box>
+        )}
+        <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
+          <Button key={input.key} plain onPress={input.onPress}>
+            <Text color={input.titleTone} wrap="truncate-end">{input.title}</Text>
+          </Button>
+        </Box>
+        {input.detail !== undefined && input.detail !== null && input.detail !== '' && (
+          <Box flexShrink={0}>
+            <Text color={input.detailTone ?? 'subtle'}>{input.detail}</Text>
+          </Box>
+        )}
+        {input.link !== undefined && input.link !== null && (
+          <Box flexShrink={0}>
+            <Link href={input.link} label="↗" />
+          </Box>
+        )}
+      </Box>
+      {input.body ?? null}
+    </Box>
+  )
+}
+
+function quiet(elements: Elements, line: string): unknown {
+  const { Text } = elements
+
+  return <Text color="subtle">{line}</Text>
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'terylon', description: 'Otevře panel Terylon: fronta, přidat úkol, signál hotovo' })
-    await $.command.register({ name: 'terylon-memory', description: 'Otevře paměť lídra Terylonu: návrh úpravy potvrdíš v konzoli' })
-    void $.ui.open({ id: PANE, title: COPY.title })
+    await $.command.register({ name: 'terylon-pane', description: 'Opens the Terylon pane: queue, goals, bell, memory' })
+    await $.command.register({ name: 'terylon', description: 'Opens the Terylon pane (the same as /terylon-pane)' })
+    await $.command.register({ name: 'terylon-memory', description: "Opens the Terylon pane on the leader's memory; an edit is confirmed in the console" })
+    await showHealth($)
     $.clock.after(0, () => tick($, true))
     $.clock.every(POLL_MS, () => tick($, false))
 
     return next(e)
   })
 
-  on('command.run', { command: 'terylon' }, async $ => {
-    await $.ui.open({ id: PANE, title: COPY.title })
+  on('command.run', { command: 'terylon-pane' }, async $ => {
+    await openPane($, QUEUE)
 
-    return { text: 'Panel Terylon je otevřený.' }
+    return { text: 'The Terylon pane is open.' }
+  })
+
+  on('command.run', { command: 'terylon' }, async $ => {
+    await openPane($, QUEUE)
+
+    return { text: 'The Terylon pane is open.' }
   })
 
   on('command.run', { command: 'terylon-memory' }, async $ => {
-    await $.ui.open({ id: MEMORY_PANE, title: COPY.memoryTitle })
-    await openMemory($)
+    await openPane($, { screen: 'memory' })
 
-    return { text: 'Paměť lídra je otevřená.' }
+    return { text: "The leader's memory is open." }
   })
 
+  // THE BAND: one row above the prompt, what calls for the owner, and the pane's entry point. The machine's health and
+  // spend are the status line's, never repeated here.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const shown = await read($, band)
-
-    if (shown === null || e.props.hasSurvey) {
+    if (e.props.hasSurvey) {
       return next(e)
     }
 
-    const { Box, Text, Link, Button } = $.ui.resolve(e)
+    const { Box, Text, Button, Link } = $.ui.resolve(e)
+    const caught = await read($, band)
 
-    return (
-      <Box flexDirection="row" gap={1}>
-        <Text bold>T</Text>
-        <Text color={shown.isAlert ? 'warning' : undefined}>{shown.text}</Text>
-        <Link href={shown.link} label="Konzole ↗" />
-        <Button key="band-hide" label="✕" role="dismiss" onPress={() => update($, band, (): PaneBand => null)} />
-      </Box>
-    )
-  })
-
-  on('ui.render', { component: 'Pane', requestId: MEMORY_PANE }, async ($, e) => {
-    const elements = $.ui.resolve(e)
-    const { Box, Text, Button, Link } = elements
-    const state = await read($, memory)
-    const base = await baseUrl($)
-    const memoryLink = consoleLink(base, 'memory')
-
-    if (state.phase === 'loading') {
-      return <Text dimColor>{COPY.memoryLoading}</Text>
-    }
-
-    if (state.phase === 'error') {
+    if (caught !== null) {
       return (
-        <Box flexDirection="column" gap={1}>
-          <Text color="error">{COPY.memoryError(state.sentence ?? '?')}</Text>
-          <Button key="mem-retry" label={COPY.retry} onPress={() => openMemory($)} />
-        </Box>
-      )
-    }
-
-    if (state.edit !== null && (state.phase === 'editing' || state.phase === 'sending' || state.phase === 'proposed' || state.phase === 'refused')) {
-      const edit = state.edit
-      const isPhone = e.surface === 'mobile'
-
-      return (
-        <Box flexDirection="column" gap={1}>
-          <Text bold>{edit.file}</Text>
-          {edit.oldText !== null && <Text dimColor>{edit.oldText}</Text>}
-          {state.phase === 'editing' && !isPhone && 'Input' in elements && edit.action !== 'remove' && (
-            <elements.Input key="mem-text" label={COPY.memoryText} value={edit.text} onInput={value => update($, memory, (current: PaneMemory): PaneMemory => ({ ...current, edit: current.edit === null ? null : { ...current.edit, text: value } }))} onSubmit={() => undefined} />
-          )}
-          {state.phase === 'editing' && !isPhone && 'Input' in elements && (
-            <elements.Input key="mem-why" label={COPY.memoryWhy} value={edit.why} onInput={value => update($, memory, (current: PaneMemory): PaneMemory => ({ ...current, edit: current.edit === null ? null : { ...current.edit, why: value } }))} onSubmit={() => proposeMemory($)} />
-          )}
-          {state.phase === 'editing' && (
-            <Box flexDirection="row" gap={1}>
-              <Button key="mem-cancel" label={COPY.cancel} onPress={() => update($, memory, (current: PaneMemory): PaneMemory => ({ ...current, phase: 'ok', edit: null }))} />
-              <Button key="mem-propose" label={COPY.memoryPropose} variant="primary" onPress={() => proposeMemory($)} />
-            </Box>
-          )}
-          {state.phase === 'sending' && <Text dimColor>{COPY.memorySending}</Text>}
-          {(state.phase === 'proposed' || state.phase === 'refused') && (
-            <Box flexDirection="column" gap={1}>
-              <Text color={state.phase === 'refused' ? 'error' : 'success'}>{state.sentence ?? ''}</Text>
-              <Link href={memoryLink} label={COPY.memoryConfirmInConsole} />
-              <Button key="mem-back" label={COPY.memoryBack} onPress={() => openMemory($)} />
-            </Box>
-          )}
-          <Text dimColor>{COPY.memoryNote}</Text>
-        </Box>
-      )
-    }
-
-    const startEdit = (action: 'add' | 'replace' | 'remove', file: string, oldText: string | null) =>
-      update($, memory, (current: PaneMemory): PaneMemory => ({ ...current, phase: 'editing', edit: { action, file, oldText, text: action === 'replace' ? oldText ?? '' : '', why: '' } }))
-
-    return (
-      <Box flexDirection="column" gap={1}>
-        {state.pending > 0 && <Link href={memoryLink} label={COPY.memoryPending(state.pending)} />}
-        {state.files.length === 0 && <Text dimColor>{COPY.memoryEmpty}</Text>}
-        {state.files.map((file, fileIndex) => (
-          <Box key={`mem-file-${fileIndex}`} flexDirection="column">
-            <Text bold>{file.heading}</Text>
-            {file.text !== null && <Text dimColor>{COPY.topicNote}</Text>}
-            {file.entries.map((entry, entryIndex) => (
-              <Box key={`mem-entry-${fileIndex}-${entryIndex}`} flexDirection="row" gap={1}>
-                <Text>{entry}</Text>
-                <Button key={`mem-edit-${fileIndex}-${entryIndex}`} label={COPY.memoryEdit} onPress={() => startEdit('replace', file.file, entry)} />
-                <Button key={`mem-remove-${fileIndex}-${entryIndex}`} label={COPY.memoryRemove} onPress={() => startEdit('remove', file.file, entry)} />
-              </Box>
-            ))}
-            {file.text === null && <Button key={`mem-add-${fileIndex}`} label={COPY.memoryAdd} onPress={() => startEdit('add', file.file, null)} />}
+        <Box width="100%" flexDirection="row" justifyContent="space-between" gap={1}>
+          <Box flexGrow={1} flexShrink={1}>
+            <Text wrap="truncate-end">
+              <Text color="inactive">{COPY.title}</Text>
+              <Text color="subtle">{' · '}</Text>
+              <Text color={caught.isAlert ? 'warning' : 'inactive'}>{caught.text}</Text>
+            </Text>
           </Box>
-        ))}
-        <Text dimColor>{COPY.memoryNote}</Text>
+          <Box flexDirection="row" gap={1} flexShrink={0}>
+            <Link href={caught.link} label={COPY.bandConsole} />
+            <Button key="band-hide" label="✕" role="dismiss" plain dimColor onPress={() => update($, band, (): PaneBand => null)} />
+          </Box>
+        </Box>
+      )
+    }
+
+    const current = await readSnapshot($)
+    const now = await $.clock.now()
+    const offset = zoneOffset(now)
+    const stuck = current.running.filter(item => item.isStuck).length
+    const pair = (name: string, value: string, color: 'inactive' | 'warning' | 'suggestion') => [
+      <Text color="subtle">{` · ${name} `}</Text>,
+      <Text color={color}>{value}</Text>,
+    ]
+    const counts = [
+      ...pair(COPY.bandWaiting, String(current.waiting.length), current.waiting.length > 0 ? 'warning' : 'inactive'),
+      ...pair(COPY.bandRunning, String(current.running.length), current.running.length > 0 ? 'suggestion' : 'inactive'),
+      ...(stuck > 0 ? [<Text color="warning">{COPY.bandStuck(stuck)}</Text>] : []),
+    ]
+    let segments: unknown[]
+    switch (current.connection) {
+      case 'connecting':
+        segments = [<Text color="subtle">{` · ${COPY.connecting}`}</Text>]
+        break
+      case 'not-allowed':
+        segments = [<Text color="subtle">{' · '}</Text>, <Text color="warning">{COPY.bandNotAllowed}</Text>, <Text color="subtle">{` · ${COPY.bandNotAllowedHint}`}</Text>]
+        break
+      case 'no-server':
+        segments = [<Text color="subtle">{' · '}</Text>, <Text color="warning">{COPY.bandNoServer}</Text>, <Text color="subtle">{` · ${COPY.bandNoServerHint}`}</Text>]
+        break
+      case 'refused':
+        segments = [<Text color="subtle">{' · '}</Text>, <Text color="error">{COPY.bandRefused}</Text>]
+        break
+      case 'error':
+        segments = [<Text color="subtle">{' · '}</Text>, <Text color="error">{COPY.bandError}</Text>]
+        break
+      case 'unreachable':
+        segments = [
+          <Text color="subtle">{' · '}</Text>,
+          <Text color="warning">{COPY.disconnected(current.failingSince === null ? '?' : clock(new Date(current.failingSince).toISOString(), offset) ?? '?')}</Text>,
+          ...pair(COPY.bandWaiting, String(current.waiting.length), 'inactive'),
+          ...pair(COPY.bandRunning, String(current.running.length), 'inactive'),
+          <Text color="subtle">{` · ${COPY.bandRetrying}`}</Text>,
+        ]
+        break
+      default:
+        segments = current.paused !== null
+          ? [
+              ...pair(COPY.bandLeader, COPY.bandPaused(current.pausedSince), 'warning'),
+              ...pair(COPY.bandWaiting, String(current.waiting.length), current.waiting.length > 0 ? 'warning' : 'inactive'),
+              ...pair(COPY.bandQueued, String(current.queued.length), 'inactive'),
+            ]
+          : [
+              ...counts,
+              ...pair(COPY.bandQueued, String(current.queued.length), 'inactive'),
+              ...(current.alerts > 0 ? [<Text color="warning">{COPY.bandAlerts(current.alerts)}</Text>] : []),
+            ]
+    }
+
+    return (
+      <Box width="100%" flexDirection="row" justifyContent="space-between" gap={1}>
+        <Box flexGrow={1} flexShrink={1}>
+          <Text wrap="truncate-end">
+            <Text color="inactive">{COPY.title}</Text>
+            {segments}
+          </Text>
+        </Box>
+        <Button key="band-open" label={COPY.bandOpen} plain dimColor onPress={() => reopenPane($)} />
       </Box>
     )
   })
 
+  // THE PANE: tabs, then the screen on top of the stack.
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const elements = $.ui.resolve(e)
     const { Box, Text, Button, Link, Markdown } = elements
     const hasInput = e.surface !== 'mobile' && 'Input' in elements
-    const current = await read($, snapshot)
-    const screen = await read($, view)
+    const current = await readSnapshot($)
+    const stack = stackOf(await read($, view))
+    const screen = stack[stack.length - 1] ?? QUEUE
+    const tab = stack[0]?.screen ?? 'queue'
+    const shown = await read($, open)
     const now = await $.clock.now()
     const base = await baseUrl($)
     const offset = zoneOffset(now)
+    const at = (moment: number | null) => (moment === null ? '?' : clock(new Date(moment).toISOString(), offset) ?? '?')
     const age = current.fetchedAt === null ? null : COPY.ago(Math.max(0, Math.round((now - current.fetchedAt) / 1000)))
+    const isStale = current.connection === 'unreachable'
+    const stale = isStale ? COPY.stale : ''
+    const go = (target: PaneScreen) => show($, target, false)
+    const cardOf = (key: string, title: unknown, hint: string | null, children: unknown[]) => card(elements, key, title, hint, children, e.surface !== 'terminal')
 
-    const top = (
-      <Box key="top" flexDirection="row" gap={1}>
-        <Text bold>{COPY.title}</Text>
-        <Text color={current.connection === 'ok' ? 'success' : 'warning'}>{current.connection === 'connecting' ? COPY.connecting : age ?? ''}</Text>
-        <Button key="refresh" label={COPY.refresh} onPress={() => tick($, false)} />
-        <Button key="open-memory" label={COPY.memory} onPress={async () => { await $.ui.open({ id: MEMORY_PANE, title: COPY.memoryTitle }); await openMemory($) }} />
+    const tabButton = (key: string, label: string, target: PaneScreen, isSelected: boolean) => (
+      <Button key={key} label={isSelected ? COPY.selected(label) : label} variant={isSelected ? 'primary' : undefined} dimColor={!isSelected} onPress={() => show($, target, true)} />
+    )
+    const tabs = (
+      <Box key="tabs" flexDirection="row" gap={1} flexWrap="wrap">
+        {tabButton('tab-queue', COPY.tabQueue, QUEUE, tab === 'queue')}
+        {tabButton('tab-goals', COPY.tabGoals, { screen: 'goals' }, tab === 'goals')}
+        {tabButton('tab-bell', COPY.tabBell(current.notices), { screen: 'bell' }, tab === 'bell')}
+        {tabButton('tab-memory', COPY.tabMemory, { screen: 'memory' }, tab === 'memory')}
+        {tabButton('tab-status', COPY.tabStatus(hasProblem(current)), { screen: 'status' }, tab === 'status')}
+      </Box>
+    )
+    const context = (
+      <Box key="context" flexDirection="row" justifyContent="space-between" gap={1}>
+        <Link href={base === '' ? 'https://' : base} label={hostName(base)} />
+        <Box flexDirection="row" gap={1}>
+          <Text color={isStale ? 'warning' : 'subtle'}>
+            {screen.screen === 'memory'
+              ? COPY.memoryContext
+              : current.connection === 'connecting' ? COPY.connecting : isStale ? COPY.disconnected(at(current.failingSince)) : COPY.connected(age ?? '')}
+          </Text>
+          <Button key="refresh" label={COPY.refresh} dimColor onPress={async () => { await tick($, false); await load($, screen) }} />
+        </Box>
+      </Box>
+    )
+    const footer = <Text key="footer" color="subtle">{COPY.footer}</Text>
+    const reason = (problem: string | null) => (problem === null ? null : <Text color="subtle" wrap="truncate-end">{COPY.reason(problem)}</Text>)
+    const retry = <Button key="retry" label={COPY.retry} onPress={() => tick($, true)} />
+    const steps = (lines: readonly string[]) => (
+      <Box flexDirection="column">
+        <Text bold>{COPY.howToFix}</Text>
+        {lines.map((line, index) => <Text key={`step-${index}`} color="inactive">{COPY.fixStep(index + 1, line)}</Text>)}
       </Box>
     )
 
+    // THE STATES THAT ARE NOT A QUEUE: what happened, why, and the step that fixes it.
+    let problemCard: unknown = null
+
     if (current.connection === 'no-server') {
-      return (
-        <Box flexDirection="column" gap={1}>
-          {top}
-          <Text>{COPY.noServerTitle}</Text>
-          <Markdown text={'`' + COPY.noServerCommand + '`'} />
-          <Text dimColor>{COPY.noServerNoToken}</Text>
-          <Button key="retry" label={COPY.retry} onPress={() => tick($, true)} />
-        </Box>
-      )
+      problemCard = cardOf('problem', COPY.noServerTitle, null, [
+        <Text color="inactive">{COPY.noServerBody}</Text>,
+        <Markdown text={'`' + COPY.noServerCommand + '`'} />,
+        steps(COPY.fixNoServer),
+        retry,
+      ])
+    } else if (current.connection === 'not-allowed') {
+      problemCard = cardOf('problem', <Text bold color="warning">{COPY.notAllowedTitle}</Text>, COPY.notAllowedHint, [
+        <Text color="inactive">{COPY.notAllowedBody}</Text>,
+        reason(current.problem),
+        steps(COPY.fixNotAllowed),
+        <Markdown text={allowRules()} />,
+        retry,
+      ])
+    } else if (current.connection === 'refused') {
+      problemCard = cardOf('problem', <Text bold color="warning">{COPY.refusedTitle}</Text>, null, [
+        <Text color="inactive">{COPY.refusedBody}</Text>,
+        reason(current.problem),
+        steps(COPY.fixRefused),
+        retry,
+      ])
+    } else if (current.connection === 'error') {
+      problemCard = cardOf('problem', <Text bold color="warning">{COPY.errorTitle}</Text>, null, [
+        <Text color="inactive">{COPY.errorBody}</Text>,
+        reason(current.problem),
+        steps(COPY.fixError),
+        <Link href={consoleLink(base, 'health')} label={COPY.health} />,
+        retry,
+      ])
+    } else if (isStale) {
+      problemCard = cardOf('problem', <Text bold color="warning">{COPY.unreachableTitle}</Text>, COPY.unreachableWhen(at(current.failingSince)), [
+        <Text color="inactive">{COPY.unreachableBody(at(current.fetchedAt))}</Text>,
+        reason(current.problem),
+        steps(COPY.fixUnreachable(base)),
+        <Text color="subtle">{COPY.unreachableFix}</Text>,
+        retry,
+      ])
     }
 
     if (current.connection === 'connecting') {
       return (
         <Box flexDirection="column" gap={1}>
-          {top}
-          <Text dimColor>{COPY.connecting}</Text>
+          {tabs}
+          {context}
+          {footer}
         </Box>
       )
     }
 
-    if (current.connection === 'refused' || current.connection === 'error') {
+    // THE STATUS TAB: the machine, its slots and cost, every problem with how to fix it, and where to look.
+    if (screen.screen === 'status') {
+      const health = healthOf(current, offset)
+      const state = stateWord(health)
+      const bellState = await read($, bell)
+      const pausedCard = current.paused === null ? null : cardOf('problem-paused', <Text bold color="warning">{COPY.pausedTitle}</Text>, current.pausedSince === null ? null : COPY.statusSince(current.pausedSince), [
+        <Text color="inactive">{current.paused}</Text>,
+        steps(COPY.fixPaused),
+        <Link href={consoleLink(base, 'work')} label={COPY.resumeInConsole} />,
+      ])
+      const alertCards = current.alertNotices.map(notice =>
+        cardOf(`problem-alert-${notice.id}`, <Text bold color="warning">{notice.title}</Text>, COPY.alertHint(notice.source, notice.when), [
+          notice.body === '' ? null : <Text color="inactive">{notice.body}</Text>,
+          <Text color="subtle">{COPY.fixAlert}</Text>,
+          <Link href={notice.link === null ? consoleLink(base, 'bell') : `${base}${notice.link}`} label={COPY.bellInConsole} />,
+        ]))
+      const problems = [problemCard, pausedCard, ...alertCards].filter(item => item !== null)
+
       return (
         <Box flexDirection="column" gap={1}>
-          {top}
-          <Text bold color="error">{current.connection === 'refused' ? COPY.refusedHeading : COPY.errorHeading}</Text>
-          <Text>{current.connection === 'refused' ? COPY.refusedBody : COPY.errorBody(current.problem ?? '?')}</Text>
-          <Button key="retry" label={COPY.retry} onPress={() => tick($, true)} />
-        </Box>
-      )
-    }
-
-    const isStale = current.connection === 'unreachable'
-
-    if (screen.screen === 'story' && !isStale) {
-      const shown = await read($, story)
-
-      return (
-        <Box flexDirection="column" gap={1}>
-          <Box flexDirection="row" gap={1}>
-            <Button key="back" label={COPY.back} onPress={() => update($, view, (): PaneView => ({ screen: 'queue' }))} />
-            <Text dimColor>{age ?? ''}</Text>
-          </Box>
-          {shown === null || shown.story !== screen.story ? (
-            <Text dimColor>{COPY.connecting}</Text>
-          ) : (
-            <Box flexDirection="column" gap={1}>
-              <Text bold>{shown.title}</Text>
-              <Text dimColor>{shown.meta}</Text>
-              <Text>{shown.step}</Text>
-              <Text>{bar(shown.fraction)} {shown.cost}</Text>
-              {shown.question !== null && (
-                <Box flexDirection="column">
-                  <Text color="warning">{COPY.questionFromRun}</Text>
-                  <Text>{shown.question}</Text>
-                  {shown.questionLink !== null && <Link href={shown.questionLink} label={COPY.answerInConsole} />}
-                </Box>
-              )}
-              <Box flexDirection="row" gap={1}>
-                <Button key="summarise" label={COPY.summariseInSession} onPress={() => $.prompt.submit({ text: COPY.summarisePrompt(screen.story) })} />
-                <Link href={consoleLink(base, `work&story=${screen.story}`)} label={COPY.inConsole} />
+          {tabs}
+          {cardOf('status-machine', COPY.statusMachine, null, [
+            <Box flexDirection="row" justifyContent="space-between" gap={1}>
+              <Box flexDirection="row">
+                <Text bold color={state.tone}>{state.word}</Text>
+                {health.failingSince !== null && current.connection !== 'ok' && <Text color="subtle">{` · ${COPY.statusSince(health.failingSince)}`}</Text>}
+                {current.connection === 'ok' && current.pausedSince !== null && <Text color="subtle">{` · ${COPY.statusSince(current.pausedSince)}`}</Text>}
               </Box>
-              <Text dimColor>{COPY.summariseNote}</Text>
-            </Box>
-          )}
+              <Button key="status-refresh" label={COPY.refresh} dimColor onPress={async () => { await tick($, true); await loadBell($) }} />
+            </Box>,
+            <Text color="subtle">{COPY.statusLastAnswer(current.fetchedAt === null ? null : at(current.fetchedAt))}</Text>,
+          ])}
+          {cardOf('status-slots', COPY.statusSlots, COPY.statusSlotsHint, [
+            <Text>{COPY.statusSlotsLine(current.slotsUsed, current.slots)}</Text>,
+            current.running.length === 0 ? quiet(elements, COPY.nothingRunning) : null,
+            ...current.running.map(item =>
+              row(elements, {
+                key: `status-story-${item.story}`,
+                kind: item.isStuck ? COPY.kindStuck : item.isVerifying ? COPY.verifying : COPY.kindRunning,
+                kindTone: item.isStuck ? 'warning' : 'subtle',
+                title: item.title,
+                detail: item.detail,
+                onPress: () => go({ screen: 'story', story: item.story }),
+              })),
+          ])}
+          {cardOf('status-cost', COPY.statusCost, null, [
+            <Text>{COPY.statusToday(current.runningUsd, current.dayBudget)}</Text>,
+            bellState.metrics.length === 0 ? null : (
+              <Text>
+                <Text color="subtle">{`${COPY.statusMonth} `}</Text>
+                <Text color="inactive">{bellState.metrics.map(metric => `${metric.value} ${metric.label}`).join(' · ')}</Text>
+              </Text>
+            ),
+          ])}
+          {cardOf('status-problems', <Text bold>{COPY.statusProblems}<Text color={problems.length > 0 ? 'warning' : 'inactive'}>{COPY.count(problems.length)}</Text></Text>, null, [
+            problems.length === 0 ? quiet(elements, COPY.nothingWrong) : null,
+          ])}
+          {problems}
+          {cardOf('status-diagnostics', <Text bold color="subtle">{COPY.statusDiagnostics}</Text>, null, [
+            <Text color="subtle">{COPY.diagnosticsVersion(MOD_VERSION)}</Text>,
+            <Text color="subtle">{COPY.diagnosticsUrl(base)}</Text>,
+            <Text color="subtle">{COPY.diagnosticsServer(current.server)}</Text>,
+            <Text color="subtle">{COPY.diagnosticsDebug}</Text>,
+          ])}
+          {footer}
         </Box>
       )
     }
 
+    if (problemCard !== null && !isStale) {
+      return (
+        <Box flexDirection="column" gap={1}>
+          {tabs}
+          {context}
+          {problemCard}
+          {footer}
+        </Box>
+      )
+    }
+
+    const backButton = <Button key="back" label={backLabel(stack)} dimColor onPress={() => back($)} />
+
+    // ONE STORY: progress, phases, the run's question, environment, verdict, criteria, what happened.
+    if (screen.screen === 'story') {
+      const shownStory = await read($, story)
+
+      if (shownStory === null || shownStory.story !== screen.story) {
+        return (
+          <Box flexDirection="column" gap={1}>
+            {backButton}
+            {quiet(elements, COPY.storyLoading)}
+          </Box>
+        )
+      }
+
+      if (shownStory.phase === 'error') {
+        return (
+          <Box flexDirection="column" gap={1}>
+            {backButton}
+            {cardOf('story-error', <Text bold color="warning">{COPY.storyError}</Text>, `#${screen.story}`, [reason(shownStory.sentence)])}
+            {footer}
+          </Box>
+        )
+      }
+
+      const criteriaOpen = shown.includes(`criteria-${shownStory.story}`)
+      const timelineOpen = shown.includes(`timeline-${shownStory.story}`)
+      const done = shownStory.phases.filter(item => item.status === 'done').length
+
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Box key="story-top" flexDirection="row" justifyContent="space-between">
+            {backButton}
+            <Text color={shownStory.stateTone}>{shownStory.stateText}</Text>
+          </Box>
+          <Box key="story-head" flexDirection="column">
+            <Text bold>{shownStory.title}</Text>
+            <Text color="subtle" wrap="truncate-end">{shownStory.meta}</Text>
+          </Box>
+          {shownStory.step !== null && cardOf('story-progress', COPY.progress, null, [
+            <Text>{shownStory.step}</Text>,
+            shownStory.fraction === null ? null : <Text color="suggestion">{bar(shownStory.fraction)}</Text>,
+            <Text color="inactive">{shownStory.cost}</Text>,
+          ])}
+          {cardOf('story-phases', COPY.phases, COPY.phasesHint(done, shownStory.phases.length), [
+            ...shownStory.phases.map((item, index) => (
+              <Box key={`phase-${index}`} flexDirection="row" justifyContent="space-between" gap={1}>
+                <Text>
+                  <Text color={item.status === 'done' ? 'success' : item.status === 'now' ? 'suggestion' : 'subtle'}>{item.status === 'done' ? '✓ ' : item.status === 'now' ? '● ' : '○ '}</Text>
+                  <Text color={item.status === 'next' ? 'subtle' : 'text'}>{item.label}</Text>
+                </Text>
+                <Text color="subtle" wrap="truncate-end">{item.detail}</Text>
+              </Box>
+            )),
+            <Text color="subtle">{COPY.nowWorkingNote}</Text>,
+          ])}
+          {shownStory.question !== null && cardOf('story-question', <Text bold color="warning">{COPY.questionFromRun}</Text>, COPY.waitsOnYou, [
+            <Text>{shownStory.question.text}</Text>,
+            <Box flexDirection="row" gap={1}>
+              <Button key="story-answer" label={COPY.answer} onPress={() => go({ screen: 'question', question: shownStory.question?.id ?? 0 })} />
+              <Link href={consoleLink(base, `question&question=${shownStory.question.id}`)} label={COPY.answerInConsole} />
+            </Box>,
+          ])}
+          {shownStory.environment !== null && cardOf('story-environment', COPY.environment(shownStory.environment.name), null, [
+            shownStory.environment.url === null ? null : <Link href={shownStory.environment.url} label={`${shownStory.environment.url} ↗`} />,
+          ])}
+          {shownStory.verdict !== null && cardOf('story-verdict', <Text bold color={shownStory.verdict.isGreen ? 'success' : 'warning'}>{COPY.verdict}</Text>, COPY.verdictHint(shownStory.verdict.commit), [
+            ...shownStory.verdict.checks.map((check, index) => (
+              <Box key={`check-${index}`} flexDirection="row" justifyContent="space-between" gap={1}>
+                <Text>
+                  <Text color={check.isPass ? 'success' : 'error'}>{check.isPass ? '✓ ' : '✗ '}</Text>
+                  <Text>{check.name}</Text>
+                </Text>
+                <Text color="subtle" wrap="truncate-end">{check.detail}</Text>
+              </Box>
+            )),
+            shownStory.overrun.length === 0 ? null : (
+              <Text key="overrun">
+                <Text color="warning">{`! ${COPY.overrun} `}</Text>
+                <Text color="warning">{`${shownStory.overrun.length} · ${shownStory.overrun.join(', ')}`}</Text>
+              </Text>
+            ),
+          ])}
+          {shownStory.criteria.length > 0 && cardOf('story-criteria', COPY.criteria, COPY.criteriaHint(shownStory.criteria.length), [
+            ...(criteriaOpen ? shownStory.criteria : shownStory.criteria.slice(0, CRITERIA_SHOWN)).map((criterion, index) => (
+              <Text key={`criterion-${index}`} color="inactive" wrap={criteriaOpen ? 'wrap' : 'truncate-end'}>{`· ${criterion}`}</Text>
+            )),
+            shownStory.criteria.length > CRITERIA_SHOWN ? (
+              <Button key="criteria-more" plain dimColor label={criteriaOpen ? COPY.less : COPY.more(shownStory.criteria.length - CRITERIA_SHOWN)} onPress={() => toggle($, `criteria-${shownStory.story}`)} />
+            ) : null,
+          ])}
+          {shownStory.timeline.length > 0 && cardOf('story-timeline', COPY.timeline, COPY.timelineHint, [
+            ...(timelineOpen ? shownStory.timeline : shownStory.timeline.slice(0, TIMELINE_SHOWN)).map((event, index) => (
+              <Text key={`event-${index}`} wrap="truncate-end">
+                <Text color="subtle">{`${event.time} `}</Text>
+                <Text color="inactive">{`${event.actor} `}</Text>
+                <Text>{event.summary}</Text>
+              </Text>
+            )),
+            shownStory.timeline.length > TIMELINE_SHOWN ? (
+              <Button key="timeline-more" plain dimColor label={timelineOpen ? COPY.less : COPY.more(shownStory.timeline.length - TIMELINE_SHOWN)} onPress={() => toggle($, `timeline-${shownStory.story}`)} />
+            ) : null,
+          ])}
+          <Box key="story-actions" flexDirection="row" gap={1} flexWrap="wrap">
+            <Button key="summarise" label={COPY.summariseInSession} onPress={() => $.prompt.submit({ text: COPY.summarisePrompt(screen.story) })} />
+            {shownStory.goal !== null && <Button key="story-goal" label={COPY.goalOf(shownStory.goal)} dimColor onPress={() => go({ screen: 'goal', goal: shownStory.goal ?? 0 })} />}
+            {shownStory.isVerified && <Link href={consoleLink(base, `merge&story=${shownStory.story}`)} label={COPY.mergeInConsole} />}
+            {shownStory.isVerified && <Link href={consoleLink(base, `merge&story=${shownStory.story}`)} label={COPY.returnInConsole} />}
+            {shownStory.pullRequest !== null && <Link href={shownStory.pullRequest.url} label={shownStory.pullRequest.label} />}
+            {shownStory.isRunning && <Link href={consoleLink(base, `work&story=${shownStory.story}`)} label={COPY.stopInConsole} />}
+            <Link href={consoleLink(base, `work&story=${shownStory.story}`)} label={COPY.storyInConsole} />
+          </Box>
+          <Text key="story-note" color="subtle">{COPY.summariseNote}</Text>
+          {footer}
+        </Box>
+      )
+    }
+
+    // A QUESTION OF THE LEADER'S: its choices to press, an answer to type, question_answer to send it.
+    if (screen.screen === 'question') {
+      const form = await read($, answer)
+      const question = current.questions.find(item => item.id === screen.question) ?? null
+      const index = current.questions.findIndex(item => item.id === screen.question)
+      const next = current.questions.find((item, position) => position > index && item.id !== screen.question) ?? current.questions.find(item => item.id !== screen.question) ?? null
+
+      if (form === null || form.question !== screen.question) {
+        return (
+          <Box flexDirection="column" gap={1}>
+            {backButton}
+            {quiet(elements, COPY.loading)}
+          </Box>
+        )
+      }
+
+      if (question === null && form.phase === 'form') {
+        return (
+          <Box flexDirection="column" gap={1}>
+            {backButton}
+            {quiet(elements, COPY.questionGone)}
+            {footer}
+          </Box>
+        )
+      }
+
+      const choices = question === null ? [] : questionChoices(question.text)
+
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Box key="question-top" flexDirection="row" justifyContent="space-between">
+            {backButton}
+            {index >= 0 && <Text color="warning">{COPY.questionOf(index + 1, current.questions.length)}</Text>}
+          </Box>
+          {question !== null && cardOf('question', question.about, COPY.questionMeta(question.subjectLabel, clock(question.askedAt, offset)), [
+            <Text>{question.text}</Text>,
+            choices.length === 0 ? null : (
+              <Box key="choices" flexDirection="row" gap={1} flexWrap="wrap">
+                {choices.map((choice, position) => (
+                  <Button
+                    key={`choice-${position}`}
+                    label={form.choice === choice ? COPY.selected(choice) : choice}
+                    variant={form.choice === choice ? 'primary' : undefined}
+                    dimColor={form.choice !== choice}
+                    onPress={() => update($, answer, (value: PaneAnswer | null): PaneAnswer | null => (value === null ? null : { ...value, choice, text: value.text === '' || value.text === value.choice ? choice : value.text }))}
+                  />
+                ))}
+              </Box>
+            ),
+            form.phase === 'form' && hasInput && 'Input' in elements ? (
+              <elements.Input key="answer-text" label={COPY.answerLabel} value={form.text} onInput={value => update($, answer, (state: PaneAnswer | null): PaneAnswer | null => (state === null ? null : { ...state, text: value }))} onSubmit={() => sendAnswer($)} />
+            ) : null,
+            form.phase === 'form' ? (
+              <Box key="answer-actions" flexDirection="row" gap={1} flexWrap="wrap">
+                <Button key="answer-send" label={COPY.answerSend} variant="primary" onPress={() => sendAnswer($)} />
+                <Button key="answer-discuss" label={COPY.discussInSession} dimColor onPress={() => $.prompt.submit({ text: COPY.discussPrompt(question?.id ?? 0, question?.text ?? '') })} />
+              </Box>
+            ) : null,
+            form.phase === 'sending' ? quiet(elements, COPY.answerSending) : null,
+          ])}
+          {(form.phase === 'answered' || form.phase === 'refused') && cardOf('answer-result', form.phase === 'answered' ? <Text bold color="success">{COPY.answered(form.sentence ?? '')}</Text> : <Text bold color="error">{COPY.notAnswered}</Text>, null, [
+            form.phase === 'answered' ? <Text color="inactive">{COPY.answeredNote}</Text> : reason(form.sentence),
+            form.phase === 'refused' ? <Button key="answer-retry" label={COPY.editAndRetry} onPress={() => update($, answer, (state: PaneAnswer | null): PaneAnswer | null => (state === null ? null : { ...state, phase: 'form' }))} /> : null,
+            next !== null && form.phase === 'answered' ? <Button key="answer-next" label={COPY.nextQuestion} onPress={() => show($, { screen: 'question', question: next.id }, false)} /> : null,
+          ])}
+          <Link key="answer-console" href={consoleLink(base, `question&question=${screen.question}`)} label={COPY.answerInConsole} />
+          <Text key="answer-note" color="subtle">{COPY.answerNote}</Text>
+          {footer}
+        </Box>
+      )
+    }
+
+    // THE ADD FORM: one task for the leader; the plan it becomes is approved in the console.
     if (screen.screen === 'add' && !isStale && hasInput) {
       const form = await read($, add)
 
@@ -702,7 +1441,7 @@ export const register: Register = on => {
         return (
           <Box flexDirection="column" gap={1}>
             <Text bold>{COPY.newTask}</Text>
-            <Text dimColor>{form.title}</Text>
+            <Text color="subtle">{form.title}</Text>
             <Text>{COPY.sending}</Text>
           </Box>
         )
@@ -714,9 +1453,9 @@ export const register: Register = on => {
             <Text bold color="success">{COPY.added}</Text>
             <Text>{form.sentence ?? ''}</Text>
             {form.link !== null && <Link href={form.link} label={COPY.approveInConsole} />}
-            <Text dimColor>{COPY.addedNote}</Text>
+            <Text color="subtle">{COPY.addedNote}</Text>
             <Button key="add-next" label={COPY.nextTask} onPress={() => openAdd($, '')} />
-            <Button key="back" label={COPY.back} onPress={() => update($, view, (): PaneView => ({ screen: 'queue' }))} />
+            {backButton}
           </Box>
         )
       }
@@ -727,19 +1466,20 @@ export const register: Register = on => {
             <Text bold color={form.phase === 'paused' ? 'warning' : 'error'}>{form.phase === 'paused' ? COPY.added : COPY.notAdded}</Text>
             <Text>{form.sentence ?? ''}</Text>
             <Button key="add-retry" label={COPY.editAndRetry} variant="primary" onPress={() => update($, add, (value: PaneAdd): PaneAdd => ({ ...value, phase: 'form' }))} />
-            <Button key="back" label={COPY.back} onPress={() => update($, view, (): PaneView => ({ screen: 'queue' }))} />
+            {backButton}
           </Box>
         )
       }
 
       return (
         <Box flexDirection="column" gap={1}>
+          {backButton}
           <Text bold>{COPY.newTask}</Text>
           {'Input' in elements && (
             <elements.Input key="add-title" label={COPY.whatToDo} value={form.title} onInput={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, title: value }))} onSubmit={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, title: value }))} />
           )}
           {'Input' in elements && (
-            <elements.Input key="add-criteria" label={COPY.criteria} placeholder={COPY.criteriaPlaceholder} value={form.criteria} onInput={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, criteria: value }))} onSubmit={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, criteria: value }))} />
+            <elements.Input key="add-criteria" label={COPY.criteriaLabel} placeholder={COPY.criteriaPlaceholder} value={form.criteria} onInput={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, criteria: value }))} onSubmit={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, criteria: value }))} />
           )}
           {'Select' in elements && form.goals.length > 0 && (
             <elements.Select key="add-goal" label={COPY.goal} value={form.goal} options={form.goals} onSelect={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, goal: value }))} />
@@ -748,93 +1488,427 @@ export const register: Register = on => {
           {'Select' in elements && (
             <elements.Select key="add-after" label={COPY.afterLabel} value={form.after} options={form.stories} onSelect={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, after: value }))} />
           )}
-          <Text dimColor>{COPY.quickTaskNote}</Text>
+          <Text color="subtle">{COPY.quickTaskNote}</Text>
           <Box flexDirection="row" gap={1}>
-            <Button key="add-cancel" label={COPY.cancel} onPress={() => update($, view, (): PaneView => ({ screen: 'queue' }))} />
             <Button key="add-send" label={COPY.handOver} variant="primary" onPress={() => sendTask($)} />
+            <Button key="add-cancel" label={COPY.cancel} dimColor onPress={() => back($)} />
           </Box>
         </Box>
       )
     }
 
-    // THE QUEUE: waiting for you, running, queued or held, done today.
-    const stale = isStale ? COPY.stale : ''
-    const isEmpty = current.waiting.length + current.running.length + current.queued.length + current.doneToday.length === 0
+    // THE MEMORY TAB: the rules the machine enforces, the leader's memory as stored, the proposals waiting.
+    if (screen.screen === 'memory') {
+      const state = await readMemory($)
+      const memoryLink = consoleLink(base, 'memory')
+
+      if (state.phase === 'loading') {
+        return (
+          <Box flexDirection="column" gap={1}>
+            {tabs}
+            {quiet(elements, COPY.memoryLoading)}
+          </Box>
+        )
+      }
+
+      if (state.phase === 'error') {
+        return (
+          <Box flexDirection="column" gap={1}>
+            {tabs}
+            {context}
+            {cardOf('mem-error', <Text bold color="warning">{COPY.memoryError}</Text>, null, [
+              reason(state.sentence ?? '?'),
+              <Button key="mem-retry" label={COPY.retry} onPress={() => openMemory($)} />,
+            ])}
+            {footer}
+          </Box>
+        )
+      }
+
+      const edit = state.edit
+      const startEdit = (action: 'add' | 'replace' | 'remove', file: string, oldText: string | null) =>
+        update($, memory, (value: PaneMemory): PaneMemory => ({ ...value, phase: 'editing', sentence: null, edit: { action, file, oldText, text: action === 'replace' ? oldText ?? '' : '', why: '' } }))
+      const isEditing = (file: string, oldText: string | null, action: string) =>
+        edit !== null && edit.file === file && edit.oldText === oldText && edit.action === action
+      const choice = (key: string, label: string, isChosen: boolean, onPress: () => unknown) => (
+        <Button key={key} label={isChosen ? COPY.selected(label) : label} variant={isChosen ? 'primary' : undefined} dimColor={!isChosen} onPress={onPress} />
+      )
+
+      // The form under the entry it changes: text, why, then Propose; after it, the answer and the console's link.
+      const form = (file: string) => {
+        if (edit === null || edit.file !== file) {
+          return null
+        }
+
+        return (
+          <Box key={`mem-form-${file}`} flexDirection="column" gap={1}>
+            {state.phase === 'editing' && hasInput && 'Input' in elements && edit.action !== 'remove' && (
+              <elements.Input key="mem-text" label={COPY.memoryText} value={edit.text} onInput={value => update($, memory, (value_: PaneMemory): PaneMemory => ({ ...value_, edit: value_.edit === null ? null : { ...value_.edit, text: value } }))} onSubmit={() => undefined} />
+            )}
+            {state.phase === 'editing' && hasInput && 'Input' in elements && (
+              <elements.Input key="mem-why" label={COPY.memoryWhy} value={edit.why} onInput={value => update($, memory, (value_: PaneMemory): PaneMemory => ({ ...value_, edit: value_.edit === null ? null : { ...value_.edit, why: value } }))} onSubmit={() => proposeMemory($)} />
+            )}
+            {state.phase === 'editing' && (
+              <Box flexDirection="row" gap={1}>
+                <Button key="mem-propose" label={COPY.memoryPropose} variant="primary" onPress={() => proposeMemory($)} />
+                <Button key="mem-cancel" label={COPY.cancel} dimColor onPress={() => update($, memory, (value: PaneMemory): PaneMemory => ({ ...value, phase: 'ok', edit: null }))} />
+              </Box>
+            )}
+            {state.phase === 'sending' && quiet(elements, COPY.memorySending)}
+            {(state.phase === 'proposed' || state.phase === 'refused') && (
+              <Box flexDirection="column">
+                <Text color={state.phase === 'refused' ? 'error' : 'success'}>{state.sentence ?? ''}</Text>
+                <Link href={memoryLink} label={COPY.memoryConfirmInConsole} />
+                <Button key="mem-back" label={COPY.memoryBack} dimColor onPress={() => openMemory($)} />
+              </Box>
+            )}
+            {state.phase === 'editing' && <Text color="inactive">{COPY.memoryNote}</Text>}
+          </Box>
+        )
+      }
+
+      return (
+        <Box flexDirection="column" gap={1}>
+          {tabs}
+          {context}
+          {state.rules.length > 0 && cardOf('mem-rules', COPY.memoryRules, COPY.memoryRulesHint(state.rules.length), state.rules.map((rule, index) =>
+            row(elements, {
+              key: `mem-rule-${index}`,
+              kind: null,
+              title: rule.rule,
+              detail: rule.enforcedBy,
+              onPress: () => toggle($, `mem-rule-${index}`),
+              body: shown.includes(`mem-rule-${index}`) ? <Text color="inactive">{`${rule.rule} · ${rule.artefact}`}</Text> : null,
+            })))}
+          {state.files.length === 0 && cardOf('mem-empty', COPY.memoryFiles, null, [quiet(elements, COPY.memoryEmpty)])}
+          {state.files.map((file, fileIndex) =>
+            card(
+              elements,
+              `mem-file-${fileIndex}`,
+              file.heading,
+              file.text !== null ? COPY.memoryTopic : COPY.memoryEntries(file.file, file.entries.length),
+              [
+                ...file.entries.map((entry, entryIndex) => (
+                  <Box key={`mem-entry-${fileIndex}-${entryIndex}`} flexDirection="row" justifyContent="space-between" gap={1}>
+                    <Box flexShrink={1}>
+                      <Text>{entry}</Text>
+                    </Box>
+                    <Box flexDirection="row" gap={1} flexShrink={0}>
+                      {choice(`mem-edit-${fileIndex}-${entryIndex}`, COPY.memoryEdit, isEditing(file.file, entry, 'replace'), () => startEdit('replace', file.file, entry))}
+                      {choice(`mem-remove-${fileIndex}-${entryIndex}`, COPY.memoryRemove, isEditing(file.file, entry, 'remove'), () => startEdit('remove', file.file, entry))}
+                    </Box>
+                  </Box>
+                )),
+                ...(file.text === null
+                  ? [choice(`mem-add-${fileIndex}`, COPY.memoryAdd, isEditing(file.file, null, 'add'), () => startEdit('add', file.file, null))]
+                  : [
+                      row(elements, {
+                        key: `mem-topic-${fileIndex}`,
+                        kind: shown.includes(`mem-topic-${fileIndex}`) ? '▾' : '▸',
+                        title: firstLine(file.text),
+                        onPress: () => toggle($, `mem-topic-${fileIndex}`),
+                        body: shown.includes(`mem-topic-${fileIndex}`) ? <Text color="inactive">{file.text}</Text> : null,
+                      }),
+                    ]),
+                form(file.file),
+              ],
+            ))}
+          {cardOf('mem-pending', COPY.memoryPendingHeading, null, state.pending > 0
+            ? [<Text><Text color="warning">{COPY.memoryPending(state.pending)}</Text><Text color="inactive">{COPY.memoryPendingWhere}</Text></Text>, <Link href={memoryLink} label={COPY.memoryConfirmInConsole} />]
+            : [quiet(elements, COPY.nothingYet)])}
+          {cardOf('mem-proposed', COPY.memoryProposedHeading, null, state.proposed.length === 0
+            ? [quiet(elements, COPY.nothingYet)]
+            : state.proposed.slice().reverse().map((line, position) => <Text key={`mem-proposed-${position}`} color="inactive" wrap="truncate-end">{line}</Text>))}
+          {footer}
+        </Box>
+      )
+    }
+
+    const goalsState = await read($, goals)
+
+    // ONE PLAN: its stories in order, each opening the story; approval and rethinking are the console's.
+    const planCard = (plan: (typeof goalsState.plans)[number]) =>
+      cardOf(`plan-${plan.id}`, <Text bold>{COPY.plan(plan.id)}<Text color="subtle">{` · ${plan.goalTitle}`}</Text></Text>, plan.stateText, [
+        ...plan.stories.map(item =>
+          row(elements, {
+            key: `plan-${plan.id}-story-${item.id}`,
+            kind: String(item.index),
+            title: item.title,
+            detail: item.detail,
+            onPress: () => go({ screen: 'story', story: item.id }),
+          })),
+        plan.comment === null ? null : <Text color="inactive">{plan.comment}</Text>,
+        <Text color="inactive">{COPY.planNote}</Text>,
+        <Box flexDirection="row" gap={1} flexWrap="wrap">
+          {plan.isProposed && <Link href={plan.console} label={COPY.approveInConsole} />}
+          {plan.isProposed && <Link href={plan.console} label={COPY.rethinkInConsole} />}
+          <Button key={`plan-${plan.id}-goal`} label={COPY.goalOf(plan.goal)} dimColor onPress={() => go({ screen: 'goal', goal: plan.goal })} />
+        </Box>,
+      ])
+
+    if (screen.screen === 'plan') {
+      const plan = goalsState.plans.find(item => item.id === screen.plan) ?? null
+
+      return (
+        <Box flexDirection="column" gap={1}>
+          {backButton}
+          {plan === null ? quiet(elements, goalsState.phase === 'loading' ? COPY.loading : COPY.noPlans) : planCard(plan)}
+          {footer}
+        </Box>
+      )
+    }
+
+    // ONE GOAL: its stories, the leader's questions about it, its plans.
+    if (screen.screen === 'goal') {
+      const shownGoal = await read($, goal)
+      const questions = current.questions.filter(item => item.subject === `goal/${screen.goal}`)
+      const plans = goalsState.plans.filter(item => item.goal === screen.goal)
+
+      if (shownGoal === null || shownGoal.goal !== screen.goal || shownGoal.phase === 'loading') {
+        return (
+          <Box flexDirection="column" gap={1}>
+            {backButton}
+            {quiet(elements, COPY.loading)}
+          </Box>
+        )
+      }
+
+      return (
+        <Box flexDirection="column" gap={1}>
+          {backButton}
+          {shownGoal.phase === 'error'
+            ? cardOf('goal-error', <Text bold color="warning">{COPY.loadError(COPY.goalOf(screen.goal))}</Text>, null, [reason(shownGoal.sentence)])
+            : (
+                <Box key="goal-head" flexDirection="column">
+                  <Text bold>{shownGoal.title}</Text>
+                  <Text color="subtle">{shownGoal.meta}</Text>
+                </Box>
+              )}
+          {shownGoal.phase === 'ok' && cardOf('goal-stories', COPY.goalStories, String(shownGoal.stories.length), [
+            shownGoal.stories.length === 0 ? quiet(elements, COPY.noGoalStories) : null,
+            ...shownGoal.stories.map(item =>
+              row(elements, { key: `goal-story-${item.id}`, kind: COPY.kindStory, title: item.title, detail: item.state, onPress: () => go({ screen: 'story', story: item.id }) })),
+          ])}
+          {questions.length > 0 && cardOf('goal-questions', <Text bold>{COPY.goalQuestionsHeading}<Text color="warning">{COPY.count(questions.length)}</Text></Text>, null, questions.map(item =>
+            row(elements, { key: `goal-question-${item.id}`, kind: COPY.kindQuestion, title: firstLine(item.text), onPress: () => go({ screen: 'question', question: item.id }) })))}
+          {plans.map(plan =>
+            row(elements, { key: `goal-plan-${plan.id}`, kind: COPY.kindPlan, title: COPY.plan(plan.id), detail: plan.stateText, detailTone: plan.isProposed ? 'warning' : 'subtle', onPress: () => go({ screen: 'plan', plan: plan.id }) }))}
+          <Link key="goal-console" href={consoleLink(base, `goal&goal=${screen.goal}`)} label={COPY.goalInConsole} />
+          {footer}
+        </Box>
+      )
+    }
+
+    // THE GOALS TAB: open goals by priority, the plans, and a new goal.
+    if (screen.screen === 'goals') {
+      const isClosedShown = shown.includes('goals-closed')
+
+      return (
+        <Box flexDirection="column" gap={1}>
+          {tabs}
+          {context}
+          {problemCard}
+          {goalsState.phase === 'loading' && quiet(elements, COPY.loading)}
+          {goalsState.phase === 'error' && cardOf('goals-error', <Text bold color="warning">{COPY.loadError(COPY.tabGoals)}</Text>, null, [reason(goalsState.sentence)])}
+          {goalsState.phase === 'ok' && cardOf('goals-open', <Text bold>{COPY.openGoals}<Text color="inactive">{COPY.count(goalsState.open.length)}</Text></Text>, COPY.goalsHint, [
+            ...[...goalsState.open, ...(isClosedShown ? goalsState.closed : [])].map(item =>
+              row(elements, {
+                key: `goal-${item.id}`,
+                kind: item.priority,
+                title: item.title,
+                titleTone: goalsState.closed.includes(item) ? 'subtle' : undefined,
+                detail: item.questions > 0 ? COPY.goalQuestions(item.questions) : item.stories,
+                detailTone: item.questions > 0 ? 'warning' : 'subtle',
+                onPress: () => go({ screen: 'goal', goal: item.id }),
+              })),
+            goalsState.closed.length > 0 ? (
+              <Button key="goals-closed" plain dimColor label={isClosedShown ? COPY.hideClosed : COPY.closedGoals(goalsState.closed.length)} onPress={() => toggle($, 'goals-closed')} />
+            ) : null,
+          ])}
+          {goalsState.phase === 'ok' && goalsState.plans.length === 0 && cardOf('plans-empty', COPY.plans, null, [quiet(elements, COPY.noPlans)])}
+          {goalsState.plans.map(plan => planCard(plan))}
+          {goalsState.sentence !== null && goalsState.phase === 'ok' && reason(goalsState.sentence)}
+          {hasInput && 'Input' in elements && (
+            <Box key="goal-new" flexDirection="column">
+              <Box flexDirection="row" gap={1}>
+                <Box flexGrow={1}>
+                  <elements.Input key="goal-draft" label={COPY.newGoal} placeholder={COPY.newGoalPlaceholder} value={goalsState.draft} onInput={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, draft: value }))} onSubmit={() => addGoal($)} />
+                </Box>
+                <Button key="goal-add" label={COPY.addGoal} onPress={() => addGoal($)} />
+              </Box>
+              {goalsState.adding === 'sending' && quiet(elements, COPY.goalSending)}
+              {goalsState.adding === 'added' && <Text color="success">{`✓ ${goalsState.addSentence ?? ''}`}</Text>}
+              {goalsState.adding === 'refused' && <Text color="error">{goalsState.addSentence ?? ''}</Text>}
+              <Text color="subtle">{COPY.addGoalNote}</Text>
+            </Box>
+          )}
+          {footer}
+        </Box>
+      )
+    }
+
+    // THE BELL TAB: what needs the owner, what the machine did, the leader's state, the last 30 days.
+    if (screen.screen === 'bell') {
+      const bellState = await read($, bell)
+
+      return (
+        <Box flexDirection="column" gap={1}>
+          {tabs}
+          {context}
+          {problemCard}
+          {bellState.phase === 'loading' && quiet(elements, COPY.loading)}
+          {bellState.phase === 'error' && cardOf('bell-error', <Text bold color="warning">{COPY.loadError(COPY.tabBell(0))}</Text>, null, [reason(bellState.sentence)])}
+          {bellState.phase === 'ok' && cardOf('bell-needs', <Text bold>{COPY.needsYou}<Text color={bellState.unhandledCount > 0 ? 'warning' : 'inactive'}>{COPY.count(bellState.unhandledCount)}</Text></Text>, COPY.bellHint, [
+            bellState.unhandled.length === 0 ? quiet(elements, COPY.nothingYet) : null,
+            ...bellState.unhandled.map(notice =>
+              row(elements, {
+                key: `notice-${notice.id}`,
+                kind: notice.source,
+                kindColumn: kindWidth(bellState.unhandled.map(item => item.source)),
+                title: notice.title,
+                detail: `${notice.when} ${shown.includes(`notice-${notice.id}`) ? '▾' : '▸'}`,
+                link: notice.link === null ? null : `${base}${notice.link}`,
+                onPress: () => toggle($, `notice-${notice.id}`),
+                body: shown.includes(`notice-${notice.id}`) ? (
+                  <Box flexDirection="column" paddingLeft={kindWidth(bellState.unhandled.map(item => item.source)) + 1}>
+                    <Text color="inactive">{notice.body === '' ? COPY.noBody : notice.body}</Text>
+                  </Box>
+                ) : null,
+              })),
+            <Text color="subtle">{COPY.bellNote}</Text>,
+          ])}
+          {bellState.phase === 'ok' && cardOf('bell-machine', COPY.machine, COPY.machineHint, [
+            <Text>
+              <Text color={bellState.leader.isPaused ? 'warning' : 'success'}>{bellState.leader.isPaused ? '! ' : '✓ '}</Text>
+              <Text color={bellState.leader.isPaused ? 'warning' : 'text'}>{bellState.leader.text}</Text>
+            </Text>,
+            ...bellState.handled.map(notice => (
+              <Text key={`handled-${notice.id}`} wrap="truncate-end">
+                <Text color="success">{'✓ '}</Text>
+                <Text>{notice.title}</Text>
+                <Text color="subtle">{` ${notice.when}`}</Text>
+              </Text>
+            )),
+          ])}
+          {bellState.phase === 'ok' && bellState.metrics.length > 0 && cardOf('bell-metrics', COPY.metrics, COPY.metricsHint, [
+            <Box flexDirection="row" gap={2} flexWrap="wrap">
+              {bellState.metrics.map((metric, index) => (
+                <Text key={`metric-${index}`}>
+                  <Text bold>{metric.value}</Text>
+                  <Text color="subtle">{` ${metric.label}`}</Text>
+                </Text>
+              ))}
+            </Box>,
+          ])}
+          <Box key="bell-links" flexDirection="row" gap={1} flexWrap="wrap">
+            <Link href={consoleLink(base, 'bell')} label={COPY.bellInConsole} />
+            <Link href={consoleLink(base, 'health')} label={COPY.health} />
+            <Link href={consoleLink(base, 'work')} label={COPY.pauseInConsole} />
+          </Box>
+          {footer}
+        </Box>
+      )
+    }
+
+    // THE QUEUE: waiting for you, running, queued or held, done today. Each card stays, quiet when empty.
+    const waitingKind = (kind: string) =>
+      kind === 'question' ? COPY.kindQuestion : kind === 'merge' ? COPY.kindMerge : kind === 'plan' ? COPY.kindPlan : COPY.kindBlocked
 
     return (
       <Box flexDirection="column" gap={1}>
-        {top}
-        {isStale && <Text color="warning">{COPY.unreachable(current.fetchedAt === null ? '?' : clock(new Date(current.fetchedAt).toISOString(), offset) ?? '?')}</Text>}
-        {current.header !== '' && <Text dimColor>{current.header}</Text>}
-        {current.paused !== null && (
-          <Box key="paused" flexDirection="column">
-            <Text color="warning">{current.paused}</Text>
-            <Link href={consoleLink(base, 'work')} label={COPY.resumeInConsole} />
-          </Box>
-        )}
-        {isEmpty && !isStale && (
-          <Box key="empty" flexDirection="column">
-            <Text bold>{COPY.emptyTitle}</Text>
-            <Text dimColor>{COPY.emptyHint}</Text>
-          </Box>
-        )}
-        {current.waiting.length > 0 && (
-          <Box key="waiting" flexDirection="column">
-            <Text color="warning">{`${COPY.waiting} · ${current.waiting.length}${stale}`}</Text>
-            {current.waiting.map(item => (
-              <Box key={item.key} flexDirection="column">
-                <Text bold>{item.title}</Text>
-                <Box flexDirection="row" gap={1}>
-                  <Text dimColor>{item.detail}</Text>
-                  <Link href={item.console} label={COPY.inConsole} />
+        {tabs}
+        {context}
+        {problemCard}
+        {current.paused !== null && cardOf('paused', <Text bold color="warning">{current.paused}</Text>, null, [
+          <Link href={consoleLink(base, 'work')} label={COPY.resumeInConsole} />,
+        ])}
+        {cardOf('waiting', <Text bold>{COPY.waiting}<Text color={current.waiting.length > 0 ? 'warning' : 'inactive'}>{`${COPY.count(current.waiting.length)}${stale}`}</Text></Text>, COPY.waitingHint, [
+          current.waiting.length === 0 ? quiet(elements, COPY.nothingWaiting) : null,
+          ...current.waiting.map(item =>
+            row(elements, {
+              key: item.key,
+              kind: waitingKind(item.kind),
+              title: item.kind === 'merge' ? `${item.title} · ${item.detail}` : item.title,
+              link: item.console,
+              onPress: () => toggle($, item.key),
+              body: shown.includes(item.key) ? (
+                <Box flexDirection="column" paddingLeft={KIND_WIDTH + 1}>
+                  <Text color="inactive">{item.detail}</Text>
+                  <Box flexDirection="row" gap={1} flexWrap="wrap">
+                    {item.kind === 'question' && <Button key={`answer-${item.target}`} label={COPY.answer} onPress={() => go({ screen: 'question', question: item.target })} />}
+                    {item.kind === 'question' && <Link href={item.console} label={COPY.answerInConsole} />}
+                    {(item.kind === 'merge' || item.kind === 'blocked') && <Button key={`open-story-${item.target}`} label={COPY.openStory} onPress={() => go({ screen: 'story', story: item.target })} />}
+                    {item.kind === 'merge' && <Link href={item.console} label={COPY.mergeInConsole} />}
+                    {item.kind === 'blocked' && <Link href={item.console} label={COPY.unblockInConsole} />}
+                    {item.kind === 'plan' && <Button key={`open-plan-${item.target}`} label={COPY.openPlan} onPress={() => go({ screen: 'plan', plan: item.target })} />}
+                    {item.kind === 'plan' && <Link href={item.console} label={COPY.approveInConsole} />}
+                  </Box>
                 </Box>
-              </Box>
-            ))}
-          </Box>
-        )}
-        {current.running.length > 0 && (
-          <Box key="running" flexDirection="column">
-            <Text dimColor>{`${COPY.running} · ${current.running.length}${stale}`}</Text>
-            {current.running.map(item => (
-              <Button key={`story-${item.story}`} plain onPress={() => openStory($, item.story)}>
-                {item.title} <Text dimColor>{item.detail}</Text> <Text color={item.isStuck ? 'warning' : 'suggestion'}>{bar(item.fraction)}</Text>
-              </Button>
-            ))}
-          </Box>
-        )}
-        {current.queued.length > 0 && (
-          <Box key="queued" flexDirection="column">
-            <Text dimColor>{`${COPY.queued} · ${current.queued.length}${stale}`}</Text>
-            {current.queued.map(item => (
-              <Text key={`queued-${item.story}`}>
-                {item.title} <Text color={item.isHeld ? 'warning' : undefined} dimColor={!item.isHeld}>{item.detail}</Text>
-              </Text>
-            ))}
-          </Box>
-        )}
-        {current.doneToday.length > 0 && (
-          <Box key="done" flexDirection="column">
-            <Text dimColor>{`${COPY.doneToday} · ${current.doneToday.length}`}</Text>
-            {current.doneToday.map(item => (
-              <Text key={`done-${item.story}`} dimColor>
-                {item.title} · {item.detail}
-              </Text>
-            ))}
-          </Box>
-        )}
-        {isStale && <Text dimColor>{COPY.addAfterReconnect}</Text>}
+              ) : null,
+            })),
+        ])}
+        {cardOf('running', <Text bold>{COPY.running}<Text color={current.running.length > 0 ? 'suggestion' : 'inactive'}>{`${COPY.count(current.running.length)}${stale}`}</Text></Text>, current.header === '' ? null : current.header, [
+          current.running.length === 0 ? quiet(elements, COPY.nothingRunning) : null,
+          ...current.running.map(item =>
+            row(elements, {
+              key: `story-${item.story}`,
+              kind: item.isStuck ? COPY.kindStuck : item.isVerifying ? COPY.verifying : COPY.kindRunning,
+              kindTone: item.isStuck ? 'warning' : 'subtle',
+              title: item.title,
+              detail: item.detail,
+              detailTone: item.isStuck ? 'warning' : 'inactive',
+              onPress: () => go({ screen: 'story', story: item.story }),
+              body: (
+                <Box flexDirection="column" paddingLeft={KIND_WIDTH + 1}>
+                  {item.fraction !== null && <Text color={item.isStuck ? 'warning' : 'suggestion'}>{bar(item.fraction)}</Text>}
+                  {item.step !== null && <Text color="inactive" wrap="truncate-end">{item.step}</Text>}
+                </Box>
+              ),
+            })),
+        ])}
+        {cardOf('queued', <Text bold>{COPY.queued}<Text color="inactive">{`${COPY.count(current.queued.length)}${stale}`}</Text></Text>, null, [
+          current.queued.length === 0 ? quiet(elements, COPY.nothingQueued) : null,
+          ...current.queued.map(item =>
+            row(elements, {
+              key: `queued-${item.story}`,
+              kind: item.isHeld ? COPY.kindHeld : COPY.kindQueued,
+              title: item.title,
+              detail: item.detail,
+              detailTone: item.isHeld ? 'warning' : 'subtle',
+              onPress: () => go({ screen: 'story', story: item.story }),
+            })),
+        ])}
+        {cardOf('done', <Text bold>{COPY.doneToday}<Text color={current.doneToday.length > 0 ? 'success' : 'inactive'}>{COPY.count(current.doneToday.length)}</Text></Text>, null, [
+          current.doneToday.length === 0 ? quiet(elements, COPY.nothingDone) : null,
+          ...current.doneToday.map(item =>
+            row(elements, {
+              key: `done-${item.story}`,
+              kind: COPY.kindMerged,
+              kindTone: 'success',
+              title: item.title,
+              detail: item.detail,
+              onPress: () => go({ screen: 'story', story: item.story }),
+            })),
+        ])}
+        {isStale && quiet(elements, COPY.addAfterReconnect)}
         {!isStale && hasInput && 'Input' in elements && (
-          <Box key="quick" flexDirection="row" gap={1}>
-            <elements.Input key="quick-add" label={COPY.quickAdd} placeholder={COPY.quickPlaceholder} value={await read($, quick)} onInput={value => update($, quick, (): string => value)} onSubmit={async value => { await update($, quick, (): string => ''); await openAdd($, value) }} />
-            <Button key="quick-open" label={COPY.quickAdd} onPress={async () => { const value = await read($, quick); await update($, quick, (): string => ''); await openAdd($, value) }} />
+          <Box key="quick" flexDirection="column">
+            <Box flexDirection="row" gap={1}>
+              <Box flexGrow={1}>
+                <elements.Input key="quick-add" label={COPY.quickLabel} placeholder={COPY.quickPlaceholder} value={await read($, quick)} onInput={value => update($, quick, (): string => value)} onSubmit={async value => { await update($, quick, (): string => ''); await openAdd($, value) }} />
+              </Box>
+              <Button key="quick-open" label={COPY.quickAdd} variant="primary" onPress={async () => { const value = await read($, quick); await update($, quick, (): string => ''); await openAdd($, value) }} />
+            </Box>
+            <Text color="subtle">{COPY.quickNote}</Text>
           </Box>
         )}
         {!isStale && !hasInput && (
           <Box key="phone-add" flexDirection="column">
             <Button key="phone-add" label={COPY.addOnPhone} onPress={() => $.prompt.submit({ text: COPY.addOnPhonePrompt })} />
-            <Text dimColor>{COPY.addOnPhoneNote}</Text>
+            <Text color="subtle">{COPY.addOnPhoneNote}</Text>
           </Box>
         )}
+        {footer}
       </Box>
     )
   })

@@ -14,7 +14,7 @@ test('THE DONE-SIGNAL: a story verified is posted into the session once, with it
   expect(terylon.prompts).toEqual([
     'Story #327 „A client follows the leader by the events since its last look“ je ověřená v pr-196 a čeká na merge (PR 196, commit 4be21c0). Shrň mi důkazy a co mám proklikat.',
   ])
-  expect(terylon.toasts).toEqual(['Terylon: #327 ověřená, čeká na merge'])
+  expect(terylon.toasts).toEqual(['Terylon: #327 verified, waiting for merge'])
 
   // The next poll reads from the new sequence: nothing new, nothing posted again.
   await terylon.clock.advance(30000)
@@ -98,7 +98,7 @@ test('THE CATCH-UP: back after 14 h, ONE summary in the order done, waiting, run
   expect(terylon.toasts).toEqual([])
 
   const band = await $.ui.mount({ plugin: 'terylon-pane', surface: 'desktop', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 3, bodyColumns: 80, scroll: { top: 0, bodyRows: 3 }, view: {} } as never })
-  expect(await band.find({ type: 'Text', text: 'Souhrn 14 h vložen · 3 věci čekají na tebe' })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: 'summary of 14 h posted · 3 waiting for you' })).toBeDefined()
   await band.press({ key: 'band-hide' })
 })
 
@@ -126,7 +126,7 @@ test('more than 2 000 events behind: no summary, no signals, a band that links t
 
   expect(terylon.prompts).toEqual([])
   const band = await $.ui.mount({ plugin: 'terylon-pane', surface: 'desktop', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 3, bodyColumns: 80, scroll: { top: 0, bodyRows: 3 }, view: {} } as never })
-  expect(await band.find({ type: 'Text', text: /ZMEŠKÁNO PŘÍLIŠ MOC/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /Missed too much/ })).toBeDefined()
   expect((await band.find({ type: 'Link' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=history')
 
   await terylon.clock.advance(30000)

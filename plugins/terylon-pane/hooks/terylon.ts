@@ -1,12 +1,14 @@
 // The pane's one way to Terylon: $.mcp.call on the terylon server, through an allow-list.
-// The pane reads, adds a task and proposes a memory edit. It never calls one of the owner's gates:
-// those are confirmed by the person in Terylon's form or in the console, and the pane links there.
+// The pane reads, adds a task or a goal, answers the leader's question and proposes a memory edit. It never
+// calls one of the owner's gates: those are confirmed by the person in Terylon's form or in the console, and
+// the pane links there.
 
 // The server `terylon` as the terylon-os plugin registers it (measured on 2.1.296), then as a session that
 // added it by hand names it.
 export const SERVER_CANDIDATES = ['plugin:terylon-os:terylon', 'terylon'] as const
 
-// Every tool the pane may call: what it reads, the one task it adds, the one memory edit it proposes.
+// Every tool the pane may call: what it reads, then the four writes that decide nothing — a task, a goal, an
+// answer to the leader's question, a memory edit proposed. None of them is a gate (McpGates.cs lists those).
 export const PANE_TOOLS: ReadonlySet<string> = new Set([
   'briefing',
   'work_in_flight',
@@ -15,8 +17,15 @@ export const PANE_TOOLS: ReadonlySet<string> = new Set([
   'story_get',
   'policy_get',
   'goals_list',
+  'goal_get',
+  'plans_list',
+  'notices_list',
+  'leader_status',
+  'metrics',
   'memory_get',
   'tasks_add',
+  'goal_add',
+  'question_answer',
   'memory_propose',
 ])
 
@@ -37,6 +46,13 @@ export const GATE_TOOLS: readonly string[] = [
 // A server the session does not have, in the words $.mcp.call rejects with.
 export const MISSING_SERVER = /not (found|connected|configured)|no (such|mcp) server|unknown server|is not a server/i
 
+// A call Claude Code itself refused because no allow rule names the tool, in its own words (measured on 2.1.295):
+// auto mode's classifier has no request of the model's to judge a mod's call by, and the default mode cannot ask.
+export const NOT_ALLOWED = /auto mode classifier|requested permissions to use|permission to use .* (was|has been) denied/i
+
+// The tool names the engine gives the pane's tools on the terylon-os plugin's server, as an allow rule spells them.
+export const PANE_TOOL_PREFIX = 'mcp__plugin_terylon-os_terylon__'
+
 // The status a refusal or an error carries in Terylon's text answer: "Refused (403): ...".
 const STATUS_IN_TEXT = /\((\d{3})\)/
 
@@ -44,6 +60,7 @@ export type TerylonAnswer =
   | { kind: 'ok'; value: Record<string, unknown> }
   | { kind: 'refused'; status: number | null; sentence: string; console: string | null; value: Record<string, unknown> }
   | { kind: 'no-server' }
+  | { kind: 'not-allowed'; reason: string }
   | { kind: 'unreachable'; reason: string }
 
 export class GateRefusedError extends Error {}
@@ -85,4 +102,11 @@ export function readResult(result: { content: readonly { type: string; text?: st
     console: typeof value.console === 'string' ? value.console : null,
     value,
   }
+}
+
+// The permissions block that lets the pane call its own tools and nothing else: never a gate.
+export function allowRules(): string {
+  const lines = [...PANE_TOOLS].map(tool => `    "${PANE_TOOL_PREFIX}${tool}"`)
+
+  return ['```json', '"permissions": {', '  "allow": [', lines.join(',\n'), '  ]', '}', '```'].join('\n')
 }

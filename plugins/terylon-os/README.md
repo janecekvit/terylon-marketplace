@@ -2,6 +2,8 @@
 
 **Terylon itself, as a plugin** — *Terylon, the agentic OS extension*: the owner's MCP endpoint, `/mcp`, registered as the server `terylon`, and one skill per prompt that endpoint serves. Nothing here holds a rule: every gate is Terylon's, and the person confirms it in Terylon's own form or in the console.
 
+Where it stands beside the PC's pane and the phone: [One source of truth, reached from two places](../../docs/architecture/one-source-of-truth-reached-from-two-places.md).
+
 ## Audience
 
 The owner of a Terylon, in any Claude Code session that can reach it over the tailnet — a terminal on the PC, a local session in the desktop app, an SSH session or a Remote Control session on the remote box. It needs no other Terylon plugin and installs none.

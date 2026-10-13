@@ -12,7 +12,7 @@ test('adding a task sends tasks_add under the goal, after the chosen story, and 
   const ui = await $.ui.mount(MOUNT)
   await ui.input({ key: 'quick-add', text: 'Konzole: tlačítko Check now u Health' })
 
-  expect(await ui.find({ type: 'Text', text: 'Nový úkol' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'New task' })).toBeDefined()
   expect((await ui.find({ key: 'add-title' }))?.props.value).toBe('Konzole: tlačítko Check now u Health')
 
   await ui.input({ key: 'add-criteria', text: 'Tlačítko je vidět; Spustí kontrolu', kind: 'change' })
@@ -25,10 +25,10 @@ test('adding a task sends tasks_add under the goal, after the chosen story, and 
     goal: 3,
     tasks: [{ title: 'Konzole: tlačítko Check now u Health', brief: 'Konzole: tlačítko Check now u Health', criteria: ['Tlačítko je vidět', 'Spustí kontrolu'], files: [], size: 'M', after: [328] }],
   })
-  expect(await ui.find({ type: 'Text', text: '✓ Předáno' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '✓ Handed over' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'Lídr z úkolu udělal plán 42.' })).toBeDefined()
-  expect((await ui.find({ type: 'Link', text: 'Schválit v konzoli ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=plan&goal=3')
-  expect(await ui.find({ type: 'Button', text: /Schválit/ })).toBeUndefined()
+  expect((await ui.find({ type: 'Link', text: 'Approve in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=plan&goal=3')
+  expect(await ui.find({ type: 'Button', text: /Approve/ })).toBeUndefined()
 })
 
 test("a refused task shows the leader's own sentence, and the form comes back to edit", async ($, on) => {
@@ -41,7 +41,7 @@ test("a refused task shows the leader's own sentence, and the form comes back to
   await ui.input({ key: 'quick-add', text: 'Kruh' })
   await ui.press({ key: 'add-send' })
 
-  expect(await ui.find({ type: 'Text', text: 'Nepředáno' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Not handed over' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'The order makes a cycle: 337 → 999 → 337. Nothing was added.' })).toBeDefined()
   await ui.press({ key: 'add-retry' })
   expect((await ui.find({ key: 'add-title' }))?.props.value).toBe('Kruh')
@@ -56,15 +56,15 @@ test('a leader that does not answer within 10 s is said so with the command, and
   const ui = await $.ui.mount(MOUNT)
   await ui.input({ key: 'quick-add', text: 'Pomalý' })
   await ui.press({ key: 'add-send' })
-  expect(await ui.find({ type: 'Text', text: 'Lídr neodpověděl do 10 s. Úkol možná přišel. Než ho dáš znovu, podívej se do fronty (command 9f2c).' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'The leader did not answer within 10 s. The task may have arrived; look at the queue before you send it again (command 9f2c).' })).toBeDefined()
 
   terylon.answers.work_in_flight = { slots: 4, paused: true, stories: [] }
   await ui.press({ key: 'back' })
   await ui.press({ key: 'refresh' })
-  expect(await ui.find({ type: 'Text', text: /Lídr je pozastavený/ })).toBeDefined()
-  expect((await ui.find({ type: 'Link', text: 'Obnovit v konzoli ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=work')
+  expect(await ui.find({ type: 'Text', text: /The leader is paused/ })).toBeDefined()
+  expect((await ui.find({ type: 'Link', text: 'Resume in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=work')
 
   await ui.input({ key: 'quick-add', text: 'Během pauzy' })
   await ui.press({ key: 'add-send' })
-  expect(await ui.find({ type: 'Text', text: 'Lídr je pozastavený. Úkol je zapsaný a čeká; plán vznikne po obnovení.' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'The leader is paused. The task is written down and waits; the plan comes after the resume.' })).toBeDefined()
 })

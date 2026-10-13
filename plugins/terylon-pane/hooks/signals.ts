@@ -111,27 +111,27 @@ export function signalFor(candidate: Candidate, verdict: Verdict | null): Signal
   switch (candidate.kind) {
     case 'verified':
       prompt = `${named} je ověřená${environment === null ? '' : ` v ${environment}`} a čeká na merge${where === '' ? '' : ` (${where})`}. Shrň mi důkazy a co mám proklikat.`
-      toast = `Terylon: #${story} ověřená, čeká na merge`
+      toast = `Terylon: #${story} verified, waiting for merge`
       break
     case 'merged':
       prompt = `${named} je mergnutá${where === '' ? '' : ` (${where})`}. Shrň mi, co se změnilo a co ověřit v produkci.`
-      toast = `Terylon: #${story} mergnutá`
+      toast = `Terylon: #${story} merged`
       break
     case 'accepted':
       prompt = `${named} je přijatá bez merge. Shrň mi, s čím byla přijata.`
-      toast = `Terylon: #${story} přijatá`
+      toast = `Terylon: #${story} accepted`
       break
     case 'abandoned':
       prompt = `${named} je opuštěná. Shrň mi proč a co z ní zůstalo.`
-      toast = `Terylon: #${story} opuštěná`
+      toast = `Terylon: #${story} abandoned`
       break
     case 'blocked':
       prompt = `${named} je zablokovaná. Shrň mi proč a co potřebuje ode mě.`
-      toast = `Terylon: #${story} zablokovaná`
+      toast = `Terylon: #${story} blocked`
       break
     case 'stuck':
       prompt = `${named} se zasekla${candidate.reason === null ? '' : `: ${candidate.reason}`}. Shrň mi, co potřebuje.`
-      toast = `Terylon: #${story} se zasekla`
+      toast = `Terylon: #${story} stuck`
       break
   }
 
@@ -139,7 +139,9 @@ export function signalFor(candidate: Candidate, verdict: Verdict | null): Signal
 }
 
 export function verdictOf(story: Json): Verdict {
-  const verdict = (story.verdict ?? null) as Json | null
+  // story_get's `verdict` is the latest verdict, or the owner's verdict as a plain sentence; `verdicts` holds them all.
+  const verdicts = list(story.verdicts).filter(item => item.superseded !== true)
+  const verdict = (story.verdict !== null && typeof story.verdict === 'object' ? story.verdict : verdicts[verdicts.length - 1] ?? null) as Json | null
   const pullRequest = (story.pullRequest ?? null) as Json | number | null
 
   return {
@@ -187,5 +189,5 @@ export function catchUpSummary(input: { awayMs: number; events: Json[]; briefing
     'Projdi se mnou, co čeká na mě, od nejstaršího.',
   ].join('\n')
 
-  return { prompt, waitingCount: waiting.length, band: `Souhrn ${hours(input.awayMs)} vložen · ${waiting.length} věci čekají na tebe` }
+  return { prompt, waitingCount: waiting.length, band: `summary of ${hours(input.awayMs)} posted · ${waiting.length} waiting for you` }
 }
