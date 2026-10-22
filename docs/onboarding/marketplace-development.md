@@ -6,7 +6,7 @@ Changing a skill and wanting to run it before it reaches `main`. The mechanism i
 
 Override `ref` in your **local** `.claude/settings.local.json`. It is gitignored; never commit it.
 
-**A feature branch exists only on Azure DevOps** — GitHub receives `main` and release tags, nothing else (see *How `main` reaches GitHub* in [`flows/change-to-consumer-repo.md`](../flows/change-to-consumer-repo.md)). So the override names the Azure DevOps remote rather than the public URL, and fetching it uses your git credential for Azure DevOps. The URL is not written here, because the organisation is not published; `git remote get-url origin` in your clone prints it.
+**A feature branch lives in the same public GitHub repository as `main`**, so the override changes only the `ref`, never the URL, and fetching it needs no credential. Push the branch first; a branch that exists only in your clone cannot be installed. Working from a fork, name your fork in place of `janecekvit/terylon-marketplace`.
 
 ```json
 {
@@ -14,13 +14,19 @@ Override `ref` in your **local** `.claude/settings.local.json`. It is gitignored
     "terylon": {
       "source": {
         "source": "git",
-        "url": "<the Azure DevOps remote: run  git remote get-url origin>",
+        "url": "https://github.com/janecekvit/terylon-marketplace.git",
         "ref": "feat/<your-branch>"
       },
       "autoUpdate": true
     }
   }
 }
+```
+
+Keep the `.git` suffix: `marketplace add` records a github.com URL with it appended, and refuses an entry that names the URL without it (measured; the root `CLAUDE.md` records it under *Testing*). For a one-off session, the same branch installs without touching any settings file:
+
+```text
+/plugin marketplace add janecekvit/terylon-marketplace#feat/<your-branch>
 ```
 
 ```

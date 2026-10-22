@@ -5,24 +5,23 @@ An edit to a skill in this repository does nothing for anyone until seven things
 ## The path
 
 ```
-  YOU, in this repository
+  YOU, on github.com/janecekvit/terylon-marketplace and in a clone of it
   ┌──────────────────────────────────────────────────────────────────────┐
-  │ 1  feature branch            git-guard.js refuses Edit/Write on main │
-  │        │                                                              │
-  │ 2  edit the skill / agent / manifest                                  │
-  │        │                                                              │
-  │ 3  BUMP plugins/<slug>/.claude-plugin/plugin.json#version             │
-  │        │                     which digit: plugins/CLAUDE.md           │
-  │        │                                                              │
-  │ 4  commit  (explicit user consent, every time)                        │
-  │        │                                                              │
-  │ 5  pull request ──▶ main    git-guard.js refuses any push to main     │
+  │ 1  an issue states the need ──▶ a feature branch for it              │
+  │        │                     git-guard.js refuses Edit/Write on main │
+  │        │                                                             │
+  │ 2  edit the skill / agent / manifest                                 │
+  │        │                                                             │
+  │ 3  BUMP plugins/<slug>/.claude-plugin/plugin.json#version            │
+  │        │                     which digit: plugins/CLAUDE.md          │
+  │        │                                                             │
+  │ 4  commit  (explicit user consent, every time)                       │
+  │        │                                                             │
+  │ 5  pull request "Closes #N" ──▶ CI green ──▶ squash-merged to main   │
+  │        │   by the maintainer; git-guard.js refuses any push to main  │
   └────────┼─────────────────────────────────────────────────────────────┘
-           │  merged on Azure DevOps (private — where review happens)
-           │
-           │  5b the operator pushes that main, unchanged, to GitHub
            ▼
-  THE MARKETPLACE  —  github.com/janecekvit/terylon-marketplace, on the ref the consumer tracks
+  THE MARKETPLACE  —  main on GitHub, the ref the consumer tracks
            │
            │  6  the consumer's Claude Code refreshes the marketplace
            │     autoUpdate: true  ──▶  in the background
@@ -44,42 +43,41 @@ An edit to a skill in this repository does nothing for anyone until seven things
 
 | # | Hop | Enforced by | Fails how |
 |---|---|---|---|
-| 1 | Work happens on a feature branch | `.claude/hooks/git-guard.js` refuses `Edit` / `Write` and `git commit` while HEAD is on `main` | loudly, at the tool call |
+| 1 | Work starts from an issue, on a feature branch | the issue form and `CONTRIBUTING.md`; `.claude/hooks/git-guard.js` refuses `Edit` / `Write` and `git commit` while HEAD is on `main` | the branch rule loudly, at the tool call |
 | 3 | The version is bumped | **nothing** — it is a convention with no guard | **silently** |
 | 4 | Each commit has explicit consent | `git-workflow.md`, plus the hook | loudly |
-| 5 | `main` is reached only through a pull request | the hook refuses **any** push targeting `main`, from any branch — including `git push origin HEAD:main` from a feature branch | loudly |
-| 5b | The merged `main` reaches GitHub | **nothing** — the operator pushes it by hand, see below | **silently** — Azure DevOps shows the merge, consumers see nothing |
+| 5 | `main` is reached only through a pull request, squash-merged by the maintainer once CI is green | the hook refuses **any** push targeting `main`, from any branch — including `git push origin HEAD:main`; GitHub's ruleset refuses a force push to `main` and requires a linear history; the repository allows squash merges only | loudly |
 | 6 | The consumer refreshes | `autoUpdate: true` in their `extraKnownMarketplaces` entry | silently, if the background fetch cannot reach GitHub |
 | 7 | The plugin is enabled | `enabledPlugins` in the consumer's `.claude/settings.json` | loudly — the skill is simply absent |
 
-Three hops fail silently, and they are the ones the runbook exists for.
+Two hops fail silently, and they are the ones the runbook exists for.
 
-## How `main` reaches GitHub
+## How a change reaches `main`
 
-**Two remotes, one history.** Azure DevOps is `origin` and stays where every pull request is reviewed and merged. GitHub is the second remote, `github`, and receives `main` exactly as Azure DevOps holds it — the same commits, never a rebased or squashed copy.
+**One remote, one history.** The repository lives on GitHub alone, as `origin` in every clone: the issue, the branch, the pull request and the merge all happen there, and what is merged is what consumers install. Nothing is pushed anywhere by hand.
 
 ```
-  origin  (Azure DevOps, private)          github  (GitHub, public)
-  feature branches, pull requests, merges   main and release tags only
-            │                                        ▲
-            └── main ──── pushed unchanged ──────────┘
+  issue #N ──▶ feat/<slug> ──▶ pull request "Closes #N" ──▶ CI: unit suites + install stage
+                                                                │ green
+                                                                ▼
+                                       the maintainer squash-merges ──▶ main ──▶ issue #N closes
 ```
 
-| When | Command, run by the operator in their own clone |
-|---|---|
-| once per clone | `git remote add github https://github.com/janecekvit/terylon-marketplace.git` |
-| **once ever — the first push** | `git fetch origin` then `git push --force github origin/main:refs/heads/main` |
-| after every later merge on Azure DevOps | `git fetch origin` then `git push github origin/main:refs/heads/main` — plain, never forced |
-| to check | `git ls-remote origin refs/heads/main` and `git ls-remote github refs/heads/main` print the same commit |
-| on a release | `git tag -a v<date> origin/main` then `git push github v<date>`, and the release notes on GitHub |
+| Step | Who | What |
+|---|---|---|
+| the need | anyone | an issue from the *Change* form: the need, the plugins it touches, acceptance criteria as a checklist |
+| the work | the contributor | a `feat/`, `fix/` or `docs/` branch, one pull request per issue, its description saying `Closes #N`; evidence for each criterion as a comment on the issue |
+| the check | GitHub Actions | `.github/workflows/ci.yml` on the pull request — the unit suites and the free install stage |
+| the merge | the maintainer | squash, once CI is green; the branch is deleted on merge |
+| a release | the maintainer | `git tag -a vX.Y.Z` on `main` and `git push origin vX.Y.Z`, with the release notes on GitHub |
 
-**The operator pushes, not an agent.** `.claude/hooks/git-guard.js` refuses any push that targets `main`, whichever remote it names — on purpose, since the rule it backs is that `main` moves only through a reviewed pull request, and the GitHub copy is that same `main`.
+**An agent never merges and never pushes `main`.** `.claude/hooks/git-guard.js` refuses any push that targets `main`, on purpose: the rule it backs is that `main` moves only through a reviewed pull request.
 
-**The first push is forced, once.** The GitHub repository was created holding a single commit — GitHub's generated `LICENSE` — that the Azure DevOps history does not have, so the first `main` from Azure DevOps cannot fast-forward over it. Forcing replaces that one commit with the reviewed history, whose own `LICENSE` was the same MIT licence (MIT until 2026-10-12; Apache-2.0 since, the operator's decision). It is made after the #273 merge, by the operator.
+**A release tag is not what a consumer compares.** Each plugin carries its own version in `plugin.json`, and that field is the contract below; a tag marks a point in the history for readers. The major version of anything — a plugin or a release — is raised only by the maintainer.
 
-**Never force any later push.** A rejected push means GitHub's `main` holds a commit Azure DevOps does not. Find where it came from and bring it through a pull request; forcing would delete it from the public history.
+**Until 2026-10-22 there were two remotes.** Review and merges happened in a private Azure DevOps repository and the operator pushed each merged `main` to GitHub by hand, a hop that failed silently. That repository is frozen and will be archived; the history was rewritten when it moved, and the hop no longer exists.
 
-**Only `main` and tags go to GitHub.** A feature branch stays on Azure DevOps, so testing a branch before it merges points at that remote — see [`onboarding/marketplace-development.md`](../onboarding/marketplace-development.md).
+**Testing a branch before it merges points at the same repository** — see [`onboarding/marketplace-development.md`](../onboarding/marketplace-development.md).
 
 ## The version field is the whole contract
 
@@ -133,7 +131,9 @@ Three hops fail silently, and they are the ones the runbook exists for.
 | `.claude/hooks/git-guard.js` | refuses `Edit` / `Write` / `git commit` on `main`, and any push targeting `main` from any branch |
 | `.claude/rules/git-workflow.md` | the branch, consent and bump rules the hook backs up |
 | `plugins/CLAUDE.md` | *Versioning* — the branch-scoped digit table in full |
-| `README.md` | the consumer-facing `settings.json` snippet, and *Where it is developed* — the two remotes for a public reader |
-| `git remote -v` in a clone | `origin` on Azure DevOps; `github` added by hand, once per clone, by whoever pushes `main` to GitHub |
+| `README.md` | the consumer-facing `settings.json` snippet, and *Where it is developed* — the issue to release flow for a public reader |
+| `CONTRIBUTING.md` | the contribution flow: an issue first, the branch names, one pull request per issue, the squash merge, the version rules |
+| `.github/ISSUE_TEMPLATE/change.yml`, `.github/PULL_REQUEST_TEMPLATE.md` | the shape of an issue and of a pull request |
+| `.github/workflows/ci.yml` | the check a pull request must pass before the merge |
 | `docs/onboarding/consumer-setup.md` | what a consuming repository configures, end to end |
 | `docs/onboarding/marketplace-development.md` | pointing a local checkout at a feature branch to test before merging |

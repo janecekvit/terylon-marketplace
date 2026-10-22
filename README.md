@@ -162,13 +162,22 @@ Every slug carries the `terylon-` prefix, redundantly with the `@terylon` market
 ## Where it is developed
 
 ```
-  feature branch ──▶ pull request, reviewed and merged on a private Azure DevOps repository
-                            │
-                            ▼  main, pushed unchanged
-  github.com/janecekvit/terylon-marketplace   ◀── what you install from
+  an issue           the need, its acceptance criteria as a checklist
+     │
+     ▼
+  a feature branch
+     │
+     ▼
+  a pull request     "Closes #N"; CI must be green
+     │
+     ▼  squash-merged by the maintainer
+  main on github.com/janecekvit/terylon-marketplace   ◀── what you install from
+     │
+     ▼  a vX.Y.Z tag, pushed by the maintainer
+  a release
 ```
 
-This GitHub repository is the **public home** of the marketplace and the address you install from. Changes are reviewed in a private Azure DevOps repository, and each merged `main` is pushed here as it stands, so the history on both is the same history. How that push is made is in [`docs/flows/change-to-consumer-repo.md`](./docs/flows/change-to-consumer-repo.md).
+This GitHub repository is the marketplace's **only home**: its code, issues, pull requests and releases are all here, and it is the address you install from. Every change starts as an issue that states the need and its acceptance criteria, is made on a branch, and arrives as a pull request that closes the issue. The maintainer merges it, squashed, once CI is green. A release is a `vX.Y.Z` tag; each plugin keeps its own version in its `plugin.json`, and that version, not the tag, is what a consumer's update compares. How to contribute is in [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 The marketplace is built with itself: its stories, builds, reviews and test-plan checks run through these plugins.
 

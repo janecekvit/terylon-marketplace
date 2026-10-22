@@ -14,13 +14,14 @@ paths:
   - ".gitignore"
   - ".gitattributes"
   - ".github/**"
+  - "CONTRIBUTING.md"
 ---
 
 # CLAUDE.md sync
 
 After modifying files in any folder, check whether a `CLAUDE.md` exists in that folder or a nearby ancestor (up to 3 levels up). If one exists, decide whether the change affects the orientation information it contains.
 
-This repo has three: the root `CLAUDE.md` (repo structure, Azure DevOps identity, rules), `plugins/CLAUDE.md` (authoring conventions, plugin overview, naming, versioning), and `docs/CLAUDE.md` (which documentation store is which, and the directive to read the knowledge base before the sources).
+This repo has three: the root `CLAUDE.md` (repo structure, the GitHub repository and how a change reaches it, rules), `plugins/CLAUDE.md` (authoring conventions, plugin overview, naming, versioning), and `docs/CLAUDE.md` (which documentation store is which, and the directive to read the knowledge base before the sources).
 
 A `CLAUDE.md` is read by whoever picks this repository up next — human or agent — with no memory of the session that produced the change. Its job is to stop them re-deriving what is already established, and above all to stop them **re-learning the hard way something that was already paid for once.**
 

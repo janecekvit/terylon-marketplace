@@ -85,7 +85,7 @@ Then, once per machine:
 
 The plugin ships no `.mcp.json` for the server because a plugin `.mcp.json` does not substitute variables inside `oauth`, and the ids are configuration, not code; [`plugins/terylon-ado/README.md`](../../plugins/terylon-ado/README.md) has the measurement and the registered fields.
 
-**It used to fall back to a hard-coded organisation and no longer does**, so forgetting it now fails immediately instead of silently targeting somebody else's organisation. The decision and the failure it prevents are stated in the root [`CLAUDE.md`](../../CLAUDE.md), under *Azure DevOps*; when the failure lands, [`runbooks/ado-mcp-authorization-error.md`](../runbooks/ado-mcp-authorization-error.md) is the way out.
+**It used to fall back to a hard-coded organisation and no longer does**, so forgetting it now fails immediately instead of silently targeting somebody else's organisation. The decision and the failure it prevents are stated in the root [`CLAUDE.md`](../../CLAUDE.md), under *Azure DevOps, as a consumer's forge*; when the failure lands, [`runbooks/ado-mcp-authorization-error.md`](../runbooks/ado-mcp-authorization-error.md) is the way out.
 
 Everything else resolves on its own:
 
@@ -132,4 +132,4 @@ Set them in your **own** `~/.claude/settings.json` — never in a repository, an
 | `plugins/terylon-ado/skills/check-access/SKILL.md` | `check-access` — which of the four variables is missing, and whether the registration matches them |
 | `plugins/terylon-forge/.claude-plugin/plugin.json` | `dependencies` — `terylon-git` only, which is why an adapter must be enabled by hand |
 | `plugins/terylon-forge/skills/resolve-forge/SKILL.md` | `resolve-forge` — the precedence that resolves the forge at runtime |
-| `CLAUDE.md` | *Azure DevOps* — why no organisation is committed and no `env` block exists here |
+| `CLAUDE.md` | *Azure DevOps, as a consumer's forge* — why no organisation is committed and no `env` block exists here |
