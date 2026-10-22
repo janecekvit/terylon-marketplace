@@ -235,6 +235,7 @@ export const COPY = {
   newGoal: 'New goal',
   newGoalPlaceholder: 'What you want done…',
   addGoal: 'Add goal',
+  // GOALS ARE GENERAL (Terylon #369, S31; the operator, 2026-10-22, the approved S31 canvas): a concrete ask is steered to a task, never refused — the leader reads it and files it under a goal.
   addGoalNote: 'A goal is a general direction. A concrete ask — a file, a document, one change — becomes a task under a goal. The leader asks its questions first, then makes a plan you approve.',
   // The leader's own answer, then how it reads a goal, unless its answer already says so (S31).
   goalAdded: (sentence: string) =>
