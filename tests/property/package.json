@@ -1,0 +1,13 @@
+{
+  "name": "terylon-marketplace-property-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Property-based tests of the repository's input parsers. The one npm dependency in the repository, confined to this folder; nothing outside it requires fast-check.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "test": "node --test ./*.test.js"
+  },
+  "devDependencies": {
+    "fast-check": "4.10.2"
+  }
+}

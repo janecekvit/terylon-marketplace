@@ -37,7 +37,7 @@ The `create-workspace` skill in `terylon-git` uses the `feat/<slug>` convention 
 - Read git state (`git status`, `git log`, `git diff`, `git branch`).
 - Stage files (`git add`).
 - Create branches (`git checkout -b`, `git switch -c`) — branching is cheap and reversible.
-- Stash and unstash local changes when needed to keep the working tree clean.
+- Stash and unstash local changes when needed to keep the working tree clean — **except in a worktree that parallel agents share**: the stash belongs to the repository, not the worktree. See *Parallel agents in one repository* in `docs/onboarding/marketplace-development.md`.
 
 ## What requires explicit permission (each time)
 

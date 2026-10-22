@@ -75,23 +75,9 @@ Each agent is a role with its own instructions, dispatched by the `leader` and r
 
 ## Plugins
 
-```
-terylon-core (root — no dependencies)
-    ▲
-    └── terylon-git
-           ▲
-           └── terylon-forge          the forge port — ships no adapter
-                  ▲
-                  ├── terylon-ado        adapter: Azure DevOps
-                  ├── terylon-github     adapter: GitHub
-                  ├── terylon-product
-                  ├── terylon-dev        also declares terylon-git and terylon-core directly
-                  └── terylon-test       also declares terylon-core directly
+![The plugin dependency graph: terylon-git sits on the root terylon-core; terylon-forge, the forge port that declares no adapter, sits on terylon-git; the adapters terylon-ado and terylon-github and the role plugins terylon-product, terylon-dev and terylon-test sit on terylon-forge, with terylon-dev also declaring terylon-git and terylon-core directly and terylon-test also declaring terylon-core directly; outside the chain, terylon-pane sits on terylon-os, which has no dependencies](docs/architecture/plugins.svg)
 
-terylon-os (no dependencies)            Terylon itself: its /mcp server and a skill per prompt
-    ▲
-    └── terylon-pane                    a mod: the band, the status line and the pane in Claude Desktop
-```
+Drawn from [`docs/architecture/plugins.d2`](docs/architecture/plugins.d2), which follows every `plugin.json#dependencies`; an arrow points from a plugin to one it declares, and a dashed one is declared although the chain already reaches it.
 
 | Plugin | For | Skills | Agents |
 |---|---|---|---|

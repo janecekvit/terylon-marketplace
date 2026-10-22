@@ -36,6 +36,11 @@ const AUTHORING_SKILLS =
 const FEATURE_STANDARD = path.join(REPOSITORY_ROOT, "plugins", "terylon-product", "skills", "create-feature", "references", "feature-standard.md");
 const FAKE_GH = path.join(__dirname, "fake-gh.js");
 
+// The recipes pipe through `gh --jq`, which fake-gh.js hands to the real jq. Without jq on PATH the
+// tests that run such a recipe skip and say why; in CI a missing jq fails them instead, so a skip
+// there can never hide a regression.
+const JQ_SKIP = jqSkipReason();
+
 // The heading both bodies file the key table under. The same text on both is part of the contract.
 const KEY_TABLE_HEADING = "### Work-item keys — the authoring contract";
 
@@ -58,6 +63,18 @@ const FEATURE_SECTIONS =
     "**Acceptance criteria**",
     "**Out of scope**",
 ];
+
+function jqSkipReason()
+{
+    const probe = childProcess.spawnSync("jq", ["--version"], { encoding: "utf8" });
+
+    if (probe.status === 0 || process.env.CI)
+    {
+        return false;
+    }
+
+    return "jq not on PATH";
+}
 
 function readText(file)
 {
@@ -296,7 +313,7 @@ test("every key an authoring skill passes is a key both bodies declare", () =>
 // Fixture — the GitHub body's recipes against a stand-in gh
 // ---------------------------------------------------------------------------------------------
 
-test("a story is created with its title, body and criteria intact, the criteria as a task list", () =>
+test("a story is created with its title, body and criteria intact, the criteria as a task list", { skip: JQ_SKIP }, () =>
 {
     const directory = createFixture({ labels: ["reports"] });
     const result = createWorkItem(directory, STORY);
@@ -318,7 +335,7 @@ test("a story is created with its title, body and criteria intact, the criteria 
     assert.ok(issue.body.endsWith(STORY.footer), "the footer is last");
 });
 
-test("the type label is created when missing, an existing tag is not, and both are attached", () =>
+test("the type label is created when missing, an existing tag is not, and both are attached", { skip: JQ_SKIP }, () =>
 {
     const directory = createFixture({ labels: ["reports"] });
     const result = createWorkItem(directory, STORY);
@@ -340,7 +357,7 @@ test("the create recipe writes nothing for a key GitHub does not carry", () =>
     assert.strictEqual(readState(directory).unsupportedFlags, undefined, "no milestone or project stands in for planning");
 });
 
-test("a created story is attached to the requested parent, and the parent reads it back as a child", () =>
+test("a created story is attached to the requested parent, and the parent reads it back as a child", { skip: JQ_SKIP }, () =>
 {
     const directory = createFixture(
     {
@@ -369,7 +386,7 @@ test("a created story is attached to the requested parent, and the parent reads 
     assert.deepStrictEqual(children.map((child) => [child.id, child.title]), [[8, STORY.title]]);
 });
 
-test("a Feature keeps every section of the standard, in order, and gains no criteria section", () =>
+test("a Feature keeps every section of the standard, in order, and gains no criteria section", { skip: JQ_SKIP }, () =>
 {
     const template = section(readText(FEATURE_STANDARD), "## 2. Template");
 
@@ -412,7 +429,7 @@ test("teeth: without the label step, the create fails on the missing type label"
     assert.match(result.stderr, /could not add label: 'user story' not found/);
 });
 
-test("teeth: sending the id as a string (-f) is refused", () =>
+test("teeth: sending the id as a string (-f) is refused", { skip: JQ_SKIP }, () =>
 {
     const directory = createFixture(
     {
