@@ -1,4 +1,5 @@
-# Dependabot raises the pinned GitHub Actions once a week, one pull request for all of them.
+# Dependabot raises the pinned GitHub Actions once a week, one pull request for all of them, and only
+# to releases at least seven days old, so a compromised release has time to be caught first.
 # The marketplace ships no npm, NuGet or pip dependency of its own; the tests use Node's standard
 # library only.
 version: 2
@@ -13,6 +14,8 @@ updates:
       day: monday
     cooldown:
       default-days: 14
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ["*"]
