@@ -14,6 +14,10 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /.github/workflows/ci.yml          unit suites + the free e2e install stage, on every PR and push to main
 /.github/workflows/diagrams.yml    renders every docs/**/*.d2 with the pinned D2; red on a bad source or a stale SVG
 /Scripts/render-diagrams.js        formats, validates and renders each .d2 to the .svg beside it; --check is CI's
+/.github/workflows/security.yml    CodeQL (JavaScript and the workflows) + zizmor, on every PR, push to main and weekly
+/.github/workflows/scorecard.yml   OpenSSF Scorecard, on main and weekly, published for the README badge
+/.github/dependabot.yml            raises the SHA-pinned actions weekly, one grouped pull request
+/.github/CODEOWNERS                every file the maintainer's to review
 /plugins/<slug>/                   one directory per plugin
 /plugins/CLAUDE.md                 authoring conventions — read before editing a plugin
 /docs/                             the engineering knowledge base — architecture, flows, runbooks, onboarding
