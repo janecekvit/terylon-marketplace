@@ -12,6 +12,9 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /NOTICE                            the copyright notice Apache-2.0 carries: Terylon Marketplace, copyright the operator
 /SECURITY.md                       how to report a vulnerability — GitHub private vulnerability reporting
 /.github/workflows/ci.yml          unit suites + the free e2e install stage, on every PR and push to main
+/.github/workflows/release.yml     on a vX.Y.Z tag: source archive + SHA256SUMS, provenance attestation, Sigstore signatures, the GitHub release
+/tests/release/                    release-notes.js — the notes a release carries (every plugin's version, the PRs since the previous tag) — and its tests
+/docs/runbooks/releasing.md        cutting a release, and verifying one
 /plugins/<slug>/                   one directory per plugin
 /plugins/CLAUDE.md                 authoring conventions — read before editing a plugin
 /docs/                             the engineering knowledge base — architecture, flows, runbooks, onboarding
@@ -134,6 +137,7 @@ Five suites under `/tests/`, none distributed, and a mod's own tests beside it. 
 | terylon-pane version | `node --test tests/terylon-pane/version.test.js` | the version the Status tab says is the one `plugin.json` ships | free, milliseconds |
 | terylon-os plugin | `node --test tests/terylon-os/terylon-os-plugin.test.js` | the `terylon-os` plugin's one server is `${TERYLON_URL}/mcp` with no header or token, every prompt Terylon's `/mcp` serves has exactly one skill mirroring it, and nothing published names a host | free, milliseconds |
 | harness unit checks | `node --test tests/e2e/ref.test.js` | which ref the harness installs, and that a detached HEAD is refused rather than passed on as `HEAD` | free, milliseconds |
+| release notes | `node --test tests/release/release-notes.test.js` | the tag check, the previous tag chosen by number, every plugin's version and change, the pull requests from squash and merge subjects — against fixtures and a throwaway repository with real tags | free, about a second |
 | end-to-end | `node tests/e2e/run.js` | the marketplace installs from a git ref as a consumer installs it, everything loads, and the skills — followed by a model, headless — write the right things or refuse with the right reason | about **$2.60–3.25** per full run on sonnet, 4–8 min (measured 2026-10-04) |
 
 ```

@@ -1,0 +1,179 @@
+# A release is cut by pushing a tag vMAJOR.MINOR.PATCH. This workflow builds the source archive and
+# SHA256SUMS from that tag, attests the archive's build provenance, signs both with Sigstore, and
+# publishes the GitHub release with every signature attached. docs/runbooks/releasing.md is the
+# maintainer's procedure and how anyone verifies a release.
+#
+# Run by hand (workflow_dispatch) it is a rehearsal only: it prints the notes and the archive's
+# listing for the version named, and attests, signs and publishes nothing.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The version to rehearse, such as v1.0.0. An existing tag is read as it is; a new one is rehearsed against the dispatched commit."
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, attest, sign and publish
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # create the release and upload its assets
+      id-token: write # the OIDC token Sigstore signs with, for the attestation and the signatures
+      attestations: write # store the build provenance attestation on the repository
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - name: Refuse a tag that is not exactly vMAJOR.MINOR.PATCH
+        run: |
+          if [[ ! "${RELEASE_TAG}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          then
+              echo "::error::${RELEASE_TAG} is not a release tag: it must be exactly vMAJOR.MINOR.PATCH, such as v1.0.0"
+              exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Find the previous release tag
+        id: previous
+        run: |
+          previous_tag="$(node tests/release/release-notes.js --print-previous --current "${RELEASE_TAG}")"
+          echo "Previous release tag: ${previous_tag}"
+          echo "tag=${previous_tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build the source archive and SHA256SUMS
+        id: archive
+        run: |
+          archive_name="terylon-marketplace-${RELEASE_TAG}.tar.gz"
+          mkdir --parents dist
+          git archive --format=tar.gz --prefix="terylon-marketplace-${RELEASE_TAG}/" --output="dist/${archive_name}" "refs/tags/${RELEASE_TAG}"
+          (cd dist && sha256sum "${archive_name}" > SHA256SUMS)
+          cat dist/SHA256SUMS
+          echo "name=${archive_name}" >> "${GITHUB_OUTPUT}"
+
+      - name: Write the release notes
+        env:
+          PREVIOUS_TAG: ${{ steps.previous.outputs.tag }}
+        run: |
+          node tests/release/release-notes.js --previous "${PREVIOUS_TAG}" --current "${RELEASE_TAG}" > "${RUNNER_TEMP}/release-notes.md"
+          cat "${RUNNER_TEMP}/release-notes.md" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Attest the archive's build provenance
+        id: attest
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/${{ steps.archive.outputs.name }}
+
+      - name: Keep the attestation beside the archive
+        env:
+          ATTESTATION_BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+          ARCHIVE_NAME: ${{ steps.archive.outputs.name }}
+        run: cp "${ATTESTATION_BUNDLE}" "dist/${ARCHIVE_NAME%.tar.gz}.intoto.jsonl"
+
+      - name: Sign the archive and SHA256SUMS with Sigstore
+        uses: sigstore/gh-action-sigstore-python@790bc6befb9d733738f18d8f895854b453640ec9 # v3.5.0
+        with:
+          inputs: dist/${{ steps.archive.outputs.name }} dist/SHA256SUMS
+          verify: true
+          verify-cert-identity: ${{ github.server_url }}/${{ github.workflow_ref }}
+          verify-oidc-issuer: https://token.actions.githubusercontent.com
+          upload-signing-artifacts: false
+          release-signing-artifacts: false
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          signature_bundles=(dist/*.sigstore.json)
+          if (( ${#signature_bundles[@]} != 2 ))
+          then
+              echo "::error::expected 2 Sigstore bundles in dist/, found ${#signature_bundles[@]}"
+              exit 1
+          fi
+          ls -l dist
+          gh release create "${RELEASE_TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${RELEASE_TAG}" \
+              --notes-file "${RUNNER_TEMP}/release-notes.md" \
+              --verify-tag \
+              dist/*.tar.gz dist/SHA256SUMS dist/*.intoto.jsonl "${signature_bundles[@]}"
+
+  rehearsal:
+    name: Rehearse the notes and the archive (publishes nothing)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # read the history and the tags
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - name: Refuse a tag that is not exactly vMAJOR.MINOR.PATCH
+        run: |
+          if [[ ! "${RELEASE_TAG}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          then
+              echo "::error::${RELEASE_TAG} is not a release tag: it must be exactly vMAJOR.MINOR.PATCH, such as v1.0.0"
+              exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Choose what to read
+        id: source
+        run: |
+          if git rev-parse --quiet --verify "refs/tags/${RELEASE_TAG}" > /dev/null
+          then
+              source_ref="refs/tags/${RELEASE_TAG}"
+          else
+              source_ref="$(git rev-parse HEAD)"
+          fi
+          echo "Rehearsing ${RELEASE_TAG} against ${source_ref}"
+          echo "ref=${source_ref}" >> "${GITHUB_OUTPUT}"
+
+      - name: Print the release notes
+        env:
+          SOURCE_REF: ${{ steps.source.outputs.ref }}
+        run: |
+          previous_tag="$(node tests/release/release-notes.js --print-previous --current "${RELEASE_TAG}")"
+          echo "Previous release tag: ${previous_tag}"
+          node tests/release/release-notes.js --previous "${previous_tag}" --current "${RELEASE_TAG}" --ref "${SOURCE_REF}" | tee "${RUNNER_TEMP}/release-notes.md"
+          cat "${RUNNER_TEMP}/release-notes.md" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Print the archive's listing
+        env:
+          SOURCE_REF: ${{ steps.source.outputs.ref }}
+        run: |
+          archive_path="${RUNNER_TEMP}/terylon-marketplace-${RELEASE_TAG}.tar.gz"
+          git archive --format=tar.gz --prefix="terylon-marketplace-${RELEASE_TAG}/" --output="${archive_path}" "${SOURCE_REF}"
+          tar --list --gzip --file="${archive_path}"
+          sha256sum "${archive_path}"

@@ -71,7 +71,7 @@ Three hops fail silently, and they are the ones the runbook exists for.
 | **once ever — the first push** | `git fetch origin` then `git push --force github origin/main:refs/heads/main` |
 | after every later merge on Azure DevOps | `git fetch origin` then `git push github origin/main:refs/heads/main` — plain, never forced |
 | to check | `git ls-remote origin refs/heads/main` and `git ls-remote github refs/heads/main` print the same commit |
-| on a release | `git tag -a v<date> origin/main` then `git push github v<date>`, and the release notes on GitHub |
+| on a release | `git fetch github`, `git tag -a vX.Y.Z github/main`, then `git push github vX.Y.Z`; the release workflow builds, signs and publishes it — [`runbooks/releasing.md`](../runbooks/releasing.md) |
 
 **The operator pushes, not an agent.** `.claude/hooks/git-guard.js` refuses any push that targets `main`, whichever remote it names — on purpose, since the rule it backs is that `main` moves only through a reviewed pull request, and the GitHub copy is that same `main`.
 
