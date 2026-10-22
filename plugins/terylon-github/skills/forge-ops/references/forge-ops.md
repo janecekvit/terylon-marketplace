@@ -423,7 +423,6 @@ Closes #142
 
 **This differs in kind from the other side.** Azure DevOps links a work item without deciding its state; a GitHub closing keyword links *and* transitions. A transport that wants the link without the close must say `#N` and accept that it is only a mention, and it must say which it did.
 
-
 ### `check-preconditions`
 
 - **In:** nothing. **Out:** usable / not usable, with the reason.

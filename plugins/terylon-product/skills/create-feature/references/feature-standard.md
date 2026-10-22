@@ -25,10 +25,12 @@ At most one prefix per Feature, in the `[ProjectName]` form, for work belonging 
 ### Examples
 
 **Good:**
+
 - `Let administrators configure SSO against their own identity provider`
 - `[Atlas] Export the audit log to SIEM tools`
 
 **Bad:**
+
 - `Refactor auth middleware` — technical, the benefit is not visible
 - `SSO` — too vague, not a statement
 - `[Atlas] [Beta] RBAC rewrite` — double prefix, jargon

@@ -1,0 +1,39 @@
+# lychee configuration: the link check of .github/workflows/docs.yml.
+# Every relative link and every #anchor must resolve; an external link must answer.
+
+# Check the anchor of a link as well as its target, in a local file and on a remote page.
+include_fragments = "full"
+
+# A link inside a code block or a code span is an example, not a link.
+include_verbatim = false
+
+# 206 is a partial answer and 429 is a rate limit; neither says the page is gone.
+accept = ["200", "206", "429"]
+
+# Remember results in .lycheecache, which the workflow carries between runs, so a pull request
+# does not hit every external site again.
+cache = true
+max_cache_age = "1d"
+
+max_retries = 3
+retry_wait_time = 5
+timeout = 20
+
+# Never reachable from a runner, or not a real address.
+exclude_all_private = true
+exclude = [
+    # The private Azure DevOps organisation and its MCP endpoint: a runner has no sign-in.
+    '^https?://([a-z0-9-]+\.)*dev\.azure\.com',
+    '^https?://([a-z0-9-]+\.)*visualstudio\.com',
+    # A local listener.
+    '^https?://localhost',
+    '^https?://127\.0\.0\.1',
+    # Example organisations and domains in illustrations.
+    'contoso',
+    '^https?://([a-z0-9-]+\.)*example\.(com|net|org)',
+    '\.example\.ts\.net',
+    # A URL with a placeholder in it: {org}, <role>, and their percent-encoded forms.
+    '[{}<>]',
+    '%7[BbDd]',
+    '%3[CcEe]',
+]
