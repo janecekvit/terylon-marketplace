@@ -80,6 +80,8 @@ Bump `plugin.json#version` on every commit that touches the plugin. Which digit 
 
 Consumers only re-fetch when this field changes, so pushing to `main` without a bump ships nothing. The branch-scoped convention exists so that one branch can iterate freely — review feedback, fixups, renames — without every iteration looking like a release.
 
+**CI holds every pull request to this** (`.github/workflows/versions.yml`, running `tests/versions/check-plugin-versions.js`): a plugin with any changed file under `plugins/<slug>/` must carry a strictly higher `MAJOR.MINOR.PATCH` than the base branch has, and a raised major fails unless the pull request carries the label `major`, which only the maintainer sets. A new plugin passes from `1.0.0` up and a deleted one passes. The check cannot tell a patch from a minor — which of the two a branch moves stays the rule above. A version listed in `.claude-plugin/marketplace.json` must equal the plugin's own; it lists none today, so nothing is compared.
+
 ## Adding a new plugin (checklist)
 
 1. Create `plugins/terylon-<role>/` with the structure above.

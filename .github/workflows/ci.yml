@@ -29,6 +29,10 @@ jobs:
     name: Unit suites
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # id-token: write lets the Codecov upload authenticate by OIDC, so no Codecov token is stored.
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -38,8 +42,23 @@ jobs:
         with:
           node-version: 22
 
-      - name: node --test
-        run: node --test "**/*.test.js"
+      # Two reporters: spec to the log, as before, and lcov to lcov.info for Codecov.
+      - name: node --test, with coverage
+        run: >-
+          node --test --experimental-test-coverage
+          --test-reporter=spec --test-reporter-destination=stdout
+          --test-reporter=lcov --test-reporter-destination=lcov.info
+          "**/*.test.js"
+
+      # Informational only: codecov.yml sets no gate, and an unreachable Codecov does not fail CI.
+      # Forks skip it; the repository has to be enabled on codecov.io for an upload to land.
+      - name: Upload coverage to Codecov
+        if: github.repository == 'janecekvit/terylon-marketplace'
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          use_oidc: true
+          files: lcov.info
+          fail_ci_if_error: false
 
   install:
     name: End-to-end install stage (free, no model)

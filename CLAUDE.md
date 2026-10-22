@@ -12,6 +12,7 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /NOTICE                            the copyright notice Apache-2.0 carries: Terylon Marketplace, copyright the operator
 /SECURITY.md                       how to report a vulnerability — GitHub private vulnerability reporting
 /.github/workflows/ci.yml          unit suites + the free e2e install stage, on every PR and push to main
+/.github/workflows/versions.yml    the plugin version rules, on every PR — a changed plugin raises its version; a major needs the label `major`
 /.github/workflows/docs.yml        Markdown lint + link check over every tracked .md, on every PR and push to main
 /.markdownlint-cli2.jsonc          the Markdown lint rules — .claude/rules/markdown.md, encoded
 /lychee.toml                       the link check: relative links, anchors, external links; what is excluded and why
@@ -19,12 +20,14 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /.github/workflows/scorecard.yml   OpenSSF Scorecard, on main and weekly, published for the README badge
 /.github/dependabot.yml            raises the SHA-pinned actions weekly, one grouped pull request
 /.github/CODEOWNERS                every file the maintainer's to review
+/codecov.yml                       Codecov: coverage of the unit suites is informational, never a gate; stubs and fixtures ignored
 /plugins/<slug>/                   one directory per plugin
 /plugins/CLAUDE.md                 authoring conventions — read before editing a plugin
 /docs/                             the engineering knowledge base — architecture, flows, runbooks, onboarding
 /docs/terylon/                     terylon working tree: intake, specs, plans, ledgers (gitignored)
 /docs/superpowers/                 the same, when those skills run directly (gitignored)
 /tests/                            local tests of what the plugins ship, across plugin boundaries — not distributed
+/tests/versions/                   the version check versions.yml runs, and its tests
 ```
 
 **All of `/plugins` is the distribution boundary.** Anything inside is consumed by other repos; anything outside stays local.
@@ -140,6 +143,7 @@ Five suites under `/tests/`, none distributed, and a mod's own tests beside it. 
 | terylon-pane commands | `node --test tests/terylon-pane/commands.test.js` | no command the mod registers shares a name with a skill of the mod or of `terylon-os` | free, milliseconds |
 | terylon-pane version | `node --test tests/terylon-pane/version.test.js` | the version the Status tab says is the one `plugin.json` ships | free, milliseconds |
 | terylon-os plugin | `node --test tests/terylon-os/terylon-os-plugin.test.js` | the `terylon-os` plugin's one server is `${TERYLON_URL}/mcp` with no header or token, every prompt Terylon's `/mcp` serves has exactly one skill mirroring it, and nothing published names a host | free, milliseconds |
+| plugin versions | `node --test tests/versions/check-plugin-versions.test.js` | a changed plugin without a raised version fails, a patch or minor raise passes, a major raise fails without the label `major` and passes with it, a new plugin passes from 1.0.0 up, a deleted one passes, a malformed version fails, and a version `marketplace.json` lists must equal `plugin.json`'s — the pure rules, and the command line end to end in a throwaway repository | free, seconds |
 | harness unit checks | `node --test tests/e2e/ref.test.js` | which ref the harness installs, and that a detached HEAD is refused rather than passed on as `HEAD` | free, milliseconds |
 | end-to-end | `node tests/e2e/run.js` | the marketplace installs from a git ref as a consumer installs it, everything loads, and the skills — followed by a model, headless — write the right things or refuse with the right reason | about **$2.60–3.25** per full run on sonnet, 4–8 min (measured 2026-10-04) |
 
