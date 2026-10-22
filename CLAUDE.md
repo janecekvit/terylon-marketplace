@@ -17,6 +17,8 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /.github/workflows/release.yml     on a vX.Y.Z tag: source archive + SHA256SUMS, provenance attestation, Sigstore signatures, the GitHub release
 /tests/release/                    release-notes.js — the notes a release carries (every plugin's version, the PRs since the previous tag) — and its tests
 /docs/runbooks/releasing.md        cutting a release, and verifying one
+/.github/workflows/diagrams.yml    renders every docs/**/*.d2 with the pinned D2; red on a bad source or a stale SVG
+/Scripts/render-diagrams.js        formats, validates and renders each .d2 to the .svg beside it; --check is CI's
 /.github/workflows/security.yml    CodeQL (JavaScript and the workflows) + zizmor, on every PR, push to main and weekly
 /.github/workflows/scorecard.yml   OpenSSF Scorecard, on main and weekly, published for the README badge
 /.github/dependabot.yml            raises the SHA-pinned actions weekly, one grouped pull request
@@ -25,6 +27,7 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /plugins/<slug>/                   one directory per plugin
 /plugins/CLAUDE.md                 authoring conventions — read before editing a plugin
 /docs/                             the engineering knowledge base — architecture, flows, runbooks, onboarding
+/docs/architecture/*.d2            structure drawn in D2, the rendered .svg committed beside each; flows are Mermaid
 /docs/terylon/                     terylon working tree: intake, specs, plans, ledgers (gitignored)
 /docs/superpowers/                 the same, when those skills run directly (gitignored)
 /tests/                            local tests of what the plugins ship, across plugin boundaries — not distributed
