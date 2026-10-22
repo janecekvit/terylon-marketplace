@@ -1,5 +1,14 @@
 # Terylon Marketplace
 
+[![CI](https://github.com/janecekvit/terylon-marketplace/actions/workflows/ci.yml/badge.svg)](https://github.com/janecekvit/terylon-marketplace/actions/workflows/ci.yml)
+[![Security](https://github.com/janecekvit/terylon-marketplace/actions/workflows/security.yml/badge.svg)](https://github.com/janecekvit/terylon-marketplace/actions/workflows/security.yml)
+[![Docs](https://github.com/janecekvit/terylon-marketplace/actions/workflows/docs.yml/badge.svg)](https://github.com/janecekvit/terylon-marketplace/actions/workflows/docs.yml)
+[![Diagrams](https://github.com/janecekvit/terylon-marketplace/actions/workflows/diagrams.yml/badge.svg)](https://github.com/janecekvit/terylon-marketplace/actions/workflows/diagrams.yml)
+[![codecov](https://codecov.io/gh/janecekvit/terylon-marketplace/graph/badge.svg)](https://codecov.io/gh/janecekvit/terylon-marketplace)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/janecekvit/terylon-marketplace/badge)](https://scorecard.dev/viewer/?uri=github.com/janecekvit/terylon-marketplace)
+[![Latest release](https://img.shields.io/github/v/release/janecekvit/terylon-marketplace?sort=semver)](https://github.com/janecekvit/terylon-marketplace/releases)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 **A [Claude Code](https://code.claude.com/docs) plugin marketplace that gives Claude the roles of a small development team.** Those roles are a product owner who writes the stories, a developer pipeline that builds them test-first under review, a reviewer for pull requests, and a tester who checks what a pull request claims. It works on **Azure DevOps or GitHub**, in your own repositories. Apache-2.0 licensed.
 
 It also carries **Terylon**, the agentic OS extension: an MCP endpoint and a Claude Desktop pane for the owner of a Terylon, who hands whole goals to an autonomous leader and keeps every decision.
