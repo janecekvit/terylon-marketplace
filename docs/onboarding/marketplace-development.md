@@ -80,7 +80,7 @@ Feature work belongs in an isolated worktree under `.claude/worktrees/`, which i
 | Check | Why |
 |---|---|
 | The version is bumped in **every** plugin the change touched | a consumer fetches per plugin; a bumped port with an unbumped adapter ships half a change |
-| Every dependency diagram is redrawn if an edge moved | the diagrams are drawn in the root `CLAUDE.md`, the root `README.md`, `plugins/CLAUDE.md` and **every** plugin `README.md` |
+| Every dependency diagram is redrawn if an edge moved | the diagrams are drawn in the root `CLAUDE.md`, `plugins/CLAUDE.md`, **every** plugin `README.md`, and `docs/architecture/plugins.d2`, whose rendering the root `README.md` embeds |
 | `grep` for any renamed component across the diagrams | a diagram that no longer matches is worse than none, because it is believed |
 | The knowledge base still tells the truth | [`.claude/rules/docs-sync.md`](../../.claude/rules/docs-sync.md) — `grep -rn "<path you changed>" docs/` |
 
