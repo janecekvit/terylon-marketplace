@@ -181,6 +181,8 @@ This GitHub repository is the marketplace's **only home**: its code, issues, pul
 
 The marketplace is built with itself: its stories, builds, reviews and test-plan checks run through these plugins.
 
+**A pull request that changes a plugin raises its version.** Change anything under `plugins/<slug>/` and raise `version` in that plugin's `.claude-plugin/plugin.json` in the same pull request — [`.github/workflows/versions.yml`](./.github/workflows/versions.yml) fails it otherwise, and fails a raised major unless the maintainer has labelled the pull request `major`. Run the same check locally with `node tests/versions/check-plugin-versions.js --base origin/main --head HEAD`; which digit to move is in [`plugins/CLAUDE.md`](./plugins/CLAUDE.md), under *Versioning*.
+
 ## Continuous integration
 
 [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) runs on every pull request and every push to `main`:
@@ -189,6 +191,8 @@ The marketplace is built with itself: its stories, builds, reviews and test-plan
 |---|---|---|
 | Unit suites | `node --test "**/*.test.js"`: the forge-port contract and fixture tests, the harness's ref checks, the hook and measurement scripts, the Terylon pane's command and version checks. The pane's mutation suite skips here, as no `claude` CLI is installed in this job | nothing |
 | End-to-end install stage | `node tests/e2e/run.js --stages install`: installs the marketplace from the commit under test as a consumer does, and checks every plugin, skill, agent, hook and MCP server loads | nothing: no login, no token, no model call |
+
+The unit suites run with Node's built-in coverage, and the job uploads the lcov report to [Codecov](https://codecov.io/gh/janecekvit/terylon-marketplace) without a stored token (OIDC); coverage is informational there, as set in [`codecov.yml`](./codecov.yml), and never fails a check.
 
 **The harness's other two stages stay manual, on purpose.** `author` and `github-only` drive the skills through a model, headless, and judge what it writes:
 
