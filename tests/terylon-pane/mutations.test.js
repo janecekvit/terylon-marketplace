@@ -1,6 +1,6 @@
 // The terylon-pane mod's tests have teeth (#332): each mutation below is planted in a copy of the mod, and
 // `claude plugin test` on that copy must fail. The unmutated copy must pass first, or a red mutation proves
-// nothing. Needs the `claude` CLI on PATH; without it every case skips and says why.
+// nothing. Needs a `claude` CLI on PATH that has `plugin test`; without one every case skips and says why.
 "use strict";
 
 const test = require("node:test");
@@ -235,11 +235,26 @@ const MUTATIONS = [
     },
 ];
 
-function hasClaude()
+// Capability, not presence: an older claude answers --version yet has no `plugin test`, and running
+// it would fail every case on "unknown command 'test'" instead of skipping. Asked for help on an
+// unknown subcommand, the CLI prints the parent's usage, so the probe checks the usage names it.
+function skipReason()
 {
-    const probe = spawnSync("claude", ["--version"], { encoding: "utf8" });
+    const versionProbe = spawnSync("claude", ["--version"], { encoding: "utf8" });
 
-    return probe.status === 0;
+    if (versionProbe.status !== 0)
+    {
+        return "the claude CLI is not on PATH, so `claude plugin test` cannot run";
+    }
+
+    const helpProbe = spawnSync("claude", ["plugin", "test", "--help"], { encoding: "utf8" });
+
+    if (helpProbe.status !== 0 || !/claude plugin test\b/.test(`${helpProbe.stdout}${helpProbe.stderr}`))
+    {
+        return "claude on PATH has no 'plugin test' (too old)";
+    }
+
+    return false;
 }
 
 function copyMod()
@@ -275,7 +290,7 @@ function runTests(target)
     return spawnSync("claude", ["plugin", "test", target], { encoding: "utf8", timeout: RUN_TIMEOUT_MILLISECONDS });
 }
 
-const SKIP = hasClaude() ? false : "the claude CLI is not on PATH, so `claude plugin test` cannot run";
+const SKIP = skipReason();
 
 test("the unmutated mod passes its own tests", { skip: SKIP, timeout: RUN_TIMEOUT_MILLISECONDS }, () =>
 {
