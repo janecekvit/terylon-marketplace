@@ -1,0 +1,28 @@
+# The repository's code conventions, for every editor: .claude/rules/scripting.md and
+# .claude/rules/markdown.md are the source; this file only makes editors follow them.
+root = true
+
+# Everything: UTF-8, LF (the scripts run on Debian), one final newline, no trailing spaces.
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+# Node tooling, hooks and tests, and PowerShell: four spaces, never tabs (scripting rule).
+[*.{js,mjs,cjs,ps1,psm1,sh}]
+indent_size = 4
+
+# The pane mod's TypeScript follows the Claude Code mod examples: two spaces.
+[*.{ts,tsx}]
+indent_size = 2
+
+# Manifests, workflows and other data: two spaces.
+[*.{json,jsonc,yml,yaml,toml,d2}]
+indent_size = 2
+
+# Markdown: two trailing spaces can be a line break, so trailing whitespace is left alone.
+[*.md]
+indent_size = 2
+trim_trailing_whitespace = false

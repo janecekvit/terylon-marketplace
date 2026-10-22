@@ -12,6 +12,7 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /NOTICE                            the copyright notice Apache-2.0 carries: Terylon Marketplace, copyright the operator
 /SECURITY.md                       how to report a vulnerability — GitHub private vulnerability reporting
 /CONTRIBUTING.md                   how a change is made: an issue first, a branch, one PR per issue, squash merge
+/.editorconfig                     the code conventions of .claude/rules/ for every editor: UTF-8, LF, indentation per file type
 /.github/workflows/ci.yml          unit suites + the free e2e install stage, on every PR and push to main
 /.github/workflows/versions.yml    the plugin version rules, on every PR — a changed plugin raises its version; a major needs the label `major`
 /.github/workflows/release.yml     on a vX.Y.Z tag: source archive + SHA256SUMS, provenance attestation, Sigstore signatures, the GitHub release
