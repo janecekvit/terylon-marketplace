@@ -19,6 +19,9 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /docs/runbooks/releasing.md        cutting a release, and verifying one
 /.github/workflows/diagrams.yml    renders every docs/**/*.d2 with the pinned D2; red on a bad source or a stale SVG
 /Scripts/render-diagrams.js        formats, validates and renders each .d2 to the .svg beside it; --check is CI's
+/.github/workflows/docs.yml        Markdown lint + link check over every tracked .md, on every PR and push to main
+/.markdownlint-cli2.jsonc          the Markdown lint rules — .claude/rules/markdown.md, encoded
+/lychee.toml                       the link check: relative links, anchors, external links; what is excluded and why
 /.github/ISSUE_TEMPLATE/           the issue form (the need, the plugins, acceptance criteria); blank issues off
 /.github/PULL_REQUEST_TEMPLATE.md  Why / What changes / How to verify / Closes #
 /.github/workflows/security.yml    CodeQL (JavaScript and the workflows) + zizmor, on every PR, push to main and weekly

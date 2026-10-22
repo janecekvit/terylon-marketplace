@@ -103,6 +103,7 @@ Scope: N files changed (+X / -Y lines). Languages: <detected>.
 ```
 
 **Priority rubric:**
+
 - **issue** — correctness, security, data loss, thread safety, public-contract regression. Must address.
 - **suggestion** — design, clarity, testability, non-trivial performance. Worth addressing but not blocking.
 - **nitpick** — style beyond what automated tools enforce, minor naming, comment wording. Optional.

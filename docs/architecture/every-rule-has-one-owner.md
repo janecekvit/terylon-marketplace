@@ -47,7 +47,7 @@ The arrangement that produced it — one rule, several full statements, nothing 
 |---|---|
 | **Good** | a rule changes in one file, and every reader reaches the current form by following one link |
 | **Cost** | a reader of a pointer opens a second file for the reasoning |
-| **Constraint** | **writing "the rule is in X — <the rule again>" undoes this decision.** The paraphrase is the copy, and the copy is what drifts. Name the section and stop |
+| **Constraint** | **writing "the rule is in X — \<the rule again\>" undoes this decision.** The paraphrase is the copy, and the copy is what drifts. Name the section and stop |
 | **Constraint** | an example drawn from a rule another file owns is a copy too. `markdown.md` illustrated the table-over-prose rule with the version-digit table, which is how that rule's fifth copy existed |
 
 ## The sweep

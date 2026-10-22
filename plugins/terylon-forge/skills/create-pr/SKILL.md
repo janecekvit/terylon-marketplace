@@ -35,7 +35,7 @@ Opens a pull request for the current branch and wires up what belongs around it:
 | `--delete-source-branch` | Delete the source branch when auto-complete merges. Only meaningful with `--auto-complete`. |
 | `--auto` | Apply the mechanical steps — create, link the items — without pausing. Does **not** cover push, reviewers, or auto-merge. |
 | `--dry-run` | Never write. Print the plan and stop. |
-| _(default)_ | Print the plan, wait for `push` / `apply` / `go`. |
+| *(default)* | Print the plan, wait for `push` / `apply` / `go`. |
 
 ## Prerequisites
 

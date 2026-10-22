@@ -26,3 +26,5 @@ plugins/*/tsconfig.json
 # Test coverage, written by node --test --experimental-test-coverage; Codecov holds the report
 lcov.info
 coverage/
+# lychee's result cache, from a local run of the link check
+.lycheecache

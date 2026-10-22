@@ -124,30 +124,36 @@ Several writes return a trimmed object that does not contain the field the call 
 One subsection per operation: its IN/OUT contract, the tool(s) it uses, and which skills consume it. Full mechanics (recipes, JSON shapes, gotchas) are in the cited sections below. **Every call below also carries `orgName`** (§2); the recipes leave it out of each argument list rather than repeat it thirty times.
 
 ### `parse-pr-url`
+
 - **In:** PR URL string. **Out:** `org`, `project`, `repoName`, `prId`.
 - **Tools:** none (string parsing). **Consumers:** review-pr, address-pr-comments, write-pr-description, pr-reviewer.
 - **Recipe:** §9 (bash + PowerShell).
 
 ### `parse-item-url`
+
 - **In:** WI URL string or bare number. **Out:** `org`, `project`, `WI_ID`.
 - **Tools:** none. **Consumers:** create-user-story, create-feature.
 - **Recipe:** §9. Bare number → use directly; `org` / `project` come from the resolution order in *Resolving org / project without a URL* (§9) — `ADO_ORGANIZATION` for the org, `ADO_PROJECT` or the git remote for the project.
 
 ### `parse-vstfs`
+
 - **In:** `vstfs://` artifact-link URL. **Out:** `projectGuid`, `repoGuid`, `prId`.
 - **Tools:** none. **Consumers:** *(none today — exposed for completeness)*.
 - **Recipe:** §10 (bash + net-new PowerShell). Only `rel=ArtifactLink` / `attributes.name='Pull Request'` relations carry it.
 
 ### `resolve-repo-id`
+
 - **In:** `repoName` (or GUID) + `project`. **Out:** `repositoryId` (`id` GUID).
 - **Tools:** `repo_repository(action="get")`. **Consumers:** review-pr, address-pr-comments, write-pr-description, pr-reviewer.
 - **Invariant:** resolve once per repo per run; cache (§5).
 
 ### `fetch-pr-metadata`
+
 - **In:** `prId`, `repositoryId`, `project`. **Out:** the whole PR object — `status`, `isDraft`, `createdBy`, `sourceRefName`, `targetRefName`, `lastMergeSourceCommit`, `description`, **`mergeStatus`**, **`autoCompleteSetBy`** and **`completionOptions`**. The last three are what `set-auto-merge`'s gate reads and what it echoes back; an output list omitting them leaves that gate with nothing to test.
 - **Tools:** `repo_pull_request(action="get")`. **Consumers:** review-pr, address-pr-comments, write-pr-description, pr-reviewer.
 
 ### `eligibility-check`
+
 - **In:** PR metadata. **Out:** the **normalised verdict** below, plus the raw flags it was derived from.
 
 **The normalised verdict is what a transport reads. It never reads the raw fields.** Azure DevOps returns `status` as a **number** and GitHub has no `status` key at all, so a transport comparing against `"completed"` matches nothing on either side and passes everything — the gate then fails **open**, which is how a run posts to a pull request somebody already merged.
@@ -166,15 +172,18 @@ One subsection per operation: its IN/OUT contract, the tool(s) it uses, and whic
 **These are numbers, not words** (§6). The one place a word is correct is the `status` **input** of `list-pull-requests`.
 
 **The two branch keys are stripped here, once.** Consumers used to be told to read `targetRefName` and strip the prefix themselves — a raw field name and a prefix shape that exist on this side only, restated in six places across the port. The other body reports the same two keys from `baseRefName` / `headRefName` with nothing to strip.
+
 - **Tools:** `repo_pull_request(action="get")`. **Consumers:** review-pr, address-pr-comments, write-pr-description, pr-reviewer.
 - **Decisions stay skill-side** (§14). Two-phase: phase-1 before read, phase-2 re-check before write.
 
 ### `detect-prior-run`
+
 - **In:** PR threads or WI comments. **Out:** boolean (prior Claude post present).
 - **Tools:** `repo_pull_request_thread(action="list")` (PR) / `wit_work_item(action="get")` (WI). **Consumers:** review-pr, address-pr-comments, create-user-story, pr-reviewer.
 - **Sentinel:** version-less `Generated with [Claude Code]` (§15).
 
 ### `list-threads`
+
 - **In:** `prId`, `repositoryId`, `project`. **Out:** the **normalised thread shape** below. The raw form is `[{ id, status, comments: [{ id, content, commentType, … }] }]` and stays here.
 
 **Both bodies return this shape, key for key**, or a transport cannot be written once against them:
@@ -188,30 +197,36 @@ One subsection per operation: its IN/OUT contract, the tool(s) it uses, and whic
 | `comments[]` | `{ commentId, body, author }` | `{ id, content, createdBy.uniqueName }` |
 
 The `- 1` is load-bearing: this side stores the end one past the last covered line, and reporting it raw makes every consumer edit one line too many.
+
 - **Tools:** `repo_pull_request_thread(action="list")`. **Consumers:** review-pr, address-pr-comments, pr-reviewer.
 - Classification/filtering stay skill-side.
 
 ### `list-thread-comments`
+
 - **In:** `prId`, `repositoryId`, `project`, `threadId`. **Out:** comments in that thread.
 - **Tools:** `repo_pull_request_thread(action="list_comments")`. **Consumers:** address-pr-comments.
 - The first comment's `id` feeds `reply-to-thread` as `parentCommentId`.
 
 ### `post-pr-thread`
+
 - **In:** comment body, `status`, optional `threadContext`. **Out:** created thread.
 - **Tools:** `repo_pull_request_thread_write(action="create")`. **Consumers:** review-pr, pr-reviewer.
 - **Merged op:** inline (with `threadContext`) and PR-wide (no `threadContext`) keyed on `threadContext` presence (§7, §8).
 
 ### `reply-to-thread`
+
 - **In:** `threadId`, `parentCommentId`, reply `content`. **Out:** created reply.
 - **Tools:** `repo_pull_request_thread_write(action="reply")`. **Consumers:** address-pr-comments.
 - Does **not** change thread status.
 
 ### `update-thread-status`
+
 - **In:** `threadId`, `status`. **Out:** updated thread.
 - **Tools:** `repo_pull_request_thread_write(action="update_status")`. **Consumers:** *(none today — exposed for completeness)*.
 - **Policy-guarded — never auto-resolve to `2` (fixed)** (§6).
 
 ### `update-pr-description`
+
 - **In:** `prId`, `repositoryId`, `project`, full `description` string (**≤4000 chars**). **Out:** updated PR.
 - **Tools:** `repo_pull_request_write(action="update")`. **Consumers:** write-pr-description.
 - Overwrites the whole `description` field; the Claude-region locate-or-append logic stays skill-side.
@@ -240,38 +255,45 @@ The `- 1` is load-bearing: this side stores the end one past the last covered li
 **The encoding is this body's business, not the caller's.** Every multiline key is written `Markdown` here, and a caller never passes a format: it hands over markdown and gets markdown rendered.
 
 ### `fetch-work-item`
+
 - **In:** `WI_ID`, `project`, `expand`. **Out:** the work-item keys above, plus the raw fields + relations they were read from.
 - **Tools:** `wit_work_item(action="get")` with `expand="relations"`, then one `get` per child for `children`. **Consumers:** create-user-story, create-feature.
 - Use `expand="relations"`; HTML fields pass as-is (§11), and `description` / `acceptanceCriteria` are reported with the encoding `multilineFieldsFormat` names, because an inherited HTML field is not markdown and must not be parsed as such.
 - **Gotcha — `multilineFieldsFormat` is empty under a `fields` filter.** The response reports which multiline fields are markdown in a `multilineFieldsFormat` object, and **that object comes back `{}` whenever the call passes an explicit `fields` list**, even for fields it asked for. It is populated under `expand`. Measured on a work item whose description and acceptance criteria are both markdown: the filtered fetch reported `{}` and the `expand` fetch reported both as `markdown`. **A check that confirms the format must use `expand`** — the filtered form fails it every time, and fails it in the direction that looks like a real defect.
 
 ### `fetch-work-items-batch`
+
 - **In:** `ids[]`, `project`, explicit `fields[]`. **Out:** `[{ id, rev, fields, url }, ...]`.
 - **Tools:** `wit_work_item(action="get_batch")`. **Consumers:** *(none today — exposed for completeness)*.
 - Explicit `fields` selector; deleted IDs silently omitted; ~200/call (§12).
 
 ### `parent-rollup`
+
 - **In:** WIs from a batch (with `System.Parent`). **Out:** `parentId → (type, title)` lookup.
 - **Tools:** `wit_work_item(action="get_batch")`. **Consumers:** *(none today — exposed for completeness)*.
 - `System.Parent` is top-level; two-pass; one level only (§12).
 
 ### `item-comments-read`
+
 - **In:** `WI_ID`, `project`. **Out:** `{ totalCount, comments: [{ id, text, createdBy }] }`.
 - **Tools:** `wit_work_item(action="list_comments")`. **Consumers:** update-work-item-checklist.
 - Doubles as the WI `detect-prior-run` source (grep `comments[].text`).
 
 ### `item-comment-post`
+
 - **In:** `WI_ID`, `project`, `text` (already includes the caller's footer). **Out:** `{ id }`.
 - **Tools:** `wit_work_item_comment_write(action="add")`, and `(action="update")` for the idempotent re-run. **Consumers:** update-work-item-checklist.
 - **Update form:** pass the existing `commentId` with `action="update"`. A re-run **updates** its previous comment rather than posting a second; both bodies must offer this or the idempotence the callers rely on has no call behind it.
 - Plain text; print the returned `id`.
 
 ### `build-pr-diff`
+
 - **In:** PR refs + `lastMergeSourceCommit`. **Out:** local `git diff` text.
 - **Tools:** none (git). **Consumers:** review-pr, write-pr-description, pr-reviewer.
 - **TWO flag profiles — see §13.** Never `git diff HEAD`.
 
 ### `create-work-item`
+
 - **In:** `project` (resolved per *Resolving org / project without a URL* (§9) when not taken from a URL) and the work-item keys `type`, `title`, `description`, `footer`, and when given `acceptanceCriteria`, `planning`, `estimate`, `priority`, `tags`. **Out:** the new item's `id` and `url`.
 - **Tool:** `wit_work_item_write(action="create")`. **Consumers:** create-user-story, create-feature.
 - **Recipe:** `workItemType` from `type`; `fields: [{name, value, format?}]` mapped through the key table — `System.Title`; `System.Description` = `description` + a blank line + `footer`, with **`format: "Markdown"`**; `Microsoft.VSTS.Common.AcceptanceCriteria` with **`format: "Markdown"`** when `acceptanceCriteria` is present; `System.AreaPath` and `System.IterationPath` from `planning`; `Microsoft.VSTS.Scheduling.StoryPoints`, `Microsoft.VSTS.Common.Priority`, `System.Tags` from `estimate`, `priority`, `tags`.
@@ -279,6 +301,7 @@ The `- 1` is load-bearing: this side stores the end one past the last covered li
 - **Gotcha (checkboxes):** `- [ ]` renders as an interactive checkbox **only when the field is written with `format: "Markdown"`**. ADO defaults every multiline field to HTML, where the same line is a plain bullet or a literal `[ ]`. Pass `format: "Markdown"` for **each** multiline field independently — `System.Description` and `Microsoft.VSTS.Common.AcceptanceCriteria` do not inherit from one another, and setting only the first leaves a story whose description renders and whose criteria do not.
 
 ### `link-work-item-parent`
+
 - **In:** `child`, `parent` — two item ids, the same two keys on both bodies. **Out:** linked work item.
 - **Tool:** `wit_work_item_link_write(action="link")`. **Consumers:** create-user-story, create-feature.
 - **Recipe:** `updates: [{ id: <child>, linkToId: <parent>, type: "parent" }]` — `id` is the work item being updated (the new story); `linkToId` is the Feature; `type: "parent"` makes the story a child of the Feature.
@@ -286,6 +309,7 @@ The `- 1` is load-bearing: this side stores the end one past the last covered li
 - **Alternative (one call, limited fields):** `wit_work_item_write(action="add_child")(parentId, workItemType, items:[{title, description, format, areaPath?, iterationPath?}])` creates AND links a child in one call — but supports only title/description/format/area/iteration, NOT StoryPoints/Priority/Tags. Use create-work-item + link-work-item-parent when any extra metadata is needed.
 
 ### `update-work-item`
+
 - **In:** `id` and any of the work-item keys `title`, `description`, `acceptanceCriteria`, `footer`; each given key replaces what the item holds. **Out:** updated work item. The JSON-Patch below is how this body writes them — a caller passes keys, never patch paths.
 - **Tool:** `wit_work_item_write(action="update")` — or `action="update_batch"` with `batchUpdates: [{ id, op, path, value, format }]`. **Consumers:** create-feature, update-work-item-checklist.
 - **The two update forms are not equivalent, and only one can state a format.** `update_batch` accepts a per-op **`format`**; the single `update` does not. So rewriting a markdown multiline field — acceptance criteria, a description — goes through `update_batch` **even for one item**, or the write lands with no format stated and depends on whatever encoding the field already carries. Measured: `update_batch` with `format: "Markdown"` on a single-element array round-tripped the criteria with `multilineFieldsFormat` still `markdown`.
@@ -315,7 +339,7 @@ The `- 1` is load-bearing: this side stores the end one past the last covered li
   | `wit_work_item_write(action="create")` | `feat/&lt;slug&gt;` — escaped, renders correctly |
   | `wit_work_item_write(action="update")` | `feat/` — **the tag is silently dropped** |
 
-  Observed on Story #110: `create-workspace creates a worktree on \`feat/<slug>\`` came back as `` `feat/` ``, losing the placeholder without any error. Nothing in the response signals it, so the loss is only visible by reading the stored value back.
+  Observed on Story #110: `` create-workspace creates a worktree on `feat/<slug>` `` came back as `` `feat/` ``, losing the placeholder without any error. Nothing in the response signals it, so the loss is only visible by reading the stored value back.
 
   When updating, write placeholders in a form that is not tag-shaped — `feat/` plus a description in prose, `{slug}`, or `feat/SLUG`. Reserve `<…>` for content you create in one call and never patch.
 
@@ -323,48 +347,57 @@ The `- 1` is load-bearing: this side stores the end one past the last covered li
 - **Gotcha (blast radius):** title edits are higher blast-radius than description edits — the caller confirms a title change separately. The confirm-before-write decision and any footer stay caller-side (this engine never stamps a footer, §16).
 
 ### `create-pull-request`
+
 - **In:** `repositoryId`, `sourceRefName`, `targetRefName`, `title` (required); `project` (required when `repositoryId` is a name), `description?` (≤4000), `isDraft?`, `labels?`, `workItems?`. **Out:** new PR (`pullRequestId`).
 - **Tool:** `repo_pull_request_write(action="create")`. **Consumers:** create-pr, develop (terylon-dev).
 - **Recipe:** pass **full ref names** (`refs/heads/<branch>`) for `sourceRefName` / `targetRefName` — do NOT strip `refs/heads/` here (that stripping is only for diff building, §13). Resolve `repositoryId` once via `resolve-repo-id` (§5); pass `project` when `repositoryId` is a name. `description` is capped at 4000 chars — keep the generated PR body within the limit.
 - **Associate work items:** `workItems` (space-separated WI IDs, e.g. `"101055 98792"`) links work items at creation — an alternative to a separate `link-work-item-to-pull-request` call. Draft/eligibility decisions and footer stay caller-side.
 
 ### `check-preconditions`
+
 - **In:** nothing. **Out:** usable / not usable, with the reason.
 - **Tools:** none (environment + git). **Consumers:** create-pr, and any transport before its first call.
 - **Recipe:** `ADO_ORGANIZATION` must be set — there is no default (§9) — and it must equal the organisation in the repository's remote, or every call goes to an organisation the remote does not describe. Report the mismatch and stop; do not "correct" either side.
 - **The `ado` server must be connected:** its `mcp__ado__*` tools are present in the session. When they are absent it is not registered or not signed in — say so and stop before the first call, as `resolve-forge` prescribes, and point at `check-access` and `connect`; the sign-in is the owner's, in `/mcp`.
 
 ### `list-pull-requests`
+
 - **In:** `repositoryId`, `project`, optional `sourceRefName` (full `refs/heads/<branch>`), `status`.
 - **Out:** one entry per matching pull request, each carrying the **same normalised `isOpen` / `isDraft` / `author`** that `eligibility-check` reports, derived the same way (`status == 1` is open, and so on). **Tool:** `repo_pull_request(action="list")`. **Consumers:** create-pr.
 - **Gotcha:** the `status` **input** is a **word** (`"Active"`, `"All"`), unlike the numeric `status` the response carries. That input is the one place the word form is correct — and the response's number never leaves this file.
 
 ### `resolve-current-user`
+
 - **In:** nothing. **Out:** the identity of whoever the run is acting as, in the same form `eligibility-check` reports `author`.
 - **Recipe:** `git config user.email` — on this forge `createdBy.uniqueName` is email-shaped, so the two compare directly.
 - **Why it is an operation:** the ownership gate needs "am I the author", and the answer is a platform question. Without it a transport reaches for a platform command of its own and crosses the port boundary to ask something the port should have answered.
 
 ### `resolve-identity`
+
 - **In:** an email or display name. **Out:** the reviewer id `update_reviewers` takes. **Tool:** none — the remote server has no identity lookup. **Consumers:** create-pr.
 - **Recipe:** an email passes as-is: `reviewerIds` takes email addresses. A display name is not resolvable here — ask for the email, never guess one.
 
 ### `add-reviewers`
+
 - **In:** `orgName`, `repositoryId`, `pullRequestId`, `project`, `reviewerIds` (emails or ids), `reviewerAction: "add"`.
 - **Out:** updated reviewers. **Tool:** `repo_pull_request_write(action="update_reviewers")`. **Consumers:** create-pr.
 - **Gotcha:** the request body carries `{ id }` only, so every reviewer added here is **optional** — required comes from a branch policy. On read-back an optional reviewer **omits** `isRequired` rather than reporting `false`; never test for an explicit `false`.
 
 ### `set-auto-merge`
+
 - **In:** `repositoryId`, `pullRequestId`, `project`, `autoComplete`, `mergeStrategy`, `deleteSourceBranch`, `transitionWorkItems`.
 - **Out:** updated pull request. **Tool:** `repo_pull_request_write(action="update")`. **Consumers:** create-pr.
 - **Gate before calling:** `status == 1`, `isDraft == false`, `mergeStatus == 3`, `autoCompleteSetBy` absent. **These are numbers, not words** (§6) — comparing against `"active"` matches nothing and passes everything.
 - **Gotchas:** completion options are sent whole, so read and echo back what a human already chose; `transitionWorkItems` defaults to `true` and moves every linked item on the board; **never send `bypassReason`** — any non-empty string overrides branch policies. The response **strips** `autoCompleteSetBy` and `completionOptions`, so read the pull request back to confirm.
 
 ### `list-linked-items`
+
 - **In:** `repositoryId`, `pullRequestId`, `project`. **Out:** the items already linked to the pull request.
 - **Tool:** `repo_pull_request(action="get", includeWorkItemRefs=true)`, **read back from the work item** when it returns nothing.
 - **Measured gotcha:** that call returned **no `workItemRefs` key at all** on a pull request that demonstrably had a linked work item. Never report "no links" from its absence — confirm against `wit_work_item(action="get", expand="Relations")`, which is where the relation actually lives.
 
 ### `link-work-item-to-pull-request`
+
 - **In:** `projectId`, `repositoryId`, `pullRequestId`, `workItemId` (optional `pullRequestProjectId` for cross-project links). **Out:** linked work item.
 - **Tool:** `wit_work_item_link_write(action="link_to_pull_request")`. **Consumers:** develop (terylon-dev).
 - **Gotcha (GUIDs, not names):** `projectId` must be the **project GUID** (the tool rejects a project name) and `repositoryId` must be the **repo GUID**. Resolve both via `resolve-repo-id` (§5) — `repo_repository(action="get")` returns the repo object with its `project.id`. Most other ops accept a project *name*; this one does not.
