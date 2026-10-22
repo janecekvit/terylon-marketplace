@@ -14,6 +14,9 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /.editorconfig                     the code conventions of .claude/rules/ for every editor: UTF-8, LF, indentation per file type
 /.github/workflows/ci.yml          unit suites + the free e2e install stage, on every PR and push to main
 /.github/workflows/versions.yml    the plugin version rules, on every PR — a changed plugin raises its version; a major needs the label `major`
+/.github/workflows/release.yml     on a vX.Y.Z tag: source archive + SHA256SUMS, provenance attestation, Sigstore signatures, the GitHub release
+/tests/release/                    release-notes.js — the notes a release carries (every plugin's version, the PRs since the previous tag) — and its tests
+/docs/runbooks/releasing.md        cutting a release, and verifying one
 /.github/workflows/security.yml    CodeQL (JavaScript and the workflows) + zizmor, on every PR, push to main and weekly
 /.github/workflows/scorecard.yml   OpenSSF Scorecard, on main and weekly, published for the README badge
 /.github/dependabot.yml            raises the SHA-pinned actions weekly, one grouped pull request
@@ -143,6 +146,7 @@ Five suites under `/tests/`, none distributed, and a mod's own tests beside it. 
 | terylon-os plugin | `node --test tests/terylon-os/terylon-os-plugin.test.js` | the `terylon-os` plugin's one server is `${TERYLON_URL}/mcp` with no header or token, every prompt Terylon's `/mcp` serves has exactly one skill mirroring it, and nothing published names a host | free, milliseconds |
 | plugin versions | `node --test tests/versions/check-plugin-versions.test.js` | a changed plugin without a raised version fails, a patch or minor raise passes, a major raise fails without the label `major` and passes with it, a new plugin passes from 1.0.0 up, a deleted one passes, a malformed version fails, and a version `marketplace.json` lists must equal `plugin.json`'s — the pure rules, and the command line end to end in a throwaway repository | free, seconds |
 | harness unit checks | `node --test tests/e2e/ref.test.js` | which ref the harness installs, and that a detached HEAD is refused rather than passed on as `HEAD` | free, milliseconds |
+| release notes | `node --test tests/release/release-notes.test.js` | the tag check, the previous tag chosen by number, every plugin's version and change, the pull requests from squash and merge subjects — against fixtures and a throwaway repository with real tags | free, about a second |
 | end-to-end | `node tests/e2e/run.js` | the marketplace installs from a git ref as a consumer installs it, everything loads, and the skills — followed by a model, headless — write the right things or refuse with the right reason | about **$2.60–3.25** per full run on sonnet, 4–8 min (measured 2026-10-04) |
 
 ```
