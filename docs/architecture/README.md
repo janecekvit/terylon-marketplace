@@ -4,6 +4,28 @@ Why this marketplace is shaped the way it is — the static view. **Architecture
 
 An ADR records a decision *and the reasoning that was overturned to reach it*. That is what separates it from the rest of the knowledge base: a flow describes what happens now, an ADR describes why the alternative was rejected.
 
+## Diagrams
+
+The structure of the marketplace, drawn in [D2](https://d2lang.com). Each `.d2` file here is the source of truth for the `.svg` beside it. To change a diagram, edit the `.d2`, run `node Scripts/render-diagrams.js` and commit both files; the Diagrams workflow fails when a source is unformatted or invalid, or when an SVG is stale or missing. Flows over time are drawn as Mermaid in the article that walks them, in [`flows/`](../flows/README.md).
+
+| Diagram | Draws |
+|---|---|
+| [`plugins.d2`](./plugins.d2) | every plugin and the dependencies its manifest declares, and the two keys a consumer enables |
+| [`forge-port.d2`](./forge-port.d2) | the forge port: its operation catalog, `resolve-forge`, and the two adapters that implement it |
+| [`terylon-os-and-pane.d2`](./terylon-os-and-pane.d2) | a session reaching Terylon's Agentic OS through `terylon-os`, the `terylon-pane` mod, and the gates that stay in the console |
+
+### The plugins
+
+![The marketplace's plugins and their declared dependencies](./plugins.svg)
+
+### The forge port
+
+![The forge port, its operation catalog and its two adapters](./forge-port.svg)
+
+### terylon-os and the pane
+
+![terylon-os, the terylon-pane mod and Terylon's Agentic OS](./terylon-os-and-pane.svg)
+
 ## Articles
 
 | Article | Records |

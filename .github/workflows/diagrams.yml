@@ -1,0 +1,76 @@
+# Every docs/**/*.d2 is a diagram source, and the .svg beside it is what the documentation embeds.
+# This job renders every source with the pinned D2, keeps the result as an artifact, and fails when
+# a source is unformatted or invalid, or when a committed SVG differs from the fresh render or is
+# missing. To fix a red run: run node Scripts/render-diagrams.js with the same D2 and commit the result,
+# or take the SVGs from this run's rendered-diagrams artifact.
+name: Diagrams
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "Scripts/render-diagrams.js"
+      - ".github/workflows/diagrams.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "Scripts/render-diagrams.js"
+      - ".github/workflows/diagrams.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: diagrams-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The D2 release every committed SVG is rendered with; node Scripts/render-diagrams.js names the same.
+  D2_VERSION: v0.9.0
+
+jobs:
+  diagrams:
+    name: Diagrams
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # D2 v0.9.0's go.mod requires Go 1.27.
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27"
+          cache: false
+
+      # From v0.9.0 the module is github.com/d2lang/d2; the old oss.terrastruct.com/d2 path stops
+      # before that release and cannot install it.
+      - name: Install D2
+        run: |
+          go install "github.com/d2lang/d2@${D2_VERSION}"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Render
+        run: node Scripts/render-diagrams.js
+
+      - name: Keep the rendered diagrams
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rendered-diagrams
+          path: |
+            docs/**/*.svg
+            docs/**/*.d2
+          if-no-files-found: warn
+
+      # The render above formatted each source in place and wrote each SVG, so anything that now
+      # differs from the commit - a source d2 fmt rewrote, an SVG that changed or did not exist -
+      # is reported here and fails the job.
+      - name: Check against the commit
+        run: node Scripts/render-diagrams.js --check
