@@ -172,6 +172,8 @@ This GitHub repository is the **public home** of the marketplace and the address
 
 The marketplace is built with itself: its stories, builds, reviews and test-plan checks run through these plugins.
 
+**A pull request that changes a plugin raises its version.** Change anything under `plugins/<slug>/` and raise `version` in that plugin's `.claude-plugin/plugin.json` in the same pull request — [`.github/workflows/versions.yml`](./.github/workflows/versions.yml) fails it otherwise, and fails a raised major unless the maintainer has labelled the pull request `major`. Run the same check locally with `node tests/versions/check-plugin-versions.js --base origin/main --head HEAD`; which digit to move is in [`plugins/CLAUDE.md`](./plugins/CLAUDE.md), under *Versioning*.
+
 ## Continuous integration
 
 [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) runs on every pull request and every push to `main`:
