@@ -13,7 +13,8 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /SECURITY.md                       how to report a vulnerability — GitHub private vulnerability reporting
 /CONTRIBUTING.md                   how a change is made: an issue first, a branch, one PR per issue, squash merge
 /.editorconfig                     the code conventions of .claude/rules/ for every editor: UTF-8, LF, indentation per file type
-/.github/workflows/ci.yml          unit suites + the free e2e install stage, on every PR and push to main
+/.github/workflows/ci.yml          unit suites, the free e2e install stage, the terylon-pane mod's tests, on every PR and push to main
+/.github/claude-code/              the Claude Code CI runs: an exact pin and its lockfile, installed with npm ci; Dependabot raises it
 /.github/workflows/versions.yml    the plugin version rules, on every PR — a changed plugin raises its version; a major needs the label `major`
 /.github/workflows/release.yml     on a vX.Y.Z tag: source archive + SHA256SUMS, provenance attestation, Sigstore signatures, the GitHub release
 /tests/release/                    release-notes.js — the notes a release carries (every plugin's version, the PRs since the previous tag) — and its tests
@@ -27,7 +28,7 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /.github/PULL_REQUEST_TEMPLATE.md  Why / What changes / How to verify / Closes #
 /.github/workflows/security.yml    CodeQL (JavaScript and the workflows) + zizmor, on every PR, push to main and weekly
 /.github/workflows/scorecard.yml   OpenSSF Scorecard, on main and weekly, published for the README badge
-/.github/dependabot.yml            raises the SHA-pinned actions weekly, one grouped pull request
+/.github/dependabot.yml            raises the SHA-pinned actions weekly, one grouped pull request, and the CI's Claude Code; 14-day cooldown
 /.github/CODEOWNERS                every file the maintainer's to review
 /codecov.yml                       Codecov: coverage of the unit suites is informational, never a gate; stubs and fixtures ignored
 /plugins/<slug>/                   one directory per plugin
@@ -157,9 +158,9 @@ The repo runs on **Windows and natively on Debian**. Everything scripted must wo
 
 ## Testing
 
-Five suites under `/tests/`, none distributed, and a mod's own tests beside it. **Run the end-to-end harness before a change reaches `main`**, and before anything moves to a new host.
+Seven suites under `/tests/`, none distributed, and a mod's own tests beside it. **Run the end-to-end harness before a change reaches `main`**, and before anything moves to a new host.
 
-**GitHub Actions runs the free part on every pull request and every push to `main`** (`.github/workflows/ci.yml`): `node --test "**/*.test.js"` and the `install` stage, with Claude Code pinned to the version last measured. The stage needs no secret — measured on 2026-10-04 with an empty environment and an empty `HOME`: 82 checks green, $0, and each install-stage planted defect (`skill-frontmatter`, `hook-path`, `mcp-organisation`) turned it red. Since #332 the stage has 104 checks — `terylon-ado`'s `connect` registering `ado` against the stand-in, `ado` and `terylon-os`'s `terylon` connecting — and `connect-client-id` replaced `mcp-organisation` (measured 2026-10-11: caught, 1 failing check). A CI checkout is a detached HEAD, which the harness refuses, so the job names the commit as a local branch and passes `--ref`. The model-driven stages stay manual; why is in `README.md`, under *Continuous integration*.
+**GitHub Actions runs the free part on every pull request and every push to `main`** (`.github/workflows/ci.yml`): `node --test "**/*.test.js"`, the `install` stage, and the `terylon-pane` mod's `plugin validate`, `plugin test` and mutation suite. Claude Code is pinned exactly in `.github/claude-code/package.json` and installed from its lockfile with `npm ci`, to the version last measured: **2.1.295, measured 2026-10-22** — the newest release then at least 14 days old, on which the install stage passed 104 checks, `plugin test` 85 tests and the mutation suite all 35 cases. Dependabot proposes a newer one after the same 14 days; its pull request's CI is the measurement, and this figure moves when it lands. The stage needs no secret — measured on 2026-10-04 with an empty environment and an empty `HOME`: 82 checks green, $0, and each install-stage planted defect (`skill-frontmatter`, `hook-path`, `mcp-organisation`) turned it red. Since #332 the stage has 104 checks — `terylon-ado`'s `connect` registering `ado` against the stand-in, `ado` and `terylon-os`'s `terylon` connecting — and `connect-client-id` replaced `mcp-organisation` (measured 2026-10-11: caught, 1 failing check). A CI checkout is a detached HEAD, which the harness refuses, so the job names the commit as a local branch and passes `--ref`. The model-driven stages stay manual; why is in `README.md`, under *Continuous integration*.
 
 | Suite | Command | Proves | Cost |
 |---|---|---|---|
@@ -170,6 +171,7 @@ Five suites under `/tests/`, none distributed, and a mod's own tests beside it. 
 | terylon-pane version | `node --test tests/terylon-pane/version.test.js` | the version the Status tab says is the one `plugin.json` ships | free, milliseconds |
 | terylon-os plugin | `node --test tests/terylon-os/terylon-os-plugin.test.js` | the `terylon-os` plugin's one server is `${TERYLON_URL}/mcp` with no header or token, every prompt Terylon's `/mcp` serves has exactly one skill mirroring it, and nothing published names a host | free, milliseconds |
 | plugin versions | `node --test tests/versions/check-plugin-versions.test.js` | a changed plugin without a raised version fails, a patch or minor raise passes, a major raise fails without the label `major` and passes with it, a new plugin passes from 1.0.0 up, a deleted one passes, a malformed version fails, and a version `marketplace.json` lists must equal `plugin.json`'s — the pure rules, and the command line end to end in a throwaway repository | free, seconds |
+| diagrams | `node --test tests/diagrams/render-diagrams.test.js` | the render script's arguments, where a source renders to, how git's path listings are read, and that the D2 it pins is the one `diagrams.yml` installs; the D2 calls themselves run in the Diagrams workflow | free, milliseconds |
 | harness unit checks | `node --test tests/e2e/ref.test.js` | which ref the harness installs, and that a detached HEAD is refused rather than passed on as `HEAD` | free, milliseconds |
 | release notes | `node --test tests/release/release-notes.test.js` | the tag check, the previous tag chosen by number, every plugin's version and change, the pull requests from squash and merge subjects — against fixtures and a throwaway repository with real tags | free, about a second |
 | end-to-end | `node tests/e2e/run.js` | the marketplace installs from a git ref as a consumer installs it, everything loads, and the skills — followed by a model, headless — write the right things or refuse with the right reason | about **$2.60–3.25** per full run on sonnet, 4–8 min (measured 2026-10-04) |

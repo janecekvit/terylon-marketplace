@@ -28,3 +28,6 @@ lcov.info
 coverage/
 # lychee's result cache, from a local run of the link check
 .lycheecache
+
+# The Claude Code CI installs from .github/claude-code/ with npm ci; only the manifest and lockfile are committed
+.github/claude-code/node_modules/
