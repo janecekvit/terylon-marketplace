@@ -73,7 +73,7 @@ Declaring without prose leaves an agent holding a skill it has no reason to open
 
 - **One `# H1` per file**, at the top, naming what the file is.
 - **Do not skip heading levels.** `##` follows `#`, `###` follows `##`.
-- **Fence every code block with a language tag** — ` ```powershell `, ` ```bash `, ` ```json `, ` ```yaml `. Untagged fences lose syntax highlighting and make the intended interpreter ambiguous. **A diagram is the one exception** and takes a bare fence — see below.
+- **Fence every code block with a language tag** — ` ```powershell `, ` ```bash `, ` ```json `, ` ```yaml `. Untagged fences lose syntax highlighting and make the intended interpreter ambiguous. **A diagram is the one exception** and takes a bare fence — see below; a Mermaid flow takes ` ```mermaid `, which is what renders it.
 - **A blank line around** every heading, list, table, and fenced block. Some renderers silently merge them otherwise.
 
 ## Show structure, do not describe it
@@ -100,6 +100,21 @@ Any rule with distinct cases becomes a table keyed on the condition, not a bulle
 The example is the wrapping rule this file already owns, on purpose: an example that reproduced a rule owned elsewhere would be a copy of it, and copies drift.
 
 Same for flags, recipe catalogues, tool mappings, and field encodings. Key column first, answer second. Prose stays for the reasoning that the table cannot carry.
+
+### D2 for structure, Mermaid for flows, box drawing for short sketches
+
+Three kinds of drawing, and each shape has one of them:
+
+| Shape | Drawn as | Lives in |
+|---|---|---|
+| **Structure** — components, their dependencies and boundaries, the static view | a [D2](https://d2lang.com) source, `docs/architecture/<name>.d2`, with the rendered `<name>.svg` committed beside it and embedded as `![…](<name>.svg)` | `docs/architecture/`, indexed in its `README.md` |
+| **A flow over time** — a resolution, a pipeline, a sequence of calls with branches | Mermaid in a ` ```mermaid ` fence, a `flowchart` or a `sequenceDiagram` | the article that walks the flow, usually in `docs/flows/` |
+| **A short inline sketch** — a dispatch chain in a `SKILL.md`, the dependency graph an orienting document must carry, a layout | box drawing in a bare fence, by the rules below | the file it orients |
+
+- **The `.d2` is the source of truth and the `.svg` is generated.** Edit the source, run `node Scripts/render-diagrams.js`, commit both. Never edit an SVG by hand.
+- **CI holds the two together.** The Diagrams workflow renders every source with the pinned D2 and fails on an unformatted or invalid source, or on a stale or missing SVG; its `rendered-diagrams` artifact carries what it rendered.
+- **GitHub renders a ` ```mermaid ` fence inline.** The source stays plain text everywhere else, so write node labels a reader can follow unrendered.
+- **The rule that every orienting document carries the plugin graph is unchanged.** That graph stays a box drawing in each document; `docs/architecture/plugins.d2` draws the same edges, and both are derived from `plugin.json#dependencies`.
 
 ### ASCII diagrams for call chains and dependencies
 
