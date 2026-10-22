@@ -13,6 +13,7 @@ ignore:
   - "tests/**/stubs/**"
   - "**/fixtures/**"
   - "**/fixtures.*"
+  - "tests/forge-port/fake-gh.js"
 
 comment:
   layout: "condensed_header, condensed_files"
