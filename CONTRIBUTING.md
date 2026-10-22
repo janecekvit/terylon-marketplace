@@ -28,6 +28,7 @@ Keep the slug short and kebab-case. Never commit to `main`; the full git rules a
 
 - The description says why, what changes and how to verify it, and ends with `Closes #N` — the template carries that shape.
 - **CI must be green**: [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) runs the unit suites and the free install stage. Run `node --test "**/*.test.js"` locally first. The property tests need the one npm dependency in the repository, so they run apart: `npm ci && npm test` in `tests/property/`, and `.github/workflows/property.yml` runs them on every pull request.
+- **A check fails or the pull request stays blocked although your change is right?** The usual causes — a version raised on `main` after you branched, a rule added after the branch was created, a ruleset setting — and what to do about each are in [*When a pull request is blocked*](./docs/onboarding/marketplace-development.md#when-a-pull-request-is-blocked).
 - **The maintainer merges, squashed.** Nobody else merges, and `main` is never pushed to directly or force-pushed.
 
 ## Versions and releases

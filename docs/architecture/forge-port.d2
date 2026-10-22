@@ -12,7 +12,8 @@ vars: {
 direction: down
 
 # One colour per kind: callers (slate), the port (amber), adapters (green), the stop (red),
-# platforms outside the marketplace (grey).
+# platforms outside the marketplace (grey). A container has a stroke and no fill, so the theme fills
+# it in light and dark mode alike: .claude/rules/markdown.md says why.
 classes: {
   caller: {
     style: {
@@ -53,7 +54,6 @@ classes: {
 
 callers: "Callers: name operations, never tools" {
   style: {
-    fill: "#F8FAFC"
     stroke: "#64748B"
   }
 
@@ -64,7 +64,6 @@ callers: "Callers: name operations, never tools" {
 
 port: "terylon-forge: the port\ndeclares terylon-git only; no adapter declared" {
   style: {
-    fill: "#FFFBEB"
     stroke: "#F59E0B"
   }
 
@@ -76,7 +75,6 @@ stop: "STOP: name the forge, the missing plugin,\nwhat to enable. No fallback, n
 
 ado: "terylon-ado: adapter" {
   style: {
-    fill: "#ECFDF5"
     stroke: "#10B981"
   }
 
@@ -86,7 +84,6 @@ ado: "terylon-ado: adapter" {
 
 github: "terylon-github: adapter" {
   style: {
-    fill: "#ECFDF5"
     stroke: "#10B981"
   }
 

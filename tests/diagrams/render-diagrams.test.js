@@ -6,7 +6,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
 
-const { parseArguments, renderedPathFor, pathListFrom, D2_VERSION } = require(path.join(__dirname, "..", "..", "Scripts", "render-diagrams.js"));
+const { parseArguments, renderedPathFor, renderArgumentsFor, pathListFrom, D2_VERSION, LIGHT_THEME_ID, DARK_THEME_ID } = require(path.join(__dirname, "..", "..", "Scripts", "render-diagrams.js"));
 
 test("no argument renders, --check checks", () =>
 {
@@ -25,6 +25,13 @@ test("a source renders to the .svg beside it", () =>
 {
     assert.equal(renderedPathFor("docs/architecture/plugins.d2"), "docs/architecture/plugins.svg");
     assert.equal(renderedPathFor("docs/flows/deep/forge-port.d2"), "docs/flows/deep/forge-port.svg");
+});
+
+test("a source renders in a light and a dark theme, to the .svg beside it", () =>
+{
+    assert.deepEqual(renderArgumentsFor("docs/architecture/plugins.d2"),
+        ["--theme", LIGHT_THEME_ID, "--dark-theme", DARK_THEME_ID, "docs/architecture/plugins.d2", "docs/architecture/plugins.svg"]);
+    assert.notEqual(LIGHT_THEME_ID, DARK_THEME_ID);
 });
 
 test("git's listing becomes a sorted list without blanks or duplicates, CRLF or LF", () =>
