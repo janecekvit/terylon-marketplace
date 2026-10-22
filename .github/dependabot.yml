@@ -1,0 +1,20 @@
+# Dependabot raises the pinned GitHub Actions once a week, one pull request for all of them.
+# The marketplace ships no npm, NuGet or pip dependency of its own; the tests use Node's standard
+# library only.
+version: 2
+updates:
+  # Every update waits 14 days after its release (cooldown), so a compromised release has time
+  # to be caught before it reaches this repository. Actions are pinned to commit SHAs; Dependabot
+  # updates the SHA and the version comment.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 14
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "Build(deps)"
