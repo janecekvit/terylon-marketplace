@@ -114,7 +114,8 @@ Three kinds of drawing, and each shape has one of them:
 - **The `.d2` is the source of truth and the `.svg` is generated.** Edit the source, run `node Scripts/render-diagrams.js`, commit both. Never edit an SVG by hand.
 - **CI holds the two together.** The Diagrams workflow renders every source with the pinned D2 and fails on an unformatted or invalid source, or on a stale or missing SVG; its `rendered-diagrams` artifact carries what it rendered.
 - **GitHub renders a ` ```mermaid ` fence inline.** The source stays plain text everywhere else, so write node labels a reader can follow unrendered.
-- **The rule that every orienting document carries the plugin graph is unchanged.** That graph stays a box drawing in each document; `docs/architecture/plugins.d2` draws the same edges, and both are derived from `plugin.json#dependencies`.
+- **Every SVG carries a light and a dark theme.** The script renders with D2's `--theme` and `--dark-theme`, and the SVG's CSS follows the viewer's `prefers-color-scheme`, so a diagram does not glare white on GitHub's dark theme. An explicit style is not themed, so **a container takes a `stroke` and no `fill`** and a label drawn on the background (a `person`'s, an edge's) takes no `font-color`: the theme colours both, and they stay readable in either mode. A node may keep its own fill and font colour, which travel together.
+- **The plugin graph stays a box drawing in every orienting document but one.** The root `README.md` embeds the rendering of `docs/architecture/plugins.d2` instead: it is read on GitHub, where the SVG renders in both themes, and a third hand-drawn copy of the same edges there would be the one copy CI never checks. Every other orienting document keeps its box drawing, because a terminal and an agent's context window render no SVG. Both drawings are derived from `plugin.json#dependencies`.
 
 ### ASCII diagrams for call chains and dependencies
 
@@ -168,7 +169,8 @@ Use plain ASCII (`└──`, `├──`, `──▶`, `┐`/`┘`), never Unic
 
 | Document | Draws |
 |---|---|
-| root `CLAUDE.md`, root `README.md` | the whole graph |
+| root `CLAUDE.md` | the whole graph |
+| root `README.md` | the whole graph, as the embedded rendering of `docs/architecture/plugins.d2` — the one exception, stated under *D2 for structure* |
 | `plugins/CLAUDE.md` | the whole graph, plus which component lives in which plugin and every cross-plugin load |
 | each `plugins/<slug>/README.md` | the graph from **that plugin's vantage** — what it sits on, what sits on it, marked `← you are here` |
 | `docs/CLAUDE.md` | **not the plugin graph** — it orients inside the knowledge base, and draws the `docs/` tree instead. `docs/README.md` beside it is an authoring standard and draws neither |

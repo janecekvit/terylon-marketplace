@@ -13,7 +13,8 @@ vars: {
 direction: up
 
 # One colour per kind: roots (indigo), the git layer (blue), the port (amber), adapters (green),
-# role plugins (slate), Terylon's own plugins (violet), notes (grey).
+# role plugins (slate), Terylon's own plugins (violet), notes (grey). A container has a stroke and
+# no fill, so the theme fills it in light and dark mode alike: .claude/rules/markdown.md says why.
 classes: {
   root: {
     style: {
@@ -68,11 +69,10 @@ classes: {
 
 core: "terylon-core\nthe root: shared conventions, measurement\nno dependencies" {class: root}
 git: "terylon-git\n+ git; no forge, no MCP server" {class: layer}
-forge: "terylon-forge\nthe forge port: the pull request workflow\nno adapter declared" {class: port}
+forge: "terylon-forge\nthe forge port: the pull request workflow\ndeclares no adapter, on purpose" {class: port}
 
 adapters: "Adapters: one body of forge-ops each" {
   style: {
-    fill: "#ECFDF5"
     stroke: "#10B981"
   }
 
@@ -82,7 +82,6 @@ adapters: "Adapters: one body of forge-ops each" {
 
 roles: "Role plugins" {
   style: {
-    fill: "#F8FAFC"
     stroke: "#64748B"
   }
 
@@ -94,7 +93,6 @@ roles: "Role plugins" {
 # Terylon's own plugins: the owner's product, not a role in the development workflow.
 outside: "Outside the chain: Terylon itself" {
   style: {
-    fill: "#FAF5FF"
     stroke: "#A855F7"
     stroke-dash: 3
   }

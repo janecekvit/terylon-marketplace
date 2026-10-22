@@ -12,7 +12,8 @@ vars: {
 direction: down
 
 # One colour per kind: the plugin (indigo), the mod (violet), Agentic OS (blue), gates (red),
-# the person and the phone (grey).
+# the phone (grey); the owner takes the theme's. A container has a stroke and no fill, so the theme
+# fills it in light and dark mode alike: .claude/rules/markdown.md says why.
 classes: {
   plugin: {
     style: {
@@ -53,13 +54,11 @@ classes: {
 
 session: "Claude Desktop or Claude Code: a local session on the PC" {
   style: {
-    fill: "#F8FAFC"
     stroke: "#475569"
   }
 
   os: "terylon-os plugin: no dependencies" {
     style: {
-      fill: "#EEF2FF"
       stroke: "#6366F1"
     }
 
@@ -70,7 +69,6 @@ session: "Claude Desktop or Claude Code: a local session on the PC" {
 
   pane: "terylon-pane mod: shows, asks, answers, posts; never approves" {
     style: {
-      fill: "#FAF5FF"
       stroke: "#A855F7"
     }
 
@@ -85,7 +83,6 @@ phone: "The phone, through Remote Control\nterylon-os on an always-on box; no mo
 
 terylon: "Terylon's Agentic OS: the only source of truth" {
   style: {
-    fill: "#EFF6FF"
     stroke: "#3B82F6"
   }
 
@@ -94,9 +91,9 @@ terylon: "Terylon's Agentic OS: the only source of truth" {
   console: "the console: every gate\nplan approve or rethink, merge, return, unblock,\nabandon, stop, accept, leader pause or resume" {class: gate}
 }
 
+# No class: its label sits outside the shape, on the background, so it takes the theme's colours.
 person: "the owner" {
   shape: person
-  class: external
 }
 
 session.pane -> session.os: "dependencies: terylon-os" {
