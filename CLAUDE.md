@@ -76,7 +76,7 @@ Component layout, the placement rule in full, the dispatch chains and the table 
 | Remote | **one**, `origin`, on GitHub. Nothing is mirrored anywhere |
 | A change | starts as an issue stating the need, with its acceptance criteria as a checklist; is made on a `feat/`, `fix/` or `docs/` branch; ends as a pull request that says `Closes #N` |
 | Merge | **squash only**, by the maintainer (`janecekvit`), once CI is green; the branch is deleted on merge |
-| `main` | the repository ruleset refuses deleting it and force-pushing it, and requires a linear history and signed commits; every pull request also gets Copilot code review and code quality |
+| `main` | the repository ruleset refuses deleting it and force-pushing it, requires a linear history, a pull request (squash only, every review thread resolved), the CI checks green and no high or higher CodeQL alert; every pull request also gets Copilot code review |
 | Releases | a `vX.Y.Z` tag the maintainer pushes; each plugin keeps its own version in `plugin.json` |
 
 ```
