@@ -69,7 +69,7 @@ Two hops fail silently, and they are the ones the runbook exists for.
 | the work | the contributor | a `feat/`, `fix/` or `docs/` branch, one pull request per issue, its description saying `Closes #N`; evidence for each criterion as a comment on the issue |
 | the check | GitHub Actions | `.github/workflows/ci.yml` on the pull request — the unit suites and the free install stage |
 | the merge | the maintainer | squash, once CI is green; the branch is deleted on merge |
-| a release | the maintainer | `git tag -a vX.Y.Z` on `main` and `git push origin vX.Y.Z`, with the release notes on GitHub |
+| a release | the maintainer | `git tag -a vX.Y.Z` on `main` and `git push origin vX.Y.Z`; the Release workflow builds, attests, signs and publishes it — [`runbooks/releasing.md`](../runbooks/releasing.md) |
 
 **An agent never merges and never pushes `main`.** `.claude/hooks/git-guard.js` refuses any push that targets `main`, on purpose: the rule it backs is that `main` moves only through a reviewed pull request.
 
