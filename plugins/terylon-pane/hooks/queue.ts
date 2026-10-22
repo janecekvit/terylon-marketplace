@@ -199,6 +199,17 @@ export function waitingItems(briefing: Json, base: string): PaneWaitingItem[] {
   return items
 }
 
+// "Tests · tester · step 5 of 9": a running row's stage, who works in it and how far, from progress alone.
+function stageLineOf(stage: string | null, step: number | null, steps: number | null, environment: string | null): string | null {
+  if (stage === null) {
+    return null
+  }
+
+  return [COPY.stageLabel(stage), COPY.stageRole(stage), step !== null && steps !== null ? COPY.stepOf(step, steps) : null, stage === 'verify' ? environment : null]
+    .filter(part => part !== null)
+    .join(' · ')
+}
+
 export function runningItems(flight: Json, zoneOffsetMinutes = 0): PaneRunningItem[] {
   return list(flight.stories).map(story => {
     const progress = (story.progress ?? null) as Json | null
@@ -207,13 +218,19 @@ export function runningItems(flight: Json, zoneOffsetMinutes = 0): PaneRunningIt
     const stuck = (story.stuck ?? null) as Json | null
     const isVerifying = story.state === 'verifying'
     const environment = text((story.environment as Json | null)?.name)
+    const stage = text(progress?.stage)
+    const phases = phasesOf({ ...story, state: String(story.state ?? '') }, stage)
+    const now = phases.findIndex(phase => phase.status === 'now')
+    // THE PHASE OF EIGHT the row is at (the S32 canvas: "5/8 · $2.10"), else the step, as 1.1.2 said it.
     const where = stuck !== null
       ? COPY.stuckSince(clock(stuck.since, zoneOffsetMinutes) ?? '?')
       : isVerifying
         ? COPY.verifying
-        : step !== null && steps !== null
-          ? `${step}/${steps}`
-          : text(story.state) ?? ''
+        : now >= 0
+          ? `${now + 1}/${phases.length}`
+          : step !== null && steps !== null
+            ? `${step}/${steps}`
+            : text(story.state) ?? ''
 
     return {
       story: number(story.id) ?? 0,
@@ -227,6 +244,8 @@ export function runningItems(flight: Json, zoneOffsetMinutes = 0): PaneRunningIt
       fraction: isVerifying ? 0.9 : step !== null && steps !== null && steps > 0 ? Math.min(1, step / steps) : null,
       isStuck: stuck !== null,
       isVerifying,
+      phases,
+      stageLine: stageLineOf(stage, step, steps, environment),
     }
   })
 }
@@ -332,17 +351,24 @@ export function phasesOf(document: Json, stage: string | null): PanePhase[] {
   ]
 }
 
-// "1.4 M tokens": the run's tokens so far, as Terylon measured them.
-export function tokensText(tokens: number | null): string | null {
+// "1.4 M": the run's tokens so far, as Terylon measured them.
+export function tokenCount(tokens: number | null): string | null {
   if (tokens === null) {
     return null
   }
 
-  return tokens >= 1000000 ? COPY.tokens(`${(tokens / 1000000).toFixed(1)} M`) : tokens >= 1000 ? COPY.tokens(`${Math.round(tokens / 1000)} k`) : COPY.tokens(String(tokens))
+  return tokens >= 1000000 ? `${(tokens / 1000000).toFixed(1)} M` : tokens >= 1000 ? `${Math.round(tokens / 1000)} k` : String(tokens)
+}
+
+// "1.4 M tokens".
+export function tokensText(tokens: number | null): string | null {
+  const count = tokenCount(tokens)
+
+  return count === null ? null : COPY.tokens(count)
 }
 
 // Who works in the run now, at which stage, on which step, and what it has spent: read from progress, while a run goes.
-function workingOf(progress: Json | null, state: string, cost: string, hours: string | null): PaneWorking | null {
+function workingOf(progress: Json | null, state: string, spent: { usd: number; budget: number | null }, hours: string | null): PaneWorking | null {
   const agent = (progress?.agent ?? null) as Json | null
   const stage = text(progress?.stage)
 
@@ -354,6 +380,8 @@ function workingOf(progress: Json | null, state: string, cost: string, hours: st
   const steps = number(progress?.steps)
   const name = text(agent.name) ?? 'main'
   const others = (number(agent.running) ?? 0) - 1
+  const cost = COPY.costOf(spent.usd.toFixed(2), spent.budget === null ? null : spent.budget.toFixed(0))
+  const tokens = tokenCount(number(progress?.tokens))
 
   return {
     agent: `${name === 'main' ? COPY.mainAgent : name}${others > 0 ? ` +${others}` : ''}`,
@@ -361,6 +389,13 @@ function workingOf(progress: Json | null, state: string, cost: string, hours: st
     step: step !== null && steps !== null ? COPY.step(step, steps, text(progress?.current)) : text(progress?.current) ?? COPY.noStep,
     fraction: step !== null && steps !== null && steps > 0 ? step / steps : null,
     spend: [cost, tokensText(number(progress?.tokens)), hours === null ? null : COPY.sinceStart(hours)].filter(part => part !== null).join(' · '),
+    numbers: [
+      { value: `$${spent.usd.toFixed(2)}`, label: spent.budget === null ? COPY.numberSpent : COPY.numberOfBudget(spent.budget.toFixed(0)) },
+      ...(tokens === null ? [] : [{ value: tokens, label: COPY.numberTokens }]),
+      ...(hours === null ? [] : [{ value: hours, label: COPY.numberSinceStart }]),
+    ],
+    spentUsd: spent.usd,
+    budgetUsd: spent.budget,
   }
 }
 
@@ -395,11 +430,15 @@ export function storyView(id: number, document: Json, inFlight: Json, question: 
     sentence: null,
     title: `#${id} ${text(document.title) ?? text(inFlight.title) ?? ''}`.trim(),
     meta: COPY.storyMeta(hours, number(inFlight.attempt ?? document.attempt) ?? 1, text(pullRequest?.branch), model === '' ? null : model),
+    running: hours,
+    attempt: number(inFlight.attempt ?? document.attempt) ?? 1,
+    branch: text(pullRequest?.branch),
+    model: model === '' ? null : model,
     state,
     stateText: COPY.stateText(state),
     stateTone: tone,
     step: step !== null && steps !== null ? COPY.step(step, steps, text(progress?.current)) : isRunning ? COPY.noStep : null,
-    working: workingOf(progress, state, COPY.costOf(money(inFlight.costUsd ?? document.costUsd), budget === null ? null : budget.toFixed(0)), hours),
+    working: workingOf(progress, state, { usd: number(inFlight.costUsd ?? document.costUsd) ?? 0, budget }, hours),
     fraction: step !== null && steps !== null && steps > 0 ? step / steps : null,
     cost: COPY.costOf(money(inFlight.costUsd ?? document.costUsd), budget === null ? null : budget.toFixed(0)),
     phases: phasesOf({ ...document, state }, text(progress?.stage)),
@@ -485,6 +524,9 @@ export function planItems(plans: Json, base: string): PanePlan[] {
           title: text(story.title) ?? '',
           detail: COPY.planStoryDetail(text(story.size) ?? '?', storyEstimate === null ? null : storyEstimate.toFixed(0), afterIds.length === 0 ? null : afterIds.join(', ')),
           criteria: strings(story.criteria),
+          after: afterIds,
+          size: text(story.size) ?? '?',
+          estimate: storyEstimate === null ? null : storyEstimate.toFixed(0),
         }
       }),
       console: consoleLink(base, `plan&plan=${id}`),

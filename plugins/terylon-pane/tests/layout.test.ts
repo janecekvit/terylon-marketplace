@@ -31,12 +31,13 @@ test('a card has air: its rows stand apart from its title on every surface, and 
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
-  for (const [surface, rowGap] of [['desktop', 1], ['terminal', 0]] as const) {
+  // THE SURFACE'S OWN SPACING STEPS on the desktop (S32), whole cells on the terminal.
+  for (const [surface, cardGap, padding, rowGap] of [['desktop', 'sm', 'md', 'xs'], ['terminal', 1, 1, 0]] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     const cards = (await ui.findAll({ type: 'Box' })).filter(box => box.props.borderStyle === 'round')
 
     expect(cards.length).toBeGreaterThanOrEqual(4)
-    expect(cards.every(box => box.props.gap === 1)).toBe(true)
+    expect(cards.every(box => box.props.gap === cardGap && box.props.paddingX === padding)).toBe(true)
 
     // Each card holds its rows in a column of their own, spaced by the surface.
     const rowColumns = (await ui.findAll({ type: 'Box' })).filter(box => box.props.borderStyle === undefined && box.props.flexDirection === 'column' && box.props.gap === rowGap)
@@ -73,7 +74,7 @@ test('the kind column holds "orchestrator" whole, and never grows past fourteen 
   expect(kindWidth(['production-follow'])).toBe(14)
 })
 
-test('the bell: a row opens its body, which says what to do; its own link is a ↗ into the console', async ($, on) => {
+test('the bell: a row opens its body, which says what to do, and its own console link sits there', async ($, on) => {
   const terylon = world(on)
   terylon.answers.notices_list = BELL
   await $.session.start(SESSION)
@@ -83,15 +84,16 @@ test('the bell: a row opens its body, which says what to do; its own link is a �
     const ui = await $.ui.mount({ ...PANE, surface })
     await ui.press({ key: 'tab-bell' })
 
-    expect(await ui.find({ type: 'Text', text: exact('orchestrator') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^orchestrator\s*$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /EGRESS=off/ })).toBeUndefined()
     await ui.press({ key: 'notice-90' })
     expect((await ui.find({ type: 'Text', text: /EGRESS=off/ }))?.props.color).toBe('inactive')
     await ui.press({ key: 'notice-90' })
 
-    expect((await ui.find({ type: 'Link', text: '↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=waiting')
+    expect(await ui.find({ type: 'Link', text: exact('↗') })).toBeUndefined()
     await ui.press({ key: 'notice-56' })
     expect(await ui.find({ type: 'Text', text: exact('No more than the title.') })).toBeDefined()
+    expect((await ui.find({ type: 'Link', text: 'Bell in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=waiting')
     await ui.press({ key: 'notice-56' })
     await ui.unmount()
   }
@@ -133,5 +135,5 @@ test('a goal opens whole from the goals tab, its stories open, and ‹ comes bac
   expect(await ui.find({ type: 'Text', text: exact('#333 Direct dispatch') })).toBeDefined()
   await ui.press({ key: 'back' })
   await ui.press({ key: 'back' })
-  expect((await ui.find({ key: 'tab-goals' }))?.props.label).toBe('● Goals')
+  expect((await ui.find({ key: 'tab-goals' }))?.props.variant).toBe('primary')
 })

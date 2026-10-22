@@ -117,7 +117,7 @@ test('the rules the machine enforces: each one line with who enforces it, presse
     const memory = await $.ui.mount({ ...MEMORY_MOUNT, surface })
 
     expect(await memory.find({ type: 'Text', text: exact('Rules the machine enforces') })).toBeDefined()
-    expect((await memory.find({ key: 'mem-rule-0' }))?.text).toBe('No push to main and no force push.')
+    expect((await memory.find({ key: 'mem-rule-0' }))?.text).toBe('No push to main and no force push.  a hook')
     expect((await memory.find({ type: 'Text', text: exact('a hook') }))?.props.color).toBe('subtle')
     expect((await memory.find({ type: 'Text', text: exact('No push to main and no force push.') }))?.props.wrap).toBe('truncate-end')
     expect(await memory.find({ type: 'Text', text: /git-guard\.js/ })).toBeUndefined()

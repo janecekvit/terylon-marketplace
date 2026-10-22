@@ -209,10 +209,11 @@ export const STORY_327 = {
 }
 
 // The world beneath the plugin: the clock, the store, the environment, and Terylon at /mcp.
-export function world(on: On, options: { store?: Record<string, unknown>; now?: number } = {}): World & { clock: ReturnType<typeof mock.clock> } {
+// `env` adds to the environment: TERYLON_PANE_PROOFS turns on a drawing Desktop has to prove first (S32).
+export function world(on: On, options: { store?: Record<string, unknown>; now?: number; env?: Record<string, string> } = {}): World & { clock: ReturnType<typeof mock.clock> } {
   const clock = mock.clock(on, { now: options.now ?? Date.parse('2026-10-11T22:00:00Z') })
   mock.store(on, options.store ?? {})
-  mock.env(on, { TERYLON_URL: BASE })
+  mock.env(on, { TERYLON_URL: BASE, ...(options.env ?? {}) })
   const state: World = {
     calls: [],
     prompts: [],
@@ -313,6 +314,14 @@ export function world(on: On, options: { store?: Record<string, unknown>; now?: 
 }
 
 export const SESSION = { cwd: '/work', surface: 'desktop', isInteractive: true } as const
+
+// The pane in the narrow dock (the S32 canvas's 360 px board): fewer body columns than NARROW_COLUMNS.
+export const NARROW_PANE_PROPS = { ...(PANE_PROPS as Record<string, unknown>), bodyColumns: 36 } as never
+
+// Every Svg the drawing holds: its markup and its alt.
+export async function pictures(ui: { findAll: (query: { type?: string }) => Promise<{ props: Record<string, unknown> }[]> }): Promise<{ source: string; alt: string; isInteractive: unknown }[]> {
+  return (await ui.findAll({ type: 'Svg' })).map(node => ({ source: String(node.props.source), alt: String(node.props.alt), isInteractive: node.props.isInteractive }))
+}
 
 // The band's props as the engine passes them; a survey makes it yield.
 export function bandProps(hasSurvey = false) {

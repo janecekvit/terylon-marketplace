@@ -17,7 +17,7 @@ test('frame E: no terylon server tells the owner to install the plugin, and asks
 
   const ui = await $.ui.mount(MOUNT)
   expect(await ui.find({ type: 'Text', text: exact('The pane found no MCP server terylon') })).toBeDefined()
-  expect(await ui.find({ type: 'Markdown', text: '`/plugin install terylon-os@terylon`' })).toBeDefined()
+  expect(await ui.find({ type: 'Code', text: exact('/plugin install terylon-os@terylon') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /No token: your tailnet login is the identity\./ })).toBeDefined()
   expect(terylon.calls.map(call => call.server)).toEqual(['plugin:terylon-os:terylon', 'terylon'])
 
@@ -106,8 +106,11 @@ test('frame I: a call Claude Code did not allow is said as that, with the rules 
   expect(await ui.find({ type: 'Text', text: /TerylonLab does not answer/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /Reason: .*auto mode classifier gave no verdict/ })).toBeDefined()
 
-  const rules = await ui.find({ type: 'Markdown', text: /permissions/ })
-  expect(rules).toBeDefined()
+  // THE ALLOW RULES AS CODE (S32): json, to select and copy by hand, the pane's whole list and no gate.
+  const rules = await ui.find({ type: 'Code', text: /permissions/ })
+  expect(rules?.props.language).toBe('json')
+  expect(rules?.props.startLine).toBeUndefined()
+  expect(String(rules?.text)).not.toContain('```')
 
   for (const tool of ['briefing', 'work_in_flight', 'stories_list', 'events_since', 'story_get', 'policy_get', 'goals_list', 'goal_get', 'plans_list', 'notices_list', 'leader_status', 'metrics', 'memory_get', 'tasks_add', 'goal_add', 'question_answer', 'memory_propose']) {
     expect(String(rules?.text)).toContain(`"mcp__plugin_terylon-os_terylon__${tool}"`)

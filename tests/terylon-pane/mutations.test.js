@@ -63,8 +63,8 @@ const MUTATIONS = [
     {
         name: "the band shows the spend again",
         file: "hooks/register.tsx",
-        find: "              ...(current.alerts > 0 ? [<Text color=\"warning\">{COPY.bandAlerts(current.alerts)}</Text>] : []),\n",
-        replace: "              ...pair('Today', `$${current.runningUsd}`, 'inactive'),\n              ...(current.alerts > 0 ? [<Text color=\"warning\">{COPY.bandAlerts(current.alerts)}</Text>] : []),\n",
+        find: "              ...(current.alerts > 0 ? [<Text color=\"warning\" tabular>{COPY.bandAlerts(current.alerts)}</Text>] : []),\n",
+        replace: "              ...pair('Today', `$${current.runningUsd}`, 'inactive'),\n              ...(current.alerts > 0 ? [<Text color=\"warning\" tabular>{COPY.bandAlerts(current.alerts)}</Text>] : []),\n",
     },
     {
         name: "the status line no longer says the machine's health",
@@ -132,8 +132,8 @@ const MUTATIONS = [
     {
         name: "an empty card says nothing",
         file: "hooks/register.tsx",
-        find: "          current.running.length === 0 ? quiet(elements, COPY.nothingRunning) : null,\n          ...current.running.map(item =>\n            row(elements, {\n              key: `story-${item.story}`,",
-        replace: "          null,\n          ...current.running.map(item =>\n            row(elements, {\n              key: `story-${item.story}`,",
+        find: "          current.running.length === 0 ? quiet(elements, COPY.nothingRunning) : null,\n          ...current.running.map(item =>\n            rowOf({\n              key: `story-${item.story}`,",
+        replace: "          null,\n          ...current.running.map(item =>\n            rowOf({\n              key: `story-${item.story}`,",
     },
     {
         name: "the machine card shows a repeated notice each time",
@@ -232,6 +232,85 @@ const MUTATIONS = [
         file: "hooks/copy.ts",
         find: "`${count === 1 ? 'story' : 'stories'}",
         replace: "`${'stories'}",
+    },
+    // S32 (#25): the drawing on the 2.1.304 mod API.
+    {
+        name: "a running row with no progress.stage draws its first phase to come as now",
+        file: "hooks/drawing.ts",
+        find: "  const parts = phases.map((phase, index) => {\n    const x = round(index * (size + gap))\n",
+        replace: "  const parts = phases.map((given, index) => {\n    const phase = nowOf(phases) < 0 && index === phases.findIndex(item => item.status === 'next') ? { ...given, status: 'now' as const } : given\n    const x = round(index * (size + gap))\n",
+    },
+    {
+        name: "a gate creeps into the allow rules the Status tab draws",
+        file: "hooks/register.tsx",
+        find: "<Code key=\"allow-rules\" source={allowRules()}",
+        replace: "<Code key=\"allow-rules\" source={allowRules().replace('\"\\n  ]', '\",\\n    \"mcp__plugin_terylon-os_terylon__story_merge\"\\n  ]')}",
+    },
+    {
+        name: "input-rows is on without the owner's proof",
+        file: "hooks/drawing.ts",
+        find: "    inputRows: named.has(PROOF_NAMES.inputRows),\n",
+        replace: "    inputRows: true,\n",
+    },
+    {
+        name: "hover-reveal is on without the owner's proof",
+        file: "hooks/drawing.ts",
+        find: "    hoverReveal: named.has(PROOF_NAMES.hoverReveal),\n",
+        replace: "    hoverReveal: true,\n",
+    },
+    {
+        name: "svg-tooltips is on without the owner's proof",
+        file: "hooks/drawing.ts",
+        find: "    svgTooltips: named.has(PROOF_NAMES.svgTooltips),\n",
+        replace: "    svgTooltips: true,\n",
+    },
+    {
+        name: "a word is drawn inside an Svg, where the theme cannot reach it",
+        file: "hooks/drawing.ts",
+        find: "viewBox=\"0 0 ${width} ${height}\">${body}</svg>`",
+        replace: "viewBox=\"0 0 ${width} ${height}\">${body}<text x=\"0\" y=\"8\">now</text></svg>`",
+    },
+    {
+        name: "the band's digits are no longer tabular",
+        file: "hooks/register.tsx",
+        find: "      <Text color={color} tabular>{value}</Text>,\n",
+        replace: "      <Text color={color}>{value}</Text>,\n",
+    },
+    {
+        name: "the narrow dock is drawn as the wide pane",
+        file: "hooks/register.tsx",
+        find: "      isNarrow: e.props.bodyColumns < NARROW_COLUMNS,\n",
+        replace: "      isNarrow: false,\n",
+    },
+    {
+        name: "the new goal's priority picked is not what goal_add sends",
+        file: "hooks/register.tsx",
+        find: "onSelect={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, priority: value }))}",
+        replace: "onSelect={() => undefined}",
+    },
+    {
+        name: "the new task's size picked is not what tasks_add sends",
+        file: "hooks/register.tsx",
+        find: "    size: COPY.sizes.includes(form.size) ? form.size : 'M',\n",
+        replace: "    size: 'M',\n",
+    },
+    {
+        name: "one of S27's buttons is drawn in the story's slot",
+        file: "hooks/register.tsx",
+        find: "            <Button key=\"summarise\" label={COPY.summariseInSession}",
+        replace: "            <Button key=\"story-stop\" label=\"Stop\" onPress={() => undefined} />\n            <Button key=\"summarise\" label={COPY.summariseInSession}",
+    },
+    {
+        name: "a row's kind and detail fall outside its one Button",
+        file: "hooks/register.tsx",
+        find: "        <Button key={input.key} plain onPress={input.onPress}>\n          {children}\n        </Button>\n",
+        replace: "        {children.slice(0, -1)}\n        <Button key={input.key} plain onPress={input.onPress}>\n          {children.slice(-1)}\n        </Button>\n",
+    },
+    {
+        name: "the card that waits for the owner is no longer tinted",
+        file: "hooks/register.tsx",
+        find: "      backgroundColor={look.isGraphic && tone !== 'plain' ? toneKey : undefined}\n",
+        replace: "",
     },
 ];
 
