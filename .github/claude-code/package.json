@@ -4,6 +4,6 @@
   "description": "The Claude Code CI runs, pinned exactly and locked with its integrity hashes. Installed with npm ci; Dependabot raises it.",
   "license": "Apache-2.0",
   "dependencies": {
-    "@anthropic-ai/claude-code": "2.1.295"
+    "@anthropic-ai/claude-code": "2.1.308"
   }
 }
