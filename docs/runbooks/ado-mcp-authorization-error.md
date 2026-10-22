@@ -80,7 +80,7 @@ The plugin ships no `.mcp.json` for the server. Inside a plugin `.mcp.json`'s `o
 
 Two values in the registration were forced by failures: the **root** URL, because an organisation URL fails with `AADSTS9010010`, and the metadata **pinned to the tenant**, because the root's own metadata names the `organizations` authority, which a single-tenant app cannot use.
 
-**The organisation used to carry a hard-coded fallback, and removing it is why cause A now fails loudly** instead of silently targeting the marketplace author's organisation. That silent targeting was the old behaviour behind symptom 1 — worth knowing, because an old checkout of the marketplace can still produce it. The decision and its reasoning, along with why this repository commits no `env` block of its own, are in the root `CLAUDE.md` under *Azure DevOps*.
+**The organisation used to carry a hard-coded fallback, and removing it is why cause A now fails loudly** instead of silently targeting the marketplace author's organisation. That silent targeting was the old behaviour behind symptom 1 — worth knowing, because an old checkout of the marketplace can still produce it. The decision and its reasoning, along with why this repository commits no `env` block of its own, are in the root `CLAUDE.md` under *Azure DevOps, as a consumer's forge*.
 
 Everything else about an Azure DevOps target resolves on its own: project and repository from the consuming repository's git remote at runtime, and the forge itself from [`flows/forge-resolution.md`](../flows/forge-resolution.md).
 
@@ -104,5 +104,5 @@ Everything else about an Azure DevOps target resolves on its own: project and re
 | `plugins/terylon-ado/README.md` | the consumer-facing setup for this adapter |
 | `plugins/terylon-forge/.claude-plugin/plugin.json` | `dependencies` — no adapter, which is why the port alone registers no server |
 | `plugins/terylon-forge/skills/resolve-forge/SKILL.md` | `resolve-forge` — what a run does when the forge resolves but the adapter is absent or unreachable |
-| `CLAUDE.md` | *Azure DevOps* — why there is no default organisation and no committed `env` block |
+| `CLAUDE.md` | *Azure DevOps, as a consumer's forge* — why there is no default organisation and no committed `env` block |
 | `docs/flows/forge-resolution.md` | how the platform is chosen, and why the organisation is not part of that choice |

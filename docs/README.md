@@ -43,7 +43,7 @@ flows/change-to-consumer-repo/
 └── diagram.png
 ```
 
-Both Azure DevOps and GitHub render `README.md` automatically when a folder is opened, so navigation stays seamless. Reference an asset with a relative path: `![Description](./diagram.png)`. Binaries go through Git LFS — see `.gitattributes`.
+GitHub renders `README.md` automatically when a folder is opened, so navigation stays seamless. Reference an asset with a relative path: `![Description](./diagram.png)`. Binaries go through Git LFS — see `.gitattributes`.
 
 ### The skeleton
 
@@ -101,7 +101,7 @@ Lowercase kebab-case for folders and files: `architecture/port-and-adapter-split
 
 **An ADR is named for the decision**, not for the problem: `superpowers-left-the-dependency-set`, not `dependency-review`.
 
-English only. Relative links only — Azure DevOps does not render `[[wiki-links]]`.
+English only. Relative links only — GitHub does not render `[[wiki-links]]`.
 
 ## When you add an article
 

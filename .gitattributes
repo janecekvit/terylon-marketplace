@@ -23,8 +23,8 @@
 # dormant — they take effect the moment the first image or archive lands, which
 # keeps a blob out of the git history rather than discovering it afterwards.
 #
-# Anyone cloning needs `git lfs install` once. Azure DevOps serves LFS from the
-# repo's own endpoint; no extra configuration.
+# Anyone cloning needs `git lfs install` once. GitHub serves LFS from the
+# repository's own LFS storage; no extra configuration.
 *.png   filter=lfs diff=lfs merge=lfs -text
 *.jpg   filter=lfs diff=lfs merge=lfs -text
 *.jpeg  filter=lfs diff=lfs merge=lfs -text

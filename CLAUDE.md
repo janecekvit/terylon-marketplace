@@ -1,6 +1,6 @@
 # Terylon Marketplace
 
-Claude Code plugin marketplace distributed into product repositories through `extraKnownMarketplaces`. **Public on GitHub** (`janecekvit/terylon-marketplace`, Apache-2.0) and installed from there; reviewed and merged on a private Azure DevOps repository. See *Two remotes* below.
+Claude Code plugin marketplace distributed into product repositories through `extraKnownMarketplaces`. **Public on GitHub** (`janecekvit/terylon-marketplace`, Apache-2.0), its only home: code, issues, pull requests and releases live there, and consumers install from there. See *GitHub* below.
 
 @README.md
 
@@ -11,6 +11,7 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /LICENSE                           Apache-2.0, the canonical text (MIT until 2026-10-12) — every plugin manifest says "license": "Apache-2.0"
 /NOTICE                            the copyright notice Apache-2.0 carries: Terylon Marketplace, copyright the operator
 /SECURITY.md                       how to report a vulnerability — GitHub private vulnerability reporting
+/CONTRIBUTING.md                   how a change is made: an issue first, a branch, one PR per issue, squash merge
 /.editorconfig                     the code conventions of .claude/rules/ for every editor: UTF-8, LF, indentation per file type
 /.github/workflows/ci.yml          unit suites + the free e2e install stage, on every PR and push to main
 /.github/workflows/versions.yml    the plugin version rules, on every PR — a changed plugin raises its version; a major needs the label `major`
@@ -22,6 +23,8 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /.github/workflows/docs.yml        Markdown lint + link check over every tracked .md, on every PR and push to main
 /.markdownlint-cli2.jsonc          the Markdown lint rules — .claude/rules/markdown.md, encoded
 /lychee.toml                       the link check: relative links, anchors, external links; what is excluded and why
+/.github/ISSUE_TEMPLATE/           the issue form (the need, the plugins, acceptance criteria); blank issues off
+/.github/PULL_REQUEST_TEMPLATE.md  Why / What changes / How to verify / Closes #
 /.github/workflows/security.yml    CodeQL (JavaScript and the workflows) + zizmor, on every PR, push to main and weekly
 /.github/workflows/scorecard.yml   OpenSSF Scorecard, on main and weekly, published for the README badge
 /.github/dependabot.yml            raises the SHA-pinned actions weekly, one grouped pull request
@@ -75,27 +78,43 @@ Two boundaries run through this stack. Between `terylon-git` and `terylon-forge`
 
 Component layout, the placement rule in full, the dispatch chains and the table of every cross-plugin load: `plugins/CLAUDE.md`.
 
-## Azure DevOps
+## GitHub
+
+| | |
+|---|---|
+| Repository | `janecekvit/terylon-marketplace`, public — code, issues, pull requests and releases |
+| Remote | **one**, `origin`, on GitHub. Nothing is mirrored anywhere |
+| A change | starts as an issue stating the need, with its acceptance criteria as a checklist; is made on a `feat/`, `fix/` or `docs/` branch; ends as a pull request that says `Closes #N` |
+| Merge | **squash only**, by the maintainer (`janecekvit`), once CI is green; the branch is deleted on merge |
+| `main` | the repository ruleset refuses deleting it and force-pushing it, requires a linear history, a pull request (squash only, every review thread resolved), the CI checks green and no high or higher CodeQL alert; every pull request also gets Copilot code review |
+| Releases | a `vX.Y.Z` tag the maintainer pushes; each plugin keeps its own version in `plugin.json` |
+
+```
+  issue  the need, acceptance criteria as a checklist
+     │
+     ▼
+  feat/ fix/ docs/<slug> ──▶ pull request "Closes #N" ──▶ CI green ──▶ maintainer squash-merges
+                                                                              │
+  evidence for each criterion: a comment on the issue                         ▼
+                                                                main ──▶ consumers, on the next bump
+```
+
+**The flow is stated once, in `CONTRIBUTING.md`**, with the version and secret rules a contributor needs; the issue and pull request templates under `.github/` carry its shape. Locally, `.claude/hooks/git-guard.js` still refuses any push to `main`.
+
+**This repository has lived only on GitHub since 2026-10-22.** It was developed in a private Azure DevOps repository until then, with `main` pushed to GitHub by hand after each merge; that repository is frozen and will be archived, and the history was rewritten when it moved. A `#<number>` in a commit or document from before the move names an Azure DevOps work item, not an issue here.
+
+**Everything committed is published.** Before the first push the tree **and the full history** were scanned for secrets, private host and tailnet names, personal e-mail addresses and internal-only references (#273); nothing secret was found. Keep it that way: no host name, tailnet name, home directory, personal address or organisation name goes into a commit — measured records say *the operator's own host*, test fixtures use `alice` and `contoso`, and a plugin author is named without an e-mail address.
+
+## Azure DevOps, as a consumer's forge
+
+**The plugins serve repositories on Azure DevOps; this repository is not one of them.** `terylon-ado` is the adapter, and these are the facts that bind it here:
 
 | | |
 |---|---|
 | Organisation | **not recorded here** — each person sets `ADO_ORGANIZATION` in their own settings |
-| Project | `Dev` |
-| Repo | `TerylonMarketplace` |
 | MCP server | Microsoft's remote server at `https://mcp.dev.azure.com`, over OAuth — registered at the user scope as `ado` by `terylon-ado`'s `connect` skill (#332); tools `mcp__ado__*` |
 
-**No Azure DevOps organisation name is committed anywhere in this repository.** Until #273 it appeared inside the repository's own URL, in the setup snippets and each manifest's `homepage`, because that was the address you installed from. The address is now the public GitHub repository, so the exception is gone: a published file never links a reader to the private organisation, example URLs in the recipes use `contoso`, and the one snippet that must reach a feature branch on Azure DevOps (`docs/onboarding/marketplace-development.md`) tells the reader to run `git remote get-url origin` instead. Older commits still carry the URL; the history is published as it is.
-
-## Two remotes
-
-| Remote | Holds | Who moves it |
-|---|---|---|
-| `origin` — Azure DevOps, private | feature branches, pull requests, merges | pull requests only; `git-guard.js` refuses any push to `main` |
-| `github` — `github.com/janecekvit/terylon-marketplace`, public | `main` and release tags, nothing else | the operator, by hand, after each merge — plain; forced exactly once, on the first push, over the `LICENSE` commit GitHub generated |
-
-**`main` is the same commit on both.** The commands, the check that both heads match and why an agent never makes the push are in `docs/flows/change-to-consumer-repo.md`, under *How `main` reaches GitHub*. Every manifest's `homepage` and `repository` name the GitHub repository.
-
-**Everything committed is published.** Before the first push the tree **and the full history** were scanned for secrets, private host and tailnet names, personal e-mail addresses and internal-only references (#273); nothing secret was found. Keep it that way: no host name, tailnet name, home directory, personal address or organisation name goes into a commit — measured records say *the operator's own host*, test fixtures use `alice` and `contoso`, and a plugin author is named without an e-mail address.
+**No Azure DevOps organisation name is committed anywhere in this repository.** Until #273 it appeared inside the repository's own URL, in the setup snippets and each manifest's `homepage`, because that was the address you installed from. The address is now the public GitHub repository, so the exception is gone: a published file never links a reader to a private organisation, and example URLs in the recipes use `contoso`. Older commits still carry the URL; the history is published as it is.
 
 **`.claude/settings.json` deliberately carries no `env` block.** It did briefly, and the reason it does not is the same reason the organisation lost its fallback, one level up: **this repository is the marketplace source.** Anyone who forks it to point at their own copy inherits its committed settings, and a committed `ADO_ORGANIZATION` would hand them this owner's organisation — the very outcome removing the fallback was meant to prevent, reintroduced through a file nobody thinks of as code. The same holds for `ADO_MCP_CLIENT_ID` and `ADO_MCP_TENANT_ID`, which name the owner's own Entra app registration and tenant: they are configuration, not code. Whoever works on this repository sets all three in their **own** `~/.claude/settings.json`, where a personal value belongs and where a fork cannot inherit it — and `connect` registers the server from them at the user scope, which is also why the plugin ships no `.mcp.json` for it (the measurement is in `plugins/terylon-ado/shared/ado-server.js`).
 
@@ -203,7 +222,7 @@ Details in `.claude/rules/`:
 |---|---|
 | `git-workflow.md` | `main` is protected, only through a PR; consent for every commit; branch names |
 | `scripting.md` | Node for hooks, full names over abbreviations, Allman braces, cross-platform |
-| `markdown.md` | frontmatter, no wrapping for ADO, drawing rules, references by name, language |
+| `markdown.md` | frontmatter, no wrapping for forge-bound text, drawing rules, references by name, language |
 | `claude-md-sync.md` | when to update CLAUDE.md after a change |
 | `docs-sync.md` | when an article in `docs/` stopped telling the truth, and how to find it |
 
