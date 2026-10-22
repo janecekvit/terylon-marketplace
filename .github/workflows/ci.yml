@@ -73,12 +73,13 @@ jobs:
       # exactly in .github/claude-code/package.json and installed from its lockfile, every package
       # checked against its integrity hash. Dependabot raises it; CLAUDE.md, under "Testing", says
       # which version was measured and when.
+      # A line added to GITHUB_PATH reaches the later steps only, so this one names the binary.
       - name: Install Claude Code from the lockfile
         working-directory: .github/claude-code
         run: |
           npm ci --no-audit --no-fund
+          node_modules/.bin/claude --version
           echo "${GITHUB_WORKSPACE}/.github/claude-code/node_modules/.bin" >> "${GITHUB_PATH}"
-          claude --version
 
       # marketplace add installs a branch or a tag, never a commit, and a CI checkout is a detached
       # HEAD. Name the checked-out commit as a local branch and install that branch.
@@ -118,8 +119,8 @@ jobs:
         working-directory: .github/claude-code
         run: |
           npm ci --no-audit --no-fund
+          node_modules/.bin/claude --version
           echo "${GITHUB_WORKSPACE}/.github/claude-code/node_modules/.bin" >> "${GITHUB_PATH}"
-          claude --version
 
       # What the module hooks, calls, reads and writes: the list a reviewer checks against the README.
       - name: claude plugin validate plugins/terylon-pane
