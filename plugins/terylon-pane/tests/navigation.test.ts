@@ -185,11 +185,13 @@ test('the goals tab: open goals by priority with their questions, the closed one
   expect((await ui.find({ key: 'goal-1' }))?.text).toContain('Old')
 
   expect(await ui.find({ type: 'Text', text: exact('Plan 41 · Agentic OS') })).toBeDefined()
+  // GOALS ARE GENERAL (Terylon #369, S31): the New goal note steers a concrete ask to a task, and adding one is never refused.
+  expect(await ui.find({ type: 'Text', text: exact('A goal is a general direction. A concrete ask — a file, a document, one change — becomes a task under a goal. The leader asks its questions first, then makes a plan you approve.') })).toBeDefined()
 
-  await ui.input({ key: 'goal-draft', text: 'Excel s rozpočtem domácnosti', kind: 'change' })
+  await ui.input({ key: 'goal-draft', text: 'Household budget in Excel', kind: 'change' })
   await ui.press({ key: 'goal-add' })
-  expect(terylon.calls.filter(call => call.tool === 'goal_add').map(call => call.args)).toEqual([{ title: 'Excel s rozpočtem domácnosti' }])
-  expect((await ui.find({ type: 'Text', text: exact('✓ Goal 12 is set: Excel s rozpočtem domácnosti') }))?.props.color).toBe('success')
+  expect(terylon.calls.filter(call => call.tool === 'goal_add').map(call => call.args)).toEqual([{ title: 'Household budget in Excel' }])
+  expect((await ui.find({ type: 'Text', text: /^✓ Goal 12 is set: Household budget in Excel\. The leader reads it first: / }))?.props.color).toBe('success')
 
   await ui.press({ key: 'goal-11' })
   expect(await ui.find({ key: 'goal-question-606' })).toBeDefined()
