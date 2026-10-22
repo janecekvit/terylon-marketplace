@@ -5,8 +5,8 @@
 # only.
 version: 2
 updates:
-  # Every update but Claude Code's waits 14 days after its release (cooldown), so a compromised
-  # release has time to be caught before it reaches this repository. Actions are pinned to commit SHAs; Dependabot
+  # Every update waits 14 days after its release (cooldown), so a compromised release has time
+  # to be caught before it reaches this repository. Actions are pinned to commit SHAs; Dependabot
   # updates the SHA and the version comment.
   - package-ecosystem: github-actions
     directory: /
@@ -21,15 +21,16 @@ updates:
     commit-message:
       prefix: "Build(deps)"
 
-  # The Claude Code CI installs with npm ci. It is the one exception to the cooldown: the mod is
-  # built for the engine Claude Desktop runs, which moves every few days, so each release is
-  # proposed the day it is out. A raise is a measurement: the pull request's CI runs the install
-  # stage and the terylon-pane tests on the new version, and CLAUDE.md, under "Testing", records
-  # the version and date once it lands.
+  # The Claude Code CI installs with npm ci. A raise is a measurement: the pull request's CI runs
+  # the install stage and the terylon-pane tests on the new version, and CLAUDE.md, under
+  # "Testing", records the version and date once it lands.
   - package-ecosystem: npm
     directory: /.github/claude-code
     schedule:
-      interval: daily
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 14
     commit-message:
       prefix: "Build(deps)"
 
