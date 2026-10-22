@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Formats, validates and renders every docs/**/*.d2 to the .svg beside it.
+// Formats, validates and renders every docs/**/*.d2 to the .svg beside it. Each SVG carries a light
+// and a dark theme, and its CSS picks one by the viewer's prefers-color-scheme.
 //
 //   node Scripts/render-diagrams.js            format each source in place and render it
 //   node Scripts/render-diagrams.js --check    fail on an unformatted or invalid source, or on a stale
@@ -15,6 +16,12 @@ const path = require("node:path");
 // The D2 release the committed SVGs are rendered with. CI installs exactly this one; a different
 // release lays out and serialises differently, and every SVG would read as stale.
 const D2_VERSION = "v0.9.0";
+
+// The theme pair every SVG is rendered with: D2's Neutral Default for a light viewer, and Dark Mauve,
+// its dark counterpart, for a dark one. Without a dark theme an SVG keeps its white background on
+// GitHub's dark theme and glares. List the IDs with: d2 themes
+const LIGHT_THEME_ID = "0";
+const DARK_THEME_ID = "200";
 
 // Where the sources live, as a git pathspec: every .d2 under docs/, at any depth.
 const SOURCE_PATHSPEC = "docs/*.d2";
@@ -49,6 +56,12 @@ function renderedPathFor(sourcePath)
     const parsedPath = path.posix.parse(sourcePath);
 
     return path.posix.join(parsedPath.dir, `${parsedPath.name}.svg`);
+}
+
+/** The d2 arguments that render a source to its SVG in the light and the dark theme. */
+function renderArgumentsFor(sourcePath)
+{
+    return ["--theme", LIGHT_THEME_ID, "--dark-theme", DARK_THEME_ID, sourcePath, renderedPathFor(sourcePath)];
 }
 
 /** Splits git's newline-separated path output into a sorted list without blanks or duplicates. */
@@ -137,7 +150,7 @@ function main()
     {
         runOrExit("d2", parsedArguments.isCheck ? ["fmt", "--check", sourceFile] : ["fmt", sourceFile], repositoryRoot);
         runOrExit("d2", ["validate", sourceFile], repositoryRoot);
-        runOrExit("d2", [sourceFile, renderedPathFor(sourceFile)], repositoryRoot);
+        runOrExit("d2", renderArgumentsFor(sourceFile), repositoryRoot);
     }
 
     if (!parsedArguments.isCheck)
@@ -165,4 +178,4 @@ if (require.main === module)
     main();
 }
 
-module.exports = { parseArguments, renderedPathFor, pathListFrom, D2_VERSION };
+module.exports = { parseArguments, renderedPathFor, renderArgumentsFor, pathListFrom, D2_VERSION, LIGHT_THEME_ID, DARK_THEME_ID };

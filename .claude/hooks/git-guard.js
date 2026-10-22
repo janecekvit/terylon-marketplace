@@ -77,10 +77,25 @@ const FILE_WRITING_TOOLS = ["Edit", "Write"];
 /**
  * Split a shell command into its separate invocations. A guard that only reads
  * the first one is bypassed by `true && git push origin main`.
+ *
+ * A lone `&` separates too — `true & git push origin main` runs the push in the
+ * foreground once `true` is backgrounded — but not inside a redirection such as
+ * `2>&1`, `>&2` or `&>file`, which is why it carries the lookarounds.
  */
 function splitIntoInvocations(command)
 {
-    return command.split(/&&|\|\||;|\||\n/);
+    return command.split(/&&|\|\||;|\||(?<![<>])&(?!>)|\n/);
+}
+
+/**
+ * Split one invocation into words. Quotes carry no meaning for us — `"main"`,
+ * `HEAD:"main"` and `main` are the same refspec to the shell — so every quote
+ * character is dropped, not only one at each end of a word: stripping the ends
+ * alone left `git push origin HEAD:"main"` free to push to main.
+ */
+function tokenize(invocation)
+{
+    return invocation.trim().split(/\s+/).map(token => token.replace(/["']/g, "")).filter(Boolean);
 }
 
 /**
@@ -100,8 +115,7 @@ function splitIntoInvocations(command)
  */
 function parseGitInvocation(invocation)
 {
-    // Quotes carry no meaning for us — `"main"` and `main` are the same refspec.
-    const tokens = invocation.trim().split(/\s+/).map(token => token.replace(/^["']|["']$/g, "")).filter(Boolean);
+    const tokens = tokenize(invocation);
     let index = 0;
     let explicitDirectory = null;
 
@@ -171,7 +185,7 @@ function parseCommandChain(command, startDirectory)
 
     for (const invocation of splitIntoInvocations(command))
     {
-        const tokens = invocation.trim().split(/\s+/).map(token => token.replace(/^["']|["']$/g, "")).filter(Boolean);
+        const tokens = tokenize(invocation);
 
         if (tokens[0] === "cd")
         {

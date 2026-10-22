@@ -20,7 +20,7 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /tests/release/                    release-notes.js — the notes a release carries (every plugin's version, the PRs since the previous tag) — and its tests
 /docs/runbooks/releasing.md        cutting a release, and verifying one
 /.github/workflows/diagrams.yml    renders every docs/**/*.d2 with the pinned D2; red on a bad source or a stale SVG
-/Scripts/render-diagrams.js        formats, validates and renders each .d2 to the .svg beside it; --check is CI's
+/Scripts/render-diagrams.js        formats, validates and renders each .d2 to a light-and-dark .svg beside it; --check is CI's
 /.github/workflows/docs.yml        Markdown lint + link check over every tracked .md, on every PR and push to main
 /.markdownlint-cli2.jsonc          the Markdown lint rules — .claude/rules/markdown.md, encoded
 /lychee.toml                       the link check: relative links, anchors, external links; what is excluded and why
@@ -39,6 +39,7 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /docs/superpowers/                 the same, when those skills run directly (gitignored)
 /tests/                            local tests of what the plugins ship, across plugin boundaries — not distributed
 /tests/versions/                   the version check versions.yml runs, and its tests
+/tests/property/                   property tests with fast-check — the repository's one npm dependency, confined here
 ```
 
 **All of `/plugins` is the distribution boundary.** Anything inside is consumed by other repos; anything outside stays local.
@@ -172,6 +173,7 @@ The suites under `/tests/`, none distributed, and a mod's own tests beside it. *
 | terylon-os plugin | `node --test tests/terylon-os/terylon-os-plugin.test.js` | the `terylon-os` plugin's one server is `${TERYLON_URL}/mcp` with no header or token, every prompt Terylon's `/mcp` serves has exactly one skill mirroring it, and nothing published names a host | free, milliseconds |
 | plugin versions | `node --test tests/versions/check-plugin-versions.test.js` | a changed plugin without a raised version fails, a patch or minor raise passes, a major raise fails without the label `major` and passes with it, a new plugin passes from 1.0.0 up, a deleted one passes, a malformed version fails, and a version `marketplace.json` lists must equal `plugin.json`'s — the pure rules, and the command line end to end in a throwaway repository | free, seconds |
 | diagrams | `node --test tests/diagrams/render-diagrams.test.js` | the render script's arguments, where a source renders to, how git's path listings are read, and that the D2 it pins is the one `diagrams.yml` installs; the D2 calls themselves run in the Diagrams workflow | free, milliseconds |
+| property tests | `npm ci && npm test` in `tests/property/` | over generated inputs: `git-guard.js` never crashes and always answers allow or a well-formed deny, refuses a push to `main` in any quoting and behind any chain separator, allows a branch that merely contains `main`; `compareVersions` is the numeric total order and `parseVersion` accepts one spelling per version; `resolveRef` never passes a detached HEAD on. fast-check is the only npm dependency in the repository and lives only in that folder; the root `node --test` skips these files with a stated reason, and `.github/workflows/property.yml` runs them | free, about 30 seconds |
 | harness unit checks | `node --test tests/e2e/ref.test.js` | which ref the harness installs, and that a detached HEAD is refused rather than passed on as `HEAD` | free, milliseconds |
 | release notes | `node --test tests/release/release-notes.test.js` | the tag check, the previous tag chosen by number, every plugin's version and change, the pull requests from squash and merge subjects — against fixtures and a throwaway repository with real tags | free, about a second |
 | end-to-end | `node tests/e2e/run.js` | the marketplace installs from a git ref as a consumer installs it, everything loads, and the skills — followed by a model, headless — write the right things or refuse with the right reason | about **$2.60–3.25** per full run on sonnet, 4–8 min (measured 2026-10-04) |

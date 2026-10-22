@@ -1,6 +1,8 @@
 # Dependabot raises the pinned GitHub Actions once a week, one pull request for all of them, and
-# the Claude Code CI runs, locked in .github/claude-code/. The marketplace ships no npm, NuGet or
-# pip dependency of its own; the tests use Node's standard library only.
+# two npm folders: the Claude Code CI runs, locked in .github/claude-code/, and the one npm test
+# dependency, fast-check, confined to tests/property/. The marketplace ships no npm, NuGet or pip
+# dependency of its own; the hooks, the plugins and every other suite use Node's standard library
+# only.
 version: 2
 updates:
   # Every update waits 14 days after its release (cooldown), so a compromised release has time
@@ -29,5 +31,20 @@ updates:
       day: monday
     cooldown:
       default-days: 14
+    commit-message:
+      prefix: "Build(deps)"
+
+  # fast-check for the property tests, pinned exactly in tests/property/package.json and its lockfile.
+  # Nothing outside that folder depends on npm.
+  - package-ecosystem: npm
+    directory: /tests/property
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 14
+    groups:
+      property-tests:
+        patterns: ["*"]
     commit-message:
       prefix: "Build(deps)"
