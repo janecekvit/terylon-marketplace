@@ -103,7 +103,7 @@ PR comment-addressing) follow this contract:
 
 | Flag | Behaviour |
 |------|-----------|
-| _(default)_ | Summarise the plan in chat. Wait for explicit user confirmation (`push`, `do it`, `apply`, `post`, `go`) before any write. |
+| *(default)* | Summarise the plan in chat. Wait for explicit user confirmation (`push`, `do it`, `apply`, `post`, `go`) before any write. |
 | `--auto` | Apply / post mechanical actions immediately. Items requiring judgment still pause for review. |
 | `--dry-run` | Never write. Print the plan in chat and stop. |
 

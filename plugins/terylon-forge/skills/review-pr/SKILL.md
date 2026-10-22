@@ -66,6 +66,7 @@ Report the branch you settled on before diffing.
 ### 4. Delegate review to `code-review`
 
 Invoke the `code-review` skill (from `terylon-git`, **loaded by name** — never by path) with:
+
 - `--scope=pr`
 - `--base=<merge-base sha>` (from the `git merge-base` step above)
 - `--head=<headSha>` — the PR's normalised head commit, from step 3

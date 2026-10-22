@@ -1,0 +1,64 @@
+// markdownlint-cli2 configuration: the Markdown conventions of .claude/rules/markdown.md, as lint rules.
+// Run locally with: npx --yes markdownlint-cli2@0.23.2 (the version markdownlint-cli2-action v24.2.0 bundles).
+// CI runs the same check in .github/workflows/docs.yml.
+{
+  "config": {
+    "default": true,
+
+    // Paragraphs are not hard-wrapped: a paragraph is one line and the renderer wraps it.
+    // Diagrams have their own 120-column ceiling, which no line-length setting can scope to them.
+    "MD013": false,
+
+    // Every code block takes a language tag, and a diagram is the one exception: it takes a bare
+    // fence on purpose, because syntax highlighting mangles it. MD040 has no way to tell a diagram
+    // from code, so it cannot encode that exception; the rule stays a review rule.
+    "MD040": false,
+
+    // A heading may repeat under different parents: two modes of one skill both have a
+    // "1. Read the standard" step.
+    "MD024": { "siblings_only": true },
+
+    // One H1 per file. A skill's or an agent's YAML frontmatter `name:` is its title, so an agent
+    // definition, whose body is a prompt that opens with "## Role" or a sentence, needs no H1 of its
+    // own; a SKILL.md that carries both a `name:` and an H1 is not two titles.
+    "MD041": { "front_matter_title": "^\\s*name\\s*:" },
+    "MD025": { "front_matter_title": "" },
+
+    // A bold lead-in line is the house style for a load-bearing label ("Bold the load-bearing
+    // words"), not a missing heading.
+    "MD036": false,
+
+    // A code span quotes a literal value, and its leading or trailing space can be part of the value:
+    // the footer's " · <model> / <effort>" suffix, the "; " that joins tags.
+    "MD038": false,
+
+    // Two notes in a row are two blockquotes on purpose; CommonMark keeps them apart at the blank line.
+    "MD028": false,
+
+    // A numbered procedure may continue after a table or a paragraph, at the number it had reached
+    // ("5." after a table that followed "4."). CommonMark renders that list from 5, as written;
+    // MD029 has no style that accepts a list starting above 1.
+    "MD029": false,
+
+    // A table's cells are padded, "| a | b |", over a delimiter row written "|---|---|", and the
+    // columns are not aligned: a cell is one line however long it is. No MD060 style accepts that mix.
+    "MD060": false,
+
+    // Emphasis is written with asterisks.
+    "MD049": { "style": "asterisk" },
+    "MD050": { "style": "asterisk" },
+
+    // Inline HTML is not used; a placeholder in angle brackets is escaped or put in a code span,
+    // because an unescaped <placeholder> is swallowed as a tag by the renderer.
+    "MD033": true
+  },
+
+  // Everything tracked; never the gitignored working trees.
+  "globs": ["**/*.md"],
+  "gitignore": true,
+  "ignores": [
+    "**/node_modules/**",
+    "docs/terylon/**",
+    "docs/superpowers/**"
+  ]
+}

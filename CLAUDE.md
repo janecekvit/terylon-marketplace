@@ -12,6 +12,9 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /NOTICE                            the copyright notice Apache-2.0 carries: Terylon Marketplace, copyright the operator
 /SECURITY.md                       how to report a vulnerability — GitHub private vulnerability reporting
 /.github/workflows/ci.yml          unit suites + the free e2e install stage, on every PR and push to main
+/.github/workflows/docs.yml        Markdown lint + link check over every tracked .md, on every PR and push to main
+/.markdownlint-cli2.jsonc          the Markdown lint rules — .claude/rules/markdown.md, encoded
+/lychee.toml                       the link check: relative links, anchors, external links; what is excluded and why
 /plugins/<slug>/                   one directory per plugin
 /plugins/CLAUDE.md                 authoring conventions — read before editing a plugin
 /docs/                             the engineering knowledge base — architecture, flows, runbooks, onboarding

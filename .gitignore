@@ -22,3 +22,6 @@ Thumbs.db
 # each load, never committed.
 plugins/*/.claude-plugin/types/
 plugins/*/tsconfig.json
+
+# lychee's result cache, from a local run of the link check
+.lycheecache

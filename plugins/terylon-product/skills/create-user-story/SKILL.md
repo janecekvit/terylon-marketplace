@@ -198,8 +198,8 @@ Then link the parent via `forge-ops` `link-work-item-parent` with `child` = the 
 `parent` = the Feature. **Verify by reading the parent back**: its `children` include the new story.
 The direction matters — the story's parent is the Feature, not the reverse.
 
-**If the link is refused**, the story exists and is not attached. Print it as such — `Created User Story
-#<id>, NOT linked under Feature #<parent>: <reason>` — and do not record the parent anywhere else.
+**If the link is refused**, the story exists and is not attached. Print it as such —
+`Created User Story #<id>, NOT linked under Feature #<parent>: <reason>` — and do not record the parent anywhere else.
 
 Print: `Created User Story #<id> under Feature #<parent>: <url>`.
 

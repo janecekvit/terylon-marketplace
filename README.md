@@ -23,10 +23,10 @@ It also carries **Terylon**, the agentic OS extension: an MCP endpoint and a Cla
 | You want to | Enable | Then say, or run |
 |---|---|---|
 | turn a short brief into an implementation-ready user story, or a Feature spec | `terylon-product` | "write a user story for …", `create-user-story`, `create-feature` |
-| take a work item or an idea to tested, reviewed code on a branch | `terylon-dev` | "develop <work item URL>", `develop`, `brainstorm` |
+| take a work item or an idea to tested, reviewed code on a branch | `terylon-dev` | "develop \<work item URL\>", `develop`, `brainstorm` |
 | review your own branch before you push | `terylon-git` (with any role) | "review my changes", `code-review` |
 | open a pull request with a description, or review someone else's | `terylon-forge` (with any role) | `create-pr`, `write-pr-description`, `review-pr <URL>`, `address-pr-comments` |
-| know whether a pull request's test plan and its item's acceptance criteria hold | `terylon-test` | "verify the test plan on <PR URL>", `test` |
+| know whether a pull request's test plan and its item's acceptance criteria hold | `terylon-test` | "verify the test plan on \<PR URL\>", `test` |
 | see what a run cost, per agent | `terylon-core` (with every role) | `measure-token-spend` |
 | hand whole goals to your Terylon and keep the decisions | `terylon-os`, `terylon-pane` | the pane in Claude Desktop; `briefing`, `add-goal`, `merge-gate` |
 
@@ -188,6 +188,8 @@ The marketplace is built with itself: its stories, builds, reviews and test-plan
 - a model's run varies between two identical attempts, and a check that flakes on a pull request teaches people to re-run it rather than read it.
 
 They are run by hand before a change reaches `main`; the commands are in [`CLAUDE.md`](./CLAUDE.md), under *Testing*.
+
+[`.github/workflows/docs.yml`](./.github/workflows/docs.yml) checks every tracked `.md` file on the same triggers: **Markdown lint** holds it to the conventions of [`.claude/rules/markdown.md`](./.claude/rules/markdown.md) as [`.markdownlint-cli2.jsonc`](./.markdownlint-cli2.jsonc) encodes them, and **Links** runs lychee with [`lychee.toml`](./lychee.toml) over every relative link, anchor and external link.
 
 ## Security
 
