@@ -9,6 +9,7 @@ What to do when something is broken. One symptom per file.
 | Runbook | Symptom |
 |---|---|
 | [consumer-did-not-get-the-update](./consumer-did-not-get-the-update.md) | "I changed a skill, merged it, and the product repository still runs the old one" |
+| [releasing](./releasing.md) | you are about to push a release tag, a release run failed, or you hold a `terylon-marketplace-vX.Y.Z.tar.gz` and need to know it is the one this repository built |
 | [ado-mcp-authorization-error](./ado-mcp-authorization-error.md) | an authorization or "not found" error naming an Azure DevOps organisation nobody chose, the `ado` sign-in failing or waiting in `/mcp` — or the `ado` tools missing entirely |
 
 ## Writing one
