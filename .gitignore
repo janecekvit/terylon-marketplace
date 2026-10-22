@@ -28,3 +28,6 @@ lcov.info
 coverage/
 # lychee's result cache, from a local run of the link check
 .lycheecache
+
+# fast-check for the property tests, installed by `npm ci` in tests/property/; never committed
+tests/property/node_modules/

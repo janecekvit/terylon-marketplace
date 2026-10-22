@@ -1,0 +1,48 @@
+# Every pull request and every push to main: the property-based tests in tests/property/, which
+# generate inputs with fast-check for the git guard hook, the plugin version rules and the harness's
+# ref resolution. fast-check is the repository's one npm dependency and lives only in that folder;
+# the Unit suites job in ci.yml skips these files, because it installs nothing.
+#
+# Every action is pinned to a full commit SHA, with its release in a comment; Dependabot raises
+# them. The checkout leaves no credential behind (persist-credentials: false).
+name: Property tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: property-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  property:
+    name: Property tests (fast-check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: tests/property
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # No package cache: the install is one small package, and a cache shared across runs is one
+      # more thing a pull request could poison.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      # Exactly what package-lock.json records, integrity-checked; no install script runs.
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: npm test
+        run: npm test

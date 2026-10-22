@@ -27,7 +27,7 @@ Keep the slug short and kebab-case. Never commit to `main`; the full git rules a
 ## 3. One pull request per issue
 
 - The description says why, what changes and how to verify it, and ends with `Closes #N` — the template carries that shape.
-- **CI must be green**: [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) runs the unit suites and the free install stage. Run `node --test "**/*.test.js"` locally first.
+- **CI must be green**: [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) runs the unit suites and the free install stage. Run `node --test "**/*.test.js"` locally first. The property tests need the one npm dependency in the repository, so they run apart: `npm ci && npm test` in `tests/property/`, and `.github/workflows/property.yml` runs them on every pull request.
 - **The maintainer merges, squashed.** Nobody else merges, and `main` is never pushed to directly or force-pushed.
 
 ## Versions and releases

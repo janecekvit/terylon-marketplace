@@ -38,6 +38,7 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /docs/superpowers/                 the same, when those skills run directly (gitignored)
 /tests/                            local tests of what the plugins ship, across plugin boundaries — not distributed
 /tests/versions/                   the version check versions.yml runs, and its tests
+/tests/property/                   property tests with fast-check — the repository's one npm dependency, confined here
 ```
 
 **All of `/plugins` is the distribution boundary.** Anything inside is consumed by other repos; anything outside stays local.
@@ -170,6 +171,7 @@ Five suites under `/tests/`, none distributed, and a mod's own tests beside it. 
 | terylon-pane version | `node --test tests/terylon-pane/version.test.js` | the version the Status tab says is the one `plugin.json` ships | free, milliseconds |
 | terylon-os plugin | `node --test tests/terylon-os/terylon-os-plugin.test.js` | the `terylon-os` plugin's one server is `${TERYLON_URL}/mcp` with no header or token, every prompt Terylon's `/mcp` serves has exactly one skill mirroring it, and nothing published names a host | free, milliseconds |
 | plugin versions | `node --test tests/versions/check-plugin-versions.test.js` | a changed plugin without a raised version fails, a patch or minor raise passes, a major raise fails without the label `major` and passes with it, a new plugin passes from 1.0.0 up, a deleted one passes, a malformed version fails, and a version `marketplace.json` lists must equal `plugin.json`'s — the pure rules, and the command line end to end in a throwaway repository | free, seconds |
+| property tests | `npm ci && npm test` in `tests/property/` | over generated inputs: `git-guard.js` never crashes and always answers allow or a well-formed deny, refuses a push to `main` in any quoting and behind any chain separator, allows a branch that merely contains `main`; `compareVersions` is the numeric total order and `parseVersion` accepts one spelling per version; `resolveRef` never passes a detached HEAD on. fast-check is the only npm dependency in the repository and lives only in that folder; the root `node --test` skips these files with a stated reason, and `.github/workflows/property.yml` runs them | free, about 30 seconds |
 | harness unit checks | `node --test tests/e2e/ref.test.js` | which ref the harness installs, and that a detached HEAD is refused rather than passed on as `HEAD` | free, milliseconds |
 | release notes | `node --test tests/release/release-notes.test.js` | the tag check, the previous tag chosen by number, every plugin's version and change, the pull requests from squash and merge subjects — against fixtures and a throwaway repository with real tags | free, about a second |
 | end-to-end | `node tests/e2e/run.js` | the marketplace installs from a git ref as a consumer installs it, everything loads, and the skills — followed by a model, headless — write the right things or refuse with the right reason | about **$2.60–3.25** per full run on sonnet, 4–8 min (measured 2026-10-04) |
