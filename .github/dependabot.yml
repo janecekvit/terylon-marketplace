@@ -3,11 +3,16 @@
 # library only.
 version: 2
 updates:
+  # Every update waits 14 days after its release (cooldown), so a compromised release has time
+  # to be caught before it reaches this repository. Actions are pinned to commit SHAs; Dependabot
+  # updates the SHA and the version comment.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 14
     groups:
       actions:
         patterns: ["*"]
