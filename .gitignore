@@ -22,3 +22,7 @@ Thumbs.db
 # each load, never committed.
 plugins/*/.claude-plugin/types/
 plugins/*/tsconfig.json
+
+# Test coverage, written by node --test --experimental-test-coverage; Codecov holds the report
+lcov.info
+coverage/
