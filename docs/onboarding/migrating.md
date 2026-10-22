@@ -78,7 +78,7 @@ Until #332 `terylon-ado` launched the local `@azure-devops/mcp` server from its 
 
 **Enabling only `terylon-forge` gets you no forge access at all.** The port ships no adapter by design. This is the intended behaviour, not an installation failure.
 
-**`terylon-ado` requires `ADO_ORGANIZATION`, which `terylon-devops` did not.** A repository that migrates without setting it fails at the first call, and that failure is deliberate — the reasoning is in the root [`CLAUDE.md`](../../CLAUDE.md) under *Azure DevOps*. Setting it: [consumer-setup](./consumer-setup.md).
+**`terylon-ado` requires `ADO_ORGANIZATION`, which `terylon-devops` did not.** A repository that migrates without setting it fails at the first call, and that failure is deliberate — the reasoning is in the root [`CLAUDE.md`](../../CLAUDE.md) under *Azure DevOps, as a consumer's forge*. Setting it: [consumer-setup](./consumer-setup.md).
 
 **Both adapters may be enabled at once.** `TERYLON_FORGE` then decides which a run uses, and the engine is addressed plugin-qualified.
 

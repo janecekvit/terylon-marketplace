@@ -7,14 +7,17 @@ paths:
 
 Applies to every `.md` in this repo: `SKILL.md` files, agent definitions, `README.md`, `CLAUDE.md`, rules, and reference documents.
 
-## Two audiences, two rule sets
+## Three audiences
 
-Markdown here goes to one of two places, and they render differently. Know which one you are writing for.
+Markdown here goes to one of three places, and they render differently. Know which one you are writing for.
 
 | Target | Who reads it | Wrapping |
 |---|---|---|
-| **Repo files** — `SKILL.md`, agents, `README.md`, rules | the model, and humans in a diff | wrap freely; source is the artifact |
-| **Azure DevOps** — PR descriptions, thread comments, work items | the ADO renderer | **never hard-wrap** |
+| **Repo files** — `SKILL.md`, agents, `README.md`, rules | the model, humans in a diff, and GitHub's renderer | wrap freely; source is the artifact |
+| **This repository's issues and pull requests**, on GitHub | GitHub's renderer | one paragraph per line |
+| **Azure DevOps** — the PR descriptions, thread comments and work items the plugins write in a consumer's repository | the ADO renderer | **never hard-wrap** |
+
+**GitHub treats a single newline as a soft wrap**, so a hard-wrapped issue or pull request here renders correctly. Write one paragraph per line anyway: it is what the plugins write, and a text moved between this repository and a consumer's forge then never needs reflowing.
 
 ### Never hard-wrap ADO-bound markdown
 
@@ -133,7 +136,7 @@ develop (skill, main thread — holds the gates)
 
 Annotate the edges with what the reader cannot infer from the shape: which branches run in parallel, which are conditional and on what, which direction data flows.
 
-**Three rules keep a diagram readable everywhere it is read** — in a terminal, in a raw file, in a diff pane, in the Azure DevOps renderer and in an agent's context window:
+**Three rules keep a diagram readable everywhere it is read** — in a terminal, in a raw file, in a diff pane, in GitHub's renderer, in a consumer's Azure DevOps and in an agent's context window:
 
 | Rule | Because |
 |---|---|
@@ -155,7 +158,7 @@ The 120 is a ceiling, not a target. It was set rather than inherited: the classi
 | How a value flows through a pipeline | the file that owns the pipeline |
 | How something travels **end to end, across components** | an article in `docs/flows/` — no single component's file can see the whole path |
 
-Use plain ASCII (`└──`, `├──`, `──▶`, `┐`/`┘`), never Unicode box-drawing beyond that set — it has to stay readable in a terminal diff, in a raw file, and in the ADO renderer alike.
+Use plain ASCII (`└──`, `├──`, `──▶`, `┐`/`┘`), never Unicode box-drawing beyond that set — it has to stay readable in a terminal diff, in a raw file, on GitHub and in a consumer's Azure DevOps alike.
 
 **Keep them true.** A diagram that no longer matches the code is worse than no diagram, because it is believed. When you rename or re-wire a component, grep for its name in every diagram before you finish.
 

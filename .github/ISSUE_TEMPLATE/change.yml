@@ -1,0 +1,46 @@
+name: Change
+description: A need the marketplace does not meet yet, or something it does wrong. Every change starts here.
+body:
+  - type: markdown
+    attributes:
+      value: "State the need, not the solution. A vulnerability does not belong here: report it privately, as SECURITY.md describes."
+  - type: textarea
+    id: need
+    attributes:
+      label: The need
+      description: What is missing or wrong, for whom, and what happens today. One paragraph per line.
+    validations:
+      required: true
+  - type: checkboxes
+    id: plugins
+    attributes:
+      label: Which plugins it touches
+      description: Tick every plugin the change is expected to touch. Each one gets its own version bump.
+      options:
+        - label: terylon-core
+        - label: terylon-git
+        - label: terylon-forge
+        - label: terylon-ado
+        - label: terylon-github
+        - label: terylon-product
+        - label: terylon-dev
+        - label: terylon-test
+        - label: terylon-os
+        - label: terylon-pane
+        - label: none - the repository itself (docs, tests, CI)
+  - type: textarea
+    id: criteria
+    attributes:
+      label: Acceptance criteria
+      description: A checklist. Each item is something that can be shown true, and is ticked only when a comment on this issue shows what ran and what it printed.
+      value: |
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: What this change deliberately does not do, if that is worth saying.
+    validations:
+      required: false
