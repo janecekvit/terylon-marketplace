@@ -1,3 +1,6 @@
+<!-- markdownlint-disable-file MD041 -->
+<!-- This file becomes the body of a pull request, which GitHub titles itself: it carries no top-level heading. -->
+
 ## Why
 
 <!-- The need this answers, in a sentence or two. The issue holds the full statement. -->
