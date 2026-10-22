@@ -38,5 +38,6 @@ test("the pinned D2 release is the one the workflow installs", () =>
     const fs = require("node:fs");
     const workflow = fs.readFileSync(path.join(__dirname, "..", "..", ".github", "workflows", "diagrams.yml"), "utf8");
 
-    assert.match(workflow, new RegExp(`D2_VERSION: ${D2_VERSION.replace(/\./g, "\\.")}`));
+    // A plain substring, not a pattern: no character of the version needs escaping.
+    assert.ok(workflow.includes(`D2_VERSION: ${D2_VERSION}`), `diagrams.yml does not pin D2 ${D2_VERSION}`);
 });
