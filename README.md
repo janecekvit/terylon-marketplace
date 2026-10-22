@@ -181,6 +181,8 @@ The marketplace is built with itself: its stories, builds, reviews and test-plan
 | Unit suites | `node --test "**/*.test.js"`: the forge-port contract and fixture tests, the harness's ref checks, the hook and measurement scripts, the Terylon pane's command and version checks. The pane's mutation suite skips here, as no `claude` CLI is installed in this job | nothing |
 | End-to-end install stage | `node tests/e2e/run.js --stages install`: installs the marketplace from the commit under test as a consumer does, and checks every plugin, skill, agent, hook and MCP server loads | nothing: no login, no token, no model call |
 
+The unit suites run with Node's built-in coverage, and the job uploads the lcov report to [Codecov](https://codecov.io/gh/janecekvit/terylon-marketplace) without a stored token (OIDC); coverage is informational there, as set in [`codecov.yml`](./codecov.yml), and never fails a check.
+
 **The harness's other two stages stay manual, on purpose.** `author` and `github-only` drive the skills through a model, headless, and judge what it writes:
 
 - they need a Claude login, and putting one in CI means a repository secret that any workflow change could reach. On a public repository, that is the wrong trade for a check a maintainer can run;

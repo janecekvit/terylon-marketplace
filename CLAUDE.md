@@ -16,6 +16,7 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /.github/workflows/scorecard.yml   OpenSSF Scorecard, on main and weekly, published for the README badge
 /.github/dependabot.yml            raises the SHA-pinned actions weekly, one grouped pull request
 /.github/CODEOWNERS                every file the maintainer's to review
+/codecov.yml                       Codecov: coverage of the unit suites is informational, never a gate; stubs and fixtures ignored
 /plugins/<slug>/                   one directory per plugin
 /plugins/CLAUDE.md                 authoring conventions — read before editing a plugin
 /docs/                             the engineering knowledge base — architecture, flows, runbooks, onboarding
