@@ -52,7 +52,7 @@ The diagram below is copied unchanged from #332, rev 28, section *Use case: one 
 | good | the PC being off loses no capability that matters: the gates live in the console, and everything else is a skill or a tool on terylon-remote |
 | cost | while TerylonLab does not answer, the pane shows the last state it read, marked stale, with the time and the reason |
 | **constraint** | **giving the pane a store of its own that survives a session, or a write that decides, undoes this.** The pane's `$.state` holds only the last answer and the screen it is on. Its `$.store` holds only where it last read the events and which signals it posted. |
-| **constraint** | **a tool in the pane's allow-list that is a gate undoes it**: `PANE_TOOLS` names reads and the four writes that decide nothing, and a mutation planting a gate there must turn the tests red |
+| **constraint** | **a tool in the pane's allow-list that is a gate undoes it**: `PANE_TOOLS` names reads and the five writes that decide nothing — `notice_handle` the fifth since #360, and `goal_drop` a gate the pane links to the console for — and a mutation planting a gate there must turn the tests red |
 
 ## Where it lives
 

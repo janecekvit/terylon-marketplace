@@ -26,17 +26,18 @@ This is for the owner of a Terylon, working in a **local** session on the PC: th
 ## What it does
 
 ```
-                                                                        as of #332 c9
+                                                                        as of #360
 
   every 30 s ──▶ terylon /mcp: briefing · work_in_flight · stories_list · events_since
        │           through ONE allow-list (hooks/terylon.ts) that refuses every gate tool
-       ├──▶ the band, what calls for you:  Terylon · Waiting 3 · Running 2 · Queue 2                 Open
+       ├──▶ the band, what calls for you:  Terylon · Waiting 3 · Running 2 · Queue 2 · Bell 2        Open
        ├──▶ the status line, the machine:  Agentic OS ● ok · $5.50 of $20 today · 2/4 slots
        ├──▶ ONE pane, opened by the band or a command, NEVER by itself:
        │      Queue ─── Waiting for you ──▶ a question answered here (question_answer) · a story · a plan
        │       │        Running · Queued · Done today ──▶ a story ──▶ its goal ──▶ a story …  ‹ back
+       │       │        a story: its phases and Now working FROM progress.stage, NEVER ITS TIMELINE
        │      Goals ─── goals_list · plans_list ──▶ a goal · a plan; a new goal is goal_add
-       │      Bell ──── notices_list · leader_status · metrics, read only
+       │      Bell ──── notices_list · leader_status · metrics; a notice marked handled is notice_handle
        │      Memory ── the rules the machine enforces, the leader's memory; an edit is memory_propose
        │                  ──▶ CONFIRMED in the console
        │      Status ── the machine in one word, slots, cost, every problem with How to fix, diagnostics
@@ -53,14 +54,15 @@ This is for the owner of a Terylon, working in a **local** session on the PC: th
 | the status line | the health of Agentic OS: well with today's spend and the slots in use, or the one worst problem | what waits for the owner |
 
 - The band is one row, cut at its end, so it survives a pane docked beside the transcript.
-- A value is coloured only when it differs from calm: *Waiting* above 0 is `warning`, *Running* above 0 is `suggestion`, a stuck story or an alert is `warning`.
+- A value is coloured only when it differs from calm: *Waiting* above 0 is `warning`, *Running* above 0 is `suggestion`, *Bell* above 0, a stuck story or an alert is `warning`.
+- **The bell's count is the unhandled notices `notices_list` reports** (#360), read on every poll: a notice handled in the pane drops it at once, and one handled anywhere else drops it within one poll.
 - **Its button is always *Open*, and does the same thing every time**: it opens the pane on the tab the owner last used, the queue the first time. A problem is said in the band and in the status line; how to fix it is on the Status tab, a press away, never chosen for the owner.
 
 | State | The band says | Its button | The status line says |
 |---|---|---|---|
-| calm, or something waits | `Terylon · Waiting N · Running N · Queue N` | Open | `Agentic OS ● ok · $x of $y today · a/b slots` |
+| calm, or something waits | `Terylon · Waiting N · Running N · Queue N · Bell N` | Open | `Agentic OS ● ok · $x of $y today · a/b slots` |
 | an alert | the counts, then `· N alerts` | Open | `Agentic OS ⚠ N alerts` |
-| the leader paused | `Leader paused since HH:MM · Waiting N · Queue N` | Open | `Agentic OS ⚠ leader paused` |
+| the leader paused | `Leader paused since HH:MM · Waiting N · Queue N · Bell N` | Open | `Agentic OS ⚠ leader paused` |
 | Terylon does not answer | `not answering since HH:MM` with the last numbers, `retrying every minute` | Open | `Agentic OS ⚠ not answering since HH:MM` |
 | a call Claude Code did not allow | `Claude Code refused the pane's call · allow rules missing` | Open | `Agentic OS ⚠ not allowed · /terylon-pane` |
 | no server, refused, Terylon's error | the cause, said plainly | Open | the cause, said plainly |
@@ -79,16 +81,18 @@ This is for the owner of a Terylon, working in a **local** session on the PC: th
 | Screen | What it shows | Reads |
 |---|---|---|
 | Queue | waiting for you (questions, merges, plans, blocked), running with step and cost, queued or held, done today | briefing, work_in_flight, stories_list |
-| A story | progress, the phases its timeline proves, the run's question, the environment, the verdict with its checks and overrun, criteria, what happened | story_get |
+| A story | the phases — admitted, then plan · develop · review · tests · pull request · verified · merge, from `progress.stage` — **Now working**: the agent at work and its stage, its step, the cost, tokens and time since start, the run's question, the environment, the verdict with its checks and overrun, criteria, what happened | story_get, work_in_flight |
 | A question | the question whole, its own (a)/(b)/(c) choices to press, an answer to type, *Talk it over with Claude in the session* | question_answer |
 | Goals | open goals by priority with their questions, the closed ones a press away, every plan with its stories, a new goal | goals_list, plans_list, goal_add |
 | A goal, a plan | the goal's stories, questions and plans; a plan's stories in order | goal_get, plans_list |
-| Bell | notices that need the owner (press for the body), what the machine did, whether the leader runs, the last 30 days | notices_list, leader_status, metrics |
+| Bell | notices that need the owner (press for the body and *Mark handled*), what the machine did, whether the leader runs, the last 30 days of the owner's stories with the host proof's counted apart | notices_list, notice_handle, leader_status, metrics |
 | Memory | the rules the machine enforces (each with who enforces it, pressed for its artefact), a card per memory file with *Edit* and *Remove* on each entry, the proposals waiting in the console | memory_get, memory_propose |
 | Status | **Agentic OS** in one word (*ok*, *not allowed*, *not answering*, *paused*, *N alerts*), since when, the last answer, *Refresh*; **Slots**, the policy's and the runs in them; **Cost**, today against the daily limit and the last 30 days; **Problems**, each a card with *Reason: …* and *How to fix* in steps: the allow rules for a refused call, the tailnet and `TERYLON_URL` to check, *Resume in the console ↗* for a pause, the notice's own words for an alert; **Diagnostics**, the mod's version, `TERYLON_URL`, the server that answered, the debug log | everything above, metrics |
 | New task | title, criteria, goal, after; sent, refused, no answer in 10 s, paused | tasks_add |
 
-**The pane cannot show who is working inside a run, or the tokens spent.** `/mcp` does not report them yet, so the story screen says so quietly instead of guessing; its phases are derived from the timeline.
+**A tab never sits on *Loading…* for good** (the operator's Desktop walk of 1.1.1, 2026-10-21): a tab's load starts from an empty value, so one an earlier version of the mod left behind is replaced, and whatever it throws or does not finish within 8 s — under Desktop's own 10 s bound on a press — ends as the tab's error with its reason, and in the debug log. **The pane's own prompts are posted once**: the same text is not posted again within a minute, and an answer is sent once however often *Send* is pressed.
+
+**A story's stage, the agent at work and its tokens are Terylon's, never the pane's** (#360). `story_get` and `work_in_flight` report `progress.stage` — plan, develop, review and test measured from the run, then pr, verify and merge from the story's state — `progress.agent` and `progress.tokens`, and the pane draws exactly that. It works out no stage from the timeline, and a mutation that brings an inference back turns the tests red. A story Terylon reports no stage for draws no phase as now, and *Now working* only while a run goes.
 
 **The done-signal** goes into the session once per story and verdict commit. It covers a story that is verified and waiting for its merge, merged, accepted, abandoned, blocked or stuck.
 
@@ -112,7 +116,7 @@ This is for the owner of a Terylon, working in a **local** session on the PC: th
 
 A mod installed at the user scope from a terminal loads in the desktop app's local sessions too.
 
-**Allow the pane's seventeen tools, or it reads nothing.** The pane calls Terylon on its own timer, outside any turn of the model's, and Claude Code puts that call through the same permission check as the model's:
+**Allow the pane's eighteen tools, or it reads nothing.** The pane calls Terylon on its own timer, outside any turn of the model's, and Claude Code puts that call through the same permission check as the model's:
 
 - In auto mode, the classifier has no request to judge the call by, and gives no verdict.
 - In the default mode, there is no one to ask.
@@ -138,12 +142,13 @@ Either way the call is refused, and only an allow rule lets it through. Add thes
     "mcp__plugin_terylon-os_terylon__tasks_add",
     "mcp__plugin_terylon-os_terylon__goal_add",
     "mcp__plugin_terylon-os_terylon__question_answer",
-    "mcp__plugin_terylon-os_terylon__memory_propose"
+    "mcp__plugin_terylon-os_terylon__memory_propose",
+    "mcp__plugin_terylon-os_terylon__notice_handle"
   ]
 }
 ```
 
-**Four of these tools write, and none of them is a gate:**
+**Five of these tools write, and none of them is a gate:**
 
 | Tool | What it does | Why it is not a gate |
 |---|---|---|
@@ -151,6 +156,9 @@ Either way the call is refused, and only an allow rule lets it through. Add thes
 | `goal_add` | adds a goal | the leader turns it into a plan that waits for approval |
 | `question_answer` | answers the leader's question | it completes the brief and approves nothing |
 | `memory_propose` | proposes a memory edit | the owner confirms the edit in the console |
+| `notice_handle` | marks a notice handled | it decides nothing about work, and the same notice raised again opens again; the owner decided on 2026-10-12 (#360) that it is not a gate |
+
+**`goal_drop` is a gate** (#360): it ends the owner's goal, so it is confirmed by the person in Terylon's form or in the console. It is in `GATE_TOOLS`, never in `PANE_TOOLS`, and the pane links to the console for it.
 
 **Never allow the server as a whole** (`mcp__plugin_terylon-os_terylon`): that would let the model call the owner's gates without asking too. The list is the pane's own allow-list, `PANE_TOOLS` in `hooks/terylon.ts`. A test holds the block to that list and to no gate, and a planted gate in either turns the tests red.
 
@@ -164,6 +172,7 @@ Either way the call is refused, and only an allow rule lets it through. Add thes
 | not answering since HH:MM / TerylonLab does not answer | the call left and nothing answered | read *Reason:*, then `tailscale status` and `TERYLON_URL` |
 | no terylon server | `terylon-os` is not installed, or its server is not connected | `claude mcp list` |
 | refused: not the owner | Terylon answered, but not to its owner | sign this PC into the tailnet with your own account |
+| a tab says *… did not load* · *Terylon did not answer within 8 s* | the tab's calls did not finish under Desktop's 10 s bound on a press | read the debug log's `terylon-pane: loading … failed:` line, then press the tab again |
 
 ## Tests
 
@@ -178,7 +187,7 @@ Either way the call is refused, and only an allow rule lets it through. Add thes
 
 Two more checks live at the repository root:
 
-- `tests/terylon-pane/mutations.test.js` plants mutations, and each must turn the tests red. It covers the done-signal, the catch-up, a refusal of Claude Code's taken for the tailnet, the debug log silenced and the reason hidden. It also covers the band ignoring a survey, the band showing the spend again or a *Fix*, *Open* forgetting the tab, the Status tab missing the fix step for a refused call, the status line counting the briefing as an alert or no longer saying the health, the pane opening by itself, a repeated notice shown each time on the machine card, `/terylon-memory` opening a second pane, a waiting count drawn calm, a row's title no longer cut, an empty card saying nothing, a pressed choice that no longer fills the answer, a gate among the pane's tools or its allow rules, the guard opened to a gate, and a waiting item approving from the pane.
+- `tests/terylon-pane/mutations.test.js` plants mutations, and each must turn the tests red. It covers the done-signal, the catch-up, a refusal of Claude Code's taken for the tailnet, the debug log silenced and the reason hidden. It also covers the band ignoring a survey, the band showing the spend again or a *Fix*, *Open* forgetting the tab, the Status tab missing the fix step for a refused call, the status line counting the briefing as an alert or no longer saying the health, the pane opening by itself, a repeated notice shown each time on the machine card, `/terylon-memory` opening a second pane, a waiting count drawn calm, a row's title no longer cut, an empty card saying nothing, a pressed choice that no longer fills the answer, a gate among the pane's tools or its allow rules, the guard opened to a gate, and a waiting item approving from the pane. Since #360 also: a tab's load no longer bounded (Goals, Bell), the pane's prompts posted twice, an answer sent twice, one story said as *stories*, the phases inferred from the timeline again, *Mark handled* sending nothing, the band dropping the bell's count or never reading it again, `goal_drop` among the pane's tools, and the copied gate list losing `goal_drop`.
 - `tests/terylon-pane/commands.test.js` holds every command the mod registers to a name that no skill of the mod or of `terylon-os` takes.
 - `tests/terylon-pane/version.test.js` holds the version the Status tab says to the one `plugin.json` ships.
 

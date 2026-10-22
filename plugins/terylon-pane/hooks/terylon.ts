@@ -1,5 +1,6 @@
 // The pane's one way to Terylon: $.mcp.call on the terylon server, through an allow-list.
-// The pane reads, adds a task or a goal, answers the leader's question and proposes a memory edit. It never
+// The pane reads, adds a task or a goal, answers the leader's question, proposes a memory edit and marks a
+// notice handled. It never
 // calls one of the owner's gates: those are confirmed by the person in Terylon's form or in the console, and
 // the pane links there.
 
@@ -7,8 +8,9 @@
 // added it by hand names it.
 export const SERVER_CANDIDATES = ['plugin:terylon-os:terylon', 'terylon'] as const
 
-// Every tool the pane may call: what it reads, then the four writes that decide nothing — a task, a goal, an
-// answer to the leader's question, a memory edit proposed. None of them is a gate (McpGates.cs lists those).
+// Every tool the pane may call: what it reads, then the five writes that decide nothing — a task, a goal, an
+// answer to the leader's question, a memory edit proposed, a notice handled. None of them is a gate (McpGates.cs
+// lists those; the owner decided on 2026-10-12, #360, that notice_handle is not one).
 export const PANE_TOOLS: ReadonlySet<string> = new Set([
   'briefing',
   'work_in_flight',
@@ -27,6 +29,7 @@ export const PANE_TOOLS: ReadonlySet<string> = new Set([
   'goal_add',
   'question_answer',
   'memory_propose',
+  'notice_handle',
 ])
 
 // The owner's gates (Terylon, src/Terylon.Web.Host/Mcp/McpGates.cs): never the pane's, whatever it is asked.
@@ -41,6 +44,7 @@ export const GATE_TOOLS: readonly string[] = [
   'story_accept',
   'leader_pause',
   'leader_resume',
+  'goal_drop',
 ]
 
 // A server the session does not have, in the words $.mcp.call rejects with.

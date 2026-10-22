@@ -26,7 +26,7 @@
       "source": "./plugins/terylon-pane",
       "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-pane",
       "repository": "https://github.com/janecekvit/terylon-marketplace",
-      "description": "The Terylon band, status line and pane in Claude Desktop, a mod: what waits for you above the prompt, the health of Agentic OS and today's spend in the status line, and one pane with Queue, Goals, Bell, Memory and Status tabs. It answers the leader's questions and adds tasks and goals; it approves nothing. Requires terylon-os.",
+      "description": "The Terylon band, status line and pane in Claude Desktop, a mod: what waits for you above the prompt, the health of Agentic OS and today's spend in the status line, and one pane with Queue, Goals, Bell, Memory and Status tabs. It answers the leader's questions, adds tasks and goals, follows a run live and marks notices handled; it approves nothing. Requires terylon-os.",
       "category": "general",
       "keywords": [
         "terylon",

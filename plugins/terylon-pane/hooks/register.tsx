@@ -8,7 +8,7 @@
 //        │      Fronta ── Čeká na tebe ──▶ question (question_answer) · story · plan
 //        │        │       Běží · Ve frontě · Hotovo dnes ──▶ story ──▶ goal ──▶ story …
 //        │      Cíle ──── goals_list · plans_list ──▶ goal · plan ──▶ story; a new goal is goal_add
-//        │      Zvonek ── notices_list · leader_status · metrics, read only
+//        │      Zvonek ── notices_list · leader_status · metrics; Mark handled is notice_handle (#360)
 //        │      Paměť ─── the memory pane: memory_get; an edit is memory_propose, confirmed in the console
 //        └──▶ the done-signal: $.prompt.submit once per story and verdict commit, and a toast
 //   session start, away > 2 h ──▶ ONE catch-up summary, and the band says it until dismissed
@@ -82,7 +82,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.0.1'
+export const MOD_VERSION = '1.1.2'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -91,6 +91,14 @@ export const RETRY_MS = 60000
 // How many criteria and timeline rows a story shows before "další N ▾".
 const CRITERIA_SHOWN = 2
 const TIMELINE_SHOWN = 4
+
+// HOW LONG A SCREEN'S LOAD MAY TAKE before it is said as its error: under Desktop's own 10 s bound on a press
+// (`ui.press: … did not answer within 10000ms`), so the error is written while the press is still answered.
+const LOAD_BOUND_MILLISECONDS = 8000
+
+// HOW LONG THE SAME PROMPT IS NOT POSTED AGAIN: the operator's walk of 1.1.1 found question 22 posted into the
+// chat twice from one screen.
+const PROMPT_REPEAT_MILLISECONDS = 60000
 
 // What the store keeps across sessions: where the pane last read the events, when, and what it signalled.
 const STORE_LAST_SEQ = 'lastSeq'
@@ -128,7 +136,7 @@ const EMPTY_MEMORY: PaneMemory = { phase: 'loading', files: [], rules: [], pendi
 
 const EMPTY_GOALS: PaneGoals = { phase: 'loading', sentence: null, open: [], closed: [], plans: [], draft: '', adding: 'idle', addSentence: null }
 
-const EMPTY_BELL: PaneBell = { phase: 'loading', sentence: null, unhandledCount: 0, unhandled: [], handled: [], leader: { isPaused: false, text: '' }, metrics: [] }
+const EMPTY_BELL: PaneBell = { phase: 'loading', sentence: null, unhandledCount: 0, unhandled: [], handled: [], leader: { isPaused: false, text: '' }, metrics: [], handling: null, handleSentence: null }
 
 const snapshot = atom({ plugin: 'terylon-pane', key: 'snapshot' } as const, EMPTY_SNAPSHOT)
 const view = atom({ plugin: 'terylon-pane', key: 'view' } as const, { stack: [QUEUE] } as PaneView)
@@ -317,7 +325,8 @@ async function refresh($: EngineInterface): Promise<boolean> {
     slotsUsed: running.length,
     paused: paused === null ? null : COPY.paused(paused.since, paused.reason),
     pausedSince: paused?.since ?? null,
-    notices: number(lastBriefing.unhandledNotices) ?? 0,
+    // THE BELL'S COUNT ON THE BAND (#360): what notices_list says, else the briefing's, else the last.
+    notices: (notices.kind === 'ok' ? number(notices.value.unhandled) : null) ?? number(lastBriefing.unhandledNotices) ?? previous.notices,
     alerts,
     alertNotices,
     server: answeringServer,
@@ -480,6 +489,48 @@ async function readMemory($: EngineInterface): Promise<PaneMemory> {
   return { ...EMPTY_MEMORY, ...(await read($, memory)) }
 }
 
+async function readGoals($: EngineInterface): Promise<PaneGoals> {
+  return { ...EMPTY_GOALS, ...(await read($, goals)) }
+}
+
+async function readBell($: EngineInterface): Promise<PaneBell> {
+  return { ...EMPTY_BELL, ...(await read($, bell)) }
+}
+
+// A SCREEN'S LOAD IS TOTAL (the operator's walk of 1.1.1: Goals and Bell sat on "Loading…" for good): whatever
+// it throws, and whatever does not answer within the bound, ends as the screen's error with its reason — never
+// a "Loading…" nothing will ever replace.
+async function bounded($: EngineInterface, what: string, work: () => Promise<void>, fail: (sentence: string) => Promise<void>): Promise<void> {
+  const timedOut = new Promise<string>(resolve => {
+    $.clock.after(LOAD_BOUND_MILLISECONDS, () => resolve(COPY.loadTimedOut(LOAD_BOUND_MILLISECONDS / 1000)))
+  })
+  const finished = work().then(
+    (): null => null,
+    (error: unknown): string => (error instanceof Error ? error.message : String(error)),
+  )
+  const outcome = await Promise.race([finished, timedOut])
+
+  if (outcome !== null) {
+    $.ui.log(`terylon-pane: loading ${what} failed: ${outcome}`, { to: 'debug' })
+    await fail(outcome)
+  }
+}
+
+// THE PANE'S OWN PROMPTS, ONCE: the same text is not posted again within a minute, however often it is pressed.
+const postedAt = new Map<string, number>()
+async function postPrompt($: EngineInterface, text: string): Promise<void> {
+  const now = await $.clock.now()
+  const last = postedAt.get(text)
+
+  // RECORDED BEFORE THE POST, so a second press — a double click included — finds it and posts nothing.
+  if (last !== undefined && now - last < PROMPT_REPEAT_MILLISECONDS) {
+    return
+  }
+
+  postedAt.set(text, now)
+  await $.prompt.submit({ text })
+}
+
 function stackOf(value: PaneView): PaneScreen[] {
   return Array.isArray(value.stack) && value.stack.length > 0 ? value.stack : [QUEUE]
 }
@@ -560,10 +611,28 @@ async function openQuestion($: EngineInterface, id: number): Promise<void> {
 }
 
 // AN ANSWER IS NOT A GATE: question_answer only completes the brief; the leader takes it from there.
+// ONE SEND AT A TIME, decided before the first await: two presses dispatched before the screen draws "sending" —
+// a double click, or Enter and the button — both read the answer as a form, so the state alone cannot tell.
+let isAnswerSending = false
+
 async function sendAnswer($: EngineInterface): Promise<void> {
+  if (isAnswerSending) {
+    return
+  }
+
+  isAnswerSending = true
+
+  try {
+    await sendAnswerOnce($)
+  } finally {
+    isAnswerSending = false
+  }
+}
+
+async function sendAnswerOnce($: EngineInterface): Promise<void> {
   const form = await read($, answer)
 
-  if (form === null) {
+  if (form === null || form.phase === 'sending') {
     return
   }
 
@@ -595,6 +664,18 @@ async function sendAnswer($: EngineInterface): Promise<void> {
 }
 
 async function loadGoals($: EngineInterface): Promise<void> {
+  // A VALUE KEPT FROM AN EARLIER VERSION OF THE MOD is replaced whole, as the memory's is; only the new goal's
+  // draft and what became of it stay.
+  await update($, goals, (current: PaneGoals): PaneGoals => ({
+    ...EMPTY_GOALS,
+    draft: typeof current?.draft === 'string' ? current.draft : '',
+    adding: current?.adding ?? 'idle',
+    addSentence: typeof current?.addSentence === 'string' ? current.addSentence : null,
+  }))
+  await bounded($, 'goals', () => readGoalsFromTerylon($), sentence => update($, goals, (current: PaneGoals): PaneGoals => ({ ...EMPTY_GOALS, ...current, phase: 'error', sentence })))
+}
+
+async function readGoalsFromTerylon($: EngineInterface): Promise<void> {
   const goalsAnswer = await callTerylon($, 'goals_list')
   const plansAnswer = await callTerylon($, 'plans_list')
   const base = await baseUrl($)
@@ -663,6 +744,11 @@ async function openGoal($: EngineInterface, id: number): Promise<void> {
 }
 
 async function loadBell($: EngineInterface): Promise<void> {
+  await update($, bell, (): PaneBell => EMPTY_BELL)
+  await bounded($, 'the bell', () => readBellFromTerylon($), sentence => update($, bell, (current: PaneBell): PaneBell => ({ ...EMPTY_BELL, ...current, phase: 'error', sentence })))
+}
+
+async function readBellFromTerylon($: EngineInterface): Promise<void> {
   const notices = await callTerylon($, 'notices_list')
 
   if (notices.kind !== 'ok') {
@@ -676,6 +762,32 @@ async function loadBell($: EngineInterface): Promise<void> {
 
   await update($, bell, (): PaneBell =>
     bellView(notices.value, leader.kind === 'ok' ? leader.value : null, metrics.kind === 'ok' ? metrics.value : null, now, zoneOffset(now)))
+}
+
+// A notice marked handled from the Bell tab (#360): notice_handle is a write the owner decided is not a gate, so
+// the pane sends it; the bell and the band drop it at once, and the next poll reads what Terylon published.
+async function handleNotice($: EngineInterface, id: number): Promise<void> {
+  await update($, bell, (current: PaneBell): PaneBell => ({ ...current, handling: id, handleSentence: null }))
+
+  const answered = await callTerylon($, 'notice_handle', { notice: id })
+
+  if (answered.kind !== 'ok') {
+    await update($, bell, (current: PaneBell): PaneBell => ({ ...current, handling: null, handleSentence: why(answered) }))
+    return
+  }
+
+  await update($, bell, (current: PaneBell): PaneBell => {
+    const isListed = current.unhandled.some(notice => notice.id === id)
+
+    return {
+      ...current,
+      handling: null,
+      handleSentence: null,
+      unhandled: current.unhandled.filter(notice => notice.id !== id),
+      unhandledCount: isListed ? Math.max(0, current.unhandledCount - 1) : current.unhandledCount,
+    }
+  })
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...current, notices: Math.max(0, current.notices - 1) }))
 }
 
 async function openAdd($: EngineInterface, title: string): Promise<void> {
@@ -1034,10 +1146,12 @@ export const register: Register = on => {
               ...pair(COPY.bandLeader, COPY.bandPaused(current.pausedSince), 'warning'),
               ...pair(COPY.bandWaiting, String(current.waiting.length), current.waiting.length > 0 ? 'warning' : 'inactive'),
               ...pair(COPY.bandQueued, String(current.queued.length), 'inactive'),
+              ...pair(COPY.bandBell, String(current.notices), current.notices > 0 ? 'warning' : 'inactive'),
             ]
           : [
               ...counts,
               ...pair(COPY.bandQueued, String(current.queued.length), 'inactive'),
+              ...pair(COPY.bandBell, String(current.notices), current.notices > 0 ? 'warning' : 'inactive'),
               ...(current.alerts > 0 ? [<Text color="warning">{COPY.bandAlerts(current.alerts)}</Text>] : []),
             ]
     }
@@ -1167,7 +1281,7 @@ export const register: Register = on => {
     if (screen.screen === 'status') {
       const health = healthOf(current, offset)
       const state = stateWord(health)
-      const bellState = await read($, bell)
+      const bellState = await readBell($)
       const pausedCard = current.paused === null ? null : cardOf('problem-paused', <Text bold color="warning">{COPY.pausedTitle}</Text>, current.pausedSince === null ? null : COPY.statusSince(current.pausedSince), [
         <Text color="inactive">{current.paused}</Text>,
         steps(COPY.fixPaused),
@@ -1282,22 +1396,27 @@ export const register: Register = on => {
             <Text bold>{shownStory.title}</Text>
             <Text color="subtle" wrap="truncate-end">{shownStory.meta}</Text>
           </Box>
-          {shownStory.step !== null && cardOf('story-progress', COPY.progress, null, [
-            <Text>{shownStory.step}</Text>,
-            shownStory.fraction === null ? null : <Text color="suggestion">{bar(shownStory.fraction)}</Text>,
-            <Text color="inactive">{shownStory.cost}</Text>,
-          ])}
           {cardOf('story-phases', COPY.phases, COPY.phasesHint(done, shownStory.phases.length), [
             ...shownStory.phases.map((item, index) => (
               <Box key={`phase-${index}`} flexDirection="row" justifyContent="space-between" gap={1}>
                 <Text>
                   <Text color={item.status === 'done' ? 'success' : item.status === 'now' ? 'suggestion' : 'subtle'}>{item.status === 'done' ? '✓ ' : item.status === 'now' ? '● ' : '○ '}</Text>
-                  <Text color={item.status === 'next' ? 'subtle' : 'text'}>{item.label}</Text>
+                  <Text bold={item.status === 'now'} color={item.status === 'next' ? 'subtle' : 'text'}>{item.label}</Text>
+                  {item.role !== null && <Text color="subtle">{` · ${item.role}`}</Text>}
                 </Text>
                 <Text color="subtle" wrap="truncate-end">{item.detail}</Text>
               </Box>
             )),
-            <Text color="subtle">{COPY.nowWorkingNote}</Text>,
+          ])}
+          {shownStory.working !== null && cardOf('story-working', COPY.nowWorking, COPY.nowWorkingHint(shownStory.working.agent, shownStory.working.stage), [
+            <Text>{shownStory.working.step}</Text>,
+            shownStory.working.fraction === null ? null : <Text color="suggestion">{bar(shownStory.working.fraction)}</Text>,
+            <Text color="inactive">{shownStory.working.spend}</Text>,
+          ])}
+          {shownStory.working === null && shownStory.step !== null && cardOf('story-progress', COPY.progress, null, [
+            <Text>{shownStory.step}</Text>,
+            shownStory.fraction === null ? null : <Text color="suggestion">{bar(shownStory.fraction)}</Text>,
+            <Text color="inactive">{shownStory.cost}</Text>,
           ])}
           {shownStory.question !== null && cardOf('story-question', <Text bold color="warning">{COPY.questionFromRun}</Text>, COPY.waitsOnYou, [
             <Text>{shownStory.question.text}</Text>,
@@ -1347,7 +1466,7 @@ export const register: Register = on => {
             ) : null,
           ])}
           <Box key="story-actions" flexDirection="row" gap={1} flexWrap="wrap">
-            <Button key="summarise" label={COPY.summariseInSession} onPress={() => $.prompt.submit({ text: COPY.summarisePrompt(screen.story) })} />
+            <Button key="summarise" label={COPY.summariseInSession} onPress={() => postPrompt($, COPY.summarisePrompt(screen.story))} />
             {shownStory.goal !== null && <Button key="story-goal" label={COPY.goalOf(shownStory.goal)} dimColor onPress={() => go({ screen: 'goal', goal: shownStory.goal ?? 0 })} />}
             {shownStory.isVerified && <Link href={consoleLink(base, `merge&story=${shownStory.story}`)} label={COPY.mergeInConsole} />}
             {shownStory.isVerified && <Link href={consoleLink(base, `merge&story=${shownStory.story}`)} label={COPY.returnInConsole} />}
@@ -1416,7 +1535,7 @@ export const register: Register = on => {
             form.phase === 'form' ? (
               <Box key="answer-actions" flexDirection="row" gap={1} flexWrap="wrap">
                 <Button key="answer-send" label={COPY.answerSend} variant="primary" onPress={() => sendAnswer($)} />
-                <Button key="answer-discuss" label={COPY.discussInSession} dimColor onPress={() => $.prompt.submit({ text: COPY.discussPrompt(question?.id ?? 0, question?.text ?? '') })} />
+                <Button key="answer-discuss" label={COPY.discussInSession} dimColor onPress={() => postPrompt($, COPY.discussPrompt(question?.id ?? 0, question?.text ?? ''))} />
               </Box>
             ) : null,
             form.phase === 'sending' ? quiet(elements, COPY.answerSending) : null,
@@ -1624,7 +1743,7 @@ export const register: Register = on => {
       )
     }
 
-    const goalsState = await read($, goals)
+    const goalsState = await readGoals($)
 
     // ONE PLAN: its stories in order, each opening the story; approval and rethinking are the console's.
     const planCard = (plan: (typeof goalsState.plans)[number]) =>
@@ -1693,7 +1812,7 @@ export const register: Register = on => {
             row(elements, { key: `goal-question-${item.id}`, kind: COPY.kindQuestion, title: firstLine(item.text), onPress: () => go({ screen: 'question', question: item.id }) })))}
           {plans.map(plan =>
             row(elements, { key: `goal-plan-${plan.id}`, kind: COPY.kindPlan, title: COPY.plan(plan.id), detail: plan.stateText, detailTone: plan.isProposed ? 'warning' : 'subtle', onPress: () => go({ screen: 'plan', plan: plan.id }) }))}
-          <Link key="goal-console" href={consoleLink(base, `goal&goal=${screen.goal}`)} label={COPY.goalInConsole} />
+          <Link key="goal-console" href={consoleLink(base, `goals&goal=${screen.goal}`)} label={COPY.goalInConsole} />
           {footer}
         </Box>
       )
@@ -1749,7 +1868,7 @@ export const register: Register = on => {
 
     // THE BELL TAB: what needs the owner, what the machine did, the leader's state, the last 30 days.
     if (screen.screen === 'bell') {
-      const bellState = await read($, bell)
+      const bellState = await readBell($)
 
       return (
         <Box flexDirection="column" gap={1}>
@@ -1772,9 +1891,17 @@ export const register: Register = on => {
                 body: shown.includes(`notice-${notice.id}`) ? (
                   <Box flexDirection="column" paddingLeft={kindWidth(bellState.unhandled.map(item => item.source)) + 1}>
                     <Text color="inactive">{notice.body === '' ? COPY.noBody : notice.body}</Text>
+                    <Box flexDirection="row" gap={1}>
+                      <Button
+                        key={`handle-${notice.id}`}
+                        label={bellState.handling === notice.id ? COPY.handling : COPY.markHandled}
+                        onPress={() => handleNotice($, notice.id)}
+                      />
+                    </Box>
                   </Box>
                 ) : null,
               })),
+            bellState.handleSentence === null ? null : reason(bellState.handleSentence),
             <Text color="subtle">{COPY.bellNote}</Text>,
           ])}
           {bellState.phase === 'ok' && cardOf('bell-machine', COPY.machine, COPY.machineHint, [
@@ -1904,7 +2031,7 @@ export const register: Register = on => {
         )}
         {!isStale && !hasInput && (
           <Box key="phone-add" flexDirection="column">
-            <Button key="phone-add" label={COPY.addOnPhone} onPress={() => $.prompt.submit({ text: COPY.addOnPhonePrompt })} />
+            <Button key="phone-add" label={COPY.addOnPhone} onPress={() => postPrompt($, COPY.addOnPhonePrompt)} />
             <Text color="subtle">{COPY.addOnPhoneNote}</Text>
           </Box>
         )}

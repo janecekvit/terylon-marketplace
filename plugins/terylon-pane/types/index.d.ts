@@ -77,7 +77,9 @@ export type PaneScreen =
 // Where the pane is, and the way back: the last entry is drawn, ‹ pops it, a tab starts the stack over.
 export type PaneView = { stack: PaneScreen[] }
 
-export type PanePhase = { label: string; detail: string; status: 'done' | 'now' | 'next' }
+export type PanePhase = { label: string; role: string | null; detail: string; status: 'done' | 'now' | 'next' }
+
+export type PaneWorking = { agent: string; stage: string; step: string; fraction: number | null; spend: string }
 
 export type PaneCheck = { name: string; isPass: boolean; detail: string }
 
@@ -95,6 +97,7 @@ export type PaneStory = {
   step: string | null
   fraction: number | null
   cost: string
+  working: PaneWorking | null
   phases: PanePhase[]
   question: { id: number; text: string } | null
   environment: { name: string; url: string | null } | null
@@ -176,6 +179,8 @@ export type PaneBell = {
   handled: PaneNotice[]
   leader: { isPaused: boolean; text: string }
   metrics: { value: string; label: string }[]
+  handling: number | null
+  handleSentence: string | null
 }
 
 export type PaneBand = { text: string; link: string; isAlert: boolean } | null

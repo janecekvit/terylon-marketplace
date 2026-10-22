@@ -8,6 +8,7 @@ import type {
   PaneGoalItem,
   PaneNotice,
   PanePhase,
+  PaneWorking,
   PanePlan,
   PaneQuestionItem,
   PaneQueuedItem,
@@ -27,9 +28,6 @@ const QUEUED_STATES = new Set(['approved', 'dispatched'])
 // A goal still in play; every other state is drawn among the closed ones.
 const OPEN_GOAL_STATES = new Set(['open', 'active', 'planned'])
 
-// A transition in a timeline summary: "running → verified: why".
-const TRANSITION = /→\s*([a-z-]+)/
-
 // "(a) the first option, (b) the second": a question that offers its own choices.
 const CHOICE_MARK = /\(([a-z])\)/g
 
@@ -39,19 +37,15 @@ const CHOICE_LONGEST = 40
 // How many of the bell's handled notices the machine card shows.
 const HANDLED_SHOWN = 4
 
-// What each later state proves the story already passed.
-const STATE_ORDER: Record<string, number> = {
-  proposed: 0,
-  approved: 1,
-  dispatched: 2,
-  running: 3,
-  blocked: 3,
-  'pr-open': 4,
-  verifying: 5,
-  verified: 6,
-  merged: 7,
-  accepted: 7,
-}
+// The stages a story's work moves through, as Terylon reports them on progress.stage (#360): four measured from
+// its run, three said by its state. The pane draws them in this order and never works one out for itself.
+const STAGES = ['plan', 'develop', 'review', 'test', 'pr', 'verify', 'merge'] as const
+
+// The states a story's work is over in.
+const ENDED_STATES = new Set(['merged', 'accepted'])
+
+// The states a story has been given a slot in.
+const ADMITTED_STATES = new Set(['dispatched', 'running', 'pr-open', 'verifying', 'verified', 'blocked', 'merged', 'accepted'])
 
 export function list(value: unknown): Json[] {
   return Array.isArray(value) ? value.filter((item): item is Json => item !== null && typeof item === 'object') : []
@@ -308,72 +302,66 @@ function latestVerdict(document: Json): Json | null {
   return standing[standing.length - 1] ?? null
 }
 
-// Which states the story has been in: its timeline's transitions, and where it is now.
-function statesReached(document: Json): Set<string> {
-  const reached = new Set<string>()
-
-  for (const event of list(document.timeline)) {
-    const match = TRANSITION.exec(String(event.summary ?? ''))
-
-    if (match?.[1] !== undefined) {
-      reached.add(match[1])
-    }
-  }
-
-  reached.add(String(document.state ?? ''))
-
-  return reached
-}
-
-function passed(reached: ReadonlySet<string>, order: number): boolean {
-  return [...reached].some(state => (STATE_ORDER[state] ?? -1) > order)
-}
-
-function eventTime(document: Json, matches: (event: Json) => boolean, zoneOffsetMinutes: number): string | null {
-  const event = list(document.timeline).find(matches)
-
-  return event === undefined ? null : clock(event.at, zoneOffsetMinutes)
-}
-
-// The run's phases, as far as the timeline tells them: what /mcp reports today, not the agents inside a run.
-export function phasesOf(document: Json, zoneOffsetMinutes = 0): PanePhase[] {
+// The story's phases, from the stage Terylon reports (progress.stage) and the state it is in — never from its
+// timeline: a stage is measured from the run, and the pane draws what it is told.
+export function phasesOf(document: Json, stage: string | null): PanePhase[] {
   const state = String(document.state ?? '')
-  const reached = statesReached(document)
-  const admitted = list(document.timeline).find(event => event.type === 'StoryAdmitted')
+  const at = stage === null ? -1 : (STAGES as readonly string[]).indexOf(stage)
+  const isOver = ENDED_STATES.has(state)
   const pullRequest = (document.pullRequest ?? null) as Json | null
   const verdict = latestVerdict(document)
-  const isRunNow = state === 'running' || state === 'dispatched' || state === 'blocked'
-  const ranAt = eventTime(document, event => /→\s*running/.test(String(event.summary ?? '')), zoneOffsetMinutes)
+  const status = (index: number): PanePhase['status'] => (isOver || (at >= 0 && index < at) ? 'done' : index === at ? 'now' : 'next')
+  const details: Record<(typeof STAGES)[number], string> = {
+    plan: '—',
+    develop: '—',
+    review: '—',
+    test: '—',
+    pr: pullRequest !== null && number(pullRequest.id) !== null ? `PR ${number(pullRequest.id)}` : '—',
+    verify: verdict === null ? '—' : `${text(verdict.environment) ?? ''} · ${verdict.green === true ? '✓' : '✗'}`,
+    merge: state === 'verified' ? COPY.waitsOnYou : '—',
+  }
 
-  const phases: PanePhase[] = [
-    {
-      label: COPY.phaseAdmitted,
-      detail: admitted === undefined ? '—' : `${text(admitted.summary) ?? ''}${clock(admitted.at, zoneOffsetMinutes) === null ? '' : ` · ${clock(admitted.at, zoneOffsetMinutes)}`}`,
-      status: admitted !== undefined || passed(reached, 2) ? 'done' : 'next',
-    },
-    {
-      label: COPY.phaseRun,
-      detail: state === 'blocked' ? COPY.waitsOnYou : ranAt ?? '—',
-      status: isRunNow ? 'now' : passed(reached, 3) ? 'done' : 'next',
-    },
-    {
-      label: COPY.phasePullRequest,
-      detail: pullRequest !== null ? `PR ${number(pullRequest.id) ?? ''}`.trim() : '—',
-      status: state === 'pr-open' ? 'now' : pullRequest !== null || passed(reached, 4) ? 'done' : 'next',
-    },
-    {
-      label: COPY.phaseVerify,
-      detail: verdict === null ? '—' : `${text(verdict.environment) ?? ''} · ${verdict.green === true ? '✓' : '✗'}`,
-      status: state === 'verifying' ? 'now' : passed(reached, 5) ? 'done' : 'next',
-    },
-    {
-      label: COPY.phaseMerge,
-      detail: state === 'verified' ? COPY.waitsOnYou : '—',
-      status: state === 'verified' ? 'now' : state === 'merged' || state === 'accepted' ? 'done' : 'next',
-    },
+  return [
+    { label: COPY.phaseAdmitted, role: null, detail: '—', status: isOver || at >= 0 || ADMITTED_STATES.has(state) ? 'done' : 'next' },
+    ...STAGES.map((name, index): PanePhase => ({
+      label: COPY.stageLabel(name),
+      role: COPY.stageRole(name),
+      detail: details[name],
+      status: status(index),
+    })),
   ]
+}
 
-  return phases
+// "1.4 M tokens": the run's tokens so far, as Terylon measured them.
+export function tokensText(tokens: number | null): string | null {
+  if (tokens === null) {
+    return null
+  }
+
+  return tokens >= 1000000 ? COPY.tokens(`${(tokens / 1000000).toFixed(1)} M`) : tokens >= 1000 ? COPY.tokens(`${Math.round(tokens / 1000)} k`) : COPY.tokens(String(tokens))
+}
+
+// Who works in the run now, at which stage, on which step, and what it has spent: read from progress, while a run goes.
+function workingOf(progress: Json | null, state: string, cost: string, hours: string | null): PaneWorking | null {
+  const agent = (progress?.agent ?? null) as Json | null
+  const stage = text(progress?.stage)
+
+  if (agent === null || stage === null || !['running', 'dispatched'].includes(state)) {
+    return null
+  }
+
+  const step = number(progress?.step)
+  const steps = number(progress?.steps)
+  const name = text(agent.name) ?? 'main'
+  const others = (number(agent.running) ?? 0) - 1
+
+  return {
+    agent: `${name === 'main' ? COPY.mainAgent : name}${others > 0 ? ` +${others}` : ''}`,
+    stage: COPY.stageLabel(stage),
+    step: step !== null && steps !== null ? COPY.step(step, steps, text(progress?.current)) : text(progress?.current) ?? COPY.noStep,
+    fraction: step !== null && steps !== null && steps > 0 ? step / steps : null,
+    spend: [cost, tokensText(number(progress?.tokens)), hours === null ? null : COPY.sinceStart(hours)].filter(part => part !== null).join(' · '),
+  }
 }
 
 export function storyView(id: number, document: Json, inFlight: Json, question: PaneQuestionItem | null, now: number, zoneOffsetMinutes = 0): PaneStory {
@@ -411,9 +399,10 @@ export function storyView(id: number, document: Json, inFlight: Json, question: 
     stateText: COPY.stateText(state),
     stateTone: tone,
     step: step !== null && steps !== null ? COPY.step(step, steps, text(progress?.current)) : isRunning ? COPY.noStep : null,
+    working: workingOf(progress, state, COPY.costOf(money(inFlight.costUsd ?? document.costUsd), budget === null ? null : budget.toFixed(0)), hours),
     fraction: step !== null && steps !== null && steps > 0 ? step / steps : null,
     cost: COPY.costOf(money(inFlight.costUsd ?? document.costUsd), budget === null ? null : budget.toFixed(0)),
-    phases: phasesOf({ ...document, state }, zoneOffsetMinutes),
+    phases: phasesOf({ ...document, state }, text(progress?.stage)),
     question: question === null ? null : { id: question.id, text: question.text },
     environment: environment === null || text(environment.name) === null ? null : { name: text(environment.name) ?? '', url: text(environment.url) },
     verdict: verdict === null
@@ -546,10 +535,10 @@ export function bellView(notices: Json, leader: Json | null, metrics: Json | nul
   const rows: { value: string; label: string }[] = metrics === null
     ? []
     : [
-        { value: String(number(metrics.stories) ?? 0), label: COPY.metricStories },
+        { value: String(number(metrics.stories) ?? 0), label: COPY.metricStories(number(metrics.stories) ?? 0, number((metrics.hostProof as Json | null | undefined)?.stories)) },
         { value: `$${money(metrics.costPerStoryUsd)}`, label: COPY.metricCost },
         { value: String(number(metrics.merged) ?? 0), label: COPY.metricMerged },
-        { value: String(number(metrics.opened) ?? 0), label: COPY.metricOpened },
+        { value: String(number(metrics.opened) ?? 0), label: COPY.metricOpened(number(metrics.opened) ?? 0) },
       ]
 
   return {
@@ -560,5 +549,7 @@ export function bellView(notices: Json, leader: Json | null, metrics: Json | nul
     handled: lastOfEachKey(all.filter(notice => notice.handledAt != null)).slice(0, HANDLED_SHOWN).map(notice => noticeOf(notice, now, zoneOffsetMinutes)),
     leader: paused === null ? { isPaused: false, text: COPY.leaderRuns } : { isPaused: true, text: COPY.leaderPaused(paused.since, paused.reason) },
     metrics: rows,
+    handling: null,
+    handleSentence: null,
   }
 }

@@ -137,7 +137,7 @@ Terylon runs on your own machine and holds your goals. Its leader breaks each go
 | Plugin | Gives you |
 |---|---|
 | `terylon-os` | Terylon's `/mcp` server in any Claude Code session, with one skill per prompt it serves: the morning briefing, adding a goal, reviewing a plan, a story's state, the merge gate, a hand-over. Set `TERYLON_URL`; there is no default address and no token |
-| `terylon-pane` | in Claude Desktop, three things: a band above the prompt saying what waits for you; a status line with the machine's health and today's spend; and a pane with five tabs (*Queue*, *Goals*, *Bell*, *Memory*, *Status*). The pane answers the leader's questions and adds tasks and goals. It approves nothing |
+| `terylon-pane` | in Claude Desktop, three things: a band above the prompt saying what waits for you; a status line with the machine's health and today's spend; and a pane with five tabs (*Queue*, *Goals*, *Bell*, *Memory*, *Status*). The pane answers the leader's questions, adds tasks and goals, follows a running story's stage, agent and tokens, and marks notices handled. It approves nothing |
 
 Agentic OS is the only source of truth, and the PC's pane and the phone through Remote Control both reach it through the same `/mcp`. See [one source of truth, reached from two places](./docs/architecture/one-source-of-truth-reached-from-two-places.md), and the READMEs of [`terylon-os`](./plugins/terylon-os/README.md) and [`terylon-pane`](./plugins/terylon-pane/README.md) for setup.
 

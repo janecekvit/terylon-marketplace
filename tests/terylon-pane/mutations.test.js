@@ -165,6 +165,74 @@ const MUTATIONS = [
         find: "    await openPane($, { screen: 'memory' })\n",
         replace: "    await $.ui.open({ id: 'terylon-memory', title: 'Memory' })\n",
     },
+    // S24 (#360): the live run, the bell handled from the pane, and its count on the band.
+    {
+        name: "the phases are inferred from the timeline again",
+        file: "hooks/queue.ts",
+        find: "  const at = stage === null ? -1 : (STAGES as readonly string[]).indexOf(stage)\n",
+        replace: "  const inferred = [...list(document.timeline)].reverse().map(event => /→\\s*([a-z-]+)/.exec(String(event.summary ?? ''))?.[1]).find(found => found !== undefined)\n  const at = (STAGES as readonly string[]).indexOf(({ 'pr-open': 'pr', verifying: 'verify', verified: 'merge' } as Record<string, string>)[inferred ?? ''] ?? stage ?? '')\n",
+    },
+    {
+        name: "Mark handled sends nothing",
+        file: "hooks/register.tsx",
+        find: "                        onPress={() => handleNotice($, notice.id)}\n",
+        replace: "                        onPress={() => toggle($, `notice-${notice.id}`)}\n",
+    },
+    {
+        name: "the band drops the bell's count",
+        file: "hooks/register.tsx",
+        find: "              ...pair(COPY.bandBell, String(current.notices), current.notices > 0 ? 'warning' : 'inactive'),\n              ...(current.alerts",
+        replace: "              ...(current.alerts",
+    },
+    {
+        name: "the band never reads the bell again after a notice is handled",
+        file: "hooks/register.tsx",
+        find: "    notices: (notices.kind === 'ok' ? number(notices.value.unhandled) : null) ?? number(lastBriefing.unhandledNotices) ?? previous.notices,\n",
+        replace: "    notices: previous.notices,\n",
+    },
+    {
+        name: "goal_drop, a gate, joins the pane's own tools",
+        file: "hooks/terylon.ts",
+        find: "  'notice_handle',\n])",
+        replace: "  'notice_handle',\n  'goal_drop',\n])",
+    },
+    {
+        name: "the gate list copied from McpGates.cs loses goal_drop",
+        file: "hooks/terylon.ts",
+        find: "  'leader_resume',\n  'goal_drop',\n]",
+        replace: "  'leader_resume',\n]",
+    },
+    // The operator's Desktop walk of 1.1.1 (2026-10-21, #360).
+    {
+        name: "the goals tab's load is no longer bounded",
+        file: "hooks/register.tsx",
+        find: "  await bounded($, 'goals', () => readGoalsFromTerylon($),",
+        replace: "  await readGoalsFromTerylon($); void (async () => undefined)(",
+    },
+    {
+        name: "the bell's load is no longer bounded",
+        file: "hooks/register.tsx",
+        find: "  await bounded($, 'the bell', () => readBellFromTerylon($),",
+        replace: "  await readBellFromTerylon($); void (async () => undefined)(",
+    },
+    {
+        name: "the pane's prompts are no longer posted once",
+        file: "hooks/register.tsx",
+        find: "  if (last !== undefined && now - last < PROMPT_REPEAT_MILLISECONDS) {\n    return\n  }\n",
+        replace: "",
+    },
+    {
+        name: "an answer can be sent again while it is being sent",
+        file: "hooks/register.tsx",
+        find: "  if (isAnswerSending) {\n    return\n  }\n",
+        replace: "",
+    },
+    {
+        name: "one story is said as stories again",
+        file: "hooks/copy.ts",
+        find: "`${count === 1 ? 'story' : 'stories'}",
+        replace: "`${'stories'}",
+    },
 ];
 
 function hasClaude()

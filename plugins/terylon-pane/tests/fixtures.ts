@@ -26,7 +26,7 @@ export function exact(text: string): RegExp {
 }
 
 // The owner's gates, spelled out here rather than imported, so a mutation of the mod's own list cannot hide one.
-export const GATES = ['plan_approve', 'plan_rethink', 'story_merge', 'story_return', 'story_unblock', 'story_abandon', 'story_stop', 'story_accept', 'leader_pause', 'leader_resume']
+export const GATES = ['plan_approve', 'plan_rethink', 'story_merge', 'story_return', 'story_unblock', 'story_abandon', 'story_stop', 'story_accept', 'leader_pause', 'leader_resume', 'goal_drop']
 
 export type Call = { server: string; tool: string; args: Record<string, unknown> }
 
@@ -41,6 +41,8 @@ export type World = {
   opens: string[]
   answers: Record<string, Answer>
   mode: { server: 'up' | 'missing' | 'down' | 'refused' | 'error' | 'unclassified' | 'prompted' }
+  // Tools whose call never answers: what a call held in Desktop looks like to the pane.
+  hang: Set<string>
 }
 
 export const BRIEFING = {
@@ -57,8 +59,8 @@ export const FLIGHT = {
   slots: 4,
   paused: false,
   stories: [
-    { id: 333, title: 'Direct dispatch', run: 'r1', state: 'running', attempt: 2, progress: { step: 5, steps: 9, current: 'testy' }, startedAt: '2026-10-11T10:00:00Z', costUsd: 2.1, budgetUsd: 8, hours: 6, stuck: null, environment: null },
-    { id: 329, title: 'Memory proposals', run: 'r2', state: 'verifying', attempt: 1, progress: null, startedAt: '2026-10-11T09:00:00Z', costUsd: 3.4, budgetUsd: 8, hours: 6, stuck: null, environment: { name: 'pr-197', url: 'https://y' } },
+    { id: 333, title: 'Direct dispatch', run: 'r1', state: 'running', attempt: 2, progress: { stage: 'test', step: 5, steps: 9, current: 'testy', agent: { name: 'tester', running: 1 }, tokens: 1400000 }, startedAt: '2026-10-11T10:00:00Z', costUsd: 2.1, budgetUsd: 8, hours: 6, stuck: null, environment: null },
+    { id: 329, title: 'Memory proposals', run: 'r2', state: 'verifying', attempt: 1, progress: { stage: 'verify', step: null, steps: null, current: null, agent: null, tokens: null }, startedAt: '2026-10-11T09:00:00Z', costUsd: 3.4, budgetUsd: 8, hours: 6, stuck: null, environment: { name: 'pr-197', url: 'https://y' } },
   ],
 }
 
@@ -169,6 +171,7 @@ export const STORY_333 = {
   title: 'Direct dispatch',
   state: 'running',
   attempt: 2,
+  progress: { stage: 'test', step: 5, steps: 9, current: 'testy', agent: { name: 'tester', running: 1 }, tokens: 1400000 },
   model: 'opus',
   effort: 'high',
   pullRequest: { id: null, url: 'https://dev.example/pr', branch: 'feat/direct-dispatch', head: null },
@@ -191,6 +194,7 @@ export const STORY_327 = {
   goal: 3,
   title: 'Events since the last look',
   state: 'verified',
+  progress: { stage: 'merge', step: null, steps: null, current: null, agent: null, tokens: null },
   pullRequest: { id: 196, url: 'https://dev.example/pr/196', branch: 'feat/events', head: '4be21c0aaaa' },
   environment: { name: 'pr-196', url: 'https://pr-196.terylon.example.ts.net' },
   criteria: ['events_since returns transitions since a sequence, oldest first', 'a gap in the window answers gap=true', 'a third', 'a fourth'],
@@ -217,6 +221,7 @@ export function world(on: On, options: { store?: Record<string, unknown>; now?: 
     logs: [],
     opens: [],
     mode: { server: 'up' },
+    hang: new Set<string>(),
     answers: {
       briefing: BRIEFING,
       work_in_flight: FLIGHT,
@@ -235,6 +240,7 @@ export function world(on: On, options: { store?: Record<string, unknown>; now?: 
       events_since: (args: Record<string, unknown>) => events(Number(args.since), []),
       tasks_add: { accepted: true, sentence: 'Lídr z úkolu udělal plán 42.', commandId: 'c1', subjectId: 42 },
       memory_propose: { accepted: true, gate: 'pending', sentence: 'Návrh čeká.', commandId: 'c2', proposal: 6 },
+      notice_handle: (args: Record<string, unknown>) => ({ accepted: true, notice: args.notice, sentence: `Asked: the control plane marks notice ${String(args.notice)} handled.` }),
     },
   }
 
@@ -262,6 +268,10 @@ export function world(on: On, options: { store?: Record<string, unknown>; now?: 
   })
   on('mcp.call', async ($, e) => {
     state.calls.push({ server: e.server, tool: e.tool, args: e.args })
+
+    if (state.hang.has(e.tool)) {
+      return new Promise(() => undefined) as never
+    }
 
     if (state.mode.server === 'missing' || (state.mode.server === 'up' && e.server !== SERVER)) {
       return { deny: `MCP server "${e.server}" is not connected` } as never
@@ -299,7 +309,7 @@ export function world(on: On, options: { store?: Record<string, unknown>; now?: 
     return { value: { content: [{ type: 'text', text: JSON.stringify(value) }], isError: false } } as never
   })
 
-  return { ...state, clock, calls: state.calls, prompts: state.prompts, toasts: state.toasts, statuses: state.statuses, logs: state.logs, opens: state.opens, answers: state.answers, mode: state.mode }
+  return { ...state, clock, calls: state.calls, prompts: state.prompts, toasts: state.toasts, statuses: state.statuses, logs: state.logs, opens: state.opens, answers: state.answers, mode: state.mode, hang: state.hang }
 }
 
 export const SESSION = { cwd: '/work', surface: 'desktop', isInteractive: true } as const

@@ -37,14 +37,17 @@ test('the guard refuses every one of the owner\'s gates, and allows no gate in i
   expect(() => assertPaneTool('goal_add')).not.toThrow()
 })
 
-test('pressing every Button on every screen and surface calls no gate tool', async ($, on) => {
+// ONE TEST PER SURFACE: every button on every screen of all three in one test outgrew the runner's 5 s bound on a
+// busy host once the tabs' loads became total (the operator's Desktop walk of 1.1.1).
+for (const surface of ['desktop', 'terminal', 'mobile'] as const) {
+test(`pressing every Button on every screen of the ${surface} surface calls no gate tool`, async ($, on) => {
   const terylon = world(on, { store: { lastSeq: 18100, lastSeenAt: Date.parse('2026-10-11T21:59:00Z') } })
   terylon.answers.briefing = { ...BRIEFING, questionsOpen: [...BRIEFING.questionsOpen, GOAL_QUESTION] }
   terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), Number(args.since) >= 18101 ? [] : [storyMoved(18101, 327, 'Events since the last look', 'verified')])
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
-  for (const surface of ['desktop', 'terminal', 'mobile'] as const) {
+  {
     const pane = await $.ui.mount({ plugin: 'terylon-pane', surface, component: 'Pane', requestId: 'terylon', props: PANE_PROPS })
     const paths = surface === 'mobile' ? PATHS : [...PATHS, ['quick-open'], ['quick-open', 'add-send']]
 
@@ -96,3 +99,4 @@ test('pressing every Button on every screen and surface calls no gate tool', asy
   expect(terylon.calls.filter(call => GATES.includes(call.tool))).toEqual([])
   expect(terylon.calls.filter(call => !PANE_TOOLS.has(call.tool))).toEqual([])
 })
+}

@@ -113,7 +113,7 @@ test('frame I: a call Claude Code did not allow is said as that, with the rules 
     expect(String(rules?.text)).toContain(`"mcp__plugin_terylon-os_terylon__${tool}"`)
   }
 
-  expect([...PANE_TOOLS]).toHaveLength(17)
+  expect([...PANE_TOOLS]).toHaveLength(18)
 
   for (const gate of GATES) {
     expect(String(rules?.text)).not.toContain(gate)

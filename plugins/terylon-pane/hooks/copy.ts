@@ -13,6 +13,7 @@ export const COPY = {
 
   // The band above the prompt.
   bandWaiting: 'Waiting',
+  bandBell: 'Bell',
   bandRunning: 'Running',
   bandStuck: (count: number) => ` (${count} stuck)`,
   bandQueued: 'Queue',
@@ -178,11 +179,13 @@ export const COPY = {
   phases: 'Phases',
   phasesHint: (done: number, all: number) => `${done} of ${all}`,
   phaseAdmitted: 'Admitted to a slot',
-  phaseRun: 'Run',
-  phasePullRequest: 'Pull request',
-  phaseVerify: 'Verified in its PR environment',
-  phaseMerge: 'Merge — your gate',
-  nowWorkingNote: 'Who works inside the run (planner, developer, review, tester) and the tokens spent, /mcp does not report yet; the phases come from the timeline.',
+  stageLabel: (stage: string) => STAGE_LABEL[stage] ?? stage,
+  stageRole: (stage: string) => STAGE_ROLE[stage] ?? null,
+  nowWorking: 'Now working',
+  nowWorkingHint: (agent: string, stage: string) => `${agent} · ${stage}`,
+  mainAgent: 'main agent',
+  tokens: (count: string) => `${count} tokens`,
+  sinceStart: (hours: string) => `${hours} since start`,
   questionFromRun: 'Question from the run',
   waitsOnYou: 'waits for you',
   environment: (name: string) => `Environment ${name}`,
@@ -249,13 +252,17 @@ export const COPY = {
     `The leader is paused${since === null ? '' : ` since ${since}`}${reason === null ? '' : ` (${reason})`}`,
   metrics: 'Last 30 days',
   metricsHint: 'metrics',
-  metricStories: 'stories',
+  // ONE STORY, ONE OPEN PR: the operator's walk of 1.1.1 read "1 stories" on the Status tab.
+  metricStories: (count: number, hostProof: number | null) => `${count === 1 ? 'story' : 'stories'}${hostProof === null || hostProof === 0 ? '' : ` (+${hostProof} host proof)`}`,
   metricCost: 'per story',
   metricMerged: 'merged',
-  metricOpened: 'open PRs',
+  metricOpened: (count: number) => (count === 1 ? 'open PR' : 'open PRs'),
+  loadTimedOut: (seconds: number) => `Terylon did not answer within ${seconds} s. Press the tab again to retry.`,
   bellInConsole: 'Bell in the console ↗',
   pauseInConsole: 'Pause the leader ↗',
-  bellNote: 'Handling a notice comes with notice_handle in /mcp; until then, in the console. Pausing the leader is a gate: a link only.',
+  bellNote: 'Mark handled is notice_handle, which decides nothing about work. Pausing the leader is a gate: a link only.',
+  markHandled: 'Mark handled',
+  handling: 'Marking…',
   nothingYet: 'Nothing yet.',
   noBody: 'No more than the title.',
 
@@ -312,6 +319,24 @@ export const COPY = {
 } as const
 
 // A story's, a goal's or a plan's state, as the pane says it.
+// The stages Terylon reports on progress.stage (#360), as the S15 canvas names them, and who works in each.
+const STAGE_LABEL: Record<string, string> = {
+  plan: 'Plan',
+  develop: 'Develop',
+  review: 'Review',
+  test: 'Tests',
+  pr: 'Pull request',
+  verify: 'Verified in its PR environment',
+  merge: 'Merge — your gate',
+}
+
+const STAGE_ROLE: Record<string, string> = {
+  plan: 'planner',
+  develop: 'developer',
+  review: 'reviewer',
+  test: 'tester',
+}
+
 const STATE_TEXT: Record<string, string> = {
   proposed: 'proposed',
   approved: 'approved',

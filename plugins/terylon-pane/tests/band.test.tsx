@@ -16,6 +16,7 @@ test('calm: every value at its default is inactive, names subtle, one truncating
   terylon.answers.briefing = { plansWaiting: [], questionsOpen: [], storiesVerified: [], storiesBlocked: [], leader: { paused: null }, unhandledNotices: 0 }
   terylon.answers.work_in_flight = { slots: 2, paused: false, stories: [] }
   terylon.answers.stories_list = { stories: [] }
+  terylon.answers.notices_list = { unhandled: 0, notices: [] }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
@@ -30,7 +31,7 @@ test('calm: every value at its default is inactive, names subtle, one truncating
       expect(zero.props.color).toBe('inactive')
     }
 
-    const row = await band.find({ type: 'Text', text: /^Terylon · Waiting 0 · Running 0 · Queue 0$/ })
+    const row = await band.find({ type: 'Text', text: /^Terylon · Waiting 0 · Running 0 · Queue 0 · Bell 0$/ })
     expect(row?.props.wrap).toBe('truncate-end')
 
     const button = await band.find({ key: 'band-open' })
@@ -54,9 +55,10 @@ test('something waits: Waiting in warning, Running in suggestion, the rest stays
   for (const surface of SURFACES) {
     const band = await $.ui.mount(bandOn(surface))
 
-    expect(await band.find({ type: 'Text', text: exact('Terylon · Waiting 3 · Running 2 · Queue 2') })).toBeDefined()
+    expect(await band.find({ type: 'Text', text: exact('Terylon · Waiting 3 · Running 2 · Queue 2 · Bell 2') })).toBeDefined()
     expect((await band.find({ type: 'Text', text: exact('3') }))?.props.color).toBe('warning')
-    expect((await band.findAll({ type: 'Text', text: exact('2') })).map(text => text.props.color)).toEqual(['suggestion', 'inactive'])
+    // THE BELL'S COUNT (#360): the unhandled notices, in warning while any waits.
+    expect((await band.findAll({ type: 'Text', text: exact('2') })).map(text => text.props.color)).toEqual(['suggestion', 'inactive', 'warning'])
     expect(await band.find({ type: 'Text', text: /Today|Slots|\$/ })).toBeUndefined()
     expect((await band.find({ key: 'band-open' }))?.props.label).toBe('Open')
     await band.unmount()

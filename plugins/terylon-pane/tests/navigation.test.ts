@@ -19,14 +19,21 @@ for (const surface of ['desktop', 'terminal'] as const) {
     expect(await ui.find({ type: 'Text', text: exact('#333 Direct dispatch') })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: exact('running') }))?.props.color).toBe('suggestion')
     expect(await ui.find({ type: 'Text', text: /attempt 2 · feat\/direct-dispatch · opus \/ high$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('Step 5 of 9: testy') })).toBeDefined()
-    expect((await ui.find({ type: 'Text', text: exact("$2.10 of the story's $8") }))?.props.color).toBe('inactive')
-
-    // The phases, from the timeline: admitted done, the run now, the rest still to come.
+    // THE PHASES FROM progress.stage (#360), never the timeline: up to Tests done, Tests now, the rest to come.
     expect(await ui.find({ type: 'Text', text: exact('✓ Admitted to a slot') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('✓ Plan · planner') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('✓ Review · reviewer') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('● Tests · tester') })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: exact('● ') }))?.props.color).toBe('suggestion')
     expect((await ui.find({ type: 'Text', text: exact('Merge — your gate') }))?.props.color).toBe('subtle')
-    expect(await ui.find({ type: 'Text', text: /\/mcp does not report yet/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('4 of 8') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /does not report|from the timeline/ })).toBeUndefined()
+
+    // NOW WORKING: the agent at work, its stage, its step and what the run spent, read from progress.
+    expect(await ui.find({ type: 'Text', text: exact('Now working') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('tester · Tests') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('Step 5 of 9: testy') })).toBeDefined()
+    expect((await ui.find({ type: 'Text', text: exact("$2.10 of the story's $8 · 1.4 M tokens · 12 h 0 min since start") }))?.props.color).toBe('inactive')
 
     // The run's question, answerable from here or in the console.
     expect((await ui.find({ type: 'Text', text: exact('Question from the run') }))?.props.color).toBe('warning')
