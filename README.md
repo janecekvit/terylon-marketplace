@@ -36,16 +36,30 @@ You enable **two** plugins for a repository: the **role** you work in, and the *
 
 ## How a story travels
 
-```
-  brief ──▶ create-user-story ──▶ develop ───────────────────────────────▶ create-pr ──▶ review-pr / test
-            (terylon-product)     (terylon-dev)                           (terylon-forge)  (forge · test)
-                                    │
-                                    ├─ brainstorm      when the idea is still vague
-                                    ├─ planner ──▶ a design and a test-first plan
-                                    ├─ developer ──▶ one task at a time, red → green ──▶ debugger when stuck
-                                    ├─ security · performance · architecture · edge-case reviewers, in parallel
-                                    ├─ refactorer
-                                    └─ code-reviewer   the whole branch, findings verified adversarially
+```mermaid
+flowchart LR
+    subgraph develop ["develop: terylon-dev"]
+        direction TB
+        brainstorm["brainstorm<br/>when the idea is still vague"]
+        planner["planner<br/>a design and a test-first plan"]
+        developer["developer<br/>one task at a time, red to green"]
+        debugger["debugger"]
+        reviewers["security, performance, architecture,<br/>edge-case reviewers, in parallel"]
+        refactorer["refactorer"]
+        codeReviewer["code-reviewer<br/>the whole branch, findings verified adversarially"]
+
+        brainstorm -.-> planner
+        planner --> developer
+        developer -. "when stuck" .-> debugger
+        developer --> reviewers
+        reviewers --> refactorer
+        refactorer --> codeReviewer
+    end
+
+    brief([brief]) --> createUserStory["create-user-story<br/>terylon-product"]
+    createUserStory --> develop
+    develop --> createPr["create-pr<br/>terylon-forge"]
+    createPr --> reviewAndTest["review-pr / test<br/>terylon-forge, terylon-test"]
 ```
 
 Each agent is a role with its own instructions, dispatched by the `leader` and reporting back. Repository-local agents your project ships take over where they fit better, through `delegate-to-repo-agents`. The full dispatch chains are in [`plugins/CLAUDE.md`](./plugins/CLAUDE.md).

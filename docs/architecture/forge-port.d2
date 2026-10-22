@@ -1,0 +1,127 @@
+# The forge port: who names an operation, who resolves the forge, and which adapter's body runs it.
+# Source of truth for forge-port.svg beside it: edit this file, then run
+# Scripts/render-diagrams.sh and commit both.
+# Why it is a port at all: port-and-adapter-split.md. The resolution step by step:
+# ../flows/forge-resolution.md.
+vars: {
+  d2-config: {
+    layout-engine: elk
+  }
+}
+
+direction: down
+
+# One colour per kind: callers (slate), the port (amber), adapters (green), the stop (red),
+# platforms outside the marketplace (grey).
+classes: {
+  caller: {
+    style: {
+      fill: "#F1F5F9"
+      stroke: "#475569"
+      font-color: "#1E293B"
+    }
+  }
+  port: {
+    style: {
+      fill: "#FEF3C7"
+      stroke: "#D97706"
+      font-color: "#78350F"
+    }
+  }
+  adapter: {
+    style: {
+      fill: "#D1FAE5"
+      stroke: "#059669"
+      font-color: "#064E3B"
+    }
+  }
+  stop: {
+    style: {
+      fill: "#FEE2E2"
+      stroke: "#DC2626"
+      font-color: "#7F1D1D"
+    }
+  }
+  external: {
+    style: {
+      fill: "#F3F4F6"
+      stroke: "#6B7280"
+      font-color: "#374151"
+    }
+  }
+}
+
+callers: "Callers: name operations, never tools" {
+  style: {
+    fill: "#F8FAFC"
+    stroke: "#64748B"
+  }
+
+  transports: "terylon-forge transports\ncreate-pr, review-pr, address-pr-comments,\nwrite-pr-description, update-pr-checklist,\nupdate-work-item-checklist, pr-reviewer" {class: caller}
+  product: "terylon-product\ncreate-user-story, create-feature" {class: caller}
+  dev: "terylon-dev\ndevelop, planner" {class: caller}
+}
+
+port: "terylon-forge: the port\ndeclares terylon-git only; no adapter declared" {
+  style: {
+    fill: "#FFFBEB"
+    stroke: "#F59E0B"
+  }
+
+  resolve: "resolve-forge\nexplicit URL, then TERYLON_FORGE, then the git remote\nfirst hit wins; no default" {class: port}
+  catalog: "The operation catalog\nURLs: parse-pr-url, parse-item-url, resolve-repo-id\npull requests: create, list, metadata, eligibility, diff,\ndescription, reviewers, auto-merge, linked items\nthreads: list, read, post, reply, resolve\nwork items: fetch, create, update, link, comments\nidentity: current user, identity, preconditions" {class: port}
+}
+
+stop: "STOP: name the forge, the missing plugin,\nwhat to enable. No fallback, no calls of its own" {class: stop}
+
+ado: "terylon-ado: adapter" {
+  style: {
+    fill: "#ECFDF5"
+    stroke: "#10B981"
+  }
+
+  forge_ops: "forge-ops\nthe Azure DevOps body" {class: adapter}
+  connect: "connect\nregisters the ado server at the user scope" {class: adapter}
+}
+
+github: "terylon-github: adapter" {
+  style: {
+    fill: "#ECFDF5"
+    stroke: "#10B981"
+  }
+
+  forge_ops: "forge-ops\nthe GitHub body; no server" {class: adapter}
+}
+
+ado_server: "ado: Microsoft's remote MCP server\nmcp.dev.azure.com, OAuth\ntools mcp__ado__*" {
+  class: external
+  shape: cloud
+}
+gh: "gh CLI\nauthenticated by gh auth login" {class: external}
+azure_devops: "Azure DevOps" {
+  class: external
+  shape: cloud
+}
+github_com: "GitHub" {
+  class: external
+  shape: cloud
+}
+
+callers -> port.catalog: "an operation, by name"
+callers -> port.resolve: "which forge? resolved per item"
+port.resolve -> ado.forge_ops: "ado"
+port.resolve -> github.forge_ops: "github"
+port.resolve -> stop: "no forge, or its adapter not installed"
+
+ado.forge_ops -> port.catalog: "implements" {
+  style.stroke-dash: 3
+}
+github.forge_ops -> port.catalog: "implements" {
+  style.stroke-dash: 3
+}
+
+ado.connect -> ado_server: "registers"
+ado.forge_ops -> ado_server: "orgName = ADO_ORGANIZATION, every call"
+ado_server -> azure_devops
+github.forge_ops -> gh: "gh subcommands"
+gh -> github_com

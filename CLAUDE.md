@@ -12,9 +12,12 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /NOTICE                            the copyright notice Apache-2.0 carries: Terylon Marketplace, copyright the operator
 /SECURITY.md                       how to report a vulnerability — GitHub private vulnerability reporting
 /.github/workflows/ci.yml          unit suites + the free e2e install stage, on every PR and push to main
+/.github/workflows/diagrams.yml    renders every docs/**/*.d2 with the pinned D2; red on a bad source or a stale SVG
+/Scripts/render-diagrams.sh        formats, validates and renders each .d2 to the .svg beside it; --check is CI's
 /plugins/<slug>/                   one directory per plugin
 /plugins/CLAUDE.md                 authoring conventions — read before editing a plugin
 /docs/                             the engineering knowledge base — architecture, flows, runbooks, onboarding
+/docs/architecture/*.d2            structure drawn in D2, the rendered .svg committed beside each; flows are Mermaid
 /docs/terylon/                     terylon working tree: intake, specs, plans, ledgers (gitignored)
 /docs/superpowers/                 the same, when those skills run directly (gitignored)
 /tests/                            local tests of what the plugins ship, across plugin boundaries — not distributed
