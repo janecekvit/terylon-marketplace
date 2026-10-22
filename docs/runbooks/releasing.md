@@ -28,6 +28,16 @@ How the maintainer releases the marketplace, what the release workflow does with
 | `terylon-marketplace-vX.Y.Z.tar.gz.sigstore.json` | the archive's Sigstore signature bundle |
 | `SHA256SUMS.sigstore.json` | `SHA256SUMS`'s Sigstore signature bundle |
 
+**Three details of the publishing steps are unverified until the first tag is pushed.** They were taken from the actions' sources, not from a run, because no release has run yet:
+
+| Step | Assumed | If the first release proves it wrong |
+|---|---|---|
+| *Keep the attestation beside the archive* | `attest-build-provenance` reports its bundle as `bundle-path`, and copying it to `<archive name>.intoto.jsonl` gives a file `gh attestation verify --bundle` accepts | the copy fails, or the `--bundle` check below fails; read the attest step's outputs in the log |
+| *Sign* | `gh-action-sigstore-python` writes each bundle beside its input as `<file>.sigstore.json` | *Publish the release* fails with "expected 2 Sigstore bundles" — see *When it fails* |
+| *Publish the release* | `gh release create --verify-tag` accepts the tag the run was started by | the step fails before anything is published |
+
+Correct this table once the first release has run: each row either becomes a stated fact or the fix that made it one.
+
 **The signing identity is the workflow at the tag**: `https://github.com/janecekvit/terylon-marketplace/.github/workflows/release.yml@refs/tags/vX.Y.Z`, issued by `https://token.actions.githubusercontent.com`. Nothing else can produce a signature that verifies against it, and no key exists to leak.
 
 ## Cutting a release
@@ -40,7 +50,7 @@ How the maintainer releases the marketplace, what the release workflow does with
    | anything new — a plugin, a skill, a capability | **minor**, patch back to `0` | `v1.2.4` → `v1.3.0` |
    | a breaking change | **major** | only the maintainer decides it, as with a plugin's major (`plugins/CLAUDE.md`, *Versioning*) |
 
-   The first release is `v1.0.0`.
+   The first release is `v1.0.0`. **Its notes list every historic commit under *Other commits*.** With no previous tag the notes cover the whole history, and a commit lands under *Pull requests* only when its subject ends in `(#N)`; none of the commits from before the move to GitHub does. That is expected, not a defect in the notes.
 
 2. **Rehearse it** (optional, publishes nothing). Run the workflow by hand from `main` with the version: `gh workflow run release.yml -R janecekvit/terylon-marketplace --ref main -f tag=vX.Y.Z`. The *Rehearse* job prints the notes and the archive's listing, and attests, signs and publishes nothing. A tag that does not exist yet is rehearsed against the dispatched commit.
 
