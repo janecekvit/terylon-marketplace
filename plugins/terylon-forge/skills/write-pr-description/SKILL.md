@@ -96,6 +96,7 @@ Read the first file that exists:
 2. `.github/PULL_REQUEST_TEMPLATE.md`
 3. `pull_request_template.md` or `PULL_REQUEST_TEMPLATE.md` at repo root
 4. Built-in fallback:
+
    ```markdown
    ## Summary
 

@@ -169,7 +169,7 @@ The last row is what the operator hits in practice, because the gap between a ru
 
 | Flag | Behaviour |
 |---|---|
-| _(default)_ | show the composed prompt, the repository, the worktree name and the branch, then wait for the operator to confirm before dispatching |
+| *(default)* | show the composed prompt, the repository, the worktree name and the branch, then wait for the operator to confirm before dispatching |
 | `--auto` | dispatch immediately. Still reports the same block afterwards |
 | `--dry-run` | print the composed prompt and the exact command, dispatch nothing |
 
