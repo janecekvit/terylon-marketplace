@@ -69,6 +69,8 @@ Keep the `.git` suffix: `marketplace add` records a github.com URL with it appen
 
 The hook resolves the branch from **the directory the operation targets** — the worktree holding the edited file, or the path given to `git -C` — not from `CLAUDE_PROJECT_DIR`. That variable keeps pointing at the original checkout, so reading it made the guard see `main` and refuse every write inside a linked worktree that was correctly on a feature branch.
 
+**A `cd` or `git -C` target is expanded first** — `$VAR`, `${VAR}`, `%VAR%`, an assignment earlier in the same command, a leading `~`. A target that still cannot be resolved is judged by the session's own directory, and a refusal that follows names it: use a literal path. The full statement is the *Enforcement* note in [`.claude/rules/git-workflow.md`](../../.claude/rules/git-workflow.md).
+
 ## Worktrees
 
 Feature work belongs in an isolated worktree under `.claude/worktrees/`, which is gitignored. Create one with the `create-workspace` skill rather than by hand: it detects existing isolation instead of nesting, prefers native worktree tooling when the harness provides it, and checks the ignore entry before creating anything.
@@ -97,6 +99,7 @@ Feature work belongs in an isolated worktree under `.claude/worktrees/`, which i
 | File | Role |
 |---|---|
 | `.claude/hooks/git-guard.js` | the `PreToolUse` guard — branch resolution from the target directory, and the push refusals |
+| `tests/git-guard/git-guard.test.js` | the guard's tests, in both directions |
 | `.claude/rules/git-workflow.md` | the branch, consent, bump and naming rules the hook backs up |
 | `.claude/rules/scripting.md` | Node for hooks, `pwsh` never `powershell`, Allman braces, cross-platform constraints |
 | `.claude/rules/markdown.md` | frontmatter, drawing rules, and *Every orienting document carries the dependency graph* |
