@@ -1,0 +1,50 @@
+# Every pull request: the plugin version rules. A pull request that changes a file under
+# plugins/<name>/ raises that plugin's version, because Claude Code updates a plugin for its users
+# only when plugin.json's version changes; a raised major needs the label `major`, which the
+# maintainer alone sets. The rules: plugins/CLAUDE.md, under Versioning.
+name: Plugin versions
+
+on:
+  pull_request:
+    # labeled and unlabeled re-run the check when the label `major` is added or removed.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: versions-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  versions:
+    name: Plugin versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # The whole history: the check reads the merge base of the two commits and plugin.json at each.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      # The refs and the label reach the script through the environment, never spliced into the
+      # script's text, so nothing a pull request controls is ever run as shell.
+      - name: node tests/versions/check-plugin-versions.js
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MAJOR_ALLOWED: ${{ contains(github.event.pull_request.labels.*.name, 'major') }}
+        run: |
+          checkerArguments=(--base "$BASE_SHA" --head "$HEAD_SHA")
+
+          if [ "$MAJOR_ALLOWED" = "true" ]
+          then
+              checkerArguments+=(--major-allowed)
+          fi
+
+          node tests/versions/check-plugin-versions.js "${checkerArguments[@]}"
