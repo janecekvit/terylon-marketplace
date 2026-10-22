@@ -65,7 +65,7 @@ Keep the `.git` suffix: `marketplace add` records a github.com URL with it appen
 | Attempt | Result |
 |---|---|
 | `Edit` / `Write` / `git commit` while HEAD is on `main` | refused |
-| **Any** push targeting `main`, from any branch — including `git push origin HEAD:main` | refused |
+| **Any** push targeting `main`, from any branch — including `git push origin HEAD:main`, however the refspec is quoted and behind any chain separator, `&` included | refused |
 | A force push without per-operation consent | refused |
 | Everything else | allowed |
 
