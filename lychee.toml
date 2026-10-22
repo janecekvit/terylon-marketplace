@@ -2,7 +2,7 @@
 # Every relative link and every #anchor must resolve; an external link must answer.
 
 # Check the anchor of a link as well as its target, in a local file and on a remote page.
-include_fragments = true
+include_fragments = "full"
 
 # A link inside a code block or a code span is an example, not a link.
 include_verbatim = false
