@@ -15,6 +15,10 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /.github/workflows/release.yml     on a vX.Y.Z tag: source archive + SHA256SUMS, provenance attestation, Sigstore signatures, the GitHub release
 /tests/release/                    release-notes.js — the notes a release carries (every plugin's version, the PRs since the previous tag) — and its tests
 /docs/runbooks/releasing.md        cutting a release, and verifying one
+/.github/workflows/security.yml    CodeQL (JavaScript and the workflows) + zizmor, on every PR, push to main and weekly
+/.github/workflows/scorecard.yml   OpenSSF Scorecard, on main and weekly, published for the README badge
+/.github/dependabot.yml            raises the SHA-pinned actions weekly, one grouped pull request
+/.github/CODEOWNERS                every file the maintainer's to review
 /plugins/<slug>/                   one directory per plugin
 /plugins/CLAUDE.md                 authoring conventions — read before editing a plugin
 /docs/                             the engineering knowledge base — architecture, flows, runbooks, onboarding
