@@ -44,12 +44,12 @@ How the maintainer releases the marketplace, what the release workflow does with
 
 2. **Rehearse it** (optional, publishes nothing). Run the workflow by hand from `main` with the version: `gh workflow run release.yml -R janecekvit/terylon-marketplace --ref main -f tag=vX.Y.Z`. The *Rehearse* job prints the notes and the archive's listing, and attests, signs and publishes nothing. A tag that does not exist yet is rehearsed against the dispatched commit.
 
-3. **Tag the commit on `main` that GitHub holds, and push the tag.** In a clone whose GitHub remote is `github` (the two-remote clone `flows/change-to-consumer-repo.md` describes; in a clone of GitHub alone it is `origin`):
+3. **Tag the commit on `main` and push the tag:**
 
    ```bash
-   git fetch github
-   git tag -a vX.Y.Z github/main -m "vX.Y.Z"
-   git push github vX.Y.Z
+   git fetch origin
+   git tag -a vX.Y.Z origin/main -m "vX.Y.Z"
+   git push origin vX.Y.Z
    ```
 
 4. **Watch the run** in the repository's Actions tab, *Release*. When it is green the release is on the Releases page with five assets.
@@ -88,7 +88,7 @@ python -m sigstore verify github \
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| the run fails at *Refuse a tag* | the tag is not exactly `vMAJOR.MINOR.PATCH` — `v1.0`, `v1.0.0-rc.1`, `v01.0.0` | delete that tag (`git push github --delete <tag>`, `git tag -d <tag>`) — nothing was published — and push a correct one |
+| the run fails at *Refuse a tag* | the tag is not exactly `vMAJOR.MINOR.PATCH` — `v1.0`, `v1.0.0-rc.1`, `v01.0.0` | delete that tag (`git push origin --delete <tag>`, `git tag -d <tag>`) — nothing was published — and push a correct one |
 | *Publish the release* fails with "release already exists" | an earlier attempt for the same tag got as far as creating it | delete that release on GitHub, keeping the tag, and re-run the failed job |
 | *Publish the release* fails with "expected 2 Sigstore bundles" | the signing step wrote its bundles somewhere else, after an action upgrade | read the signing step's log for the paths it wrote, and correct the glob |
 | any other failed step | read its log; nothing is published before the last step | fix on `main` through a pull request, then release the next patch — the failed tag stays unreleased |
@@ -102,5 +102,5 @@ python -m sigstore verify github \
 | `tests/release/release-notes.test.js` | the notes against fixtures, and against a throwaway repository with real tags |
 | `plugins/<slug>/.claude-plugin/plugin.json` | `version` — what the notes' table reads at each tag |
 | `plugins/CLAUDE.md` | *Versioning* — the per-plugin digit rule the release version mirrors |
-| `docs/flows/change-to-consumer-repo.md` | *How `main` reaches GitHub* — the two remotes the tag is pushed through |
+| `docs/flows/change-to-consumer-repo.md` | how a merged change reaches a consumer, and the release row that points here |
 | `SECURITY.md` | where a release that fails verification is reported |
