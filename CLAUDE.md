@@ -11,6 +11,7 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /LICENSE                           Apache-2.0, the canonical text (MIT until 2026-10-12) — every plugin manifest says "license": "Apache-2.0"
 /NOTICE                            the copyright notice Apache-2.0 carries: Terylon Marketplace, copyright the operator
 /SECURITY.md                       how to report a vulnerability — GitHub private vulnerability reporting
+/.editorconfig                     the code conventions of .claude/rules/ for every editor: UTF-8, LF, indentation per file type
 /.github/workflows/ci.yml          unit suites + the free e2e install stage, on every PR and push to main
 /plugins/<slug>/                   one directory per plugin
 /plugins/CLAUDE.md                 authoring conventions — read before editing a plugin
