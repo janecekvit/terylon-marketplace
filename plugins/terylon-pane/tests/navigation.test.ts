@@ -189,7 +189,7 @@ test('the goals tab: open goals by priority with their questions, the closed one
   await ui.input({ key: 'goal-draft', text: 'Excel s rozpočtem domácnosti', kind: 'change' })
   await ui.press({ key: 'goal-add' })
   expect(terylon.calls.filter(call => call.tool === 'goal_add').map(call => call.args)).toEqual([{ title: 'Excel s rozpočtem domácnosti' }])
-  expect((await ui.find({ type: 'Text', text: exact('✓ Goal 12 is set: Excel s rozpočtem domácnosti') }))?.props.color).toBe('success')
+  expect((await ui.find({ type: 'Text', text: /^✓ Goal 12 is set: Excel s rozpočtem domácnosti\. The leader reads it first: / }))?.props.color).toBe('success')
 
   await ui.press({ key: 'goal-11' })
   expect(await ui.find({ key: 'goal-question-606' })).toBeDefined()
