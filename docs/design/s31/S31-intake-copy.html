@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>S31 intake copy</title>
+<style>
+  :root { --bg: #f6f5f2; --card: #ffffff; --ink: #1d1c1a; --muted: #6b6862; --line: #e3e0da; --accent: #2f5fd0; --ok: #1f7a4d; --warn: #9a5b00; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #161513; --card: #201f1c; --ink: #edeae4; --muted: #a29e96; --line: #34322e; --accent: #7aa2ff; --ok: #5ccf94; --warn: #f0b060; } }
+  :root[data-theme="dark"] { --bg: #161513; --card: #201f1c; --ink: #edeae4; --muted: #a29e96; --line: #34322e; --accent: #7aa2ff; --ok: #5ccf94; --warn: #f0b060; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, sans-serif; padding: 24px 16px 48px; }
+  h1 { font-size: 20px; margin: 0 0 4px; } h2 { font-size: 16px; margin: 32px 0 8px; }
+  p.lead { color: var(--muted); margin: 0 0 16px; max-width: 760px; }
+  .row { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+  .frame { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-sizing: border-box; }
+  .phone { width: 390px; max-width: 100%; } .desk { width: 640px; max-width: 100%; }
+  .label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 8px; }
+  .field { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; color: var(--muted); background: var(--bg); }
+  .note { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+  .note b, .new { color: var(--ink); }
+  .btn { display: inline-block; background: var(--accent); color: #fff; border-radius: 8px; padding: 8px 14px; font-weight: 600; margin-top: 10px; }
+  .q { font-weight: 600; margin: 0 0 8px; }
+  .done { color: var(--ok); font-size: 14px; margin-top: 8px; }
+  .blocked { color: var(--warn); font-size: 14px; }
+  .change { border-left: 3px solid var(--accent); padding-left: 10px; margin: 6px 0; }
+  .was { text-decoration: line-through; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>S31 · the leader's intake — copy only</h1>
+<p class="lead">Three small changes for #369. No new screen, no new control: one steering sentence where a goal is added, a confirmation after every answer, and the words a re-planned story shows. The console's own Add goal went with S11 (PR 221), so the steering lands in the pane, in goal_add and in the goal prompt. Highlighted lines are new.</p>
+
+<h2>1 · Pane (Claude Desktop) · Goals · New goal</h2>
+<div class="row">
+  <div class="frame phone">
+    <div class="label">New goal</div>
+    <div class="field">What you want done…</div>
+    <p class="note change new">A goal is a general direction. A concrete ask — a file, a document, one change — becomes a task under a goal. The leader asks its questions first, then makes a plan you approve.</p>
+    <p class="was">The leader makes a plan of the goal, which you approve. Write a bigger goal out with Claude in the session (/terylon-os:add-goal).</p>
+    <span class="btn">Add goal</span>
+    <p class="done change">✓ Goal 21 is set: create an Excel file with the costs. The leader reads it first: a general direction stays a goal; a concrete ask — a file, a document, one change — becomes a task under a goal.</p>
+  </div>
+</div>
+<p class="note">The concrete ask is never refused: it is added, and the leader's own answer (the second line) says what happens to it. A goal the leader reads as a task is retitled to the direction it serves, or filed under an existing goal and gone from the list.</p>
+
+<h2>2 · Console · Waiting for you · a question, after Send answer</h2>
+<div class="row">
+  <div class="frame phone">
+    <div class="label">390 × 844</div>
+    <p class="q">Where — in the code, within the repo?</p>
+    <div class="field">Your answer</div>
+    <p class="done change">Answered. The leader waits for the rest of the thread.</p>
+  </div>
+  <div class="frame desk">
+    <div class="label">1440 × 900</div>
+    <p class="q">Which branches?</p>
+    <div class="field">&nbsp;</div>
+    <span class="btn">Send answer</span>
+    <p class="done change">Answered. The leader takes it from here.</p>
+  </div>
+</div>
+<p class="note">Every time, the field clears and the line under it says <b>Answered…</b> with the leader's own sentence — the first answer of a thread and the second alike (the operator's walk: the second answer stayed in the field with no word). A refused answer keeps the text and says why in the same place.</p>
+
+<h2>3 · Console · a story the leader re-plans</h2>
+<div class="row">
+  <div class="frame desk">
+    <p class="q">#88 Cleanup of the delete jobs</p>
+    <p class="blocked change">Blocked — the owner's answer came after it started and may change it; the leader is re-planning it</p>
+    <p class="note">Then: it goes on (told the answer), or it is abandoned "re-planned after the owner's late answer" and its replacement waits at the plan gate.</p>
+  </div>
+</div>
+</body>
+</html>
