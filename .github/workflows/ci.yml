@@ -1,6 +1,7 @@
 # Every pull request and every push to main: the unit suites, the end-to-end harness's free
-# install stage, and the terylon-pane mod's own tests with their teeth. The model-driven stages (author, github-only) are not run here — they need a
-# Claude login and cost about $3 a run; the README says why, under "Continuous integration".
+# install stage, and the terylon-pane mod's own tests with their teeth. The model-driven stages
+# (author, github-only) are not run here — they need a Claude login and cost about $3 a run;
+# the README says why, under "Continuous integration".
 #
 # Every action is pinned to a full commit SHA, with its release in a comment; Dependabot raises
 # them. Every checkout leaves no credential behind (persist-credentials: false).
