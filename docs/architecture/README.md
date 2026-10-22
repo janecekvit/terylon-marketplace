@@ -6,7 +6,7 @@ An ADR records a decision *and the reasoning that was overturned to reach it*. T
 
 ## Diagrams
 
-The structure of the marketplace, drawn in [D2](https://d2lang.com). Each `.d2` file here is the source of truth for the `.svg` beside it. To change a diagram, edit the `.d2`, run `Scripts/render-diagrams.sh` and commit both files; the Diagrams workflow fails when a source is unformatted or invalid, or when an SVG is stale or missing. Flows over time are drawn as Mermaid in the article that walks them, in [`flows/`](../flows/README.md).
+The structure of the marketplace, drawn in [D2](https://d2lang.com). Each `.d2` file here is the source of truth for the `.svg` beside it. To change a diagram, edit the `.d2`, run `node Scripts/render-diagrams.js` and commit both files; the Diagrams workflow fails when a source is unformatted or invalid, or when an SVG is stale or missing. Flows over time are drawn as Mermaid in the article that walks them, in [`flows/`](../flows/README.md).
 
 | Diagram | Draws |
 |---|---|

@@ -1,7 +1,7 @@
 # Every docs/**/*.d2 is a diagram source, and the .svg beside it is what the documentation embeds.
 # This job renders every source with the pinned D2, keeps the result as an artifact, and fails when
 # a source is unformatted or invalid, or when a committed SVG differs from the fresh render or is
-# missing. To fix a red run: run Scripts/render-diagrams.sh with the same D2 and commit the result,
+# missing. To fix a red run: run node Scripts/render-diagrams.js with the same D2 and commit the result,
 # or take the SVGs from this run's rendered-diagrams artifact.
 name: Diagrams
 
@@ -9,13 +9,13 @@ on:
   pull_request:
     paths:
       - "docs/**"
-      - "Scripts/render-diagrams.sh"
+      - "Scripts/render-diagrams.js"
       - ".github/workflows/diagrams.yml"
   push:
     branches: [main]
     paths:
       - "docs/**"
-      - "Scripts/render-diagrams.sh"
+      - "Scripts/render-diagrams.js"
       - ".github/workflows/diagrams.yml"
 
 permissions:
@@ -26,7 +26,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # The D2 release every committed SVG is rendered with; Scripts/render-diagrams.sh names the same.
+  # The D2 release every committed SVG is rendered with; node Scripts/render-diagrams.js names the same.
   D2_VERSION: v0.9.0
 
 jobs:
@@ -57,7 +57,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Render
-        run: Scripts/render-diagrams.sh
+        run: node Scripts/render-diagrams.js
 
       - name: Keep the rendered diagrams
         if: always()
@@ -73,4 +73,4 @@ jobs:
       # differs from the commit - a source d2 fmt rewrote, an SVG that changed or did not exist -
       # is reported here and fails the job.
       - name: Check against the commit
-        run: Scripts/render-diagrams.sh --check
+        run: node Scripts/render-diagrams.js --check

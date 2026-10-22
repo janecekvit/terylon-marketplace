@@ -1,6 +1,6 @@
 # The marketplace's plugins and the dependencies their manifests declare.
 # Source of truth for plugins.svg beside it: edit this file, then run
-# Scripts/render-diagrams.sh and commit both.
+# node Scripts/render-diagrams.js and commit both.
 # Every edge between two plugins is one entry of a plugin.json#dependencies array, drawn from the
 # plugin that declares it to the plugin it names. A dashed one is declared although the chain
 # already reaches it. The manifests are the source of truth; when they change, redraw this.

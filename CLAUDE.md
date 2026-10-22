@@ -13,7 +13,7 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /SECURITY.md                       how to report a vulnerability — GitHub private vulnerability reporting
 /.github/workflows/ci.yml          unit suites + the free e2e install stage, on every PR and push to main
 /.github/workflows/diagrams.yml    renders every docs/**/*.d2 with the pinned D2; red on a bad source or a stale SVG
-/Scripts/render-diagrams.sh        formats, validates and renders each .d2 to the .svg beside it; --check is CI's
+/Scripts/render-diagrams.js        formats, validates and renders each .d2 to the .svg beside it; --check is CI's
 /plugins/<slug>/                   one directory per plugin
 /plugins/CLAUDE.md                 authoring conventions — read before editing a plugin
 /docs/                             the engineering knowledge base — architecture, flows, runbooks, onboarding

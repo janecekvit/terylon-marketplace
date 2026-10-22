@@ -108,7 +108,7 @@ Three kinds of drawing, and each shape has one of them:
 | **A flow over time** — a resolution, a pipeline, a sequence of calls with branches | Mermaid in a ` ```mermaid ` fence, a `flowchart` or a `sequenceDiagram` | the article that walks the flow, usually in `docs/flows/` |
 | **A short inline sketch** — a dispatch chain in a `SKILL.md`, the dependency graph an orienting document must carry, a layout | box drawing in a bare fence, by the rules below | the file it orients |
 
-- **The `.d2` is the source of truth and the `.svg` is generated.** Edit the source, run `Scripts/render-diagrams.sh`, commit both. Never edit an SVG by hand.
+- **The `.d2` is the source of truth and the `.svg` is generated.** Edit the source, run `node Scripts/render-diagrams.js`, commit both. Never edit an SVG by hand.
 - **CI holds the two together.** The Diagrams workflow renders every source with the pinned D2 and fails on an unformatted or invalid source, or on a stale or missing SVG; its `rendered-diagrams` artifact carries what it rendered.
 - **GitHub renders a ` ```mermaid ` fence inline.** The source stays plain text everywhere else, so write node labels a reader can follow unrendered.
 - **The rule that every orienting document carries the plugin graph is unchanged.** That graph stays a box drawing in each document; `docs/architecture/plugins.d2` draws the same edges, and both are derived from `plugin.json#dependencies`.
