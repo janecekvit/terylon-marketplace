@@ -247,22 +247,22 @@ const MUTATIONS = [
         replace: "<Code key=\"allow-rules\" source={allowRules().replace('\"\\n  ]', '\",\\n    \"mcp__plugin_terylon-os_terylon__story_merge\"\\n  ]')}",
     },
     {
-        name: "input-rows is on without the owner's proof",
+        name: "input-rows, which the owner proved, is off again",
         file: "hooks/drawing.ts",
-        find: "    inputRows: named.has(PROOF_NAMES.inputRows),\n",
-        replace: "    inputRows: true,\n",
+        find: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: false }",
+        replace: "export const PROOF_DEFAULTS: Proofs = { inputRows: false, hoverReveal: true, svgTooltips: false }",
     },
     {
-        name: "hover-reveal is on without the owner's proof",
+        name: "hover-reveal, which the owner proved, is off again",
         file: "hooks/drawing.ts",
-        find: "    hoverReveal: named.has(PROOF_NAMES.hoverReveal),\n",
-        replace: "    hoverReveal: true,\n",
+        find: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: false }",
+        replace: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: false, svgTooltips: false }",
     },
     {
-        name: "svg-tooltips is on without the owner's proof",
+        name: "svg-tooltips, which failed in Desktop, is on by default",
         file: "hooks/drawing.ts",
-        find: "    svgTooltips: named.has(PROOF_NAMES.svgTooltips),\n",
-        replace: "    svgTooltips: true,\n",
+        find: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: false }",
+        replace: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: true }",
     },
     {
         name: "a word is drawn inside an Svg, where the theme cannot reach it",
@@ -306,11 +306,48 @@ const MUTATIONS = [
         find: "        <Button key={input.key} plain onPress={input.onPress}>\n          {children}\n        </Button>\n",
         replace: "        {children.slice(0, -1)}\n        <Button key={input.key} plain onPress={input.onPress}>\n          {children.slice(-1)}\n        </Button>\n",
     },
+    // The owner's walk of 1.2.0 in Desktop 3.6556.2.0 (engine 2.1.308), 2026-10-23.
     {
-        name: "the card that waits for the owner is no longer tinted",
+        name: "a card that waits for the owner is filled again",
         file: "hooks/register.tsx",
-        find: "      backgroundColor={look.isGraphic && tone !== 'plain' ? toneKey : undefined}\n",
+        find: "      borderColor={toneKey}\n",
+        replace: "      borderColor={toneKey}\n      backgroundColor={look.isGraphic && tone !== 'plain' ? toneKey : undefined}\n",
+    },
+    {
+        name: "a card that waits for the owner loses its coloured stroke",
+        file: "hooks/register.tsx",
+        find: "  const toneKey = tone === 'wait' ? 'warning' : tone === 'bad' ? 'error' : 'subtle'\n",
+        replace: "  const toneKey = 'subtle'\n",
+    },
+    {
+        name: "a row's kind is plain text again, not a chip",
+        file: "hooks/register.tsx",
+        find: " backgroundColor={CHIP_BACKGROUND}>{`\\u00a0${input.kind}\\u00a0`}</Text>",
+        replace: ">{input.kind}</Text>",
+    },
+    {
+        name: "a story's state chip is filled in its own colour again",
+        file: "hooks/register.tsx",
+        find: "backgroundColor={look.isGraphic ? CHIP_BACKGROUND : undefined} paddingX",
+        replace: "backgroundColor={look.isGraphic ? shownStory.stateTone : undefined} paddingX",
+    },
+    {
+        name: "the hover reveal is laid over an open row",
+        file: "hooks/register.tsx",
+        find: " && !isOpen && ",
+        replace: " && ",
+    },
+    {
+        name: "an Svg is left to size its own box",
+        file: "hooks/register.tsx",
+        find: " height={value.height}",
         replace: "",
+    },
+    {
+        name: "the answer field names a second way to send",
+        file: "hooks/register.tsx",
+        find: "submitLabel={look.isGraphic ? '' : 'answer'}",
+        replace: "submitLabel=\"answer\"",
     },
 ];
 

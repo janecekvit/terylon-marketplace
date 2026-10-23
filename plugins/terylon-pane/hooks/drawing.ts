@@ -22,27 +22,39 @@ export const SVG_COLOURS = {
 // the running phases shrink to dots and the gauges to their numbers.
 export const NARROW_COLUMNS = 44
 
-// THE THREE DESKTOP PROOFS (S32): present in the 2.1.304 declarations, unproven in Desktop. Each is off until the
-// owner names it in TERYLON_PANE_PROOFS, and off draws what 1.1.2 drew.
-//   input-rows    a multi-line answer (rows 4) and criteria one per line (rows 3); off: one line, semicolons
-//   hover-reveal  a waiting row lights under the pointer and lays its console link over its right edge; off: the
-//                 link sits in the row's body, one press away
-//   svg-tooltips  a phase of the stepper says its stage, role and step under the pointer; off: the labels alone
+// THE THREE DESKTOP PROOFS (S32), as the owner's walk of 1.2.0 in Desktop 3.6556.2.0 (engine 2.1.308) settled them
+// on 2026-10-23. A proven one is on and `no-<name>` in TERYLON_PANE_PROOFS turns it off; the one that failed is off,
+// and naming it turns it on. Off draws what 1.1.2 drew.
+//   input-rows    PROVEN: a multi-line answer (rows 4) and criteria one per line (rows 3); off: one line, semicolons
+//   hover-reveal  PROVEN: a waiting row lights under the pointer and lays its console link over its right edge; off:
+//                 the link sits in the row's body, one press away
+//   svg-tooltips  FAILED: no tooltip showed, and the frame drew an empty band around the stepper; on: a phase says its
+//                 stage, role and step under the pointer; off: the labels under the stepper alone
 export type Proofs = { inputRows: boolean; hoverReveal: boolean; svgTooltips: boolean }
 
 export const PROOF_NAMES = { inputRows: 'input-rows', hoverReveal: 'hover-reveal', svgTooltips: 'svg-tooltips' } as const
 
+// What each proof is without a word in TERYLON_PANE_PROOFS: what the owner's walk proved.
+export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: false }
+
 export function proofsOf(value: string | null | undefined): Proofs {
   const named = new Set((value ?? '').split(/[\s,]+/).map(name => name.trim().toLowerCase()).filter(name => name !== ''))
+  const isOn = (key: keyof Proofs) => (named.has(`no-${PROOF_NAMES[key]}`) ? false : named.has(PROOF_NAMES[key]) ? true : PROOF_DEFAULTS[key])
 
   return {
-    inputRows: named.has(PROOF_NAMES.inputRows),
-    hoverReveal: named.has(PROOF_NAMES.hoverReveal),
-    svgTooltips: named.has(PROOF_NAMES.svgTooltips),
+    inputRows: isOn('inputRows'),
+    hoverReveal: isOn('hoverReveal'),
+    svgTooltips: isOn('svgTooltips'),
   }
 }
 
-export type Picture = { source: string; alt: string }
+// THE CHIP'S BACKGROUND: the theme's own neutral grey for a user message, rgb(55, 55, 55) on dark and rgb(240, 240,
+// 240) on light, so the kind's colour reads on it in either theme. The owner's walk of 1.2.0 read neither a chip on a
+// fill of its own colour nor secondary text on a tinted card.
+export const CHIP_BACKGROUND = 'userMessageBackground'
+
+// A picture and its own height in CSS pixels, given to `Svg` so a surface does not size its box for itself.
+export type Picture = { source: string; alt: string; height: number }
 
 function svg(width: number, height: number, body: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`
@@ -129,7 +141,7 @@ export function stepper(phases: readonly PanePhase[], labels: readonly string[],
     parts.push(title === undefined || title === null ? node : `<g><title>${escape(title)}</title>${node}</g>`)
   })
 
-  return { source: svg(width, height, parts.join('')), alt: phasesAlt(phases, labels, isStuck) }
+  return { source: svg(width, height, parts.join('')), alt: phasesAlt(phases, labels, isStuck), height }
 }
 
 // A RUNNING ROW's phases: eight segments in a bar, the last one Merge, dashed purple until it is reached.
@@ -148,7 +160,7 @@ export function segments(phases: readonly PanePhase[], labels: readonly string[]
     return `<rect x="${x}" y="1" width="${round(size)}" height="6" rx="3" fill="${fillOf(phase, isStuck)}"${phase.status === 'next' ? ' fill-opacity=".3"' : ''}/>`
   })
 
-  return { source: svg(width, 8, parts.join('')), alt: segmentsAlt(phases, labels, isStuck) }
+  return { source: svg(width, 8, parts.join('')), alt: segmentsAlt(phases, labels, isStuck), height: 8 }
 }
 
 // THE NARROW DOCK's phases: a dot each, the last the hollow purple ring of Merge.
@@ -163,7 +175,7 @@ export function dots(phases: readonly PanePhase[], labels: readonly string[], is
     return `<circle cx="${x}" cy="4" r="3.5" fill="${fillOf(phase, isStuck)}"${phase.status === 'next' ? ' fill-opacity=".35"' : ''}/>`
   })
 
-  return { source: svg(Math.max(8, phases.length * 16 - 8), 8, parts.join('')), alt: segmentsAlt(phases, labels, isStuck) }
+  return { source: svg(Math.max(8, phases.length * 16 - 8), 8, parts.join('')), alt: segmentsAlt(phases, labels, isStuck), height: 8 }
 }
 
 // THE SLOTS GAUGE: a filled box per slot in use, a hollow one per slot free. Small beside the Running heading,
@@ -186,7 +198,7 @@ export function slotsGauge(used: number, slots: number, isWide: boolean): Pictur
       : `<rect x="${x}" y="1.5" width="${round(size)}" height="${height - 3}" rx="${isWide ? 3 : 2}" fill="none" stroke="${SVG_COLOURS.rest}" stroke-opacity=".7" stroke-width="1"/>`
   })
 
-  return { source: svg(width, height, parts.join('')), alt: `${used} of ${slots} slots in use` }
+  return { source: svg(width, height, parts.join('')), alt: `${used} of ${slots} slots in use`, height }
 }
 
 // THE SPEND BAR: what is spent against its limit. No limit, no bar: the pane does not invent one.
@@ -201,7 +213,7 @@ export function spendBar(spent: number, limit: number | null, size: 'small' | 'w
   const track = `<rect x="0" y="0" width="${width}" height="${height}" rx="3" fill="${SVG_COLOURS.rest}" fill-opacity=".3"/>`
   const bar = filled <= 0 ? '' : `<rect x="0" y="0" width="${round(filled)}" height="${height}" rx="3" fill="${spent > limit ? SVG_COLOURS.stuck : SVG_COLOURS.now}"/>`
 
-  return { source: svg(width, height, track + bar), alt }
+  return { source: svg(width, height, track + bar), alt, height }
 }
 
 // A PLAN AS A CHAIN: a node per story in its order, an arrow into each that runs after another.
@@ -230,7 +242,7 @@ export function planChain(stories: readonly { index: number; after: readonly num
     .map((story, position) => (position === 0 ? `Story ${story.index}` : `then ${story.index}${story.after.length === 0 ? '' : ` after ${story.after.join(', ')}`}`))
     .join(', ')
 
-  return { source: svg(width, 14, parts.join('')), alt }
+  return { source: svg(width, 14, parts.join('')), alt, height: 14 }
 }
 
 // THE TERMINAL'S STEPPER: ✓ ✓ ✓ ✓ ● ○ ○ ◇, one glyph per phase, Merge the diamond.

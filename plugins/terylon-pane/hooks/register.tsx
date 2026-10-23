@@ -39,7 +39,7 @@ import type {
 } from '../types'
 
 import { COPY } from './copy'
-import { NARROW_COLUMNS, dots, meter, phaseGlyph, planChain, proofsOf, segments, slotsGauge, spendBar, splitHash, stepper } from './drawing'
+import { CHIP_BACKGROUND, NARROW_COLUMNS, dots, meter, phaseGlyph, planChain, proofsOf, segments, slotsGauge, spendBar, splitHash, stepper } from './drawing'
 import type { Picture, Proofs } from './drawing'
 import { ALERT_SOURCES, alertCount, healthLine, stateWord } from './health'
 import type { Health } from './health'
@@ -89,7 +89,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.2.0'
+export const MOD_VERSION = '1.2.1'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -1005,8 +1005,9 @@ type Look = { isGraphic: boolean; isNarrow: boolean; proofs: Proofs }
 type CardTone = 'plain' | 'wait' | 'bad'
 
 // A card: a round border, a heading left and a quiet hint right, then its rows. On a graphic surface the spacing is
-// the surface's own steps and a card that waits for the owner is tinted; on the terminal, where every gap is a whole
-// line, the rows stay together, only the heading stands apart, and nothing is painted behind the text.
+// the surface's own steps; on the terminal, where every gap is a whole line, the rows stay together and only the
+// heading stands apart. A CARD THAT WAITS FOR THE OWNER, OR A PROBLEM, IS STROKED IN ITS COLOUR AND NEVER FILLED (the
+// owner's walk of 1.2.0): on a tinted fill the hints, links and chips could not be read.
 function card(elements: Elements, look: Look, key: string, title: unknown, hint: unknown, children: unknown[], tone: CardTone = 'plain'): unknown {
   const { Box, Text } = elements
   const toneKey = tone === 'wait' ? 'warning' : tone === 'bad' ? 'error' : 'subtle'
@@ -1017,7 +1018,6 @@ function card(elements: Elements, look: Look, key: string, title: unknown, hint:
       flexDirection="column"
       borderStyle="round"
       borderColor={toneKey}
-      backgroundColor={look.isGraphic && tone !== 'plain' ? toneKey : undefined}
       paddingX={look.isGraphic ? 'md' : 1}
       paddingY={look.isGraphic ? 'sm' : 0}
       gap={look.isGraphic ? 'sm' : 1}
@@ -1081,8 +1081,15 @@ function row(elements: Elements, look: Look, input: Row): unknown {
   const hasDetail = !look.isNarrow && input.detail !== undefined && input.detail !== null && input.detail !== ''
   const children: unknown[] = []
 
+  // THE KIND AS A CHIP on a graphic surface: its colour on the theme's neutral grey, a space of air inside; the
+  // terminal pads it to its column instead, and paints nothing behind it.
   if (input.kind !== null) {
-    children.push(<Text size="caption" color={input.kindTone ?? 'subtle'}>{look.isGraphic ? input.kind : kindCell(input.kind, input.kindColumn ?? KIND_WIDTH)}</Text>, ' ')
+    children.push(
+      look.isGraphic
+        ? <Text size="caption" color={input.kindTone ?? 'subtle'} backgroundColor={CHIP_BACKGROUND}>{`\u00a0${input.kind}\u00a0`}</Text>
+        : <Text size="caption" color={input.kindTone ?? 'subtle'}>{kindCell(input.kind, input.kindColumn ?? KIND_WIDTH)}</Text>,
+      ' ',
+    )
   }
 
   children.push(<Text color={input.titleTone} wrap="truncate-end">{input.title}</Text>)
@@ -1091,7 +1098,10 @@ function row(elements: Elements, look: Look, input: Row): unknown {
     children.push('  ', <Text size="footnote" tabular color={input.detailTone ?? 'subtle'}>{input.detail}</Text>)
   }
 
-  const isRevealed = look.proofs.hoverReveal && look.isGraphic && input.reveal !== undefined && input.reveal !== null
+  // NO REVEAL OVER AN OPEN ROW (the owner's walk of 1.2.0): laid over its first line it covered the question; the open
+  // row's body carries the same link.
+  const isOpen = input.body !== undefined && input.body !== null
+  const isRevealed = look.proofs.hoverReveal && look.isGraphic && !isOpen && input.reveal !== undefined && input.reveal !== null
 
   return (
     <Box key={`row-${input.key}`} flexDirection="column" hover={isRevealed ? { backgroundColor: 'userMessageBackgroundHover' } : undefined}>
@@ -1125,7 +1135,8 @@ function picture(elements: Elements, value: Picture | null, options: { isInterac
 
   const { Svg } = elements
 
-  return <Svg source={value.source} alt={value.alt} isInteractive={options.isInteractive === true ? true : undefined} />
+  // ITS OWN HEIGHT, given: left to itself, the frame of an interactive Svg drew an empty band above and below it.
+  return <Svg source={value.source} alt={value.alt} height={value.height} isInteractive={options.isInteractive === true ? true : undefined} />
 }
 
 // THE TERMINAL'S STEPPER: ✓ ✓ ✓ ✓ ● ○ ○ ◇, done in success, now in suggestion (warning when stuck), the rest subtle.
@@ -1541,7 +1552,8 @@ export const register: Register = on => {
         ? shownStory.phases.map(item => COPY.phaseTooltip(item.label, item.role, item.status, item.status === 'now' ? shownStory.working?.step ?? null : null))
         : null
       const stateChip = (
-        <Box key="story-state" flexShrink={0} backgroundColor={look.isGraphic ? shownStory.stateTone : undefined} paddingX={look.isGraphic ? 'xs' : 0}>
+        // THE STATE AS A CHIP: its colour on the theme's neutral grey. Filled in its own colour, 1.2.0's read as a blank block.
+        <Box key="story-state" flexShrink={0} backgroundColor={look.isGraphic ? CHIP_BACKGROUND : undefined} paddingX={look.isGraphic ? 'xs' : 0}>
           <Text size="caption" color={shownStory.stateTone}>{shownStory.stateText}</Text>
         </Box>
       )
@@ -1761,7 +1773,8 @@ export const register: Register = on => {
               label={COPY.answerLabel}
               value={form.text}
               rows={look.proofs.inputRows ? 4 : undefined}
-              submitLabel="answer"
+              // ONE WAY TO SEND (the owner's walk of 1.2.0): the Answer button below; the field names no second one.
+              submitLabel={look.isGraphic ? '' : 'answer'}
               autoFocus
               onInput={value => update($, answer, (state: PaneAnswer | null): PaneAnswer | null => (state === null ? null : { ...state, text: value }))}
               onSubmit={() => sendAnswer($)}

@@ -319,8 +319,8 @@ export const SESSION = { cwd: '/work', surface: 'desktop', isInteractive: true }
 export const NARROW_PANE_PROPS = { ...(PANE_PROPS as Record<string, unknown>), bodyColumns: 36 } as never
 
 // Every Svg the drawing holds: its markup and its alt.
-export async function pictures(ui: { findAll: (query: { type?: string }) => Promise<{ props: Record<string, unknown> }[]> }): Promise<{ source: string; alt: string; isInteractive: unknown }[]> {
-  return (await ui.findAll({ type: 'Svg' })).map(node => ({ source: String(node.props.source), alt: String(node.props.alt), isInteractive: node.props.isInteractive }))
+export async function pictures(ui: { findAll: (query: { type?: string }) => Promise<{ props: Record<string, unknown> }[]> }): Promise<{ source: string; alt: string; isInteractive: unknown; height: unknown }[]> {
+  return (await ui.findAll({ type: 'Svg' })).map(node => ({ source: String(node.props.source), alt: String(node.props.alt), isInteractive: node.props.isInteractive, height: node.props.height }))
 }
 
 // The band's props as the engine passes them; a survey makes it yield.

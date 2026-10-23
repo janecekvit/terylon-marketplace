@@ -25,16 +25,16 @@ function hovers(node: unknown): { key: unknown; hover: unknown }[] {
   return [...own, ...(Array.isArray(element.children) ? element.children.flatMap(hovers) : [])]
 }
 
-test('the proofs are named in TERYLON_PANE_PROOFS, each on its own; anything else turns none on', () => {
-  expect(proofsOf(undefined)).toEqual({ inputRows: false, hoverReveal: false, svgTooltips: false })
-  expect(proofsOf('')).toEqual({ inputRows: false, hoverReveal: false, svgTooltips: false })
-  expect(proofsOf('input-rows')).toEqual({ inputRows: true, hoverReveal: false, svgTooltips: false })
-  expect(proofsOf(' Hover-Reveal, svg-tooltips ')).toEqual({ inputRows: false, hoverReveal: true, svgTooltips: true })
-  expect(proofsOf('all yes true 1')).toEqual({ inputRows: false, hoverReveal: false, svgTooltips: false })
+test('THE PROOFS AS THE OWNER\'S WALK SETTLED THEM: input-rows and hover-reveal on, svg-tooltips off; each switchable', () => {
+  expect(proofsOf(undefined)).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: false })
+  expect(proofsOf('')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: false })
+  expect(proofsOf('svg-tooltips')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true })
+  expect(proofsOf(' No-Input-Rows, no-hover-reveal ')).toEqual({ inputRows: false, hoverReveal: false, svgTooltips: false })
+  expect(proofsOf('all yes true 1 no')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: false })
 })
 
-test('UNPROVEN, 1.1.2 DRAWS: one-line fields, no hover reveal, no tooltip, unless the owner names the proof', async ($, on) => {
-  const terylon = world(on)
+test('TURNED OFF, 1.1.2 DRAWS: one-line fields, no hover reveal, no tooltip', async ($, on) => {
+  const terylon = world(on, { env: { TERYLON_PANE_PROOFS: 'no-input-rows,no-hover-reveal' } })
   terylon.answers.briefing = { ...BRIEFING, questionsOpen: [...BRIEFING.questionsOpen, GOAL_QUESTION] }
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -42,7 +42,8 @@ test('UNPROVEN, 1.1.2 DRAWS: one-line fields, no hover reveal, no tooltip, unles
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
 
   // No row lights under the pointer, and nothing is laid over a row: the console link is in its body.
-  expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.hover !== undefined || box.props.position === 'absolute')).toEqual([])
+  expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.position === 'absolute')).toEqual([])
+  expect(hovers(await ui.drawn())).toEqual([])
 
   await ui.press({ key: 'story-333' })
   const [stepper] = await pictures(ui)
@@ -55,7 +56,6 @@ test('UNPROVEN, 1.1.2 DRAWS: one-line fields, no hover reveal, no tooltip, unles
   const field = await ui.find({ key: 'answer-text' })
   expect(field?.props.rows).toBeUndefined()
   expect(field?.props.autoFocus).toBe(true)
-  expect(field?.props.submitLabel).toBe('answer')
 
   await ui.press({ key: 'back' })
   await ui.input({ key: 'quick-add', text: 'Health: a Check now button' })
@@ -63,8 +63,8 @@ test('UNPROVEN, 1.1.2 DRAWS: one-line fields, no hover reveal, no tooltip, unles
   expect((await ui.find({ key: 'add-criteria' }))?.props.placeholder).toBe('Separate them with semicolons, or the leader writes them')
 })
 
-test('input-rows proven: the answer takes four rows, the criteria three, one criterion per line', async ($, on) => {
-  const terylon = world(on, { env: { TERYLON_PANE_PROOFS: 'input-rows' } })
+test('input-rows, PROVEN AND ON: the answer takes four rows, the criteria three, one criterion per line', async ($, on) => {
+  const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
@@ -83,8 +83,26 @@ test('input-rows proven: the answer takes four rows, the criteria three, one cri
   expect(terylon.calls.filter(call => call.tool === 'tasks_add').map(call => (call.args.tasks as { criteria: string[] }[])[0]?.criteria)).toEqual([['The Status tab has Check now', 'A second press within 10 s sends nothing']])
 })
 
-test('hover-reveal proven: a waiting row lights and lays its console link over its right edge, a link and never a button', async ($, on) => {
-  const terylon = world(on, { env: { TERYLON_PANE_PROOFS: 'hover-reveal' } })
+test('ONE WAY TO SEND AN ANSWER on the desktop: the Answer button, and no submit word beside the field', async ($, on) => {
+  const terylon = world(on)
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  for (const [surface, label] of [['desktop', ''], ['terminal', 'answer']] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    await ui.press({ key: 'tab-queue' })
+    await ui.press({ key: 'question-9' })
+    await ui.press({ key: 'answer-9' })
+    expect((await ui.find({ key: 'answer-text' }))?.props.submitLabel).toBe(label)
+    expect((await ui.findAll({ type: 'Button', text: /^Answer$/ })).map(button => button.key)).toEqual(['answer-send'])
+    await ui.press({ key: 'back' })
+    await ui.press({ key: 'question-9' })
+    await ui.unmount()
+  }
+})
+
+test('hover-reveal, PROVEN AND ON: a waiting row lights and lays its console link over its right edge, a link and never a button', async ($, on) => {
+  const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
@@ -101,6 +119,13 @@ test('hover-reveal proven: a waiting row lights and lays its console link over i
   expect((await ui.findAll({ type: 'Link' })).map(link => link.text)).toEqual(expect.arrayContaining(['Answer in the console ↗', 'Merge in the console ↗', 'Approve in the console ↗']))
   expect((await ui.find({ type: 'Link', text: 'Merge in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=merge&story=327')
   expect(await ui.find({ type: 'Button', text: /Merge|Approve/ })).toBeUndefined()
+
+  // NO REVEAL OVER AN OPEN ROW (the owner's walk of 1.2.0): it covered the question; the body carries the link.
+  await ui.press({ key: 'question-9' })
+  expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.position === 'absolute')).toHaveLength(2)
+  expect((await ui.findAll({ type: 'Link', text: 'Answer in the console ↗' }))).toHaveLength(1)
+  await ui.press({ key: 'question-9' })
+  expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.position === 'absolute')).toHaveLength(3)
   await ui.unmount()
 
   // THE TERMINAL HAS NO POINTER TO HOVER: the row draws as 1.1.2 there, whatever is proven.
@@ -109,7 +134,22 @@ test('hover-reveal proven: a waiting row lights and lays its console link over i
   expect(hovers(await terminal.drawn())).toEqual([])
 })
 
-test('svg-tooltips proven: each node of the stepper says its stage, role and state, and only what Terylon reports', async ($, on) => {
+test('svg-tooltips FAILED IN DESKTOP AND IS OFF: the stepper is an image with its labels under it, at its own height', async ($, on) => {
+  const terylon = world(on)
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'story-333' })
+
+  const [stepper] = await pictures(ui)
+  expect(stepper?.isInteractive).toBeUndefined()
+  expect(stepper?.source).not.toContain('<title>')
+  expect(stepper?.height).toBe(22)
+  expect((await ui.find({ type: 'Text', text: exact('Tests') }))?.props.color).toBe('suggestion')
+})
+
+test('svg-tooltips, named: each node of the stepper says its stage, role and state, and only what Terylon reports', async ($, on) => {
   const terylon = world(on, { env: { TERYLON_PANE_PROOFS: 'svg-tooltips' } })
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -137,7 +177,7 @@ test('NO WORD INSIDE AN Svg, and only the fixed colours the light theme reads: e
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  const seen: { source: string; alt: string }[] = [...(await pictures(ui))]
+  const seen: { source: string; alt: string; height: unknown }[] = [...(await pictures(ui))]
 
   for (const path of [['story-333'], ['back', 'merge-327', 'open-story-327'], ['back', 'tab-goals'], ['tab-status']]) {
     for (const key of path) {
@@ -153,6 +193,8 @@ test('NO WORD INSIDE AN Svg, and only the fixed colours the light theme reads: e
     expect(picture.alt.trim()).not.toBe('')
     expect(picture.source).toMatch(/^<svg [^>]*>.*<\/svg>$/)
     expect(picture.source).not.toMatch(/<text|<tspan|<foreignObject|<script|<image/)
+    // ITS OWN HEIGHT, given (the owner's walk of 1.2.0): left to itself, the frame drew an empty band around it.
+    expect(picture.height).toBe(Number(/^<svg [^>]*height="(\d+)"/.exec(picture.source)?.[1]))
 
     for (const [, paint] of picture.source.matchAll(/(?:fill|stroke)="([^"]+)"/g)) {
       expect(PAINTS.has(paint ?? '')).toBe(true)
@@ -167,7 +209,7 @@ test('THE NARROW DOCK, below 44 body columns: rows drop their detail, the phases
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: NARROW_PANE_PROPS })
   expect((await ui.find({ key: 'story-333' }))?.text).toBe('#333 Direct dispatch')
-  expect((await ui.find({ key: 'queued-328' }))?.text).toMatch(/^queued\s+#328 Owner's spec and plan$/)
+  expect((await ui.find({ key: 'queued-328' }))?.text).toMatch(/^\s*queued\s+#328 Owner's spec and plan$/)
   expect(await ui.find({ type: 'Text', text: exact('you decide in the console') })).toBeUndefined()
   expect((await ui.find({ type: 'Text', text: exact('2/4 · $5.50') }))?.props.tabular).toBe(true)
 
@@ -195,8 +237,8 @@ test('the Status tab says the machine in one word, large, in its colour, its tim
     const word = await ui.find({ type: 'Text', text: exact('ok') })
 
     expect(word?.props).toMatchObject({ size: 'title', weight: 'semibold', color: 'success' })
-    expect((await ui.find({ type: 'Text', text: /^last answer at / }))?.props.tabular).toBe(true)
-    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.2.0') }))?.props.mono).toBe(true)
+    expect((await ui.find({ type: 'Text', text: /^\s*last answer at / }))?.props.tabular).toBe(true)
+    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.2.1') }))?.props.mono).toBe(true)
     await ui.unmount()
   }
 })
