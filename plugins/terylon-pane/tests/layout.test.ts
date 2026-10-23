@@ -84,7 +84,7 @@ test('the bell: a row opens its body, which says what to do, and its own console
     const ui = await $.ui.mount({ ...PANE, surface })
     await ui.press({ key: 'tab-bell' })
 
-    expect(await ui.find({ type: 'Text', text: /^\s*orchestrator\s*$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^\s*●?\s*orchestrator\s*$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /EGRESS=off/ })).toBeUndefined()
     await ui.press({ key: 'notice-90' })
     expect((await ui.find({ type: 'Text', text: /EGRESS=off/ }))?.props.color).toBe('inactive')

@@ -3,7 +3,7 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { BRIEFING, GOALS, GOAL_QUESTION, PANE_PROPS, SESSION, exact, pictures, world } from './fixtures'
+import { BRIEFING, GOALS, GOAL_QUESTION, PANE_PROPS, SESSION, chipOf, exact, pictures, world } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -21,7 +21,8 @@ for (const surface of ['desktop', 'terminal'] as const) {
     const title = await ui.find({ type: 'Text', text: exact('#333 Direct dispatch') })
     expect(title?.props.size).toBe('title')
     expect(title?.props.weight).toBe('semibold')
-    expect((await ui.find({ type: 'Text', text: exact('running') }))?.props.color).toBe('suggestion')
+    // THE STATE AS A CHIP: a dot in the state's colour, the word in inactive.
+    expect(await chipOf(ui, 'story-state')).toEqual({ word: 'inactive', dot: 'suggestion', background: undefined, size: 'caption' })
     // THE STATE CHIP: its colour on the theme's neutral grey, never on a fill of its own colour (the owner's walk of 1.2.0).
     expect((await ui.find({ key: 'story-state' }))?.props.backgroundColor).toBe(surface === 'desktop' ? 'userMessageBackground' : undefined)
     expect(await ui.find({ type: 'Text', text: /attempt 2 · feat\/direct-dispatch · opus \/ high$/ })).toBeDefined()
@@ -36,7 +37,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
       const [stepper] = await pictures(ui)
       expect(stepper?.alt).toBe('Admitted, Plan, Develop, Review done; Tests now; Pull req., Verified, Merge to come')
       expect(stepper?.source).not.toMatch(/<text/)
-      expect(stepper?.isInteractive).toBeUndefined()
+      expect(stepper?.isInteractive).toBe(true)
       const now = await ui.find({ type: 'Text', text: exact('Tests') })
       expect(now?.props.color).toBe('suggestion')
       expect(now?.props.weight).toBe('semibold')
@@ -73,7 +74,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
     }
 
     // The run's question, answerable from here or in the console.
-    expect((await ui.find({ type: 'Text', text: exact('Question from the run') }))?.props.color).toBe('warning')
+    expect((await ui.find({ type: 'Text', text: exact('Question from the run') }))?.props.color).toBe('text')
     expect(await ui.find({ type: 'Text', text: exact('Má mrtvý běh pokračovat od posledního commitu?') })).toBeDefined()
     expect(await ui.find({ key: 'story-answer' })).toBeDefined()
 
@@ -112,7 +113,8 @@ test('a verified story shows its environment, verdict, overrun and criteria; mer
   await ui.press({ key: 'merge-327' })
   await ui.press({ key: 'open-story-327' })
 
-  expect((await ui.find({ type: 'Text', text: exact('verified · waits for you') }))?.props.color).toBe('success')
+  expect(await ui.find({ type: 'Text', text: /verified · waits for you/ })).toBeDefined()
+  expect((await chipOf(ui, 'story-state'))?.dot).toBe('success')
   expect(await ui.find({ type: 'Text', text: exact('Environment pr-196') })).toBeDefined()
   expect((await ui.find({ type: 'Link', text: 'https://pr-196.terylon.example.ts.net ↗' }))?.props.href).toBe('https://pr-196.terylon.example.ts.net')
   expect((await ui.find({ type: 'Text', text: exact('Verdict') }))?.props.color).toBe('success')
@@ -199,7 +201,7 @@ test('a waiting plan opens with its stories, each opening the story; approve and
 
   expect(await ui.find({ type: 'Text', text: exact('Plan 41 · Agentic OS') })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: exact('to approve · ~$14') }))?.props.color).toBe('subtle')
-  expect((await ui.find({ key: 'plan-41-story-351' }))?.text).toMatch(/^\s*2\s+Notice handle přes MCP\s+M · ~\$5 · after 1$/)
+  expect((await ui.find({ key: 'plan-41-story-351' }))?.text).toMatch(/^\s*(?:●\s+)?2\s+Notice handle přes MCP\s+M · ~\$5 · after 1$/)
   expect(await ui.find({ type: 'Text', text: exact('M · ~$5 · after 1') })).toBeDefined()
   // A PLAN AS A CHAIN (S32): its order and its "after" as an Svg, the sizes and estimates in tabular digits.
   expect((await pictures(ui)).map(item => item.alt)).toEqual(['Story 1, then 2 after 1'])
@@ -226,10 +228,10 @@ test('the goals tab: open goals by priority with their questions, the closed one
 
   expect((await ui.find({ key: 'tab-goals' }))?.props.variant).toBe('primary')
   expect(await ui.find({ type: 'Text', text: exact('Open goals · 2') })).toBeDefined()
-  expect((await ui.find({ key: 'goal-3' }))?.text).toMatch(/^\s*P1\s+P1 · Agentic OS\s+2 running, 2 approved$/)
+  expect((await ui.find({ key: 'goal-3' }))?.text).toMatch(/^\s*(?:●\s+)?P1\s+P1 · Agentic OS\s+2 running, 2 approved$/)
   // THE PRIORITY AS A CHIP (S32): P1 in warning, the others inactive.
-  expect((await ui.find({ type: 'Text', text: /^\s*P1\s*$/ }))?.props.color).toBe('warning')
-  expect((await ui.find({ type: 'Text', text: /^\s*P2\s*$/ }))?.props.color).toBe('inactive')
+  expect((await chipOf(ui, 'goal-3'))?.dot).toBe('warning')
+  expect((await chipOf(ui, 'goal-11'))?.dot).toBe('inactive')
   expect((await ui.find({ type: 'Text', text: exact('1 question') }))?.props.color).toBe('warning')
   expect(await ui.find({ key: 'goal-1' })).toBeUndefined()
 
@@ -265,9 +267,9 @@ test('the bell tab reads the notices, the leader and the metrics; handling and p
   await ui.press({ key: 'tab-bell' })
 
   expect(await ui.find({ type: 'Text', text: exact('Needs you · 2') })).toBeDefined()
-  expect((await ui.find({ key: 'notice-117' }))?.text).toMatch(/^\s*diun\s+A newer docker\.io\/amir20\/dozzle:latest is published\s+07:26 ▸$/)
+  expect((await ui.find({ key: 'notice-117' }))?.text).toMatch(/^\s*(?:●\s+)?diun\s+A newer docker\.io\/amir20\/dozzle:latest is published\s+07:26 ▸$/)
   // THE SOURCE AS A CHIP (S32): a fault of the machine in error, everything else inactive.
-  expect((await ui.find({ type: 'Text', text: /^\s*diun\s*$/ }))?.props.color).toBe('inactive')
+  expect((await chipOf(ui, 'notice-117'))?.dot).toBe('inactive')
   expect(await ui.find({ type: 'Text', text: exact('Nothing was pulled: update the pin when you choose.') })).toBeUndefined()
   await ui.press({ key: 'notice-117' })
   expect(await ui.find({ type: 'Text', text: exact('Nothing was pulled: update the pin when you choose.') })).toBeDefined()

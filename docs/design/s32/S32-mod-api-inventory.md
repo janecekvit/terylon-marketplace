@@ -20,7 +20,7 @@ The inventory behind the approved canvas, [`S32-pane-redesign.html`](./S32-pane-
 | Layout | `$.ui.open({ rows, columns })` | 2.1.296 / 2.1.305 | no | the terminal only |
 | Components | `Button` with children: strings and `Text` | 2.1.295 | yes | every row: kind chip, title cut at its end, tabular detail, one press |
 | Components | `Svg` with `alt` (Desktop, the phone, VS Code; not the terminal) | ≤ 2.1.296 | yes | the 8-phase stepper, a running row's segments, the slots gauge, the spend bar, a plan's chain |
-| Components | `Svg` `isInteractive`: `<title>` tooltips in a sandboxed frame | ≤ 2.1.296 | no: **failed** in Desktop | — the labels under the stepper instead |
+| Components | `Svg` `isInteractive`: `<title>` tooltips in a sandboxed frame | ≤ 2.1.296 | yes, **proven** in Desktop: the tooltip shows under a pointer held still | a stepper node says its stage, role and step |
 | Components | `Select` | ≤ 2.1.296 | yes | *New task*: goal, after, size; *New goal*: priority, target |
 | Components | `Input` `rows` — a multi-line field | 2.1.301 | yes, **proven** in Desktop | the answer (4 rows), the criteria (3 rows, one per line) |
 | Components | `Code` with a `language` | ≤ 2.1.296 | yes | the allow rules on the Status tab, as `json` |
@@ -35,13 +35,13 @@ The inventory behind the approved canvas, [`S32-pane-redesign.html`](./S32-pane-
 
 ## The three proofs
 
-Each is declared in 2.1.304 and was unproven in Desktop; 1.2.0 drew each behind a switch, off. The owner walked them in Desktop 3.6556.2.0 (engine 2.1.308) on 2026-10-23, and 1.2.1 sets the defaults to what the walk found. `TERYLON_PANE_PROOFS` turns one on by its name and off by `no-` and its name; off draws what 1.1.2 drew.
+Each is declared in 2.1.304 and was unproven in Desktop; 1.2.0 drew each behind a switch, off. The owner walked them in Desktop 3.6556.2.0 (engine 2.1.308) on 2026-10-23, and **all three work**: from 1.2.2 they are on. `TERYLON_PANE_PROOFS` is the escape hatch: `no-` and a name turns one off, and off draws what 1.1.2 drew.
 
-| Name | The walk | 1.2.1 default | On | Off — 1.1.2 |
-|---|---|---|---|---|
-| `input-rows` | proven | on | the answer in 4 rows, the criteria in 3, one criterion per line | one line each; criteria split by semicolons |
-| `hover-reveal` | proven; laid over an expanded row it covered the question | on, never over an open row | a waiting row lights under the pointer and lays *Merge in the console ↗* (or *Approve*, *Answer*, *Unblock*) over its right edge | the link sits in the row's body, one press away |
-| `svg-tooltips` | failed: no tooltip, and an empty band around the stepper | off | each stepper node says *Tests · tester · now · Step 5 of 9* under the pointer | the labels under the stepper alone |
+| Name | The walk | On, the default | Off — 1.1.2 |
+|---|---|---|---|
+| `input-rows` | proven | the answer in 4 rows, the criteria in 3, one criterion per line | one line each; criteria split by semicolons |
+| `hover-reveal` | proven; laid over an expanded row it covered the question | a waiting row lights under the pointer and lays *Merge in the console ↗* (or *Approve*, *Answer*, *Unblock*) over its right edge, never over an open row | the link sits in the row's body, one press away |
+| `svg-tooltips` | proven: *Admitted to a slot · done* under a pointer held still; first reported missing | each stepper node says *Tests · tester · now · Step 5 of 9* | the labels under the stepper alone |
 
 ```json
 "env": { "TERYLON_PANE_PROOFS": "no-hover-reveal" }
@@ -54,9 +54,11 @@ What the owner's walk of 1.2.0 in Desktop 3.6556.2.0 (engine 2.1.308) found, on 
 | Seen | 1.2.1 |
 |---|---|
 | on a card tinted with `Box` `backgroundColor` `warning` or `error`, the hints, links and chips could not be read | no card is filled; a card that waits, or a problem, is stroked in its colour |
-| a state chip filled in the theme colour of its own text drew as a blank block | the chip's text in its colour on `userMessageBackground`, the theme's neutral grey |
-| a row's kind inside its Button read as plain text | the kind on `userMessageBackground`, with a space of air inside |
-| an empty band above and below the stepper | `isInteractive` off; every `Svg` given its own `height` |
+| a state chip filled in the theme colour of its own text drew as a blank block, in both themes | a dot in the state's colour, the word in `inactive`, on `userMessageBackground`, the theme's neutral grey |
+| a row's kind inside its Button read as plain text | the same chip: a dot in the kind's colour, the word in `inactive` |
+| an empty band above and below the stepper | every `Svg` given its own `height` |
+| in a dock of about 435 px the stepper shrank, its labels running together | below 60 body columns a compact stepper, its nodes at their size, only the phase now named |
+| in the light theme the waiting tint drew dark brown, an open question's body and its link unreadable on it | no fill; every word and link on a card that waits or warns at 4.5:1 in both themes, computed from the canvas's palette (`tests/contrast.ts`) |
 | an `answer` submit beside the field and an *Answer* button under it | on Desktop the field names no submit; the button sends |
 
 What the 2.1.304 engine refused while the pane was built, on 2026-10-22, by `claude plugin test`:

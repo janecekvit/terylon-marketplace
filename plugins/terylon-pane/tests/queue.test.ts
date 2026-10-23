@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
-import { BRIEFING, PANE_PROPS, SESSION, exact, lateOnTheLocalDayOf, pictures, world } from './fixtures'
+import { BRIEFING, PANE_PROPS, SESSION, chipOf, exact, lateOnTheLocalDayOf, pictures, world } from './fixtures'
 
 // The theme keys the house style allows: a colour is a role, never a hex value.
 const THEME = ['text', 'inactive', 'subtle', 'suggestion', 'success', 'warning', 'error', 'merged', 'userMessageBackground']
@@ -28,13 +28,13 @@ test('the queue draws the four groups from Terylon as cards, each row one Button
     // ONE ROW, ONE BUTTON (S32): the kind chip, the title, the detail, keyed by the subject's id.
     expect(await ui.find({ type: 'Text', text: exact('Waiting for you · 3') })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: exact('you decide in the console') }))?.props.color).toBe('subtle')
-    expect((await ui.find({ key: 'question-9' }))?.text).toMatch(/^\s*question\s+#333 — Má mrtvý běh pokračovat od posledního commitu\?$/)
-    expect((await ui.find({ key: 'merge-327' }))?.text).toMatch(/^\s*merge\s+#327 Events since the last look · verified in pr-196 · waiting for merge$/)
-    expect((await ui.find({ key: 'plan-41' }))?.text).toMatch(/^\s*plan\s+Plan 41 · Agentic OS · 3 stories$/)
-    const questionKind = await ui.find({ type: 'Text', text: /^\s*question\s*$/ })
-    expect(questionKind?.props.color).toBe('warning')
-    expect(questionKind?.props.size).toBe('caption')
-    expect((await ui.find({ type: 'Text', text: /^\s*merge\s*$/ }))?.props.color).toBe('merged')
+    expect((await ui.find({ key: 'question-9' }))?.text).toMatch(/^\s*(?:●\s+)?question\s+#333 — Má mrtvý běh pokračovat od posledního commitu\?$/)
+    expect((await ui.find({ key: 'merge-327' }))?.text).toMatch(/^\s*(?:●\s+)?merge\s+#327 Events since the last look · verified in pr-196 · waiting for merge$/)
+    expect((await ui.find({ key: 'plan-41' }))?.text).toMatch(/^\s*(?:●\s+)?plan\s+Plan 41 · Agentic OS · 3 stories$/)
+    // THE KIND AS A CHIP: a dot in the kind's colour, the word in inactive, which reads on the chip in both themes.
+    expect(await chipOf(ui, 'question-9')).toEqual({ word: 'inactive', dot: 'warning', background: surface === 'desktop' ? 'userMessageBackground' : undefined, size: 'caption' })
+    expect((await chipOf(ui, 'merge-327'))?.dot).toBe('merged')
+    expect((await chipOf(ui, 'plan-41'))?.dot).toBe('inactive')
 
     expect(await ui.find({ type: 'Text', text: exact('Running · 2') })).toBeDefined()
     expect((await ui.find({ key: 'story-333' }))?.text).toMatch(/^#333 Direct dispatch\s+5\/8 · \$2\.10$/)
@@ -59,11 +59,11 @@ test('the queue draws the four groups from Terylon as cards, each row one Button
     }
 
     expect(await ui.find({ type: 'Text', text: exact('Queued · 2') })).toBeDefined()
-    expect((await ui.find({ key: 'queued-328' }))?.text).toMatch(/^\s*queued\s+#328 Owner's spec and plan\s+after #324$/)
+    expect((await ui.find({ key: 'queued-328' }))?.text).toMatch(/^\s*(?:●\s+)?queued\s+#328 Owner's spec and plan\s+after #324$/)
     expect((await ui.find({ type: 'Text', text: exact('tvoje volba') }))?.props.color).toBe('warning')
 
     expect(await ui.find({ type: 'Text', text: exact('Done today · 1') })).toBeDefined()
-    expect((await ui.find({ type: 'Text', text: /^\s*merged\s*$/ }))?.props.color).toBe('merged')
+    expect((await chipOf(ui, 'done-341'))?.dot).toBe('merged')
     expect((await ui.find({ key: 'done-341' }))?.text).toContain('#341 S10a cleanup')
 
     expect(await ui.find({ key: 'quick-add' })).toBeDefined()
@@ -82,7 +82,7 @@ test('the counts carry their colours in tabular digits: waiting warning, running
   const ui = await $.ui.mount({ plugin: 'terylon-pane', surface: 'desktop', component: 'Pane', requestId: 'terylon', props: PANE_PROPS })
   const counts = await ui.findAll({ type: 'Text', text: /^ · \d$/ })
 
-  expect(counts.map(count => [count.text, count.props.color])).toEqual([[' · 3', 'warning'], [' · 2', 'suggestion'], [' · 2', 'inactive'], [' · 1', 'success']])
+  expect(counts.map(count => [count.text, count.props.color])).toEqual([[' · 3', 'text'], [' · 2', 'suggestion'], [' · 2', 'inactive'], [' · 1', 'success']])
   expect(counts.every(count => count.props.tabular === true)).toBe(true)
 
   // A CARD'S HEADING (S32): semibold at the heading size.
@@ -113,8 +113,8 @@ test('the house style: theme keys only, round cards, a card that waits stroked a
     // Only a kind chip has a background, the theme's neutral grey, and only where a surface draws chips.
     expect(boxes.filter(box => box.props.backgroundColor !== undefined)).toEqual([])
     const chips = texts.filter(text => text.props.backgroundColor !== undefined)
-    expect(chips.map(text => text.text.trim())).toEqual(surface === 'desktop' ? ['question', 'merge', 'plan', 'queued', 'held', 'merged'] : [])
-    expect(chips.every(text => text.props.backgroundColor === 'userMessageBackground' && /^\u00a0\S+\u00a0$/.test(text.text))).toBe(true)
+    expect(chips.map(text => text.text.replace(/[\s●]+/g, ''))).toEqual(surface === 'desktop' ? ['question', 'merge', 'plan', 'queued', 'held', 'merged'] : [])
+    expect(chips.every(text => text.props.backgroundColor === 'userMessageBackground' && text.props.color === 'inactive' && /^\u00a0●\u00a0\S+\u00a0$/.test(text.text))).toBe(true)
 
     const cards = boxes.filter(box => box.props.borderStyle === 'round')
     expect(cards.length).toBeGreaterThanOrEqual(3)
@@ -188,7 +188,7 @@ test('a row longer than its card stays one line: the title is cut inside the one
     expect(title?.props.wrap).toBe('truncate-end')
     expect((await ui.find({ key: 'question-22' }))?.type).toBe('Button')
     expect((await ui.find({ key: 'question-22' }))?.props.plain).toBe(true)
-    expect((await ui.find({ type: 'Text', text: /^\s*question\s*$/ }))?.props.color).toBe('warning')
+    expect((await chipOf(ui, 'question-22'))?.dot).toBe('warning')
     expect(await ui.find({ type: 'Link', text: exact('↗') })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: exact(long) })).toBeUndefined()
 

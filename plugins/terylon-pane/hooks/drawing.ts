@@ -22,20 +22,18 @@ export const SVG_COLOURS = {
 // the running phases shrink to dots and the gauges to their numbers.
 export const NARROW_COLUMNS = 44
 
-// THE THREE DESKTOP PROOFS (S32), as the owner's walk of 1.2.0 in Desktop 3.6556.2.0 (engine 2.1.308) settled them
-// on 2026-10-23. A proven one is on and `no-<name>` in TERYLON_PANE_PROOFS turns it off; the one that failed is off,
-// and naming it turns it on. Off draws what 1.1.2 drew.
-//   input-rows    PROVEN: a multi-line answer (rows 4) and criteria one per line (rows 3); off: one line, semicolons
-//   hover-reveal  PROVEN: a waiting row lights under the pointer and lays its console link over its right edge; off:
-//                 the link sits in the row's body, one press away
-//   svg-tooltips  FAILED: no tooltip showed, and the frame drew an empty band around the stepper; on: a phase says its
-//                 stage, role and step under the pointer; off: the labels under the stepper alone
+// THE THREE DESKTOP PROOFS (S32), all PROVEN in the owner's walk of 1.2.0 in Desktop 3.6556.2.0 (engine 2.1.308) on
+// 2026-10-23, and on. `no-<name>` in TERYLON_PANE_PROOFS is the escape hatch that turns one off; off draws 1.1.2.
+//   input-rows    a multi-line answer (rows 4) and criteria one per line (rows 3); off: one line, semicolons
+//   hover-reveal  a waiting row lights under the pointer and lays its console link over its right edge, never over
+//                 an open row; off: the link sits in the row's body, one press away
+//   svg-tooltips  a phase of the stepper says its stage, role and step under a still pointer; off: the labels alone
 export type Proofs = { inputRows: boolean; hoverReveal: boolean; svgTooltips: boolean }
 
 export const PROOF_NAMES = { inputRows: 'input-rows', hoverReveal: 'hover-reveal', svgTooltips: 'svg-tooltips' } as const
 
 // What each proof is without a word in TERYLON_PANE_PROOFS: what the owner's walk proved.
-export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: false }
+export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: true }
 
 export function proofsOf(value: string | null | undefined): Proofs {
   const named = new Set((value ?? '').split(/[\s,]+/).map(name => name.trim().toLowerCase()).filter(name => name !== ''))
@@ -49,9 +47,16 @@ export function proofsOf(value: string | null | undefined): Proofs {
 }
 
 // THE CHIP'S BACKGROUND: the theme's own neutral grey for a user message, rgb(55, 55, 55) on dark and rgb(240, 240,
-// 240) on light, so the kind's colour reads on it in either theme. The owner's walk of 1.2.0 read neither a chip on a
-// fill of its own colour nor secondary text on a tinted card.
+// 240) on light. Its word is drawn in `inactive`, which reads on it in both themes; the kind's colour is a dot before
+// the word, a mark that needs 3:1 rather than text's 4.5:1 (tests/contrast.ts). The owner's walk of 1.2.0 read neither
+// a chip on a fill of its own colour nor secondary text on a tinted card.
 export const CHIP_BACKGROUND = 'userMessageBackground'
+export const CHIP_WORD = 'inactive'
+export const CHIP_DOT = '●'
+
+// Below this many body columns the stepper of eight would shrink as a whole and its labels run together (the owner's
+// walk, a dock of about 435 px): it is drawn compact instead, its nodes at their size and only the phase now labelled.
+export const STEPPER_COLUMNS = 60
 
 // A picture and its own height in CSS pixels, given to `Svg` so a surface does not size its box for itself.
 export type Picture = { source: string; alt: string; height: number }
@@ -104,8 +109,9 @@ function fillOf(phase: PanePhase, isStuck: boolean): string {
 
 // THE STEPPER of one story: a node per phase on a line, done ✓ green, now blue (amber when stuck), the rest
 // hollow grey, Merge a hollow purple square — the owner's gate. No phase is now unless Terylon said so.
-export function stepper(phases: readonly PanePhase[], labels: readonly string[], options: { isStuck?: boolean; tooltips?: readonly string[] | null } = {}): Picture {
-  const width = 456
+export function stepper(phases: readonly PanePhase[], labels: readonly string[], options: { isStuck?: boolean; tooltips?: readonly string[] | null; isCompact?: boolean } = {}): Picture {
+  // COMPACT: the nodes 24 px apart, so the picture is never wider than a narrow dock and never scaled down.
+  const width = options.isCompact === true ? 28 + (phases.length - 1) * 24 : 456
   const height = 22
   const first = 14
   const last = width - 14

@@ -26,14 +26,14 @@ test('well: ok, the slots and the runs in them, the cost today and over 30 days,
     expect(await ui.find({ key: 'status-refresh' })).toBeDefined()
 
     expect(await ui.find({ type: 'Text', text: exact('2 of 4 running') })).toBeDefined()
-    expect((await ui.find({ key: 'status-story-333' }))?.text).toMatch(/^\s*running\s+#333 Direct dispatch\s+5\/8 · \$2\.10$/)
+    expect((await ui.find({ key: 'status-story-333' }))?.text).toMatch(/^\s*(?:●\s+)?running\s+#333 Direct dispatch\s+5\/8 · \$2\.10$/)
     expect(await ui.find({ type: 'Text', text: exact('$5.50 of the $20 daily limit today') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('43 stories · $1.10 per story · 0 merged · 1 open PR') })).toBeDefined()
 
     expect(await ui.find({ type: 'Text', text: exact('Problems · 0') })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: exact('Nothing wrong.') }))?.props.color).toBe('subtle')
 
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.2.1') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.2.2') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('TERYLON_URL https://terylon.example.ts.net') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('server plugin:terylon-os:terylon') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Every failure is in claude --debug under terylon-pane:') })).toBeDefined()
@@ -126,7 +126,7 @@ test('an alert: its own card with the notice\'s body, which says what to do, and
     await ui.press({ key: 'tab-status' })
 
     expect((await ui.find({ type: 'Text', text: exact('1 alert') }))?.props.color).toBe('warning')
-    expect((await ui.find({ type: 'Text', text: exact('the page is not well') }))?.props.color).toBe('warning')
+    expect((await ui.find({ type: 'Text', text: exact('the page is not well') }))?.props.color).toBe('error')
     expect(await ui.find({ type: 'Text', text: /^\s*gatus · / })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('gatus says it stopped answering; check the container.') })).toBeDefined()
     expect((await ui.find({ type: 'Link', text: 'Bell in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=bell')

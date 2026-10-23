@@ -39,7 +39,7 @@ import type {
 } from '../types'
 
 import { COPY } from './copy'
-import { CHIP_BACKGROUND, NARROW_COLUMNS, dots, meter, phaseGlyph, planChain, proofsOf, segments, slotsGauge, spendBar, splitHash, stepper } from './drawing'
+import { CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, NARROW_COLUMNS, STEPPER_COLUMNS, dots, meter, phaseGlyph, planChain, proofsOf, segments, slotsGauge, spendBar, splitHash, stepper } from './drawing'
 import type { Picture, Proofs } from './drawing'
 import { ALERT_SOURCES, alertCount, healthLine, stateWord } from './health'
 import type { Health } from './health'
@@ -89,7 +89,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.2.1'
+export const MOD_VERSION = '1.2.2'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -999,7 +999,8 @@ type Tone = 'text' | 'inactive' | 'subtle' | 'suggestion' | 'success' | 'warning
 // HOW A SURFACE DRAWS (S32): a graphic one (Desktop, the phone, VS Code) takes Svg, type sizes and spacing steps;
 // the terminal draws whole cells, no Svg, and the text fallbacks the canvas's terminal board draws. Below
 // NARROW_COLUMNS the pane is the narrow dock.
-type Look = { isGraphic: boolean; isNarrow: boolean; proofs: Proofs }
+// isCompact: too few columns for the stepper of eight at its size (STEPPER_COLUMNS), so it is drawn compact.
+type Look = { isGraphic: boolean; isNarrow: boolean; isCompact: boolean; proofs: Proofs }
 
 // The tint of a card: plain, waiting for the owner (warning), or a problem (error).
 type CardTone = 'plain' | 'wait' | 'bad'
@@ -1081,13 +1082,14 @@ function row(elements: Elements, look: Look, input: Row): unknown {
   const hasDetail = !look.isNarrow && input.detail !== undefined && input.detail !== null && input.detail !== ''
   const children: unknown[] = []
 
-  // THE KIND AS A CHIP on a graphic surface: its colour on the theme's neutral grey, a space of air inside; the
-  // terminal pads it to its column instead, and paints nothing behind it.
+  // THE KIND AS A CHIP: a dot in the kind's colour, then the word in `inactive`, which reads on the chip in both themes
+  // where the kind's colour does not (tests/contrast.ts). A graphic surface lays it on the theme's neutral grey with a
+  // space of air inside; the terminal pads it to its column instead, and paints nothing behind it.
   if (input.kind !== null) {
     children.push(
       look.isGraphic
-        ? <Text size="caption" color={input.kindTone ?? 'subtle'} backgroundColor={CHIP_BACKGROUND}>{`\u00a0${input.kind}\u00a0`}</Text>
-        : <Text size="caption" color={input.kindTone ?? 'subtle'}>{kindCell(input.kind, input.kindColumn ?? KIND_WIDTH)}</Text>,
+        ? <Text size="caption" color={CHIP_WORD} backgroundColor={CHIP_BACKGROUND}>{'\u00a0'}<Text color={input.kindTone ?? 'subtle'}>{CHIP_DOT}</Text>{`\u00a0${input.kind}\u00a0`}</Text>
+        : <Text size="caption" color={CHIP_WORD}><Text color={input.kindTone ?? 'subtle'}>{CHIP_DOT}</Text>{` ${kindCell(input.kind, input.kindColumn ?? KIND_WIDTH)}`}</Text>,
       ' ',
     )
   }
@@ -1298,6 +1300,7 @@ export const register: Register = on => {
     const look: Look = {
       isGraphic: e.surface !== 'terminal',
       isNarrow: e.props.bodyColumns < NARROW_COLUMNS,
+      isCompact: e.props.bodyColumns < STEPPER_COLUMNS,
       proofs: proofsOf(await $.env.get('TERYLON_PANE_PROOFS')),
     }
     const current = await readSnapshot($)
@@ -1367,7 +1370,9 @@ export const register: Register = on => {
         {lines.map((line, index) => <Text key={`step-${index}`} color="inactive">{COPY.fixStep(index + 1, line)}</Text>)}
       </Box>
     )
-    const warned = (title: string) => <Text size="heading" weight="semibold" color="warning">{title}</Text>
+    // A CARD'S TITLE THAT WARNS (the owner's walk of 1.2.0): a problem's in `error`, a waiting card's in `text`, its
+    // stroke carrying the warning. Amber text reads under 4.5:1 on light (tests/contrast.ts), so no card's text is amber.
+    const warned = (title: string, tone: 'wait' | 'bad' = 'bad') => <Text size="heading" weight="semibold" color={tone === 'bad' ? 'error' : 'text'}>{title}</Text>
 
     // THE STATES THAT ARE NOT A QUEUE: what happened, why, and the step that fixes it.
     let problemCard: unknown = null
@@ -1432,7 +1437,7 @@ export const register: Register = on => {
       const health = healthOf(current, offset)
       const state = stateWord(health)
       const bellState = await readBell($)
-      const pausedCard = current.paused === null ? null : cardOf('problem-paused', warned(COPY.pausedTitle), current.pausedSince === null ? null : COPY.statusSince(current.pausedSince), [
+      const pausedCard = current.paused === null ? null : cardOf('problem-paused', warned(COPY.pausedTitle, 'wait'), current.pausedSince === null ? null : COPY.statusSince(current.pausedSince), [
         <Text color="inactive">{current.paused}</Text>,
         steps(COPY.fixPaused),
         <Link href={consoleLink(base, 'work')} label={COPY.resumeInConsole} />,
@@ -1554,7 +1559,7 @@ export const register: Register = on => {
       const stateChip = (
         // THE STATE AS A CHIP: its colour on the theme's neutral grey. Filled in its own colour, 1.2.0's read as a blank block.
         <Box key="story-state" flexShrink={0} backgroundColor={look.isGraphic ? CHIP_BACKGROUND : undefined} paddingX={look.isGraphic ? 'xs' : 0}>
-          <Text size="caption" color={shownStory.stateTone}>{shownStory.stateText}</Text>
+          <Text size="caption" color={CHIP_WORD}>{look.isGraphic ? '\u00a0' : ''}<Text color={shownStory.stateTone}>{CHIP_DOT}</Text>{` ${shownStory.stateText}${look.isGraphic ? '\u00a0' : ''}`}</Text>
         </Box>
       )
       const working = shownStory.working
@@ -1585,8 +1590,12 @@ export const register: Register = on => {
           {cardOf('story-phases', COPY.phases, <Text color="subtle" size="footnote" tabular>{COPY.phasesHint(nowAt >= 0 ? nowAt + 1 : done, shownStory.phases.length)}</Text>, look.isGraphic
             ? [
                 // THE STEPPER (S32): the Svg says no word, the labels sit under it in Text; no stage, no node is now.
-                picture(elements, stepper(shownStory.phases, labels, { isStuck, tooltips }), { isInteractive: tooltips !== null }),
-                <Box key="phase-labels" flexDirection="row">
+                picture(elements, stepper(shownStory.phases, labels, { isStuck, tooltips, isCompact: look.isCompact }), { isInteractive: tooltips !== null }),
+                // COMPACT, below STEPPER_COLUMNS (the owner's walk, a dock of about 435 px): eight labels ran together, so
+                // only the phase now is named; the tooltips name the rest.
+                look.isCompact
+                  ? (nowAt < 0 ? null : <Text key="phase-now" size="caption" weight="semibold" color={isStuck ? 'warning' : 'suggestion'}>{shownStory.phases[nowAt]?.label ?? ''}</Text>)
+                  : <Box key="phase-labels" flexDirection="row">
                   {shownStory.phases.map((item, index) => (
                     <Box key={`phase-label-${index}`} flexGrow={1} flexShrink={1} minWidth={0} width={0} justifyContent="center">
                       <Text
@@ -1638,7 +1647,7 @@ export const register: Register = on => {
             shownStory.fraction === null ? null : <Text color="suggestion">{bar(shownStory.fraction)}</Text>,
             <Text color="inactive" tabular>{shownStory.cost}</Text>,
           ])}
-          {shownStory.question !== null && cardOf('story-question', warned(COPY.questionFromRun), COPY.waitsOnYou, [
+          {shownStory.question !== null && cardOf('story-question', warned(COPY.questionFromRun, 'wait'), COPY.waitsOnYou, [
             <Text>{shownStory.question.text}</Text>,
             <Box flexDirection="row" gap={1}>
               <Button key="story-answer" label={COPY.answer} variant="primary" onPress={() => go({ screen: 'question', question: shownStory.question?.id ?? 0 })} />
@@ -2005,7 +2014,7 @@ export const register: Register = on => {
               ],
             ))}
           {cardOf('mem-pending', COPY.memoryPendingHeading, null, state.pending > 0
-            ? [<Text><Text color="warning" tabular>{COPY.memoryPending(state.pending)}</Text><Text color="inactive">{COPY.memoryPendingWhere}</Text></Text>, <Link href={memoryLink} label={COPY.memoryConfirmInConsole} />]
+            ? [<Text><Text color="text" tabular>{COPY.memoryPending(state.pending)}</Text><Text color="inactive">{COPY.memoryPendingWhere}</Text></Text>, <Link href={memoryLink} label={COPY.memoryConfirmInConsole} />]
             : [quiet(elements, COPY.nothingYet)], state.pending > 0 ? 'wait' : 'plain')}
           {cardOf('mem-proposed', COPY.memoryProposedHeading, null, state.proposed.length === 0
             ? [quiet(elements, COPY.nothingYet)]
@@ -2094,7 +2103,7 @@ export const register: Register = on => {
             ...shownGoal.stories.map(item =>
               rowOf({ key: `goal-story-${item.id}`, kind: COPY.kindStory, title: item.title, detail: item.state, onPress: () => go({ screen: 'story', story: item.id }) })),
           ])}
-          {questions.length > 0 && cardOf('goal-questions', headingOf(COPY.goalQuestionsHeading, questions.length, 'warning'), null, questions.map(item =>
+          {questions.length > 0 && cardOf('goal-questions', headingOf(COPY.goalQuestionsHeading, questions.length, 'text'), null, questions.map(item =>
             rowOf({ key: `goal-question-${item.id}`, kind: COPY.kindQuestion, kindTone: 'warning', title: firstLine(item.text), onPress: () => go({ screen: 'question', question: item.id }) })), 'wait')}
           {plans.map(plan =>
             rowOf({ key: `goal-plan-${plan.id}`, kind: COPY.kindPlan, title: COPY.plan(plan.id), detail: plan.stateText, detailTone: plan.isProposed ? 'warning' : 'subtle', onPress: () => go({ screen: 'plan', plan: plan.id }) }))}
@@ -2178,7 +2187,7 @@ export const register: Register = on => {
           {problemCard}
           {bellState.phase === 'loading' && quiet(elements, COPY.loading)}
           {bellState.phase === 'error' && cardOf('bell-error', warned(COPY.loadError(COPY.tabBell(0))), null, [reason(bellState.sentence)], 'bad')}
-          {bellState.phase === 'ok' && cardOf('bell-needs', headingOf(COPY.needsYou, bellState.unhandledCount, bellState.unhandledCount > 0 ? 'warning' : 'inactive'), COPY.bellHint, [
+          {bellState.phase === 'ok' && cardOf('bell-needs', headingOf(COPY.needsYou, bellState.unhandledCount, bellState.unhandledCount > 0 ? 'text' : 'inactive'), COPY.bellHint, [
             bellState.unhandled.length === 0 ? quiet(elements, COPY.nothingYet) : null,
             ...bellState.unhandled.map(notice =>
               rowOf({
@@ -2289,10 +2298,10 @@ export const register: Register = on => {
         {tabs}
         {context}
         {problemCard}
-        {current.paused !== null && cardOf('paused', <Text size="heading" weight="semibold" color="warning">{current.paused}</Text>, null, [
+        {current.paused !== null && cardOf('paused', <Text size="heading" weight="semibold" color="text">{current.paused}</Text>, null, [
           <Link href={consoleLink(base, 'work')} label={COPY.resumeInConsole} />,
         ], 'wait')}
-        {cardOf('waiting', headingOf(COPY.waiting, current.waiting.length, current.waiting.length > 0 ? 'warning' : 'inactive', stale), look.isNarrow ? null : COPY.waitingHint, [
+        {cardOf('waiting', headingOf(COPY.waiting, current.waiting.length, current.waiting.length > 0 ? 'text' : 'inactive', stale), look.isNarrow ? null : COPY.waitingHint, [
           current.waiting.length === 0 ? quiet(elements, COPY.nothingWaiting) : null,
           ...current.waiting.map(item =>
             rowOf({
