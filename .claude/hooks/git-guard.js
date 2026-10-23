@@ -19,9 +19,18 @@
  * `&&` — all of which now reach the same check.
  *
  * This is defence in depth, not a sandbox: it guards against an honest slip, not
- * against a determined attempt to evade it. Shell metaprogramming (variable
- * expansion, aliases, a script that pushes) still gets through, which is why
+ * against a determined attempt to evade it. Shell metaprogramming (aliases,
+ * command substitution, a script that pushes) still gets through, which is why
  * .claude/settings.json carries the same rules in permissions.deny.
+ *
+ * A `cd` or `git -C` target is expanded before it is judged: `$VAR`, `${VAR}`
+ * and `%VAR%` from the environment or from an assignment earlier in the same
+ * command, and a leading `~`. Without that, `git -C "$P" commit` named a
+ * directory that does not exist, the walk up to an existing ancestor reached the
+ * session's own checkout, and a commit in a scratch clone on a feature branch was
+ * refused as a commit on main — with nothing in the message to say why. A target
+ * that still cannot be resolved is judged by the session's directory, and a
+ * refusal that follows names the target so the person knows to use a literal path.
  *
  * The branch is resolved from the directory the operation actually targets, not
  * from CLAUDE_PROJECT_DIR. That variable keeps pointing at the original checkout
@@ -39,6 +48,7 @@
 
 const { execSync } = require("node:child_process");
 const fileSystem = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 
 /**
@@ -69,6 +79,21 @@ const GIT_OPTIONS_WITH_VALUE = new Set(["-C", "-c", "--git-dir", "--work-tree", 
  */
 const GIT_OPTIONS_THAT_REDIRECT = new Set(["-C", "--git-dir", "--work-tree"]);
 
+/**
+ * A variable reference in a path: `${NAME}`, `$NAME` (POSIX shells) or `%NAME%`
+ * (cmd). Expanded from the command's own earlier assignments, then process.env.
+ */
+const VARIABLE_REFERENCE_PATTERN = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)|%([A-Za-z_][A-Za-z0-9_]*)%/g;
+
+/** What is left after expansion that the guard cannot evaluate: `$(…)`, backticks, `${…:-…}` and the like. */
+const UNEVALUATED_SHELL_PATTERN = /[$`]/;
+
+/** A shell assignment standing alone, or behind `export`: `P=/tmp/scratch`. */
+const ASSIGNMENT_PATTERN = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/;
+
+/** An MSYS / Git Bash drive path, `/c/Users/...`, which Node on Windows reads as `C:\c\Users\...`. */
+const MSYS_DRIVE_PATTERN = /^\/([A-Za-z])(\/|$)/;
+
 /** Bound on the upward walk to an existing ancestor — a cycle must not spin here. */
 const MAXIMUM_ANCESTOR_WALK_DEPTH = 64;
 
@@ -77,25 +102,69 @@ const FILE_WRITING_TOOLS = ["Edit", "Write"];
 /**
  * Split a shell command into its separate invocations. A guard that only reads
  * the first one is bypassed by `true && git push origin main`.
- *
- * A lone `&` separates too — `true & git push origin main` runs the push in the
- * foreground once `true` is backgrounded — but not inside a redirection such as
- * `2>&1`, `>&2` or `&>file`, which is why it carries the lookarounds.
  */
 function splitIntoInvocations(command)
 {
+    // A lone `&` separates too (`true & git push …`); `2>&1`, `>&2` and `&>` are redirections, not separators.
     return command.split(/&&|\|\||;|\||(?<![<>])&(?!>)|\n/);
 }
 
 /**
- * Split one invocation into words. Quotes carry no meaning for us — `"main"`,
- * `HEAD:"main"` and `main` are the same refspec to the shell — so every quote
- * character is dropped, not only one at each end of a word: stripping the ends
- * alone left `git push origin HEAD:"main"` free to push to main.
+ * Split one invocation into words, keeping a quoted run together — `cd "C:/My
+ * Repo"` names one directory, not two. Quotes carry no meaning beyond that:
+ * `"main"` and `main` are the same refspec.
  */
-function tokenize(invocation)
+function tokenizeInvocation(invocation)
 {
-    return invocation.trim().split(/\s+/).map(token => token.replace(/["']/g, "")).filter(Boolean);
+    const tokens = [];
+    let current = "";
+    let inToken = false;
+    let quote = null;
+
+    for (const character of invocation)
+    {
+        if (quote !== null)
+        {
+            if (character === quote)
+            {
+                quote = null;
+            }
+            else
+            {
+                current += character;
+            }
+
+            continue;
+        }
+
+        if (character === "\"" || character === "'")
+        {
+            quote = character;
+            inToken = true;
+        }
+        else if (/\s/.test(character))
+        {
+            if (inToken)
+            {
+                tokens.push(current);
+            }
+
+            current = "";
+            inToken = false;
+        }
+        else
+        {
+            current += character;
+            inToken = true;
+        }
+    }
+
+    if (inToken)
+    {
+        tokens.push(current);
+    }
+
+    return tokens;
 }
 
 /**
@@ -115,7 +184,7 @@ function tokenize(invocation)
  */
 function parseGitInvocation(invocation)
 {
-    const tokens = tokenize(invocation);
+    const tokens = tokenizeInvocation(invocation);
     let index = 0;
     let explicitDirectory = null;
 
@@ -164,8 +233,88 @@ function parseGitInvocation(invocation)
 }
 
 /**
+ * Expand `$NAME`, `${NAME}` and `%NAME%` in `text` — from the command's own
+ * earlier assignments first, then process.env. Returns `{ value }`, or
+ * `{ unresolved }` naming what could not be expanded.
+ */
+function expandVariables(text, shellVariables)
+{
+    let unexpandedReference = null;
+
+    const value = text.replace(VARIABLE_REFERENCE_PATTERN, (reference, braced, bare, percent) =>
+    {
+        const name = braced || bare || percent;
+        const variableValue = shellVariables.has(name) ? shellVariables.get(name) : process.env[name];
+
+        if (typeof variableValue !== "string")
+        {
+            unexpandedReference = unexpandedReference || reference;
+            return reference;
+        }
+
+        return variableValue;
+    });
+
+    if (unexpandedReference !== null)
+    {
+        return { unresolved: `${unexpandedReference} is not set, or not to anything the guard can evaluate` };
+    }
+
+    if (UNEVALUATED_SHELL_PATTERN.test(value))
+    {
+        return { unresolved: "shell expansion the guard cannot evaluate" };
+    }
+
+    return { value };
+}
+
+/**
+ * Expand the variables and a leading `~` in a `cd` or `git -C` target and anchor
+ * it to the directory the shell is in at that point. Returns `{ directory }` when
+ * the target names an existing directory, otherwise `{ unresolved }` saying why —
+ * never a guess. A guess is what refused commits in a scratch clone: an unexpanded
+ * `$P` named nothing, and the walk up from nothing reached the main checkout.
+ */
+function resolveTargetDirectory(target, baseDirectory, shellVariables)
+{
+    const expansion = expandVariables(target, shellVariables);
+
+    if (expansion.unresolved !== undefined)
+    {
+        return { unresolved: `${target} (${expansion.unresolved})` };
+    }
+
+    let expanded = expansion.value;
+
+    if (expanded === "~" || /^~[\\/]/.test(expanded))
+    {
+        expanded = path.join(os.homedir(), expanded.slice(1));
+    }
+
+    if (process.platform === "win32")
+    {
+        expanded = expanded.replace(MSYS_DRIVE_PATTERN, "$1:/");
+    }
+
+    if (!path.isAbsolute(expanded) && baseDirectory === null)
+    {
+        return { unresolved: `${target} (relative to a directory that could not be resolved)` };
+    }
+
+    const directory = path.resolve(baseDirectory || process.cwd(), expanded);
+
+    if (!fileSystem.existsSync(directory))
+    {
+        return { unresolved: `${target} (${directory} does not exist)` };
+    }
+
+    return { directory };
+}
+
+/**
  * Walk the invocations of one shell command in order and return the git ones,
- * each tagged with the directory it will actually run in.
+ * each tagged with the directory it will actually run in — or, when that cannot
+ * be determined, with the target that could not be resolved.
  *
  * Order matters because `cd` persists: in `cd <main-checkout> && git commit`, the
  * commit lands on main even though the shell started in a worktree. Reading the
@@ -173,27 +322,46 @@ function parseGitInvocation(invocation)
  * invocation *runs*, and a guard that trusts a directory the operation has
  * already left is not guarding it.
  *
- * `pushd`/`popd` are not tracked; they would need a directory stack, and nothing
- * in this repo's workflows uses them. A `cd` whose target cannot be determined
- * clears the running directory, so resolution falls back rather than trusting a
- * stale one.
+ * Assignments persist too: `P=/tmp/scratch && git -C "$P" commit` is resolved
+ * from the `P` set before it. `pushd`/`popd` are not tracked; they would need a
+ * directory stack, and nothing in this repo's workflows uses them.
  */
 function parseCommandChain(command, startDirectory)
 {
     const gitInvocations = [];
-    let runningDirectory = startDirectory;
+    const shellVariables = new Map();
+    let runningDirectory = startDirectory || process.cwd();
+    let runningUnresolved = null;
 
     for (const invocation of splitIntoInvocations(command))
     {
-        const tokens = tokenize(invocation);
+        const tokens = tokenizeInvocation(invocation);
+        const assignmentTokens = tokens[0] === "export" ? tokens.slice(1) : tokens;
+
+        if (assignmentTokens.length > 0 && assignmentTokens.every(token => ASSIGNMENT_PATTERN.test(token)))
+        {
+            for (const token of assignmentTokens)
+            {
+                const [, name, value] = token.match(ASSIGNMENT_PATTERN);
+                const expansion = expandVariables(value, shellVariables);
+
+                // Recorded even when it cannot be evaluated, so a later `$NAME` is
+                // reported as unresolvable rather than read from process.env.
+                shellVariables.set(name, expansion.unresolved === undefined ? expansion.value : null);
+            }
+
+            continue;
+        }
 
         if (tokens[0] === "cd")
         {
-            const target = tokens[1];
+            const target = tokens[1] === undefined ? "~" : tokens[1];
+            const resolution = target === "-"
+                ? { unresolved: "cd - (the previous directory is not tracked)" }
+                : resolveTargetDirectory(target, runningUnresolved === null ? runningDirectory : null, shellVariables);
 
-            runningDirectory = target
-                ? path.resolve(runningDirectory || process.cwd(), target)
-                : null;
+            runningDirectory = resolution.directory || null;
+            runningUnresolved = resolution.unresolved || null;
 
             continue;
         }
@@ -205,11 +373,23 @@ function parseCommandChain(command, startDirectory)
             continue;
         }
 
+        let directory = runningDirectory;
+        let unresolvedTarget = runningUnresolved;
+
+        if (parsed.directory !== null)
+        {
+            const resolution = resolveTargetDirectory(parsed.directory, runningUnresolved === null ? runningDirectory : null, shellVariables);
+
+            directory = resolution.directory || null;
+            unresolvedTarget = resolution.unresolved || null;
+        }
+
         gitInvocations.push(
         {
             subcommand: parsed.subcommand,
             args: parsed.args,
-            directory: parsed.directory || runningDirectory,
+            directory,
+            unresolvedTarget,
         });
     }
 
@@ -351,6 +531,23 @@ function resolveGoverningDirectory(toolInput, payloadWorkingDirectory, explicitD
     return payloadWorkingDirectory || process.env.CLAUDE_PROJECT_DIR || process.cwd();
 }
 
+/**
+ * The sentence a refusal carries when it was judged by the session's directory
+ * because the operation's own target could not be resolved. Without it the
+ * person sees "on main" about a clone that is not, and cannot tell why.
+ */
+function describeUnresolvedTarget(invocation)
+{
+    if (!invocation || invocation.unresolvedTarget === null)
+    {
+        return "";
+    }
+
+    return " The target directory could not be resolved: " + invocation.unresolvedTarget +
+        ". It was judged by the session's own directory instead, which is on main — " +
+        "use a literal path if the operation is meant for another checkout.";
+}
+
 function denyWithReason(reason)
 {
     const response =
@@ -407,12 +604,19 @@ for (const invocation of gitInvocations.filter(candidate => candidate.subcommand
     const pushesHead = refspecs.some(refspec => refspec === "HEAD" || refspec === "+HEAD");
 
     if (refspecs.some(refspec => MAIN_REFSPEC_PATTERN.test(refspec))
-        || flags.some(flag => PUSH_EVERYTHING_FLAGS.has(flag))
-        || ((noRefspecGiven || pushesHead) && getCurrentBranch(pushDirectory, payloadWorkingDirectory) === "main"))
+        || flags.some(flag => PUSH_EVERYTHING_FLAGS.has(flag)))
     {
         denyWithReason(
             "Refuse to push to main — main is reached only through a pull request " +
             "(see .claude/rules/git-workflow.md)."
+        );
+    }
+
+    if ((noRefspecGiven || pushesHead) && getCurrentBranch(pushDirectory, payloadWorkingDirectory) === "main")
+    {
+        denyWithReason(
+            "Refuse to push to main — main is reached only through a pull request " +
+            "(see .claude/rules/git-workflow.md)." + describeUnresolvedTarget(invocation)
         );
     }
 
@@ -444,17 +648,21 @@ if (!isFileWritingTool && !isGitCommit)
 // first meant `git -C <worktree> commit && git commit` was governed by the
 // worktree alone while the second commit landed on main — and a `-C` pointing
 // nowhere disarmed the guard just as well. Guard 1 loops for the same reason.
-const governingDirectories = isFileWritingTool
-    ? [resolveGoverningDirectory(toolInput, payloadWorkingDirectory, null)]
+const governedOperations = isFileWritingTool
+    ? [{ directory: resolveGoverningDirectory(toolInput, payloadWorkingDirectory, null), invocation: null }]
     : gitInvocations
         .filter(invocation => invocation.subcommand === "commit")
-        .map(invocation => resolveGoverningDirectory(toolInput, payloadWorkingDirectory, invocation.directory));
+        .map(invocation => (
+        {
+            directory: resolveGoverningDirectory(toolInput, payloadWorkingDirectory, invocation.directory),
+            invocation,
+        }));
 
-const landsOnMain = governingDirectories.some(
-    directory => getCurrentBranch(directory, payloadWorkingDirectory) === "main"
+const operationOnMain = governedOperations.find(
+    operation => getCurrentBranch(operation.directory, payloadWorkingDirectory) === "main"
 );
 
-if (!landsOnMain)
+if (operationOnMain === undefined)
 {
     process.exit(0);
 }
@@ -471,7 +679,7 @@ if (isGitCommit)
 {
     denyWithReason(
         "Refuse to commit on main — create a feature branch first " +
-        "(see .claude/rules/git-workflow.md)."
+        "(see .claude/rules/git-workflow.md)." + describeUnresolvedTarget(operationOnMain.invocation)
     );
 }
 
