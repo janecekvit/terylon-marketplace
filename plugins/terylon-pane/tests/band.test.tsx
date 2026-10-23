@@ -109,8 +109,8 @@ test('not allowed: the band says Claude Code refused, and Open opens the pane, w
 
   const pane = await $.ui.mount({ plugin: 'terylon-pane', surface: 'desktop', component: 'Pane', requestId: 'terylon', props: PANE_PROPS })
   expect(await pane.find({ type: 'Text', text: exact("Claude Code refused the pane's call") })).toBeDefined()
-  expect(await pane.find({ type: 'Markdown', text: /permissions/ })).toBeDefined()
-  expect((await pane.find({ key: 'tab-queue' }))?.props.label).toBe('● Queue')
+  expect((await pane.find({ type: 'Code', text: /permissions/ }))?.props.language).toBe('json')
+  expect((await pane.find({ key: 'tab-queue' }))?.props.variant).toBe('primary')
   expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Status ⚠')
   expect(await pane.find({ type: 'Text', text: /^Reason: / })).toBeDefined()
 })

@@ -8,10 +8,11 @@ export const SERVER = 'plugin:terylon-os:terylon'
 
 export const BASE = 'https://terylon.example.ts.net'
 
+// A pane as wide as the canvas's 520 px: wide enough for the stepper of eight (STEPPER_COLUMNS).
 export const PANE_PROPS = {
   title: 'Terylon',
   isFocused: false,
-  bodyColumns: 48,
+  bodyColumns: 64,
   placement: 'dock',
   scroll: { top: 0, bodyRows: 40 },
   view: {},
@@ -209,10 +210,11 @@ export const STORY_327 = {
 }
 
 // The world beneath the plugin: the clock, the store, the environment, and Terylon at /mcp.
-export function world(on: On, options: { store?: Record<string, unknown>; now?: number } = {}): World & { clock: ReturnType<typeof mock.clock> } {
+// `env` adds to the environment: TERYLON_PANE_PROOFS turns on a drawing Desktop has to prove first (S32).
+export function world(on: On, options: { store?: Record<string, unknown>; now?: number; env?: Record<string, string> } = {}): World & { clock: ReturnType<typeof mock.clock> } {
   const clock = mock.clock(on, { now: options.now ?? Date.parse('2026-10-11T22:00:00Z') })
   mock.store(on, options.store ?? {})
-  mock.env(on, { TERYLON_URL: BASE })
+  mock.env(on, { TERYLON_URL: BASE, ...(options.env ?? {}) })
   const state: World = {
     calls: [],
     prompts: [],
@@ -314,7 +316,49 @@ export function world(on: On, options: { store?: Record<string, unknown>; now?: 
 
 export const SESSION = { cwd: '/work', surface: 'desktop', isInteractive: true } as const
 
+// A dock of about 435 px, as the owner's walk of 1.2.0 had it: rows and gauges as wide, the stepper compact.
+export const MID_PANE_PROPS = { ...(PANE_PROPS as Record<string, unknown>), bodyColumns: 52 } as never
+
+// The pane in the narrow dock (the S32 canvas's 360 px board): fewer body columns than NARROW_COLUMNS.
+export const NARROW_PANE_PROPS = { ...(PANE_PROPS as Record<string, unknown>), bodyColumns: 36 } as never
+
+// Every Svg the drawing holds: its markup and its alt.
+export async function pictures(ui: { findAll: (query: { type?: string }) => Promise<{ props: Record<string, unknown> }[]> }): Promise<{ source: string; alt: string; isInteractive: unknown; height: unknown }[]> {
+  return (await ui.findAll({ type: 'Svg' })).map(node => ({ source: String(node.props.source), alt: String(node.props.alt), isInteractive: node.props.isInteractive, height: node.props.height }))
+}
+
 // The band's props as the engine passes them; a survey makes it yield.
 export function bandProps(hasSurvey = false) {
   return { hasSurvey, isWorking: false, maxRows: 3, bodyColumns: 80, scroll: { top: 0, bodyRows: 3 }, view: {} } as never
+}
+
+// The chip a row or the story's head draws: its word's colour, its dot's colour (the kind's), its background and size.
+type Described = { type?: string; props?: Record<string, unknown>; children?: unknown[]; text?: string }
+
+function chipIn(node: unknown): { word: unknown; dot: unknown; background: unknown; size: unknown } | null {
+  if (node === null || typeof node !== 'object') {
+    return null
+  }
+
+  const element = node as Described
+  const children = Array.isArray(element.children) ? element.children : []
+  const dot = children.find((child): child is Described => typeof child === 'object' && child !== null && (child as Described).type === 'Text' && ((child as Described).children ?? []).join('') === '●')
+
+  if (element.type === 'Text' && dot !== undefined) {
+    return { word: element.props?.color, dot: dot.props?.color, background: element.props?.backgroundColor, size: element.props?.size }
+  }
+
+  for (const child of children) {
+    const found = chipIn(child)
+
+    if (found !== null) {
+      return found
+    }
+  }
+
+  return null
+}
+
+export async function chipOf(ui: { find: (query: { key?: string }) => Promise<unknown> }, key: string): Promise<{ word: unknown; dot: unknown; background: unknown; size: unknown } | null> {
+  return chipIn(await ui.find({ key }))
 }
