@@ -4,7 +4,9 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { GATES, NOTICES, PANE_PROPS, SESSION, STORY_333, bandProps, exact, world } from './fixtures'
+import { SVG_COLOURS } from '../hooks/drawing'
+
+import { GATES, NOTICES, PANE_PROPS, SESSION, STORY_333, bandProps, exact, pictures, world } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -29,16 +31,15 @@ test('the phases are the stage Terylon reports, never the timeline: a timeline t
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'story-333' })
 
-  expect(await ui.find({ type: 'Text', text: exact('✓ Plan · planner') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: exact('● Develop · developer') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: exact('○ Pull request') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: exact('○ Verified in its PR environment') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: exact('2 of 8') })).toBeDefined()
+  expect((await pictures(ui))[0]?.alt).toBe('Admitted, Plan done; Develop now; Review, Tests, Pull req., Verified, Merge to come')
+  expect((await ui.find({ type: 'Text', text: exact('Develop') }))?.props.color).toBe('suggestion')
+  expect((await ui.find({ type: 'Text', text: exact('Pull req.') }))?.props.color).toBe('subtle')
+  expect(await ui.find({ type: 'Text', text: exact('3 of 8') })).toBeDefined()
 
   // THE RUN'S OWN AGENT, with no list: its words for the step, its tokens.
   expect(await ui.find({ type: 'Text', text: exact('main agent · Develop') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('Writing the route') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /· 42 k tokens ·/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('42 k') })).toBeDefined()
 })
 
 test('a story Terylon reports no stage for draws no phase as now, and no one as working', async ($, on) => {
@@ -54,6 +55,21 @@ test('a story Terylon reports no stage for draws no phase as now, and no one as 
   expect(await ui.find({ type: 'Text', text: exact('✓ Admitted to a slot') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('● ') })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: exact('Now working') })).toBeUndefined()
+
+  // THE SAME ON THE DESKTOP (S32): the stepper and the running row's segments draw no node as now, in no colour of
+  // now, and say so in their alt; the labels under the stepper have none in the colour of now either.
+  const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await desktop.press({ key: 'back' })
+  const segments = (await pictures(desktop)).find(item => /phase/i.test(item.alt))
+  expect(segments?.alt).toBe('1 of 8 phases done')
+  expect(segments?.source).not.toContain(SVG_COLOURS.now)
+  await desktop.press({ key: 'story-333' })
+  const [stepper] = await pictures(desktop)
+  expect(stepper?.alt).toBe('Admitted done; Plan, Develop, Review, Tests, Pull req., Verified, Merge to come')
+  expect(stepper?.source).not.toContain(SVG_COLOURS.now)
+  const labels = ['Admitted', 'Plan', 'Develop', 'Review', 'Tests', 'Pull req.', 'Verified', 'Merge']
+  expect((await desktop.findAll({ type: 'Text' })).filter(node => labels.includes(node.text) && node.props.color === 'suggestion')).toEqual([])
+  expect(await desktop.find({ type: 'Text', text: exact('1 of 8') })).toBeDefined()
 })
 
 test('a subagent at work is named with how many more are out, and its stage beside it', async ($, on) => {
@@ -68,8 +84,14 @@ test('a subagent at work is named with how many more are out, and its stage besi
   await ui.press({ key: 'story-333' })
 
   expect(await ui.find({ type: 'Text', text: exact('code-reviewer +2 · Review') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: exact('● Review · reviewer') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: exact("$0.40 of the story's $8 · 950 tokens · 1 h 0 min since start") })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: exact('Review') }))?.props.color).toBe('suggestion')
+  expect(await ui.find({ type: 'Text', text: exact('$0.40') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('950') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('1 h 0 min') })).toBeDefined()
+
+  const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await terminal.find({ type: 'Text', text: exact('● Review · reviewer') })).toBeDefined()
+  expect(await terminal.find({ type: 'Text', text: exact("$0.40 of the story's $8 · 950 tokens · 1 h 0 min since start") })).toBeDefined()
 })
 
 test('a notice is marked handled from the Bell tab through notice_handle, and the bell and the band drop it at once', async ($, on) => {

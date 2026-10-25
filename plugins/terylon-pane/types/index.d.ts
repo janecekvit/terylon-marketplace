@@ -21,6 +21,10 @@ export type PaneRunningItem = {
   fraction: number | null
   isStuck: boolean
   isVerifying: boolean
+  // The eight phases from progress.stage, as the story's own screen draws them (S32): none is now without a stage.
+  phases: PanePhase[]
+  // "Tests · tester · step 5 of 9": the stage, who works in it and the step, or null with no stage reported.
+  stageLine: string | null
 }
 
 export type PaneQueuedItem = { story: number; title: string; detail: string; isHeld: boolean }
@@ -79,7 +83,17 @@ export type PaneView = { stack: PaneScreen[] }
 
 export type PanePhase = { label: string; role: string | null; detail: string; status: 'done' | 'now' | 'next' }
 
-export type PaneWorking = { agent: string; stage: string; step: string; fraction: number | null; spend: string }
+export type PaneWorking = {
+  agent: string
+  stage: string
+  step: string
+  fraction: number | null
+  spend: string
+  // The run's numbers drawn large on the desktop (S32): the spend, the tokens, the time since start.
+  numbers: { value: string; label: string }[]
+  spentUsd: number
+  budgetUsd: number | null
+}
 
 export type PaneCheck = { name: string; isPass: boolean; detail: string }
 
@@ -91,6 +105,12 @@ export type PaneStory = {
   sentence: string | null
   title: string
   meta: string
+  // The meta's parts, drawn apart on the desktop (S32): the time tabular, the branch monospaced.
+  // "running 12 h 0 min", or "blocked for 2 h 5 min": the time a story's header names, by its state.
+  running: string | null
+  attempt: number
+  branch: string | null
+  model: string | null
   state: string
   stateText: string
   stateTone: 'success' | 'warning' | 'suggestion' | 'subtle'
@@ -119,6 +139,7 @@ export type PaneAdd = {
   criteria: string
   goal: string
   after: string
+  size: string
   goals: PaneChoice[]
   stories: PaneChoice[]
   sentence: string | null
@@ -135,7 +156,7 @@ export type PaneAnswer = {
 
 export type PaneGoalItem = { id: number; title: string; priority: string; state: string; questions: number; stories: string }
 
-export type PanePlanStory = { id: number; index: number; title: string; detail: string; criteria: string[] }
+export type PanePlanStory = { id: number; index: number; title: string; detail: string; criteria: string[]; after: number[]; size: string; estimate: string | null }
 
 export type PanePlan = {
   id: number
@@ -156,6 +177,10 @@ export type PaneGoals = {
   closed: PaneGoalItem[]
   plans: PanePlan[]
   draft: string
+  // The new goal's priority (1–4) and target, as goal_add takes them (S32).
+  priority: string
+  target: string
+  targets: PaneChoice[]
   adding: 'idle' | 'sending' | 'added' | 'refused'
   addSentence: string | null
 }

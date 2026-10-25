@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terylon Pane redesign (S32, v3)</title>
+<style>
+:root{
+  --canvas:#f5f4ef; --canvas-ink:#1f1e1d; --canvas-muted:#6b6a68; --canvas-line:#e2e0d8;
+  --bg:#1a1a19; --raised:#222221; --chip:#2e2d2b; --line:#3a3936; --line-soft:#2e2d2b;
+  --text:#e8e6e3; --soft:#b4b2ad; --muted:#8f8d88;
+  --blue:#7aa7ff; --amber:#e3a03f; --green:#4caf72; --red:#e5534b; --purple:#a98bf0;
+  --amber-tint:rgba(227,160,63,.08); --blue-tint:rgba(122,167,255,.07); --red-tint:rgba(229,83,75,.08);
+}
+*{box-sizing:border-box}
+html{background:var(--canvas);color:var(--canvas-ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+body{margin:0;padding:40px 48px 80px;display:flex;flex-direction:column;gap:56px}
+header.intro{max-width:1100px}
+header.intro h1{margin:0 0 8px;font-size:22px;font-weight:600}
+header.intro p{margin:6px 0;color:#3b3a38;max-width:980px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:12px;font-size:13px;color:var(--canvas-muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.board h2{margin:0 0 6px;font-size:13px;font-weight:500;color:var(--canvas-muted);letter-spacing:.01em}
+.board .say{margin:0 0 14px;max-width:1080px;font-size:13px;color:#3b3a38}
+.row{display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap}
+.col{display:flex;flex-direction:column;gap:8px}
+.col > .cap{font-size:12px;color:var(--canvas-muted)}
+.pins{margin:14px 0 0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:6px 24px;max-width:1120px;font-size:12.5px;color:#3b3a38}
+.pins li{display:flex;gap:8px;align-items:baseline}
+.pin{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:17px;height:17px;border-radius:50%;background:#d97757;color:#fff;font:600 10.5px/1 system-ui,sans-serif;font-style:normal;vertical-align:middle}
+.pane .pin{margin-left:4px}
+.prove{color:#a35a00;font-weight:500}
+
+/* ── the pane as Claude Desktop draws it, dark theme ── */
+.pane{width:520px;background:var(--bg);color:var(--text);border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.06);font-size:14px}
+.pane.narrow{width:360px}
+.chrome{display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid var(--line-soft);color:var(--muted);font-size:12.5px}
+.chrome b{color:var(--text);font-weight:500}
+.body{padding:14px 18px 16px;display:flex;flex-direction:column;gap:14px}
+.narrow .body{padding:12px 12px 14px;gap:12px}
+
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tab{display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--line);border-radius:7px;color:var(--soft);font:inherit;font-size:13px;padding:4px 10px}
+.tab.on{background:var(--text);border-color:var(--text);color:var(--bg);font-weight:600}
+.tab .n{font-variant-numeric:tabular-nums;border-radius:9px;padding:0 6px;font-size:11.5px;line-height:17px;background:var(--chip);color:var(--amber)}
+.tab .w{color:var(--amber)}
+.context{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:12.5px;color:var(--muted)}
+.context a{color:var(--blue);text-decoration:none;font-size:13px}
+.btn{display:inline-flex;align-items:center;gap:6px;background:var(--chip);border:none;border-radius:7px;color:var(--text);font:inherit;font-size:13px;padding:5px 11px;white-space:nowrap}
+.btn.primary{background:var(--text);color:var(--bg);font-weight:600}
+.btn.ghost{background:transparent;color:var(--muted);padding:5px 4px}
+.btn.small{font-size:12px;padding:3px 9px}
+.link{color:var(--blue);text-decoration:none;font-size:13px;white-space:nowrap}
+
+.card{background:var(--raised);border:1px solid var(--line-soft);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.card.wait{background:linear-gradient(var(--amber-tint),var(--amber-tint)),var(--raised);border-color:rgba(227,160,63,.35)}
+.card.bad{background:linear-gradient(var(--red-tint),var(--red-tint)),var(--raised);border-color:rgba(229,83,75,.35)}
+.card.quiet{background:transparent;border-style:dashed}
+.card-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.h{font-size:15.5px;font-weight:600}
+.h .c{font-variant-numeric:tabular-nums;font-weight:600}
+.hint{font-size:12px;color:var(--muted)}
+.title{font-size:19px;font-weight:600;line-height:1.25}
+.foot{font-size:12px;color:var(--muted)}
+.cap2{font-size:11px;color:var(--muted);letter-spacing:.02em}
+.mono{font-family:ui-monospace,"SF Mono","Cascadia Mono",Consolas,monospace;font-size:12.5px}
+.tab-n{font-variant-numeric:tabular-nums}
+.big{font-size:19px;font-weight:600;font-variant-numeric:tabular-nums}
+
+/* a row is ONE Button with children: chip, title, dim meta */
+.rows{display:flex;flex-direction:column;gap:2px;margin:0 -8px}
+.r{position:relative;display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:7px;min-width:0}
+.r.hov{background:#2a2a28}
+.chipk{flex-shrink:0;width:64px;font-size:11.5px;color:var(--muted)}
+.chipk.f{display:inline-block;width:auto;border-radius:5px;padding:1px 7px;background:var(--chip)}
+.chipk.amber{color:var(--amber)} .chipk.blue{color:var(--blue)} .chipk.green{color:var(--green)} .chipk.purple{color:var(--purple)} .chipk.red{color:var(--red)}
+.rt{flex-grow:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rm{flex-shrink:0;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.rm.amber{color:var(--amber)} .rm.green{color:var(--green)}
+.reveal{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:#33322f;border:1px solid var(--line);border-radius:6px;padding:2px 8px;font-size:12px;color:var(--blue);box-shadow:0 2px 8px rgba(0,0,0,.35)}
+.run{display:flex;flex-direction:column;align-items:stretch;gap:6px;padding:8px;margin:0 -8px;border-radius:7px}
+.run .top{display:flex;justify-content:space-between;gap:10px;align-items:baseline;width:100%}
+.run .sub{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--soft)}
+.gauges{display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.gauges span{display:inline-flex;align-items:center;gap:7px;font-variant-numeric:tabular-nums}
+.narrow .rm.hide-n{display:none}
+.stack{display:flex;flex-direction:column;gap:6px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:13px}
+.kv dt{color:var(--muted)} .kv dd{margin:0}
+.nums{display:flex;gap:22px;flex-wrap:wrap}
+.nums div{display:flex;flex-direction:column;gap:1px}
+.ok{color:var(--green)} .warn{color:var(--amber)} .err{color:var(--red)} .blue{color:var(--blue)} .purple{color:var(--purple)}
+.quote{border-left:2px solid var(--line);padding:2px 0 2px 10px;color:var(--soft);font-size:13.5px}
+.choice{display:flex;gap:10px;align-items:baseline;width:100%;text-align:left;background:var(--chip);border:1px solid transparent;border-radius:8px;color:var(--text);font:inherit;font-size:13.5px;padding:7px 10px}
+.choice b{color:var(--blue);font-weight:600}
+.choice.picked{border-color:var(--blue);background:var(--blue-tint)}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:12px;color:var(--muted)}
+.input{background:#1c1c1b;border:1px solid var(--line);border-radius:8px;color:var(--text);font:inherit;padding:8px 10px;min-height:36px}
+.input.ta{min-height:86px;line-height:1.45}
+.input.ph{color:#6f6d69}
+.select{display:flex;justify-content:space-between;align-items:center;background:#1c1c1b;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:13.5px}
+.select::after{content:"⌄";color:var(--muted);margin-left:8px}
+.menu{color:var(--text);background:#2a2a28;border:1px solid var(--line);border-radius:8px;padding:4px;box-shadow:0 6px 18px rgba(0,0,0,.45);font-size:13px}
+.menu div{padding:5px 8px;border-radius:5px}
+.menu .sel{background:var(--chip)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.s27{border:1.5px dashed #6d5bd0;border-radius:8px;padding:8px 10px;color:#b9adf5;font-size:12px;background:rgba(109,91,208,.07)}
+.code{background:#141413;border:1px solid var(--line-soft);border-radius:8px;padding:9px 10px;font-family:ui-monospace,"SF Mono","Cascadia Mono",Consolas,monospace;font-size:12px;line-height:1.5;color:#d8d5cf;white-space:pre;overflow:hidden}
+.code .k{color:#9cc3ff} .code .s{color:#c3e88d} .code .p{color:#8f8d88}
+.tip{position:absolute;background:#f2f0ea;color:#1f1e1d;border-radius:6px;padding:5px 8px;font-size:11.5px;line-height:1.35;box-shadow:0 4px 14px rgba(0,0,0,.45);white-space:nowrap}
+.labels{display:grid;grid-template-columns:repeat(8,1fr);font-size:10.5px;color:var(--muted);text-align:center;gap:2px;margin-top:2px}
+.labels .now{color:var(--blue);font-weight:600}
+.labels .done{color:var(--soft)}
+.tl{display:grid;grid-template-columns:44px 72px 1fr;gap:3px 10px;font-size:12.5px}
+.tl .t{color:var(--muted);font-variant-numeric:tabular-nums}
+.tl .who{color:var(--soft)}
+
+/* terminal board */
+.term{width:620px;background:#0f0f0e;color:#d6d3cd;border-radius:8px;padding:14px 16px;font-family:ui-monospace,"SF Mono","Cascadia Mono",Consolas,monospace;font-size:12.5px;line-height:1.55;white-space:pre;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.term .d{color:#7c7a75} .term .a{color:#e3a03f} .term .b{color:#7aa7ff} .term .g{color:#4caf72} .term .i{background:#d6d3cd;color:#0f0f0e}
+
+/* light-theme check */
+.pane.light{--bg:#ffffff;--raised:#f7f6f2;--chip:#ecebe6;--line:#dcdad3;--line-soft:#e6e4dd;--text:#1f1e1d;--soft:#4a4946;--muted:#75736e;--blue:#2f6fe0;--amber:#b56d00;--green:#23824a;--red:#c4322b;--purple:#6b47d6}
+.pane.light .r.hov{background:#efeee9}
+
+/* inventory board */
+table.inv{border-collapse:collapse;font-size:12.5px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.08);max-width:1120px}
+table.inv th,table.inv td{border-bottom:1px solid var(--canvas-line);padding:6px 10px;text-align:left;vertical-align:top}
+table.inv th{background:#efede6;font-weight:600;font-size:12px}
+.y{color:#1d7a43;font-weight:600} .yp{color:#a35a00;font-weight:600} .n{color:#a33a2b;font-weight:600} .l{color:#6b6a68;font-weight:600}
+@media (max-width:700px){body{padding:24px 16px}.row,.col{width:100%;min-width:0}.menu{max-width:100%}.pane,.pane.narrow{width:100% !important}.term{width:100%;overflow-x:auto}.labels{font-size:9px}.grid2{grid-template-columns:1fr !important}}
+</style>
+</head>
+<body>
+
+<header class="intro">
+  <h1>Terylon Pane — a redesign on what Claude Desktop 2.1.304 can do (S32 #370, v3)</h1>
+  <p>Builds on S15 v2 (the band and the pane, 1.1.2 from PR 219). <b>The content and the rules do not change</b>: the pane shows, asks, answers and sends, and never approves; merge and the other gates stay a link into the console; the band is one line and the status line tells the health. What changes is the <b>drawing</b>: since 2.1.295–2.1.299 a mod in Desktop can set font size and weight, tabular figures, named spacing, a row as one button with a chip, <code>Svg</code>, <code>Select</code>, <code>Code</code> and a multi-line field.</p>
+  <p>The pane's texts are in English, as in 1.1.x (from <code>hooks/copy.ts</code>); the captions around the boards are design notes. Pane width 520 px, as in S15 v2; narrow dock 360 px. Every board has numbered pins: which API element draws what. <span class="prove">In orange</span> = present in the declarations, but phase 2 must first verify it on Desktop 2.1.304; it has a fallback, which is the 1.1.2 drawing.</p>
+  <div class="legend">
+    <span><i class="pin">1</i> API element (list below the board)</span>
+    <span><span class="s27" style="padding:1px 8px">S27</span> the place where S27 (#363) draws its actions — S32 leaves it free</span>
+    <span>Inventory with sources: <code>S32-mod-api-inventory.md</code> next to this file</span>
+  </div>
+</header>
+
+<!-- ═════════════ 0 · INVENTORY SUMMARY ═════════════ -->
+<section class="board">
+  <h2>S32 · inventory summary — what Desktop 2.1.304 and Claude Code 2.1.308 allow and 1.1.2 does not use</h2>
+  <p class="say">Source: the <code>claude-code.d.ts</code> declarations from the 2.1.304 (Desktop) and 2.1.308 (current) packages, the 2.1.295–2.1.308 changelog, <code>claude plugin validate</code> of 1.1.2 under 2.1.304 (passed). The full text, with links, is in the inventory.</p>
+  <div style="overflow-x:auto;max-width:100%"><table class="inv">
+    <tr><th>Area</th><th>Capability</th><th>Since</th><th>For the pane</th><th>Where on the canvas</th></tr>
+    <tr><td>Layout</td><td>Spacing <code>xs–xl</code> (Desktop has its own scale), <code>padding</code>, filled cards</td><td>2.1.299</td><td class="y">YES</td><td>everywhere</td></tr>
+    <tr><td>Layout</td><td><code>Pane.bodyColumns</code> → narrow form</td><td>≤2.1.296</td><td class="y">YES</td><td>queue 360 px</td></tr>
+    <tr><td>Layout</td><td>Box <code>hover</code> + <code>position:absolute</code> (reveals without shifting)</td><td>≤2.1.296</td><td class="yp">YES, verify</td><td>queue, hover</td></tr>
+    <tr><td>Layout</td><td><code>$.ui.open({ rows, columns })</code></td><td>2.1.296/305</td><td class="n">NO</td><td>terminal only</td></tr>
+    <tr><td>Components</td><td><code>Button</code> with children: chip + title + grey details = one click</td><td>2.1.295</td><td class="y">YES</td><td>every row</td></tr>
+    <tr><td>Components</td><td><code>Svg</code> (Desktop, not the terminal), <code>alt</code> required</td><td>≤2.1.296</td><td class="y">YES</td><td>phases, slots, spend</td></tr>
+    <tr><td>Components</td><td><code>Svg isInteractive</code> — tooltip <code>&lt;title&gt;</code></td><td>≤2.1.296</td><td class="yp">YES, verify</td><td>story, phases</td></tr>
+    <tr><td>Components</td><td><code>Select</code></td><td>≤2.1.296</td><td class="y">YES</td><td>new task, new goal</td></tr>
+    <tr><td>Components</td><td><code>Input rows</code> — multi-line field</td><td>2.1.301</td><td class="yp">YES, verify</td><td>answer, criteria</td></tr>
+    <tr><td>Components</td><td><code>Code</code> with highlighting</td><td>≤2.1.296</td><td class="y">YES</td><td>Status: allow rules</td></tr>
+    <tr><td>Components</td><td><code>Client</code> (its own module, frame clock)</td><td>≤2.1.296</td><td class="l">LATER</td><td>— (no Svg inside it)</td></tr>
+    <tr><td>Components</td><td><code>Raster</code>, <code>Image</code></td><td>≤2.1.296</td><td class="n">NO</td><td>terminal only</td></tr>
+    <tr><td>Theme</td><td>Text <code>size</code>, <code>weight</code>, <code>tabular</code>, <code>mono</code></td><td>2.1.299</td><td class="y">YES</td><td>everywhere</td></tr>
+    <tr><td>Theme</td><td>Additional theme keys <code>success</code>, <code>merged</code></td><td>≤2.1.296</td><td class="y">YES</td><td>done, merged</td></tr>
+    <tr><td>Theme</td><td>Colours inside <code>Svg</code> do not read the theme</td><td>—</td><td class="yp">limitation</td><td>the “light theme” board</td></tr>
+    <tr><td>Actions</td><td><code>ui.select</code>, <code>$.ui.focus</code>, <code>$.ui.scroll</code></td><td>≤2.1.296</td><td class="y">YES</td><td>answer, story</td></tr>
+    <tr><td>Actions</td><td><code>$.ui.notify</code>, <code>$.ui.copy</code></td><td>2.1.295</td><td class="n">NO</td><td>Desktop: no-surface / remote</td></tr>
+    <tr><td>Actions</td><td><code>$.ui.ask</code>, <code>$.ui.view</code>, audio, <code>prompt.change</code></td><td>≤2.1.300</td><td class="n">NO</td><td>—</td></tr>
+  </table></div>
+</section>
+
+<!-- ═════════════ 1 · BAND ═════════════ -->
+<section class="board">
+  <h2>v3 · the band above the prompt — content unchanged (the round-3 decision on #332), only tabular figures</h2>
+  <p class="say">The band stays one line, the button always <i>Open</i>. The only change: the numbers are <code>tabular</code>, so they do not jump at each poll every 30 s. Neither an Svg nor a second line belongs here.</p>
+  <div class="row">
+    <div class="pane" style="width:760px;max-width:100%">
+      <div class="body" style="padding:10px 14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13.5px">
+          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="color:var(--soft)">Terylon</span><span style="color:var(--muted)"> · Waiting </span><span class="warn tab-n">5</span><span style="color:var(--muted)"> · Running </span><span class="blue tab-n">2</span><span style="color:var(--muted)"> · Queue </span><span class="tab-n" style="color:var(--soft)">2</span><span style="color:var(--muted)"> · Bell </span><span class="warn tab-n">2</span><i class="pin">1</i></span>
+          <span class="btn ghost" style="color:var(--soft)">Open</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <ol class="pins"><li><i class="pin">1</i><span><code>Text tabular</code> on every number; colours are still only theme keys (<code>warning</code>, <code>suggestion</code>, <code>inactive</code>).</span></li></ol>
+</section>
+
+<!-- ═════════════ 2 · QUEUE ═════════════ -->
+<section class="board">
+  <h2>v3 · PROPOSED · pane: queue — 520 px and the narrow dock at 360 px</h2>
+  <p class="say">The same cards as S15 v2 (Waiting for you, Running, Queued, Done today, new task). New: <b>a row is one button</b> (kind chip, title, grey details on the right); the “Waiting” card is tinted, because it waits for you; a running story shows <b>8 phases</b> from <code>progress.stage</code> instead of one bar; the Running header carries the slots and today's spend as small gauges. Below 44 body columns (<code>bodyColumns</code>) the grey details hide under the title and the phases shrink to dots.</p>
+  <div class="row">
+    <div class="col"><span class="cap">520 px · Desktop, dark theme</span>
+    <div class="pane">
+      <div class="chrome"><b>Terylon</b><span>✕</span></div>
+      <div class="body">
+        <div class="tabs"><i class="pin">1</i>
+          <span class="tab on">Queue</span><span class="tab">Goals</span><span class="tab">Bell <span class="n">2</span></span><span class="tab">Memory</span><span class="tab">Status</span>
+        </div>
+        <div class="context"><a href="#">terylon</a><span style="display:flex;gap:10px;align-items:center"><span class="tab-n">connected · 2 s ago</span><span class="btn small">Refresh</span></span></div>
+
+        <div class="card wait"><i class="pin" style="align-self:flex-end;margin:-4px -4px -18px 0">2</i>
+          <div class="card-head"><span class="h">Waiting for you <span class="c warn">· 5</span></span><span class="hint">you decide in the console</span></div>
+          <div class="rows"><i class="pin" style="position:absolute;margin:8px 0 0 -14px">3</i>
+            <div class="r"><span class="chipk amber">question</span><span class="rt">Test1 — What should the Excel file contain?</span><span class="rm">07:10</span></div>
+            <div class="r"><span class="chipk amber">question</span><span class="rt">I want to create an Excel file — Do you already have the input data?</span><span class="rm">07:10</span></div>
+            <div class="r"><span class="chipk purple">merge</span><span class="rt">#327 Events since the last look</span><span class="rm">verified in pr-196</span></div>
+            <div class="r"><span class="chipk">plan</span><span class="rt">Plan 41 · Agentic OS · 3 stories</span><span class="rm">~$14</span></div>
+            <div class="r"><span class="chipk red">blocked</span><span class="rt">#329 Memory proposals</span><span class="rm amber">stopped</span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span class="h">Running <span class="c blue">· 2</span></span>
+            <span class="gauges"><i class="pin">4</i>
+              <span><svg width="46" height="10" viewBox="0 0 46 10" role="img" aria-label="2 of 4 slots"><rect x="0" y="1" width="10" height="8" rx="2" fill="#7aa7ff"/><rect x="12" y="1" width="10" height="8" rx="2" fill="#7aa7ff"/><rect x="24" y="1" width="10" height="8" rx="2" fill="none" stroke="#8f8d88" stroke-width="1"/><rect x="36" y="1" width="10" height="8" rx="2" fill="none" stroke="#8f8d88" stroke-width="1"/></svg>2/4 slots</span>
+              <span><svg width="64" height="6" viewBox="0 0 64 6" role="img" aria-label="$5.50 of $20 today"><rect x="0" y="0" width="64" height="6" rx="3" fill="#8f8d88" fill-opacity=".3"/><rect x="0" y="0" width="17.6" height="6" rx="3" fill="#7aa7ff"/></svg>$5.50 of $20</span>
+            </span>
+          </div>
+          <div class="run r hov" style="display:flex"><i class="pin" style="position:absolute;right:-6px;top:-6px">5</i>
+            <div class="top"><span>#333 Direct dispatch</span><span class="rm">5/8 · $2.10</span></div>
+            <svg width="100%" height="8" viewBox="0 0 456 8" preserveAspectRatio="none" role="img" aria-label="Phase 5 of 8: tests"><g>
+              <rect x="0" y="1" width="53" height="6" rx="3" fill="#4caf72"/><rect x="57" y="1" width="53" height="6" rx="3" fill="#4caf72"/><rect x="114" y="1" width="53" height="6" rx="3" fill="#4caf72"/><rect x="171" y="1" width="53" height="6" rx="3" fill="#4caf72"/>
+              <rect x="228" y="1" width="53" height="6" rx="3" fill="#7aa7ff"/>
+              <rect x="285" y="1" width="53" height="6" rx="3" fill="#8f8d88" fill-opacity=".3"/><rect x="342" y="1" width="53" height="6" rx="3" fill="#8f8d88" fill-opacity=".3"/><rect x="399" y="1" width="57" height="6" rx="3" fill="none" stroke="#a98bf0" stroke-width="1.2" stroke-dasharray="3 2"/></g></svg>
+            <div class="sub"><span>Tests · tester · step 5 of 9</span><span class="tab-n">6 h</span></div>
+          </div>
+          <div class="run r">
+            <div class="top"><span>#329 Memory proposals</span><span class="rm amber">stuck since 15:20</span></div>
+            <svg width="100%" height="8" viewBox="0 0 456 8" preserveAspectRatio="none" role="img" aria-label="Phase 7 of 8: verify, stuck"><g>
+              <rect x="0" y="1" width="53" height="6" rx="3" fill="#4caf72"/><rect x="57" y="1" width="53" height="6" rx="3" fill="#4caf72"/><rect x="114" y="1" width="53" height="6" rx="3" fill="#4caf72"/><rect x="171" y="1" width="53" height="6" rx="3" fill="#4caf72"/><rect x="228" y="1" width="53" height="6" rx="3" fill="#4caf72"/><rect x="285" y="1" width="53" height="6" rx="3" fill="#4caf72"/>
+              <rect x="342" y="1" width="53" height="6" rx="3" fill="#e3a03f"/><rect x="399" y="1" width="57" height="6" rx="3" fill="none" stroke="#a98bf0" stroke-width="1.2" stroke-dasharray="3 2"/></g></svg>
+            <div class="sub"><span>Verified in its PR environment · pr-197</span><span class="tab-n">$3.40</span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span class="h">Queued <span class="c" style="color:var(--soft)">· 2</span></span></div>
+          <div class="rows">
+            <div class="r"><span class="chipk">queued</span><span class="rt">#328 Owner's spec and plan</span><span class="rm">after #324</span></div>
+            <div class="r"><span class="chipk">held</span><span class="rt">#347 Logs</span><span class="rm amber">your choice</span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span class="h">Done today <span class="c ok">· 1</span></span></div>
+          <div class="rows">
+            <div class="r"><span class="chipk purple">merged</span><span class="rt">#341 S10a cleanup</span><span class="rm">14:20 · $5.60</span></div>
+          </div>
+        </div>
+
+        <div class="field"><label>New task for the leader</label>
+          <div style="display:flex;gap:8px"><span class="input ph" style="flex-grow:1">What to do…</span><span class="btn primary">Add</span></div>
+          <span class="foot">The task becomes a plan you approve in the console. The pane approves nothing.</span>
+        </div>
+        <span class="foot mono" style="color:var(--muted)">/terylon-pane · /terylon-memory</span>
+      </div>
+    </div></div>
+
+    <div class="col"><span class="cap">360 px · narrow dock (bodyColumns &lt; 44)</span>
+    <div class="pane narrow">
+      <div class="chrome"><b>Terylon</b><span>✕</span></div>
+      <div class="body">
+        <div class="tabs"><span class="tab on">Queue</span><span class="tab">Goals</span><span class="tab">Bell <span class="n">2</span></span><span class="tab">Memory</span><span class="tab">Status</span></div>
+        <div class="context"><a href="#">terylon</a><span class="tab-n">2 s ago</span></div>
+        <div class="card wait">
+          <div class="card-head"><span class="h">Waiting for you <span class="c warn">· 5</span></span></div>
+          <div class="rows">
+            <div class="r"><span class="chipk amber">question</span><span class="rt">Test1 — What should the Excel file contain?</span></div>
+            <div class="r"><span class="chipk purple">merge</span><span class="rt">#327 Events since the last look</span></div>
+            <div class="r"><span class="chipk">plan</span><span class="rt">Plan 41 · Agentic OS · 3 stories</span></div>
+            <div class="r"><span class="chipk red">blocked</span><span class="rt">#329 Memory proposals</span></div>
+            <div class="r"><span class="chipk amber">question</span><span class="rt">I want to create an Excel file — Do you already…</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="h">Running <span class="c blue">· 2</span></span><span class="hint tab-n">2/4 · $5.50</span></div>
+          <div class="run r"><div class="top"><span>#333 Direct dispatch</span><span class="rm">$2.10</span></div>
+            <svg width="120" height="8" viewBox="0 0 120 8" role="img" aria-label="Phase 5 of 8: tests"><g fill="#4caf72"><circle cx="4" cy="4" r="3.5"/><circle cx="20" cy="4" r="3.5"/><circle cx="36" cy="4" r="3.5"/><circle cx="52" cy="4" r="3.5"/></g><circle cx="68" cy="4" r="3.5" fill="#7aa7ff"/><g fill="#8f8d88" fill-opacity=".35"><circle cx="84" cy="4" r="3.5"/><circle cx="100" cy="4" r="3.5"/></g><circle cx="116" cy="4" r="3" fill="none" stroke="#a98bf0" stroke-width="1.2"/></svg>
+            <div class="sub"><span>Tests · 5 of 8</span></div></div>
+          <div class="run r"><div class="top"><span>#329 Memory proposals</span><span class="rm amber">stuck</span></div>
+            <svg width="120" height="8" viewBox="0 0 120 8" role="img" aria-label="Phase 7 of 8: verify, stuck"><g fill="#4caf72"><circle cx="4" cy="4" r="3.5"/><circle cx="20" cy="4" r="3.5"/><circle cx="36" cy="4" r="3.5"/><circle cx="52" cy="4" r="3.5"/><circle cx="68" cy="4" r="3.5"/><circle cx="84" cy="4" r="3.5"/></g><circle cx="100" cy="4" r="3.5" fill="#e3a03f"/><circle cx="116" cy="4" r="3" fill="none" stroke="#a98bf0" stroke-width="1.2"/></svg>
+            <div class="sub"><span>Verify · since 15:20</span></div></div>
+        </div>
+        <div class="card"><div class="card-head"><span class="h">Queued <span class="c" style="color:var(--soft)">· 2</span></span></div></div>
+        <div class="card"><div class="card-head"><span class="h">Done today <span class="c ok">· 1</span></span></div></div>
+        <div style="display:flex;gap:8px"><span class="input ph" style="flex-grow:1">What to do…</span><span class="btn primary">Add</span></div>
+      </div>
+    </div></div>
+  </div>
+  <ol class="pins">
+    <li><i class="pin">1</i><span>Tabs: <code>Button</code> with children (name + a count chip, <code>Text tabular</code> in the <code>warning</code> colour); the selected one <code>variant="primary"</code>; <code>hotkey</code> 1–5 when the pane holds the keyboard.</span></li>
+    <li><i class="pin">2</i><span>The “Waiting” card: <code>Box backgroundColor</code> + <code>borderColor</code> from the <code>warning</code> key (Desktop mutes it), <code>padding="md"</code>, <code>gap="sm"</code>; heading <code>Text size="heading" weight="semibold"</code>.</span></li>
+    <li><i class="pin">3</i><span>A row = <b>one <code>Button plain</code> with children</b>: kind chip (<code>Text size="caption"</code>), title (<code>wrap="truncate-end"</code>), grey detail (<code>tabular</code>); <code>key</code> = the subject's id. A click opens the subject as it does today; a separate ↗ is no longer needed (the link into the console is on the subject's card).</span></li>
+    <li><i class="pin">4</i><span>Slots and today's spend: two small <code>Svg</code> (alt “2 of 4 slots”, “$5.50 of $20 today”) + <code>Text tabular</code>. Data: <code>policy_get</code> and the briefing, unchanged. In the narrow dock, text only.</span></li>
+    <li><i class="pin">5</i><span>The running story's phases: an <code>Svg</code> of 8 segments from <code>progress.stage</code> — done in <code>success</code> green, now in blue, stuck in amber, merge dashed in purple (your gate). Without <code>progress.stage</code> no segment is “now” (rule #360). The line below it: phase · role · step.</span></li>
+  </ol>
+</section>
+
+<!-- ═════════════ 3 · HOVER ═════════════ -->
+<section class="board">
+  <h2>v3 · PROPOSED · queue: the mouse over a row — the link into the console appears without shifting the list</h2>
+  <p class="say">Hovering highlights the row and lays the link into the console over its right edge (merge ↗, plan ↗…). Nothing shifts. <span class="prove">Verify on Desktop 2.1.304</span> (Box <code>hover</code> and <code>position="absolute"</code>); if it does not work, 1.1.2 stays: the link on the subject's card, one click further.</p>
+  <div class="row">
+    <div class="pane">
+      <div class="body">
+        <div class="card wait">
+          <div class="card-head"><span class="h">Waiting for you <span class="c warn">· 5</span></span><span class="hint">you decide in the console</span></div>
+          <div class="rows">
+            <div class="r"><span class="chipk amber">question</span><span class="rt">Test1 — What should the Excel file contain?</span><span class="rm">07:10</span></div>
+            <div class="r hov"><span class="chipk purple">merge</span><span class="rt">#327 Events since the last look</span><span class="rm" style="visibility:hidden">verified in pr-196</span><span class="reveal">Merge in the console ↗</span><i class="pin" style="position:absolute;right:-22px">1</i></div>
+            <div class="r"><span class="chipk">plan</span><span class="rt">Plan 41 · Agentic OS · 3 stories</span><span class="rm">~$14</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <ol class="pins"><li><i class="pin">1</i><span>The row's keyed <code>Box</code> with <code>hover={{ backgroundColor }}</code>; inside it a <code>Box position="absolute" right={0} display="none" hover={{ display:"flex" }}</code> with a <code>Link</code>. A Link may not sit inside a <code>Button</code> (only text and <code>Text</code>), so it is a sibling of the row's button. Merge stays a <b>link</b>, never a button.</span></li></ol>
+</section>
+
+<!-- ═════════════ 4 · ONE STORY ═════════════ -->
+<section class="board">
+  <h2>v3 · PROPOSED · pane: one story — the phases as a stepper, “Now working” with big numbers</h2>
+  <p class="say">The same data as 1.1.2 (<code>story_get</code>, <code>work_in_flight</code>, <code>progress.stage/agent/tokens</code>). New: the story's title in large type, a stepper of 8 phases in <code>Svg</code> with labels in <code>Text</code> (Svg does not read the theme, so the words sit outside it), the run's numbers as a tabular triple, the spend against the story's budget as a bar. The actions on a story (Stop, Return, Unblock…) are drawn by S27 into the reserved place; today's 1.1.2 links stay there until S27 arrives.</p>
+  <div class="row">
+    <div class="pane">
+      <div class="chrome"><b>Terylon</b><span>✕</span></div>
+      <div class="body">
+        <div class="context"><span class="btn ghost" style="color:var(--blue)">‹ Back</span><span class="tab-n">12 s ago</span></div>
+        <div class="stack">
+          <span class="cap2">STORY · GOAL 3 · AGENTIC OS</span>
+          <span class="title">#333 Direct dispatch <i class="pin">1</i></span>
+          <span style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12.5px;color:var(--muted)"><span class="chipk f blue">running</span><span class="tab-n">running 6 h</span>·<span>attempt 2</span>·<span class="mono">feat/direct-dispatch</span>·<span>Opus 5.5</span></span>
+        </div>
+
+        <div class="card" style="position:relative">
+          <div class="card-head"><span class="h">Phases</span><span class="hint tab-n">5 of 8</span></div>
+          <div style="position:relative"><i class="pin" style="position:absolute;left:-26px;top:2px">2</i>
+            <svg width="100%" height="22" viewBox="0 0 456 22" role="img" aria-label="Admitted, Plan, Develop, Review done; Tests now; Pull request, Verified, Merge to come">
+              <line x1="14" y1="11" x2="442" y2="11" stroke="#8f8d88" stroke-opacity=".35" stroke-width="2"/>
+              <line x1="14" y1="11" x2="242" y2="11" stroke="#4caf72" stroke-width="2"/>
+              <g fill="#4caf72"><circle cx="14" cy="11" r="6"/><circle cx="71" cy="11" r="6"/><circle cx="128" cy="11" r="6"/><circle cx="185" cy="11" r="6"/></g>
+              <g stroke="#1a1a19" stroke-width="1.6" fill="none"><path d="M11 11l2 2 4-4"/><path d="M68 11l2 2 4-4"/><path d="M125 11l2 2 4-4"/><path d="M182 11l2 2 4-4"/></g>
+              <circle cx="242" cy="11" r="9" fill="#7aa7ff" fill-opacity=".25"/><circle cx="242" cy="11" r="6" fill="#7aa7ff"/>
+              <g fill="none" stroke="#8f8d88" stroke-opacity=".7" stroke-width="1.5"><circle cx="299" cy="11" r="5.5"/><circle cx="356" cy="11" r="5.5"/></g>
+              <rect x="436" y="5" width="12" height="12" transform="rotate(45 442 11)" fill="none" stroke="#a98bf0" stroke-width="1.5"/>
+            </svg>
+            <div class="tip" style="left:196px;top:-34px">Tests · tester · now<br><span style="color:#6b6a68">step 5 of 9</span><i class="pin">3</i></div>
+            <div class="labels"><span class="done">Admitted</span><span class="done">Plan</span><span class="done">Develop</span><span class="done">Review</span><span class="now">Tests</span><span>Pull req.</span><span>Verified</span><span style="color:var(--purple)">Merge</span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span class="h">Now working</span><span class="hint">tester · test</span></div>
+          <span>Step 5 of 9: tests</span>
+          <div class="nums"><i class="pin">4</i>
+            <div><span class="big">$2.10</span><span class="foot">of the story's $8</span></div>
+            <div><span class="big">1.4 M</span><span class="foot">tokens</span></div>
+            <div><span class="big">6 h 12 min</span><span class="foot">since start</span></div>
+          </div>
+          <svg width="100%" height="6" viewBox="0 0 456 6" preserveAspectRatio="none" role="img" aria-label="$2.10 of the story's $8"><rect width="456" height="6" rx="3" fill="#8f8d88" fill-opacity=".3"/><rect width="120" height="6" rx="3" fill="#7aa7ff"/></svg>
+        </div>
+
+        <div class="card wait">
+          <div class="card-head"><span class="h">Question from the run</span><span class="hint warn">waits for you</span></div>
+          <span class="quote">Should the dead run continue from the last commit?</span>
+          <div class="actions"><span class="btn primary">Answer</span><span class="link">Answer in the console ↗</span></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span class="h">What happened</span><span class="hint">newest first</span></div>
+          <div class="tl"><i class="pin" style="position:absolute;margin-left:-28px">5</i>
+            <span class="t">16:02</span><span class="who">tester</span><span>mutation “gate in allow rules” went red</span>
+            <span class="t">15:56</span><span class="who">review</span><span>security: allow-list holds no gate — OK</span>
+            <span class="t">15:41</span><span class="who">developer</span><span>task 7/7 green, commit <span class="mono">8a223a8</span></span>
+          </div>
+          <span class="foot" style="color:var(--blue)">12 more ▾</span>
+        </div>
+
+        <div class="s27">S27 (#363) draws the story's actions here, by its state — Stop · Return… · Unblock · Abandon… · Accept. Until then, 1.1.2: <i>Summarise in the session</i> · <i>Story in the console ↗</i> · <i>Stop in the console ↗</i>.</div>
+      </div>
+    </div>
+  </div>
+  <ol class="pins">
+    <li><i class="pin">1</i><span>Title <code>Text size="title" weight="semibold"</code>; the heading above it <code>size="caption"</code>; the branch <code>mono</code>; the state as a filled chip (<code>Box backgroundColor</code> + <code>Text suggestion</code>).</span></li>
+    <li><i class="pin">2</i><span>Stepper: <code>Svg</code> (the alt names the phases and their state), the labels below it in <code>Text</code>, in a row of 8 columns. The merge square = your gate. Merge stays a link into the console.</span></li>
+    <li><i class="pin">3</i><span>A phase's tooltip through <code>Svg isInteractive</code> and <code>&lt;title&gt;</code>: only what Terylon reports (phase, role, now/done, step). <span class="prove">Verify</span>; without it nothing is lost, the labels are under the stepper.</span></li>
+    <li><i class="pin">4</i><span>The run's numbers <code>Text size="title" tabular</code> + a <code>footnote</code> label; the bar of spend against the story's budget <code>Svg</code>.</span></li>
+    <li><i class="pin">5</i><span>Timeline: time <code>tabular</code>, who <code>inactive</code>, commit <code>mono</code>. Opening a story scrolls the view to “Now working” (<code>$.ui.scroll</code>).</span></li>
+  </ol>
+</section>
+
+<!-- ═════════════ 5 · ANSWER ═════════════ -->
+<section class="board">
+  <h2>v3 · PROPOSED · pane: answering the leader — the choices as buttons, the answer in a multi-line field</h2>
+  <p class="say">The flow as in 1.1.0 (S15 v2 “answer the leader from the pane”): a pressed choice fills in the answer, the field can be added to, <i>Answer</i> sends once (<code>question_answer</code>). New: the question as <code>Markdown</code> at a sensible size, the choices as wide buttons with a letter, a field of 4 rows. <span class="prove">Verify <code>Input rows</code> on Desktop</span> — the 2.1.301 changelog describes it in the terminal; otherwise the single-line field of 1.1.x stays.</p>
+  <div class="row">
+    <div class="pane">
+      <div class="chrome"><b>Terylon</b><span>✕</span></div>
+      <div class="body">
+        <div class="context"><span class="btn ghost" style="color:var(--blue)">‹ Back</span><span>question 1 of 3</span></div>
+        <div class="stack">
+          <span class="cap2">TEST1 · ASKED BY THE LEADER · 07:10</span>
+          <span style="font-size:15.5px;font-weight:600;line-height:1.35">What should the Excel file contain: what will it be used for, and which columns or sheets do you expect in it? <i class="pin">1</i></span>
+        </div>
+        <div class="stack"><i class="pin" style="align-self:flex-end;margin-bottom:-22px;margin-right:-20px">2</i>
+          <span class="choice picked"><b>a</b><span>Household budget — months in rows, categories in columns</span></span>
+          <span class="choice"><b>b</b><span>Invoice register — number, supplier, amount, due date</span></span>
+          <span class="choice"><b>c</b><span>Task overview — name, deadline, status</span></span>
+        </div>
+        <div class="field"><label>Answer (add what you want)</label><i class="pin" style="align-self:flex-end;margin:-20px -20px 0 0">3</i>
+          <div class="input ta">(a) Household budget — months in rows, categories in columns.<br>One sheet per year, a summary at the top.</div>
+        </div>
+        <div class="actions"><span class="btn primary">Answer</span><span class="btn">Talk it over with Claude in the session</span></div>
+        <span class="foot">An answer approves nothing, it completes the brief; plans, merges and stops stay in the console.</span>
+      </div>
+    </div>
+    <div class="col"><span class="cap">after sending</span>
+    <div class="pane" style="width:360px">
+      <div class="body">
+        <div class="card" style="border-color:rgba(76,175,114,.4)">
+          <span class="ok" style="font-weight:600">✓ Answer handed over · Test1 continues</span>
+          <span class="foot">The leader goes on; a blocked story returns to Running.</span>
+          <div class="actions"><span class="btn primary">Next question</span></div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+  <ol class="pins">
+    <li><i class="pin">1</i><span>The question as <code>Markdown</code> (its content is in Terylon's language and is not translated); the heading above it <code>Text size="caption"</code>.</span></li>
+    <li><i class="pin">2</i><span>Choices (a)/(b)/(c): <code>Button</code> with children (the letter <code>Text suggestion weight="semibold"</code> + the text), the selected one <code>variant="primary"</code>. A click only fills in the field; it sends nothing.</span></li>
+    <li><i class="pin">3</i><span><code>Input rows={4}</code>, <code>submitLabel="answer"</code>, <code>autoFocus</code>; when a question opens, <code>$.ui.focus</code> on the field. <span class="prove">Verify</span>; fallback <code>rows</code> 1.</span></li>
+  </ol>
+</section>
+
+<!-- ═════════════ 6 · GOALS ═════════════ -->
+<section class="board">
+  <h2>v3 · PROPOSED · pane: goals and plans — the priority as a chip, a plan as a chain of stories, a new goal with a priority</h2>
+  <p class="say">Data: <code>goals_list</code>, <code>plans_list</code>; a new goal: <code>goal_add</code> — it takes <code>priority</code> 1–4 (2 when none is given), hence the priority picker. Approving a plan stays in the console only (and, from S27, on the plan's card).</p>
+  <div class="row">
+    <div class="pane">
+      <div class="chrome"><b>Terylon</b><span>✕</span></div>
+      <div class="body">
+        <div class="tabs"><span class="tab">Queue</span><span class="tab on">Goals</span><span class="tab">Bell <span class="n">2</span></span><span class="tab">Memory</span><span class="tab">Status</span></div>
+        <div class="card">
+          <div class="card-head"><span class="h">Open goals <span class="c" style="color:var(--soft)">· 3</span></span><span class="hint">priority</span></div>
+          <div class="rows"><i class="pin" style="position:absolute;margin:8px 0 0 -14px">1</i>
+            <div class="r"><span class="chipk f amber" style="width:28px;text-align:center">P1</span><span class="rt">Agentic OS — the pane and the console agree</span><span class="rm">2 questions</span></div>
+            <div class="r"><span class="chipk f" style="width:28px;text-align:center">P2</span><span class="rt">Logs reach the store</span><span class="rm">running</span></div>
+            <div class="r"><span class="chipk f" style="width:28px;text-align:center">P3</span><span class="rt">Weekly cost summary</span><span class="rm">proposed</span></div>
+          </div>
+          <span class="foot">4 closed ▾</span>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="h">Plans</span><span class="hint">plans_list</span></div>
+          <div class="stack">
+            <div class="r" style="margin:0 -8px"><span class="chipk">plan</span><span class="rt">Plan 41 · Agentic OS · 3 stories</span><span class="rm">to approve · ~$14</span></div>
+            <div style="display:flex;align-items:center;gap:8px;padding-left:66px"><i class="pin" style="margin-left:-30px">2</i>
+              <svg width="150" height="14" viewBox="0 0 150 14" role="img" aria-label="Story 1, then 2 after 1, then 3 after 2"><g fill="none" stroke="#8f8d88" stroke-width="1.4"><circle cx="8" cy="7" r="5.5"/><circle cx="75" cy="7" r="5.5"/><circle cx="142" cy="7" r="5.5"/></g><g stroke="#8f8d88" stroke-opacity=".6" stroke-width="1.4"><line x1="15" y1="7" x2="64" y2="7"/><line x1="82" y1="7" x2="131" y2="7"/></g><g fill="#8f8d88" fill-opacity=".6"><path d="M64 4l5 3-5 3z"/><path d="M131 4l5 3-5 3z"/></g></svg>
+              <span class="foot">S ~$3 → M ~$5 → M ~$6</span>
+            </div>
+            <span class="link" style="padding-left:66px">Approve in the console ↗</span>
+          </div>
+        </div>
+        <div class="card quiet">
+          <span class="h" style="font-size:14px">New goal</span>
+          <div class="field"><span class="input ph">What you want done…</span></div>
+          <div class="grid2"><i class="pin" style="position:absolute;margin:8px 0 0 -26px">3</i>
+            <div class="field"><label>Priority</label><span class="select">2 · normal</span></div>
+            <div class="field"><label>Where</label><span class="select">Terylon's own list</span></div>
+          </div>
+          <div class="actions"><span class="btn primary">Add goal</span></div>
+          <span class="foot">The leader makes a plan of the goal, which you approve. Write a bigger goal out with Claude in the session (/terylon-os:add-goal).</span>
+        </div>
+      </div>
+    </div>
+    <div class="col"><span class="cap">the priority picker, open (Select)</span>
+      <div class="menu" style="width:200px"><div>1 · most urgent</div><div class="sel">2 · normal</div><div>3 · later</div><div>4 · someday</div></div>
+    </div>
+  </div>
+  <ol class="pins">
+    <li><i class="pin">1</i><span>A goal row = <code>Button</code> with children: a priority chip (<code>P1</code> <code>warning</code>, the others <code>inactive</code>), title, grey detail (questions or state).</span></li>
+    <li><i class="pin">2</i><span>A plan as a chain: an <code>Svg</code> from the order and the <code>after</code> of the stories in <code>plans_list</code>; size and estimate in <code>Text tabular</code>. The text fallback in the terminal: <code>1 → 2 → 3</code>.</span></li>
+    <li><i class="pin">3</i><span><code>Select</code> for the priority (the <code>priority</code> field of <code>goal_add</code>) and for the repository target (<code>target</code>, from the targets <code>goals_list</code> shows, or <code>list</code>).</span></li>
+  </ol>
+</section>
+
+<!-- ═════════════ 7 · NEW TASK ═════════════ -->
+<section class="board">
+  <h2>v3 · PROPOSED · new task — goal, “after what” and size picked from a list, criteria over several lines</h2>
+  <p class="say">The fields match <code>tasks_add</code>: <code>goal</code>, <code>after</code>, <code>size</code> (M, L, XL), <code>criteria</code>. 1.1.2 takes the goal and “after what” as text; here they are picked from what Terylon knows. The states after sending (handed over, refused, no answer within 10 s, leader paused) are unchanged.</p>
+  <div class="row">
+    <div class="pane">
+      <div class="chrome"><b>Terylon</b><span>✕</span></div>
+      <div class="body">
+        <div class="context"><span class="btn ghost" style="color:var(--blue)">‹ Back</span><span>New task</span></div>
+        <div class="field"><label>What to do</label><span class="input">Health: a Check now button</span></div>
+        <div class="field"><label>Criteria (optional)</label><i class="pin" style="align-self:flex-end;margin:-20px -20px 0 0">1</i>
+          <div class="input ta">The Status tab has Check now; it runs check_run once.<br>A second press within 10 s sends nothing.</div>
+        </div>
+        <div class="grid2" style="grid-template-columns:1.4fr 1fr .6fr"><i class="pin" style="position:absolute;margin:8px 0 0 -26px">2</i>
+          <div class="field"><label>Goal</label><span class="select">11 · Agentic OS</span></div>
+          <div class="field"><label>After</label><span class="select">—</span></div>
+          <div class="field"><label>Size</label><span class="select">M</span></div>
+        </div>
+        <div class="actions"><span class="btn primary">Hand to the leader</span><span class="btn ghost">Cancel</span></div>
+        <span class="foot">Write a whole set with its specification with Claude in the session; this is a quick one-line task.</span>
+      </div>
+    </div>
+  </div>
+  <ol class="pins">
+    <li><i class="pin">1</i><span><code>Input rows={3}</code>; one line = one criterion (semicolons today). <span class="prove">Verify</span>; fallback: semicolons, as in 1.1.2.</span></li>
+    <li><i class="pin">2</i><span>Three <code>Select</code>: goal (the open goals from <code>goals_list</code>), after what (<code>—</code> and the stories in the queue), size M/L/XL. On the phone (no <code>Select</code>), still “Add a task…” into the session.</span></li>
+  </ol>
+</section>
+
+<!-- ═════════════ 8 · BELL ═════════════ -->
+<section class="board">
+  <h2>v3 · PROPOSED · pane: bell — the source as a chip, the machine as a checklist, the 30-day numbers large</h2>
+  <p class="say">Data: <code>notices_list</code>, <code>leader_status</code>, <code>metrics</code>; <i>Mark handled</i> is <code>notice_handle</code> (not a gate). Pausing the leader stays a link (from S27, a button on the leader's card).</p>
+  <div class="row">
+    <div class="pane">
+      <div class="chrome"><b>Terylon</b><span>✕</span></div>
+      <div class="body">
+        <div class="tabs"><span class="tab">Queue</span><span class="tab">Goals</span><span class="tab on">Bell <span class="n">2</span></span><span class="tab">Memory</span><span class="tab">Status</span></div>
+        <div class="card wait">
+          <div class="card-head"><span class="h">Needs you <span class="c warn">· 2</span></span><span class="hint">notices_list</span></div>
+          <div class="rows"><i class="pin" style="position:absolute;margin:8px 0 0 -14px">1</i>
+            <div class="r hov" style="flex-direction:column;align-items:stretch;gap:6px">
+              <div style="display:flex;gap:10px;align-items:center"><span class="chipk f red">gatus</span><span class="rt">the page is not well</span><span class="rm">11 Oct</span></div>
+              <span style="font-size:13px;color:var(--soft);padding-left:2px">terylon-page answered 502 three times in a row since 09:12.</span>
+              <div class="actions"><span class="btn small">Mark handled</span><span class="link">Bell in the console ↗</span></div>
+            </div>
+            <div class="r"><span class="chipk f">leader</span><span class="rt">The leader asks about Test from the phone</span><span class="rm">07:10</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="h">Machine</span><span class="hint">lately handled</span></div>
+          <div class="stack" style="font-size:13px"><i class="pin" style="position:absolute;margin:0 0 0 -30px">2</i>
+            <span><span class="ok">✓</span> Production at <span class="mono">d577b984</span> <span class="foot">· PR 214 · 10:39</span></span>
+            <span><span class="ok">✓</span> Backup done, verified <span class="foot">· 11:51</span></span>
+            <span><span class="ok">✓</span> The leader runs <span class="foot">· leader_status</span></span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="h">Last 30 days</span><span class="hint">metrics</span></div>
+          <div class="nums"><i class="pin">3</i>
+            <div><span class="big">43</span><span class="foot">stories (+42 host proof)</span></div>
+            <div><span class="big">$1.10</span><span class="foot">per story</span></div>
+            <div><span class="big">0</span><span class="foot">merged</span></div>
+            <div><span class="big">1</span><span class="foot">open PR</span></div>
+          </div>
+        </div>
+        <div class="actions"><span class="link">Pause the leader ↗</span><span class="link">Bell in the console ↗</span></div>
+        <div class="s27">S27 (#363): <i>Pause…</i> / <i>Resume</i> on the leader's card.</div>
+      </div>
+    </div>
+  </div>
+  <ol class="pins">
+    <li><i class="pin">1</i><span>A notice = <code>Button</code> with children (a source chip: <code>gatus</code>/<code>unit</code>/<code>host</code>/<code>incident</code> in the <code>error</code> colour, the others <code>inactive</code>); a press expands the body, with <i>Mark handled</i> below it (as in 1.1.0).</span></li>
+    <li><i class="pin">2</i><span>Machine: <code>✓</code> in <code>success</code>, hash <code>mono</code>, time <code>footnote tabular</code>.</span></li>
+    <li><i class="pin">3</i><span>Four numbers <code>Text size="title" tabular</code>. There is <b>no</b> 30-day chart: <code>metrics</code> reports no per-day series, and the pane does not invent one.</span></li>
+  </ol>
+</section>
+
+<!-- ═════════════ 9 · STATUS ═════════════ -->
+<section class="board">
+  <h2>v3 · PROPOSED · pane: Status — the machine in one word, slots and spend as gauges, the rules as code</h2>
+  <p class="say">On the left the “ok” state, on the right “Claude Code refused the call”: the fix in steps, and the allow rules as highlighted <code>Code</code> (language json) instead of <code>Markdown</code>. <code>$.ui.copy</code> does not work on Desktop, so the rules are selected and copied by hand.</p>
+  <div class="row">
+    <div class="pane">
+      <div class="chrome"><b>Terylon</b><span>✕</span></div>
+      <div class="body">
+        <div class="tabs"><span class="tab">Queue</span><span class="tab">Goals</span><span class="tab">Bell</span><span class="tab">Memory</span><span class="tab on">Status</span></div>
+        <div class="card">
+          <span class="cap2">AGENTIC OS</span>
+          <div style="display:flex;align-items:baseline;gap:10px"><span class="title ok">ok</span><span class="foot tab-n">since 07:02 · last answer at 16:04</span><i class="pin">1</i></div>
+          <div class="actions"><span class="btn small">Refresh</span></div>
+        </div>
+        <div class="grid2">
+          <div class="card"><span class="h">Slots</span>
+            <svg width="100%" height="14" viewBox="0 0 200 14" preserveAspectRatio="none" role="img" aria-label="2 of 4 running"><rect x="0" y="1" width="47" height="12" rx="3" fill="#7aa7ff"/><rect x="51" y="1" width="47" height="12" rx="3" fill="#7aa7ff"/><rect x="102" y="1.5" width="47" height="11" rx="3" fill="none" stroke="#8f8d88" stroke-opacity=".7"/><rect x="153" y="1.5" width="47" height="11" rx="3" fill="none" stroke="#8f8d88" stroke-opacity=".7"/></svg>
+            <span class="tab-n">2 of 4 running</span><span class="foot">policy slots</span></div>
+          <div class="card"><span class="h">Cost <i class="pin">2</i></span>
+            <svg width="100%" height="14" viewBox="0 0 200 14" preserveAspectRatio="none" role="img" aria-label="$5.50 of the $20 daily limit"><rect y="1" width="200" height="12" rx="3" fill="#8f8d88" fill-opacity=".3"/><rect y="1" width="55" height="12" rx="3" fill="#7aa7ff"/></svg>
+            <span class="tab-n">$5.50 of the $20 daily limit today</span></div>
+        </div>
+        <div class="card"><span class="h">Problems</span><span class="foot">Nothing wrong.</span></div>
+        <div class="card"><span class="h">Diagnostics</span>
+          <div class="stack mono" style="color:var(--soft)"><span>terylon-pane 1.2.0</span><span>TERYLON_URL https://&lt;your-terylon&gt;/mcp</span><span>server terylon (terylon-os)</span></div>
+          <span class="foot">Every failure is in claude --debug under terylon-pane:</span></div>
+      </div>
+    </div>
+    <div class="pane">
+      <div class="chrome"><b>Terylon</b><span>✕</span></div>
+      <div class="body">
+        <div class="tabs"><span class="tab">Queue</span><span class="tab">Goals</span><span class="tab">Bell</span><span class="tab">Memory</span><span class="tab on">Status <span class="w">⚠</span></span></div>
+        <div class="card">
+          <span class="cap2">AGENTIC OS</span>
+          <div style="display:flex;align-items:baseline;gap:10px"><span class="title warn">not allowed</span><span class="foot tab-n">since 09:40</span></div>
+        </div>
+        <div class="card bad">
+          <span class="h warn">Claude Code refused the pane's call</span>
+          <span style="font-size:13px;color:var(--soft)">The pane calls Terylon on its own, outside the model's turn. Such a call passes only for the tools an allow rule names. Add them to ~/.claude/settings.json and try again:</span>
+          <span class="foot">Reason: permission denied for mcp__plugin_terylon-os_terylon__briefing</span>
+          <span style="font-weight:600;font-size:13.5px">How to fix</span>
+          <span style="font-size:13px;color:var(--soft)">1. Add these rules to ~/.claude/settings.json, under "permissions" → "allow":</span>
+          <div class="code"><i class="pin" style="float:right">3</i><span class="p">"permissions": {</span>
+  <span class="k">"allow"</span><span class="p">: [</span>
+    <span class="s">"mcp__plugin_terylon-os_terylon__briefing"</span><span class="p">,</span>
+    <span class="s">"mcp__plugin_terylon-os_terylon__work_in_flight"</span><span class="p">,</span>
+    <span class="s">"mcp__plugin_terylon-os_terylon__stories_list"</span><span class="p">,</span>
+    <span class="p">… 15 more, the pane's own list</span>
+  <span class="p">]</span>
+<span class="p">}</span></div>
+          <span style="font-size:13px;color:var(--soft)">2. Press Try again.</span>
+          <div class="actions"><span class="btn primary">Try again</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <ol class="pins">
+    <li><i class="pin">1</i><span>The machine in one word, <code>Text size="title"</code> in the state's colour (<code>success</code>, <code>warning</code>, <code>error</code>); time <code>tabular</code>.</span></li>
+    <li><i class="pin">2</i><span>Slots and spend: <code>Svg</code> gauges + the 1.1.2 sentence in <code>Text</code>. In the terminal, only the sentence.</span></li>
+    <li><i class="pin">3</i><span>Allow rules: <code>Code language="json" startLine</code> omitted; the content is still the whole of <code>PANE_TOOLS</code> (a test holds that it contains no gate).</span></li>
+  </ol>
+</section>
+
+<!-- ═════════════ 10 · TERMINAL ═════════════ -->
+<section class="board">
+  <h2>v3 · PROPOSED · the same in the terminal — there is no Svg there, so it is drawn in text from the same data</h2>
+  <p class="say">The pane is tested on both <code>terminal</code> and <code>desktop</code>. The terminal has no <code>Svg</code> and ignores <code>size</code>, <code>weight</code> (except bold), <code>mono</code>, <code>tabular</code>; it draws <code>xs–xl</code> spacing as cells. Fallbacks: phases <code>✓✓✓✓●○○◇</code>, slots <code>▰▰▱▱</code>, spend <code>▰▱▱▱</code> with the sentence. A row is still one button (<code>plain</code>), so Enter on it opens the subject.</p>
+  <div class="row">
+<div class="term"><span class="d">─ Terylon ───────────────────────────────────────────────── [x]</span>
+ <span class="i"> ● Queue </span> [ Goals ] [ Bell · <span class="a">2</span> ] [ Memory ] [ Status ]
+ <span class="b">terylon</span>                                <span class="d">connected · 2 s ago</span> [ Refresh ]
+
+ <b>Waiting for you</b> <span class="a">· 5</span>                       <span class="d">you decide in the console</span>
+   <span class="a">question</span>  Test1 — What should the Excel file contain?      <span class="d">07:10</span>
+   <span class="d">merge</span>     #327 Events since the last look          <span class="d">verified in pr-196</span>
+   <span class="d">plan</span>      Plan 41 · Agentic OS · 3 stories                  <span class="d">~$14</span>
+
+ <b>Running</b> <span class="b">· 2</span>                <span class="d">▰▰▱▱ 2/4 slots · ▰▱▱▱ $5.50 of $20</span>
+   #333 Direct dispatch                                    <span class="d">5/8 · $2.10</span>
+   <span class="g">✓ ✓ ✓ ✓</span> <span class="b">●</span> <span class="d">○ ○ ◇</span>  <span class="d">Tests · tester · step 5 of 9</span>
+   #329 Memory proposals                             <span class="a">stuck since 15:20</span>
+   <span class="g">✓ ✓ ✓ ✓ ✓ ✓</span> <span class="a">●</span> <span class="d">◇</span>  <span class="d">Verified in its PR environment</span>
+
+ <b>Phases</b>                                                    <span class="d">5 of 8</span>
+   <span class="g">✓</span> Admitted to a slot   <span class="g">✓</span> Plan · planner   <span class="g">✓</span> Develop · developer
+   <span class="g">✓</span> Review · reviewer    <span class="b">●</span> Tests · tester    <span class="d">○ Pull request</span>
+   <span class="d">○ Verified in its PR environment   ◇ Merge — your gate</span>
+</div>
+  </div>
+</section>
+
+<!-- ═════════════ 11 · LIGHT THEME ═════════════ -->
+<section class="board">
+  <h2>v3 · PROPOSED · Svg in Desktop's light theme — the colours inside an Svg do not read the theme</h2>
+  <p class="say"><code>Svg</code> is a document with no theme input: its colours are fixed. Hence: a transparent background, medium-saturated colours legible on both white and dark, grey as transparency (not a fixed dark), <b>no word inside the Svg</b> — every word in <code>Text</code>, which follows the theme. Shown here: the same Svg as in the dark pane; nothing else changes.</p>
+  <div class="row">
+    <div class="pane light">
+      <div class="body">
+        <div class="card">
+          <div class="card-head"><span class="h">Running <span class="c blue">· 2</span></span>
+            <span class="gauges">
+              <span><svg width="46" height="10" viewBox="0 0 46 10" role="img" aria-label="2 of 4 slots"><rect x="0" y="1" width="10" height="8" rx="2" fill="#7aa7ff"/><rect x="12" y="1" width="10" height="8" rx="2" fill="#7aa7ff"/><rect x="24" y="1" width="10" height="8" rx="2" fill="none" stroke="#8f8d88" stroke-width="1"/><rect x="36" y="1" width="10" height="8" rx="2" fill="none" stroke="#8f8d88" stroke-width="1"/></svg>2/4 slots</span>
+              <span><svg width="64" height="6" viewBox="0 0 64 6" role="img" aria-label="$5.50 of $20 today"><rect x="0" y="0" width="64" height="6" rx="3" fill="#8f8d88" fill-opacity=".3"/><rect x="0" y="0" width="17.6" height="6" rx="3" fill="#7aa7ff"/></svg>$5.50 of $20</span>
+            </span>
+          </div>
+          <div class="run r hov" style="display:flex">
+            <div class="top"><span>#333 Direct dispatch</span><span class="rm">5/8 · $2.10</span></div>
+            <svg width="100%" height="8" viewBox="0 0 456 8" preserveAspectRatio="none" role="img" aria-label="Phase 5 of 8: tests"><g>
+              <rect x="0" y="1" width="53" height="6" rx="3" fill="#4caf72"/><rect x="57" y="1" width="53" height="6" rx="3" fill="#4caf72"/><rect x="114" y="1" width="53" height="6" rx="3" fill="#4caf72"/><rect x="171" y="1" width="53" height="6" rx="3" fill="#4caf72"/>
+              <rect x="228" y="1" width="53" height="6" rx="3" fill="#7aa7ff"/>
+              <rect x="285" y="1" width="53" height="6" rx="3" fill="#8f8d88" fill-opacity=".3"/><rect x="342" y="1" width="53" height="6" rx="3" fill="#8f8d88" fill-opacity=".3"/><rect x="399" y="1" width="57" height="6" rx="3" fill="none" stroke="#a98bf0" stroke-width="1.2" stroke-dasharray="3 2"/></g></svg>
+            <div class="sub"><span>Tests · tester · step 5 of 9</span><span class="tab-n">6 h</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

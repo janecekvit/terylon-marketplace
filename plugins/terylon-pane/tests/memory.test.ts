@@ -19,7 +19,7 @@ test("the Memory tab shows the leader's memory as stored, a card per file, and t
   expect(await memory.find({ type: 'Text', text: exact('topic · note') })).toBeDefined()
   expect((await memory.find({ type: 'Text', text: exact('what the leader remembers across runs') }))?.props.color).toBe('subtle')
 
-  expect((await memory.find({ type: 'Text', text: exact('1 proposal') }))?.props.color).toBe('warning')
+  expect((await memory.find({ type: 'Text', text: exact('1 proposal') }))?.props.color).toBe('text')
   expect((await memory.find({ type: 'Link', text: 'Confirm in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=memory')
   expect(await memory.find({ type: 'Text', text: exact('Proposed in this session') })).toBeDefined()
   expect(await memory.find({ type: 'Text', text: exact('Nothing yet.') })).toBeDefined()
@@ -117,7 +117,7 @@ test('the rules the machine enforces: each one line with who enforces it, presse
     const memory = await $.ui.mount({ ...MEMORY_MOUNT, surface })
 
     expect(await memory.find({ type: 'Text', text: exact('Rules the machine enforces') })).toBeDefined()
-    expect((await memory.find({ key: 'mem-rule-0' }))?.text).toBe('No push to main and no force push.')
+    expect((await memory.find({ key: 'mem-rule-0' }))?.text).toBe('No push to main and no force push.  a hook')
     expect((await memory.find({ type: 'Text', text: exact('a hook') }))?.props.color).toBe('subtle')
     expect((await memory.find({ type: 'Text', text: exact('No push to main and no force push.') }))?.props.wrap).toBe('truncate-end')
     expect(await memory.find({ type: 'Text', text: /git-guard\.js/ })).toBeUndefined()

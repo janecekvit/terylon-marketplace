@@ -104,6 +104,11 @@ export const COPY = {
   kindStuck: 'stuck',
   header: (runningUsd: string, dayBudget: string | null, used: number, slots: number) =>
     `running $${runningUsd}${dayBudget === null ? '' : ` of $${dayBudget} today`} · ${used} of ${slots} slots`,
+  // The Running heading's two gauges (S32), and what the narrow dock and the terminal say in their place.
+  gaugeSlots: (used: number, slots: number) => `${used}/${slots} slots`,
+  gaugeSpend: (runningUsd: string, dayBudget: string | null) => (dayBudget === null ? `$${runningUsd} today` : `$${runningUsd} of $${dayBudget}`),
+  gaugeSpendAlt: (runningUsd: string, dayBudget: string) => `$${runningUsd} of $${dayBudget} today`,
+  gaugesNarrow: (used: number, slots: number, runningUsd: string) => `${used}/${slots} · $${runningUsd}`,
   verifiedWaiting: (environment: string | null) =>
     environment === null ? 'verified · waiting for merge' : `verified in ${environment} · waiting for merge`,
   planWaiting: (estimate: string | null) => (estimate === null ? 'to approve' : `to approve · ~$${estimate}`),
@@ -169,16 +174,25 @@ export const COPY = {
   returnInConsole: 'Return with a note ↗',
   storyLoading: 'Loading the story…',
   storyError: 'The story did not load',
-  storyMeta: (hours: string | null, attempt: number, branch: string | null, model: string | null) =>
-    [hours === null ? null : `running ${hours}`, `attempt ${attempt}`, branch, model].filter(part => part !== null).join(' · '),
+  storyMeta: (timed: string | null, attempt: number, branch: string | null, model: string | null) =>
+    [timed, `attempt ${attempt}`, branch, model].filter(part => part !== null).join(' · '),
   progress: 'Progress',
   step: (step: number, steps: number, current: string | null) =>
     `Step ${step} of ${steps}${current === null ? '' : `: ${current}`}`,
   noStep: 'No step reported yet',
+  stepOf: (step: number, steps: number) => `step ${step} of ${steps}`,
   costOf: (cost: string, budget: string | null) => (budget === null ? `$${cost}` : `$${cost} of the story's $${budget}`),
   phases: 'Phases',
   phasesHint: (done: number, all: number) => `${done} of ${all}`,
   phaseAdmitted: 'Admitted to a slot',
+  // The stepper's labels under its nodes (S32), short enough for eight columns: Admitted, then the seven stages.
+  phaseShort: ['Admitted', 'Plan', 'Develop', 'Review', 'Tests', 'Pull req.', 'Verified', 'Merge'] as readonly string[],
+  phaseTooltip: (label: string, role: string | null, status: string, step: string | null) =>
+    [label, role, status === 'now' ? 'now' : status === 'done' ? 'done' : 'to come', step].filter(part => part !== null).join(' · '),
+  storyCaption: (goal: number | null) => (goal === null ? 'STORY' : `STORY · GOAL ${goal}`),
+  storyRunning: (hours: string) => `running ${hours}`,
+  storyBlocked: (hours: string) => `blocked for ${hours}`,
+  storyAttempt: (attempt: number) => `attempt ${attempt}`,
   stageLabel: (stage: string) => STAGE_LABEL[stage] ?? stage,
   stageRole: (stage: string) => STAGE_ROLE[stage] ?? null,
   nowWorking: 'Now working',
@@ -186,6 +200,11 @@ export const COPY = {
   mainAgent: 'main agent',
   tokens: (count: string) => `${count} tokens`,
   sinceStart: (hours: string) => `${hours} since start`,
+  numberSpent: 'spent',
+  numberOfBudget: (budget: string) => `of the story's $${budget}`,
+  numberTokens: 'tokens',
+  numberSinceStart: 'since start',
+  spendAlt: (cost: string, budget: string) => `$${cost} of the story's $${budget}`,
   questionFromRun: 'Question from the run',
   waitsOnYou: 'waits for you',
   environment: (name: string) => `Environment ${name}`,
@@ -204,6 +223,7 @@ export const COPY = {
   // A question of the leader's.
   questionOf: (index: number, count: number) => `question ${index} of ${count}`,
   questionMeta: (subject: string, time: string | null) => `${subject} · asked by the leader${time === null ? '' : ` · ${time}`}`,
+  questionCaption: (subject: string, time: string | null) => `${subject} · asked by the leader${time === null ? '' : ` · ${time}`}`.toUpperCase(),
   answerLabel: 'Answer (add what you want)',
   answerSend: 'Answer',
   discussInSession: 'Talk it over with Claude in the session',
@@ -232,7 +252,18 @@ export const COPY = {
   newGoal: 'New goal',
   newGoalPlaceholder: 'What you want done…',
   addGoal: 'Add goal',
-  addGoalNote: 'The leader makes a plan of the goal, which you approve. Write a bigger goal out with Claude in the session (/terylon-os:add-goal).',
+  // The new goal's pickers (S32), over goal_add's priority (1–4, 2 when none is given) and target.
+  priority: 'Priority',
+  priorities: [
+    { value: '1', label: '1 · most urgent' },
+    { value: '2', label: '2 · normal' },
+    { value: '3', label: '3 · later' },
+    { value: '4', label: '4 · someday' },
+  ] as readonly { value: string; label: string }[],
+  target: 'Where',
+  ownList: "Terylon's own list",
+  // GOALS ARE GENERAL (Terylon #369, S31; the operator, 2026-10-22, the approved S31 canvas)
+  addGoalNote: 'A goal is a general direction. A concrete ask — a file, a document, one change — becomes a task under a goal. The leader asks its questions first, then makes a plan you approve.',
   goalSending: 'Handing the goal over…',
   goalMeta: (priority: string, state: string) => `${priority} · ${state}`,
   goalStories: 'Stories',
@@ -271,6 +302,9 @@ export const COPY = {
   whatToDo: 'What to do',
   criteriaLabel: 'Criteria (optional)',
   criteriaPlaceholder: 'Separate them with semicolons, or the leader writes them',
+  criteriaPlaceholderRows: 'One per line, or the leader writes them',
+  size: 'Size',
+  sizes: ['M', 'L', 'XL'] as readonly string[],
   goal: 'Goal',
   afterLabel: 'After',
   nothingBefore: '—',
