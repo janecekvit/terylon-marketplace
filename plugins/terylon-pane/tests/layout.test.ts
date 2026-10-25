@@ -60,7 +60,7 @@ test('everything sits in a card: no plan, no memory, no proposal is a card with 
 
   await ui.press({ key: 'tab-memory' })
 
-  for (const heading of ['Memory', 'Proposals waiting for confirmation', 'Proposed in this session']) {
+  for (const heading of ['Memory', 'Proposals waiting', 'Proposed in this session']) {
     expect((await ui.find({ type: 'Text', text: exact(heading) }))?.props.bold).toBe(true)
   }
 

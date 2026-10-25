@@ -113,20 +113,22 @@ test('hover-reveal, PROVEN AND ON: a waiting row lights and lays its console lin
   expect(hovered.filter(node => node.key === 'row-merge-327').map(node => node.hover)).toEqual([{ backgroundColor: 'userMessageBackgroundHover' }])
 
   // The reveal is not keyed: a keyed Box drawn "none" would be a hover scope the pointer can never be over.
+  // ONLY MERGE AND AN ANSWER LINK OUT (S27): the plan's row reveals nothing, its acts are on its card.
   const reveals = (await ui.findAll({ type: 'Box' })).filter(box => box.props.position === 'absolute')
-  expect(reveals).toHaveLength(3)
+  expect(reveals).toHaveLength(2)
   expect(reveals.every(box => box.key === undefined && box.props.top === 0 && box.props.right === 0 && box.props.display === 'none')).toBe(true)
-  expect(hovered.filter(node => node.key === undefined).map(node => node.hover)).toEqual([{ display: 'flex' }, { display: 'flex' }, { display: 'flex' }])
-  expect((await ui.findAll({ type: 'Link' })).map(link => link.text)).toEqual(expect.arrayContaining(['Answer in the console ↗', 'Merge in the console ↗', 'Approve in the console ↗']))
+  expect(hovered.filter(node => node.key === undefined).map(node => node.hover)).toEqual([{ display: 'flex' }, { display: 'flex' }])
+  expect((await ui.findAll({ type: 'Link' })).map(link => link.text)).toEqual(expect.arrayContaining(['Answer in the console ↗', 'Merge in the console ↗']))
+  expect((await ui.findAll({ type: 'Link' })).map(link => link.text)).not.toContain('Approve in the console ↗')
   expect((await ui.find({ type: 'Link', text: 'Merge in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=merge&story=327')
   expect(await ui.find({ type: 'Button', text: /Merge|Approve/ })).toBeUndefined()
 
   // NO REVEAL OVER AN OPEN ROW (the owner's walk of 1.2.0): it covered the question; the body carries the link.
   await ui.press({ key: 'question-9' })
-  expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.position === 'absolute')).toHaveLength(2)
+  expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.position === 'absolute')).toHaveLength(1)
   expect((await ui.findAll({ type: 'Link', text: 'Answer in the console ↗' }))).toHaveLength(1)
   await ui.press({ key: 'question-9' })
-  expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.position === 'absolute')).toHaveLength(3)
+  expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.position === 'absolute')).toHaveLength(2)
   await ui.unmount()
 
   // THE TERMINAL HAS NO POINTER TO HOVER: the row draws as 1.1.2 there, whatever is proven.
@@ -306,7 +308,7 @@ test('THE NEW TASK: goal, after and size are Selects over tasks_add, and what is
   expect((sent?.args.tasks as { size: string }[])[0]?.size).toBe('XL')
 })
 
-test('THE S27 SLOTS (#27) are dashed and hold 1.1.2\'s links; none of S27\'s buttons is drawn', async ($, on) => {
+test('THE S27 SLOTS (#27) ARE FILLED: the story\'s acts and its links on one plain row, no border, merge only a link', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -317,15 +319,14 @@ test('THE S27 SLOTS (#27) are dashed and hold 1.1.2\'s links; none of S27\'s but
     await ui.press({ key: 'story-333' })
 
     const slot = await ui.find({ key: 'story-actions' })
-    expect(slot?.props.borderStyle).toBe(surface === 'desktop' ? 'dashed' : 'single')
-    expect((await ui.findAll({ type: 'Button' })).map(button => button.key).filter(key => key === 'summarise' || key === 'story-goal')).toEqual(['summarise', 'story-goal'])
-    expect(await ui.find({ type: 'Button', text: /Stop|Return|Unblock|Abandon|Accept|Pause|Resume|Approve|Merge/ })).toBeUndefined()
-    expect((await ui.find({ type: 'Link', text: 'Stop in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=work&story=333')
+    expect(slot?.props.borderStyle).toBeUndefined()
+    expect((await ui.findAll({ type: 'Button' })).map(button => button.key).filter(key => key === 'act-story-333-stop' || key === 'summarise' || key === 'story-goal')).toEqual(['act-story-333-stop', 'summarise', 'story-goal'])
+    expect(await ui.find({ type: 'Button', text: /Merge/ })).toBeUndefined()
+    expect((await ui.find({ type: 'Link', text: 'Story in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=work&story=333')
 
     await ui.press({ key: 'back' })
     await ui.press({ key: 'tab-bell' })
-    expect((await ui.find({ key: 'leader-actions' }))?.props.borderStyle).toBe(surface === 'desktop' ? 'dashed' : 'single')
-    expect(await ui.find({ type: 'Button', text: /Pause|Resume/ })).toBeUndefined()
+    expect((await ui.find({ key: 'leader-actions' }))?.props.borderStyle).toBeUndefined()
     await ui.unmount()
   }
 })

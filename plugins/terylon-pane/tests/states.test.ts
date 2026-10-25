@@ -5,7 +5,7 @@ import { test, expect } from 'claude-code/testing'
 
 import { PANE_TOOLS } from '../hooks/terylon'
 
-import { GATES, PANE_PROPS, SESSION, exact, world } from './fixtures'
+import { ACTS, GATES, PANE_PROPS, SESSION, exact, world } from './fixtures'
 
 const MOUNT = { plugin: 'terylon-pane', surface: 'desktop', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -112,11 +112,12 @@ test('frame I: a call Claude Code did not allow is said as that, with the rules 
   expect(rules?.props.startLine).toBeUndefined()
   expect(String(rules?.text)).not.toContain('```')
 
-  for (const tool of ['briefing', 'work_in_flight', 'stories_list', 'events_since', 'story_get', 'policy_get', 'goals_list', 'goal_get', 'plans_list', 'notices_list', 'leader_status', 'metrics', 'memory_get', 'tasks_add', 'goal_add', 'question_answer', 'memory_propose']) {
+  for (const tool of ['briefing', 'work_in_flight', 'stories_list', 'events_since', 'story_get', 'policy_get', 'goals_list', 'goal_get', 'plans_list', 'notices_list', 'leader_status', 'metrics', 'memory_get', 'tasks_add', 'goal_add', 'question_answer', 'memory_propose', ...ACTS]) {
     expect(String(rules?.text)).toContain(`"mcp__plugin_terylon-os_terylon__${tool}"`)
   }
 
-  expect([...PANE_TOOLS]).toHaveLength(18)
+  // Eighteen reads and writes that decide nothing, and the thirteen owner acts (S27): thirty-one, and never merge.
+  expect([...PANE_TOOLS]).toHaveLength(31)
 
   for (const gate of GATES) {
     expect(String(rules?.text)).not.toContain(gate)

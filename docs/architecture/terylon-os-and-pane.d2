@@ -1,5 +1,5 @@
-# terylon-os and its mod terylon-pane: how a session reaches Terylon's Agentic OS, and why the
-# gates stay in the console.
+# terylon-os and its mod terylon-pane: how a session reaches Terylon's Agentic OS, the owner's
+# acts the pane takes on their cards, and why merge, the one gate, stays in the console.
 # Source of truth for terylon-os-and-pane.svg beside it: edit this file, then run
 # node Scripts/render-diagrams.js and commit both.
 # Why every surface goes through the one /mcp: one-source-of-truth-reached-from-two-places.md.
@@ -67,15 +67,15 @@ session: "Claude Desktop or Claude Code: a local session on the PC" {
     skills: "one skill per prompt it serves\nbriefing, hand-over, merge-gate,\nadd-goal, review-plan, show-story" {class: plugin}
   }
 
-  pane: "terylon-pane mod: shows, asks, answers, posts; never approves" {
+  pane: "terylon-pane mod: shows, asks, answers, posts, takes the owner's acts; never merges" {
     style: {
       stroke: "#A855F7"
     }
 
-    allow_list: "PANE_TOOLS: reads + five writes that decide nothing\nnever a gate tool" {class: mod}
+    allow_list: "PANE_TOOLS: reads, five writes that decide nothing,\nthe owner's thirteen acts; never story_merge" {class: mod}
     band: "the band above the prompt\nwhat calls for the owner" {class: mod}
     status_line: "the status line\nthe health of Agentic OS, its worst problem" {class: mod}
-    tabs: "one pane, five tabs\nQueue, Goals, Bell, Memory, Status\nopened only by the band or a command" {class: mod}
+    tabs: "one pane, five tabs\nQueue, Goals, Bell, Memory, Status\nopened only by the band or a command;\neach act on its subject's card, on a press" {class: mod}
   }
 }
 
@@ -88,7 +88,7 @@ terylon: "Terylon's Agentic OS: the only source of truth" {
 
   mcp: "/mcp\nthe caller's tailnet identity; no header, no token" {class: system}
   leader: "leader, goals, plans, stories,\nbell, memory" {class: system}
-  console: "the console: every gate\nplan approve or rethink, merge, return, unblock,\nabandon, stop, accept, leader pause or resume" {class: gate}
+  console: "the console: the one gate\nmerge, confirmed by the owner's passkey" {class: gate}
 }
 
 # No class: its label sits outside the shape, on the background, so it takes the theme's colours.
@@ -104,9 +104,9 @@ session.pane.allow_list -> session.os.server: "every 30 s: briefing, work_in_fli
 session.pane.allow_list -> session.pane.band
 session.pane.allow_list -> session.pane.status_line
 session.pane.allow_list -> session.pane.tabs
-session.pane.tabs -> terylon.console: "a gate is a link, never a button" {
+session.pane.tabs -> terylon.console: "merge is a link, never a button" {
   style.stroke-dash: 3
 }
 phone -> terylon.mcp: "the same /mcp"
 terylon.mcp -> terylon.leader
-person -> terylon.console: "confirms every gate"
+person -> terylon.console: "confirms every merge"

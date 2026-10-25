@@ -27,7 +27,7 @@ test('the queue draws the four groups from Terylon as cards, each row one Button
 
     // ONE ROW, ONE BUTTON (S32): the kind chip, the title, the detail, keyed by the subject's id.
     expect(await ui.find({ type: 'Text', text: exact('Waiting for you · 3') })).toBeDefined()
-    expect((await ui.find({ type: 'Text', text: exact('you decide in the console') }))?.props.color).toBe('subtle')
+    expect((await ui.find({ type: 'Text', text: exact('decide here · merge in the console') }))?.props.color).toBe('subtle')
     expect((await ui.find({ key: 'question-9' }))?.text).toMatch(/^\s*(?:●\s+)?question\s+#333 — Má mrtvý běh pokračovat od posledního commitu\?$/)
     expect((await ui.find({ key: 'merge-327' }))?.text).toMatch(/^\s*(?:●\s+)?merge\s+#327 Events since the last look · verified in pr-196 · waiting for merge$/)
     expect((await ui.find({ key: 'plan-41' }))?.text).toMatch(/^\s*(?:●\s+)?plan\s+Plan 41 · Agentic OS · 3 stories$/)
@@ -139,7 +139,7 @@ test('a waiting row opens under itself: the whole question and the way to answer
   expect(await ui.find({ key: 'answer-9' })).toBeUndefined()
 })
 
-test('every console link points at the console screen of its gate, never at a gate tool: one press into the row', async ($, on) => {
+test('every console link points at the console screen of its subject, never at a gate tool: one press into the row', async ($, on) => {
   const terylon = world(on, { env: { TERYLON_PANE_PROOFS: 'no-hover-reveal' } })
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -156,8 +156,10 @@ test('every console link points at the console screen of its gate, never at a ga
   const links = (await ui.findAll({ type: 'Link' })).map(link => String(link.props.href))
 
   expect(links).toContain('https://terylon.example.ts.net/?cockpit=merge&story=327')
-  expect(links).toContain('https://terylon.example.ts.net/?cockpit=plan&plan=41')
   expect(links).toContain('https://terylon.example.ts.net/?cockpit=question&question=9')
+  // A PLAN'S ROW OPENS THE PLAN (S27): its acts are on its card; the row itself no longer links out.
+  expect(links).not.toContain('https://terylon.example.ts.net/?cockpit=plan&plan=41')
+  expect(await ui.find({ key: 'open-plan-41' })).toBeDefined()
 })
 
 test('on the phone there is no Input: adding a task posts a request into the session', async ($, on) => {

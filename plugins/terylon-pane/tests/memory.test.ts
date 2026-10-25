@@ -4,7 +4,7 @@ import { GATES, PANE_PROPS, SESSION, exact, world } from './fixtures'
 
 const MEMORY_MOUNT = { plugin: 'terylon-pane', surface: 'desktop', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
-test("the Memory tab shows the leader's memory as stored, a card per file, and the proposals waiting in the console", async ($, on) => {
+test("the Memory tab shows the leader's memory as stored, a card per file, and the proposals waiting to be confirmed here", async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -19,8 +19,12 @@ test("the Memory tab shows the leader's memory as stored, a card per file, and t
   expect(await memory.find({ type: 'Text', text: exact('topic · note') })).toBeDefined()
   expect((await memory.find({ type: 'Text', text: exact('what the leader remembers across runs') }))?.props.color).toBe('subtle')
 
-  expect((await memory.find({ type: 'Text', text: exact('1 proposal') }))?.props.color).toBe('text')
-  expect((await memory.find({ type: 'Link', text: 'Confirm in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=memory')
+  // THE PROPOSALS WAIT HERE (S27): confirmed or dropped on the Memory tab, the console's memory browser a link away.
+  expect(await memory.find({ type: 'Text', text: exact('Proposals waiting · 1') })).toBeDefined()
+  expect((await memory.find({ type: 'Text', text: exact('+ Merge zůstává za passkey.') }))?.props.color).toBe('success')
+  expect((await memory.find({ key: 'act-proposal-5-confirm' }))?.props.label).toBe('Confirm')
+  expect(await memory.find({ type: 'Link', text: 'Confirm in the console ↗' })).toBeUndefined()
+  expect((await memory.find({ type: 'Link', text: "Versions, roll-back and dropped proposals stay in the console's memory browser ↗" }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=memory')
   expect(await memory.find({ type: 'Text', text: exact('Proposed in this session') })).toBeDefined()
   expect(await memory.find({ type: 'Text', text: exact('Nothing yet.') })).toBeDefined()
   expect(await memory.find({ type: 'Text', text: exact('/terylon-pane · /terylon-memory') })).toBeDefined()
@@ -67,7 +71,7 @@ test('an edit is a proposal: memory_propose with the old and new text and why, t
   expect(selected?.props.label).toBe('● Edit')
   expect(selected?.props.variant).toBe('primary')
   expect((await memory.find({ key: 'mem-edit-0-1' }))?.props.dimColor).toBe(true)
-  expect((await memory.find({ type: 'Text', text: exact('The memory changes only after you confirm in the console.') }))?.props.color).toBe('inactive')
+  expect((await memory.find({ type: 'Text', text: exact('The memory changes only after you confirm the proposal.') }))?.props.color).toBe('inactive')
 
   await memory.input({ key: 'mem-text', text: 'Píše česky; kód, commity a dokumenty anglicky.', kind: 'change' })
   await memory.input({ key: 'mem-why', text: 'Upřesnění z #332', kind: 'change' })
@@ -76,7 +80,7 @@ test('an edit is a proposal: memory_propose with the old and new text and why, t
   const proposed = terylon.calls.filter(call => call.tool === 'memory_propose')
   expect(proposed).toHaveLength(1)
   expect(proposed[0]?.args).toEqual({ action: 'replace', file: 'owner', text: 'Píše česky; kód, commity a dokumenty anglicky.', oldText: 'Píše česky; kód anglicky.', why: 'Upřesnění z #332' })
-  expect((await memory.find({ type: 'Text', text: exact('The proposal waits for your confirmation in the console; the memory changes only after it.') }))?.props.color).toBe('success')
+  expect((await memory.find({ type: 'Text', text: exact('The proposal waits for your confirmation under Proposals waiting; the memory changes only after it.') }))?.props.color).toBe('success')
   expect(await memory.find({ type: 'Text', text: exact('Edit · owner · Píše česky; kód, commity a dokumenty anglicky.') })).toBeDefined()
 
   // Nothing the pane can press confirms it: the confirmation is the console's memory gate.

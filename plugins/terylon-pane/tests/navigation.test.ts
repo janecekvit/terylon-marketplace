@@ -104,7 +104,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
   })
 }
 
-test('a verified story shows its environment, verdict, overrun and criteria; merge and return are links only', async ($, on) => {
+test('a verified story shows its environment, verdict, overrun and criteria; merge is a link only, return an act', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -129,9 +129,9 @@ test('a verified story shows its environment, verdict, overrun and criteria; mer
   expect((await ui.find({ type: 'Text', text: exact('commit 4be21c0') }))?.props.mono).toBe(true)
 
   expect((await ui.find({ type: 'Link', text: 'Merge in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=merge&story=327')
-  expect(await ui.find({ type: 'Link', text: 'Return with a note ↗' })).toBeDefined()
   expect((await ui.find({ type: 'Link', text: 'PR 196 ↗' }))?.props.href).toBe('https://dev.example/pr/196')
-  expect(await ui.find({ type: 'Button', text: /Merge|Return/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Button', text: /Merge/ })).toBeUndefined()
+  expect((await ui.find({ key: 'act-story-327-return' }))?.props.label).toBe('Return…')
 })
 
 test('a question is answered from the pane: a choice pressed, question_answer sent, the leader takes it', async ($, on) => {
@@ -190,7 +190,7 @@ test('a typed answer is sent as typed; a refusal is said with its reason and the
   expect(terylon.prompts[0]).toContain('question_answer')
 })
 
-test('a waiting plan opens with its stories, each opening the story; approve and rethink are links', async ($, on) => {
+test('a waiting plan opens with its stories, each opening the story; approve and rethink are its acts, editing the console\'s', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -206,8 +206,9 @@ test('a waiting plan opens with its stories, each opening the story; approve and
   // A PLAN AS A CHAIN (S32): its order and its "after" as an Svg, the sizes and estimates in tabular digits.
   expect((await pictures(ui)).map(item => item.alt)).toEqual(['Story 1, then 2 after 1'])
   expect((await ui.find({ type: 'Text', text: exact('S ~$3 → M ~$5') }))?.props.tabular).toBe(true)
-  expect((await ui.find({ type: 'Link', text: 'Approve in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=plan&plan=41')
-  expect(await ui.find({ type: 'Link', text: 'Rethink ↗' })).toBeDefined()
+  expect((await ui.find({ type: 'Link', text: 'Edit criteria or pick stories in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=plan&plan=41')
+  expect((await ui.find({ key: 'act-plan-41-approve' }))?.props.label).toBe('Approve')
+  expect((await ui.find({ key: 'act-plan-41-rethink' }))?.props.label).toBe('Rethink…')
 
   await ui.press({ key: 'plan-41-story-350' })
   expect((await ui.find({ key: 'back' }))?.props.label).toBe('‹ Plan 41')
@@ -256,7 +257,7 @@ test('the goals tab: open goals by priority with their questions, the closed one
   expect(await ui.find({ key: 'answer-send' })).toBeDefined()
 })
 
-test('the bell tab reads the notices, the leader and the metrics; handling and pausing stay in the console', async ($, on) => {
+test('the bell tab reads the notices, the leader and the metrics; a notice is handled here, the leader paused on the queue', async ($, on) => {
   const terylon = world(on)
   terylon.answers.briefing = { ...BRIEFING, unhandledNotices: 2 }
   await $.session.start(SESSION)
@@ -285,9 +286,11 @@ test('the bell tab reads the notices, the leader and the metrics; handling and p
   }
 
   expect(await ui.find({ type: 'Svg' })).toBeUndefined()
-  // THE LEADER'S PAUSE, A LINK, in the dashed slot S27 (#27) draws its buttons into.
-  expect((await ui.find({ key: 'leader-actions' }))?.props.borderStyle).toBe('dashed')
-  expect((await ui.find({ type: 'Link', text: 'Pause the leader ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=work')
+  // WHERE S32 LEFT THE DASHED SLOT (S27): no border, and no pause here; Pause and Resume are on the queue and Status.
+  expect((await ui.find({ key: 'leader-actions' }))?.props.borderStyle).toBeUndefined()
+  expect(await ui.find({ type: 'Link', text: 'Pause the leader ↗' })).toBeUndefined()
+  expect(await ui.find({ key: 'act-leader-pause' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: exact('Mark handled is notice_handle, which decides nothing about work. Pause and Resume are on the queue and the Status tab.') })).toBeDefined()
   expect(await ui.find({ type: 'Link', text: 'Bell in the console ↗' })).toBeDefined()
 
   for (const tool of ['notices_list', 'leader_status', 'metrics']) {

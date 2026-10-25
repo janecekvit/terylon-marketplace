@@ -119,7 +119,7 @@ const MUTATIONS = [
             {
                 file: "hooks/register.tsx",
                 find: "              onPress: () => toggle($, item.key),\n",
-                replace: "              onPress: () => callTerylon($, item.kind === 'plan' ? 'plan_approve' : 'story_merge', {}),\n",
+                replace: "              onPress: () => callTerylon($, 'story_merge', {}),\n",
             },
         ],
     },
@@ -190,17 +190,75 @@ const MUTATIONS = [
         find: "    notices: (notices.kind === 'ok' ? number(notices.value.unhandled) : null) ?? number(lastBriefing.unhandledNotices) ?? previous.notices,\n",
         replace: "    notices: previous.notices,\n",
     },
+    // S27 (#27): every former gate but merge is the owner's act on its card; merge stays the one gate.
     {
-        name: "goal_drop, a gate, joins the pane's own tools",
+        name: "merge joins the owner's acts",
         file: "hooks/terylon.ts",
-        find: "  'notice_handle',\n])",
-        replace: "  'notice_handle',\n  'goal_drop',\n])",
+        find: "  'policy_save',\n]",
+        replace: "  'policy_save',\n  'story_merge',\n]",
     },
     {
-        name: "the gate list copied from McpGates.cs loses goal_drop",
+        name: "the gate list copied from McpGates.cs loses merge",
         file: "hooks/terylon.ts",
-        find: "  'leader_resume',\n  'goal_drop',\n]",
-        replace: "  'leader_resume',\n]",
+        find: "export const GATE_TOOLS: readonly string[] = ['story_merge']",
+        replace: "export const GATE_TOOLS: readonly string[] = []",
+    },
+    {
+        name: "an owner act leaves the pane's tools",
+        file: "hooks/terylon.ts",
+        find: "  'plan_approve',\n  'plan_rethink',\n",
+        replace: "  'plan_rethink',\n",
+    },
+    {
+        name: "an act is taken when its button is drawn, not when it is pressed",
+        file: "hooks/register.tsx",
+        find: "      const name = tool.replace(/^[a-z]+_/, '')\n",
+        replace: "      const name = tool.replace(/^[a-z]+_/, '')\n      if (options.isPrimary === true) { void takeAct($, key, tool, subject, '') }\n",
+    },
+    {
+        name: "a story is returned without a note",
+        file: "hooks/terylon.ts",
+        find: "export const NEEDS_TEXT: ReadonlySet<string> = new Set(['plan_rethink', 'story_return'])",
+        replace: "export const NEEDS_TEXT: ReadonlySet<string> = new Set(['plan_rethink'])",
+    },
+    {
+        name: "a verified story's merge becomes a button",
+        file: "hooks/register.tsx",
+        find: "            {shownStory.isVerified && !shownStory.isList && <Link href={consoleLink(base, `merge&story=${shownStory.story}`)} label={COPY.mergeInConsole} />}\n",
+        replace: "            {shownStory.isVerified && !shownStory.isList && <Button key=\"act-story-merge\" label=\"Merge\" onPress={() => undefined} />}\n",
+    },
+    {
+        name: "a second press sends the act again while Terylon answers",
+        edits: [
+            {
+                file: "hooks/register.tsx",
+                find: "  if (actsInFlight.has(key) || (NEEDS_TEXT.has(tool) && words.trim() === '')) {",
+                replace: "  if (NEEDS_TEXT.has(tool) && words.trim() === '') {",
+            },
+            {
+                file: "hooks/register.tsx",
+                find: "      const press = () => (isWaiting || state.busy !== null ? undefined : options.opens === true",
+                replace: "      const press = () => (false ? undefined : options.opens === true",
+            },
+        ],
+    },
+    {
+        name: "a refusal loses Terylon's own words",
+        file: "hooks/register.tsx",
+        find: "          <Text>{outcome.sentence ?? ''}</Text>,\n",
+        replace: "          <Text>Terylon refused.</Text>,\n",
+    },
+    {
+        name: "Claude Code's refusal of an act is said as Terylon's",
+        file: "hooks/register.tsx",
+        find: "      return { kind: 'not-allowed', tool, sentence: answered.reason, status: null }",
+        replace: "      return { kind: 'refused', tool, sentence: answered.reason, status: null }",
+    },
+    {
+        name: "the story's acts sit in a dashed slot again",
+        file: "hooks/register.tsx",
+        find: "<Box key=\"story-actions\" flexDirection=\"row\" gap={1} flexWrap=\"wrap\" alignItems=\"center\">",
+        replace: "<Box key=\"story-actions\" flexDirection=\"row\" gap={1} flexWrap=\"wrap\" alignItems=\"center\" borderStyle=\"dashed\">",
     },
     // The operator's Desktop walk of 1.1.1 (2026-10-21, #360).
     {
@@ -293,12 +351,6 @@ const MUTATIONS = [
         file: "hooks/register.tsx",
         find: "    size: COPY.sizes.includes(form.size) ? form.size : 'M',\n",
         replace: "    size: 'M',\n",
-    },
-    {
-        name: "one of S27's buttons is drawn in the story's slot",
-        file: "hooks/register.tsx",
-        find: "            <Button key=\"summarise\" label={COPY.summariseInSession}",
-        replace: "            <Button key=\"story-stop\" label=\"Stop\" onPress={() => undefined} />\n            <Button key=\"summarise\" label={COPY.summariseInSession}",
     },
     {
         name: "a row's kind and detail fall outside its one Button",

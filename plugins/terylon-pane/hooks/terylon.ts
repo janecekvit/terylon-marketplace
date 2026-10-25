@@ -1,16 +1,36 @@
 // The pane's one way to Terylon: $.mcp.call on the terylon server, through an allow-list.
 // The pane reads, adds a task or a goal, answers the leader's question, proposes a memory edit and marks a
-// notice handled. It never
-// calls one of the owner's gates: those are confirmed by the person in Terylon's form or in the console, and
-// the pane links there.
+// notice handled, and it takes the owner's acts Terylon PR 228 made owner writes (S27, #27): a plan approved or
+// sent back, a story returned, unblocked, abandoned, stopped or accepted, the leader paused or resumed, a goal
+// dropped, a memory proposal confirmed or dropped, the policy saved. It never merges: merge is the one gate,
+// confirmed by the person's passkey in the console, and the pane links there.
 
 // The server `terylon` as the terylon-os plugin registers it (measured on 2.1.296), then as a session that
 // added it by hand names it.
 export const SERVER_CANDIDATES = ['plugin:terylon-os:terylon', 'terylon'] as const
 
-// Every tool the pane may call: what it reads, then the five writes that decide nothing — a task, a goal, an
-// answer to the leader's question, a memory edit proposed, a notice handled. None of them is a gate (McpGates.cs
-// lists those; the owner decided on 2026-10-12, #360, that notice_handle is not one).
+// The owner's acts, each taken on its subject's card on the owner's press, in one click and with no passkey: every
+// former gate but merge, which Terylon PR 228 made an owner write. Copied from Terylon's tool table on main after
+// that PR (McpToolTable.cs), never derived; tests/terylon-pane/tool-table.test.js holds this list to the copy.
+export const OWNER_ACTS: readonly string[] = [
+  'plan_approve',
+  'plan_rethink',
+  'story_return',
+  'story_unblock',
+  'story_abandon',
+  'story_stop',
+  'story_accept',
+  'leader_pause',
+  'leader_resume',
+  'goal_drop',
+  'memory_confirm',
+  'memory_drop',
+  'policy_save',
+]
+
+// Every tool the pane may call: what it reads, the five writes that decide nothing — a task, a goal, an answer to
+// the leader's question, a memory edit proposed, a notice handled (the owner decided on 2026-10-12, #360, that
+// notice_handle is not a gate) — and the owner's acts above. Never the gate.
 export const PANE_TOOLS: ReadonlySet<string> = new Set([
   'briefing',
   'work_in_flight',
@@ -30,22 +50,12 @@ export const PANE_TOOLS: ReadonlySet<string> = new Set([
   'question_answer',
   'memory_propose',
   'notice_handle',
+  ...OWNER_ACTS,
 ])
 
-// The owner's gates (Terylon, src/Terylon.Web.Host/Mcp/McpGates.cs): never the pane's, whatever it is asked.
-export const GATE_TOOLS: readonly string[] = [
-  'plan_approve',
-  'plan_rethink',
-  'story_merge',
-  'story_return',
-  'story_unblock',
-  'story_abandon',
-  'story_stop',
-  'story_accept',
-  'leader_pause',
-  'leader_resume',
-  'goal_drop',
-]
+// The owner's one gate (Terylon main after PR 228, McpGates.cs): never the pane's, whatever it is asked. The person
+// confirms a merge with their passkey in the console; the pane shows "Merge in the console ↗".
+export const GATE_TOOLS: readonly string[] = ['story_merge']
 
 // A server the session does not have, in the words $.mcp.call rejects with.
 export const MISSING_SERVER = /not (found|connected|configured)|no (such|mcp) server|unknown server|is not a server/i
@@ -108,10 +118,49 @@ export function readResult(result: { content: readonly { type: string; text?: st
   }
 }
 
-// The permissions block that lets the pane call its own tools and nothing else: never a gate. The Status tab draws
+// The permissions block that lets the pane call its own tools and nothing else: never the gate. The Status tab draws
 // it as `Code` in json (S32), to be selected and copied by hand: `$.ui.copy` does not work in Desktop.
 export function allowRules(): string {
   const lines = [...PANE_TOOLS].map(tool => `    "${PANE_TOOL_PREFIX}${tool}"`)
 
   return ['"permissions": {', '  "allow": [', lines.join(',\n'), '  ]', '}'].join('\n')
+}
+
+// The acts whose field must say something before they are sent: a plan sent back carries its comment, a story
+// returned its note. Unblock, Abandon and Pause offer a field and send without it.
+export const NEEDS_TEXT: ReadonlySet<string> = new Set(['plan_rethink', 'story_return'])
+
+// WHAT EACH ACT SENDS, in one place: the subject's id under the name the pane's other calls give it ({story},
+// {goal}, {plan}), and the owner's words under the act's own. Inferred, not copied: the orchestrator's prep patch
+// named the tools but not their arguments, and Terylon's repository is not reachable from here.
+export function actArguments(tool: string, subject: number | null, words: string): Record<string, unknown> {
+  const said = words.trim()
+  const optional = (name: string) => (said === '' ? {} : { [name]: said })
+
+  switch (tool) {
+    case 'plan_approve':
+      return { plan: subject }
+    case 'plan_rethink':
+      return { plan: subject, comment: said }
+    case 'story_return':
+      return { story: subject, note: said }
+    case 'story_unblock':
+      return { story: subject, ...optional('note') }
+    case 'story_abandon':
+      return { story: subject, ...optional('reason') }
+    case 'story_stop':
+    case 'story_accept':
+      return { story: subject }
+    case 'leader_pause':
+      return optional('reason')
+    case 'leader_resume':
+      return {}
+    case 'goal_drop':
+      return { goal: subject }
+    case 'memory_confirm':
+    case 'memory_drop':
+      return { proposal: subject }
+    default:
+      return {}
+  }
 }

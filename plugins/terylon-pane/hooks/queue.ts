@@ -10,6 +10,7 @@ import type {
   PanePhase,
   PaneWorking,
   PanePlan,
+  PaneProposal,
   PaneQuestionItem,
   PaneQueuedItem,
   PaneRunningItem,
@@ -474,7 +475,78 @@ export function storyView(id: number, document: Json, inFlight: Json, question: 
     goal: number(document.goal),
     isRunning,
     isVerified: state === 'verified',
+    isBlocked: state === 'blocked',
+    // A STORY IN TERYLON'S OWN LIST has no pull request to merge: it is accepted instead (S27).
+    isList: text(document.target ?? inFlight.target) === 'list' || (pullRequest === null && state === 'verified'),
+    canStop: state === 'dispatched' || state === 'running',
+    commit: verdict === null ? (text(pullRequest?.head) ?? '').slice(0, 7) || null : (text(verdict.commit) ?? '').slice(0, 7) || null,
   }
+}
+
+// THE POLICY'S FIELDS (S27), in the order the Status tab draws them: the key policy_get answers with, the label, the
+// range the edit form says beside it, and how the value is read. Only the keys policy_get sends are drawn.
+export type PolicyField = { key: string; label: string; change: string; range: string | null; show: (value: number) => string; isMemory?: boolean }
+
+export const POLICY_FIELDS: readonly PolicyField[] = [
+  { key: 'slots', label: 'Slots', change: 'slots', range: '1–8', show: value => `${value} ${value === 1 ? 'story' : 'stories'}` },
+  { key: 'storyBudgetUsd', label: 'Story budget', change: 'story budget', range: '$', show: value => `$${value}` },
+  { key: 'dayBudgetUsd', label: 'Daily budget', change: 'daily budget', range: '$', show: value => `$${value}` },
+  { key: 'redVerdictsBeforeBlocked', label: 'Red verdicts before blocked', change: 'red verdicts', range: '0–10', show: value => `${value}` },
+  { key: 'continuations', label: 'Continuations', change: 'continuations', range: '0–10', show: value => `${value}` },
+  { key: 'storyHours', label: 'Story hours', change: 'story hours', range: '≤ 168', show: value => `${value} h` },
+  { key: 'stuckAfterMinutes', label: 'Stuck after, minutes', change: 'stuck after', range: '1–1440', show: value => `${value} min` },
+  { key: 'ownerMemoryChars', label: 'Owner memory, chars', change: 'owner memory', range: null, show: value => `${value} chars`, isMemory: true },
+  { key: 'projectMemoryChars', label: 'Project memory, chars', change: 'project memory', range: null, show: value => `${value} chars`, isMemory: true },
+  { key: 'topicMemoryChars', label: 'Topic memory, chars', change: 'topic memory', range: null, show: value => `${value} chars`, isMemory: true },
+  { key: 'topicsPerProject', label: 'Topics per project', change: 'topics per project', range: '1–50', show: value => `${value}` },
+]
+
+// The label a field is edited under: "Slots (1–8)", "Story budget ($)".
+export function policyFieldLabel(field: PolicyField): string {
+  return field.range === null ? field.label : `${field.label} (${field.range})`
+}
+
+// The fields policy_get sent, as the Status tab reads them: one row each, the three memory sizes in one row.
+export function policyRows(policy: Json | null): { label: string; value: string }[] {
+  if (policy === null) {
+    return []
+  }
+
+  const present = POLICY_FIELDS.filter(field => number(policy[field.key]) !== null)
+  const memory = present.filter(field => field.isMemory === true)
+  const rows: { label: string; value: string }[] = []
+
+  for (const field of present) {
+    if (field.isMemory === true) {
+      if (field === memory[0]) {
+        rows.push(memory.length === 1
+          ? { label: field.label.replace(/, chars$/, ''), value: field.show(number(policy[field.key]) ?? 0) }
+          : { label: `Memory: ${memory.map(item => item.label.replace(/ memory, chars$/, '').toLowerCase()).join(' · ')}`, value: `${memory.map(item => String(number(policy[item.key]))).join(' · ')} chars` })
+      }
+
+      continue
+    }
+
+    rows.push({ label: field.label.replace(/, minutes$/, ''), value: field.show(number(policy[field.key]) ?? 0) })
+  }
+
+  return rows
+}
+
+// What the form changes against policy_get's answer: the field, the value before and the value typed.
+export function policyChanges(policy: Json | null, values: Record<string, string>): { key: string; label: string; from: string; to: string; value: number | string }[] {
+  if (policy === null) {
+    return []
+  }
+
+  return POLICY_FIELDS
+    .filter(field => number(policy[field.key]) !== null && values[field.key] !== undefined && values[field.key]?.trim() !== String(number(policy[field.key])))
+    .map(field => {
+      const typed = (values[field.key] ?? '').trim()
+      const asNumber = Number(typed)
+
+      return { key: field.key, label: field.change, from: String(number(policy[field.key])), to: typed, value: typed !== '' && Number.isFinite(asNumber) ? asNumber : typed }
+    })
 }
 
 // "(a) web na mobilu": the options a question offers in its own text, to press instead of typing.
@@ -607,4 +679,19 @@ export function bellView(notices: Json, leader: Json | null, metrics: Json | nul
     handling: null,
     handleSentence: null,
   }
+}
+
+// THE MEMORY'S PROPOSALS (S27), as memory_get lists them: what each changes, why, who proposed it and when.
+export function proposalItems(memory: Json, zoneOffsetMinutes = 0): PaneProposal[] {
+  return list(memory.proposals).map(proposal => ({
+    id: number(proposal.id) ?? 0,
+    file: text(proposal.file) ?? '',
+    action: text(proposal.action) ?? '',
+    oldText: text(proposal.oldText),
+    text: text(proposal.text),
+    why: text(proposal.why),
+    by: text(proposal.by) ?? text(proposal.proposedBy) ?? '',
+    story: number(proposal.story),
+    at: clock(proposal.at ?? proposal.proposedAt, zoneOffsetMinutes),
+  }))
 }

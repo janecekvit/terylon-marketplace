@@ -129,6 +129,13 @@ export type PaneStory = {
   goal: number | null
   isRunning: boolean
   isVerified: boolean
+  // What the owner's acts are drawn by (S27): blocked, verified in Terylon's own list (Accept, no merge), and a run
+  // to stop, which only a dispatched or running story has.
+  isBlocked: boolean
+  isList: boolean
+  canStop: boolean
+  // The commit a merge would take: the verdict's, else the pull request's head.
+  commit: string | null
 }
 
 export type PaneAddPhase = 'form' | 'sending' | 'added' | 'refused' | 'timeout' | 'paused'
@@ -192,6 +199,10 @@ export type PaneGoal = {
   title: string
   meta: string
   stories: { id: number; title: string; state: string }[]
+  // An open or active goal can be dropped (S27); a done or dropped one cannot. Its stories with a run going keep
+  // going when it is dropped, and the drop says so.
+  isOpen: boolean
+  running: number[]
 }
 
 export type PaneNotice = { id: number; source: string; title: string; body: string; when: string; link: string | null }
@@ -222,15 +233,30 @@ export type PaneMemoryEdit = {
   why: string
 }
 
+// A memory proposal waiting for the owner (S27): what it changes, why, and who proposed it.
+export type PaneProposal = { id: number; file: string; action: string; oldText: string | null; text: string | null; why: string | null; by: string; story: number | null; at: string | null }
+
 export type PaneMemory = {
   phase: 'loading' | 'ok' | 'error' | 'editing' | 'sending' | 'proposed' | 'refused'
   files: PaneMemoryFile[]
   rules: PaneMemoryRule[]
   pending: number
+  proposals: PaneProposal[]
   edit: PaneMemoryEdit | null
   sentence: string | null
   proposed: string[]
 }
+
+// WHAT BECAME OF AN ACT (S27): Terylon took it, has not answered within its bound, refused it in its own words, or
+// Claude Code did not let the call through.
+export type PaneActOutcome = { kind: 'done' | 'pending' | 'refused' | 'not-allowed'; tool: string; sentence: string | null; status: number | null }
+
+// One subject's acts: the field open under its card (the act it sends), what is typed there, the act Terylon is
+// answering, and the last outcome. Keyed by subject: "plan-41", "story-327", "leader", "goal-3", "proposal-5", "policy".
+export type PaneAct = { open: string | null; text: string; busy: string | null; outcome: PaneActOutcome | null }
+
+// The policy's form on the Status tab: whether it is open, and each field as typed.
+export type PanePolicyForm = { isEditing: boolean; values: Record<string, string> }
 
 declare module 'claude-code' {
   interface PluginState {
@@ -247,6 +273,9 @@ declare module 'claude-code' {
       goal: PaneGoal | null
       bell: PaneBell
       open: string[]
+      acts: Record<string, PaneAct>
+      policyForm: PanePolicyForm
+      rulesAsked: boolean
     }
   }
 }

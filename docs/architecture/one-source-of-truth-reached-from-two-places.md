@@ -1,6 +1,6 @@
 # One source of truth, reached from two places
 
-**Status:** accepted, 2026-10-12, on work item #332 (criterion c10). **Agentic OS on TerylonLab holds every fact the owner works with, and is reached the same way from two places: from the PC, in Claude Desktop, with the whole pane, and from terylon-remote, through Remote Control, when the PC is off.** The pane only ever shows what Agentic OS is doing. It holds nothing and decides nothing; a decision is a link to the console.
+**Status:** accepted, 2026-10-12, on work item #332 (criterion c10). **Superseded in part on 2026-10-21** by [the pane takes the owner's acts](./the-pane-takes-the-owners-acts.md): the pane now takes the owner's acts on their cards, and only merge stays a link to the console. The one source of truth and the one `/mcp` stand. **Agentic OS on TerylonLab holds every fact the owner works with, and is reached the same way from two places: from the PC, in Claude Desktop, with the whole pane, and from terylon-remote, through Remote Control, when the PC is off.** The pane only ever shows what Agentic OS is doing. It holds nothing and decides nothing; a decision is a link to the console.
 
 ## Context
 
@@ -41,8 +41,8 @@ The diagram below is copied unchanged from #332, rev 28, section *Use case: one 
 | The phone | Remote Control on terylon-remote: skills and tools always | nothing |
 
 - The pane on the phone is read-only and **NOT YET VERIFIED**. The operator's walk 2 settles it, and replaces this mark with what it measured.
-- A gate is always the person's, confirmed in Terylon's form or in the console: plan approve or rethink, story merge, return, unblock, abandon, stop or accept, leader pause or resume.
-- A surface may write only what decides nothing: a task, a goal, an answer to the leader's question, a proposed memory edit.
+- A gate is always the person's, confirmed in Terylon's form or in the console: plan approve or rethink, story merge, return, unblock, abandon, stop or accept, leader pause or resume. **Superseded 2026-10-21**: merge is the one gate; the rest are the owner's acts, taken on their cards ([the pane takes the owner's acts](./the-pane-takes-the-owners-acts.md)).
+- A surface may write only what decides nothing: a task, a goal, an answer to the leader's question, a proposed memory edit. **Superseded 2026-10-21** by the same record, for the owner's acts.
 
 ## Consequences
 
@@ -52,7 +52,7 @@ The diagram below is copied unchanged from #332, rev 28, section *Use case: one 
 | good | the PC being off loses no capability that matters: the gates live in the console, and everything else is a skill or a tool on terylon-remote |
 | cost | while TerylonLab does not answer, the pane shows the last state it read, marked stale, with the time and the reason |
 | **constraint** | **giving the pane a store of its own that survives a session, or a write that decides, undoes this.** The pane's `$.state` holds only the last answer and the screen it is on. Its `$.store` holds only where it last read the events and which signals it posted. |
-| **constraint** | **a tool in the pane's allow-list that is a gate undoes it**: `PANE_TOOLS` names reads and the five writes that decide nothing — `notice_handle` the fifth since #360, and `goal_drop` a gate the pane links to the console for — and a mutation planting a gate there must turn the tests red |
+| **constraint** | **a tool in the pane's allow-list that is a gate undoes it**: `PANE_TOOLS` names reads, the five writes that decide nothing — `notice_handle` the fifth since #360 — and, since S27, the owner's thirteen acts; `story_merge`, the one gate, is never among them, and a mutation planting it there must turn the tests red |
 
 ## Where it lives
 

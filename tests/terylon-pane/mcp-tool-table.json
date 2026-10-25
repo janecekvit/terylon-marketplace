@@ -1,0 +1,63 @@
+{
+  "source": "Terylon's MCP tool table on main after Terylon PR 228 (src/Terylon.Web.Host/Mcp/McpToolTable.cs and McpGates.cs), as the orchestrator relayed it on 2026-10-25: copied, never derived. PR 228 made story_merge the one gate a tool can reach and the former gates owner writes, and added memory_confirm, memory_drop and policy_save as owner writes.",
+  "reads": [
+    "briefing",
+    "goals_list",
+    "goal_get",
+    "stories_list",
+    "story_get",
+    "plans_list",
+    "questions_list",
+    "work_in_flight",
+    "merge_gate",
+    "leader_status",
+    "metrics",
+    "audit",
+    "events_since",
+    "memory_get",
+    "memory_search",
+    "memory_list_recent",
+    "policy_get",
+    "notices_list",
+    "leader_answer",
+    "spec_get",
+    "check_get",
+    "secrets_status",
+    "knowledge_search",
+    "knowledge_get",
+    "knowledge_list_recent",
+    "logs_search",
+    "logs_histogram"
+  ],
+  "writes": [
+    "notice_handle",
+    "goal_add",
+    "question_answer",
+    "tasks_add",
+    "story_order",
+    "spec_revise",
+    "story_choose_run",
+    "memory_propose",
+    "knowledge_propose",
+    "check_run",
+    "connect_provider"
+  ],
+  "ownerWritesThatWereGates": [
+    "plan_approve",
+    "plan_rethink",
+    "story_return",
+    "story_unblock",
+    "story_abandon",
+    "story_stop",
+    "story_accept",
+    "leader_pause",
+    "leader_resume",
+    "goal_drop",
+    "memory_confirm",
+    "memory_drop",
+    "policy_save"
+  ],
+  "gates": [
+    "story_merge"
+  ]
+}

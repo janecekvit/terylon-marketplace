@@ -10,7 +10,7 @@ import { CHIP_BACKGROUND, CHIP_WORD } from '../hooks/drawing'
 
 import { MARK_RATIO, PALETTE, TEXT_RATIO, contrast, inks, strokedCards } from './contrast'
 import type { Ink, Theme } from './contrast'
-import { BRIEFING, GOAL_QUESTION, PANE_PROPS, SESSION, world } from './fixtures'
+import { BRIEFING, FLIGHT, GOAL_QUESTION, MEMORY, PANE_PROPS, SESSION, refusal, world } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -61,7 +61,9 @@ for (const surface of ['desktop', 'terminal'] as const) {
     }
 
     const open = strokedCards(await ui.drawn()).flatMap(card => inks(card))
-    expect(open.map(ink => ink.text)).toEqual(expect.arrayContaining(['Má mrtvý běh pokračovat od posledního commitu?', 'Answer in the console ↗', 'Merge in the console ↗', 'Unblock in the console ↗']))
+    // ONLY MERGE AND AN ANSWER LINK OUT (S27): a plan's and a blocked story's acts are on their own cards.
+    expect(open.map(ink => ink.text)).toEqual(expect.arrayContaining(['Má mrtvý běh pokračovat od posledního commitu?', 'Answer in the console ↗', 'Merge in the console ↗']))
+    expect(open.map(ink => ink.text)).not.toContain('Unblock in the console ↗')
     expect(unreadable(open)).toEqual([])
     await ui.unmount()
   })
@@ -89,7 +91,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
     await ui.press({ key: 'story-333' })
     await look()
 
-    expect(seen.map(ink => ink.text)).toEqual(expect.arrayContaining(['the page is not well', 'Bell in the console ↗', 'Approve in the console ↗', 'Rethink ↗', 'notices_list', 'Question from the run', 'Answer in the console ↗']))
+    expect(seen.map(ink => ink.text)).toEqual(expect.arrayContaining(['the page is not well', 'Bell in the console ↗', 'Approve starts both stories as the plan orders them.', 'Edit criteria or pick stories in the console ↗', 'notices_list', 'Question from the run', 'Answer in the console ↗']))
     // The alert's title on its problem card in `error`; as a row on the Bell, a title in `text`.
     expect(seen.filter(ink => ink.text === 'the page is not well').map(ink => ink.color)).toEqual(['error', 'text'])
     expect(unreadable(seen)).toEqual([])
@@ -119,3 +121,40 @@ test('no card is filled, on any screen: the stroke carries the warning, the pane
     expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.borderStyle === 'round' && box.props.backgroundColor !== undefined)).toEqual([])
   }
 })
+
+// THE OWNER'S ACTS (S27) on the cards that wait or warn: a blocked story's, a refusal's, Claude Code's refusal, the
+// memory's proposals. The danger word, the struck old text and the new one, the ⚠ mark: each reads in both themes.
+for (const surface of ['desktop', 'terminal'] as const) {
+  test(`${surface}: every word on the acts' cards reads in both themes, the danger word, the diff and the ⚠ mark included`, async ($, on) => {
+    const terylon = world(on)
+    terylon.answers.story_get = (args: Record<string, unknown>) => ({ id: args.story, goal: 3, title: 'Memory proposals', state: 'blocked', attempt: 2, pullRequest: null, timeline: [] })
+    terylon.answers.work_in_flight = { ...FLIGHT, stories: [FLIGHT.stories[0], { ...FLIGHT.stories[1], state: 'blocked' }] }
+    terylon.answers.story_unblock = refusal('Story 329 is running; only a blocked story is unblocked.', 409)
+    terylon.answers.memory_get = { ...MEMORY, proposals: [{ id: 5, file: 'owner', action: 'replace', oldText: 'Old text.', text: 'New text.', why: 'Because.', by: 'owner', at: '2026-10-11T19:14:00Z' }] }
+    await $.session.start(SESSION)
+    await terylon.clock.settle()
+
+    const ui = await $.ui.mount({ ...PANE, surface })
+    const seen: Ink[] = []
+    const look = async () => {
+      seen.push(...strokedCards(await ui.drawn()).flatMap(card => inks(card)))
+    }
+
+    await ui.press({ key: 'story-329' })
+    await look()
+    await ui.press({ key: 'act-story-329-unblock' })
+    await look()
+    terylon.mode.server = 'prompted'
+    await ui.press({ key: 'act-story-329-unblock' })
+    terylon.mode.server = 'up'
+    await look()
+    await $.command.run({ command: 'terylon-memory', args: '' } as never)
+    await look()
+
+    expect(seen.map(ink => ink.text)).toEqual(expect.arrayContaining(['Blocked', 'Abandon…', '✗ Refused (409)', 'Story 329 is running; only a blocked story is unblocked.', '⚠', "Claude Code refused the pane's call to story_unblock", 'Old text.', 'New text.']))
+    expect(seen.find(ink => ink.text === 'Abandon…')?.color).toBe('error')
+    expect(seen.find(ink => ink.text === '⚠')?.isMark).toBe(true)
+    expect(unreadable(seen)).toEqual([])
+    await ui.unmount()
+  })
+}
