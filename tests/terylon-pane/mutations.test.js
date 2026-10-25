@@ -232,8 +232,8 @@ const MUTATIONS = [
         edits: [
             {
                 file: "hooks/register.tsx",
-                find: "  if (actsInFlight.has(key) || (NEEDS_TEXT.has(tool) && words.trim() === '')) {",
-                replace: "  if (NEEDS_TEXT.has(tool) && words.trim() === '') {",
+                find: "  if (actsInFlight.has(key) || !isSendable(tool, subject, words)) {",
+                replace: "  if (!isSendable(tool, subject, words)) {",
             },
             {
                 file: "hooks/register.tsx",

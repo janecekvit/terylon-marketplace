@@ -46,7 +46,7 @@ import { CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, NARROW_COLUMNS, STEPPER_COLUMNS, 
 import type { Picture, Proofs } from './drawing'
 import { ALERT_SOURCES, alertCount, healthLine, stateWord } from './health'
 import type { Health } from './health'
-import { MISSING_SERVER, NEEDS_TEXT, NOT_ALLOWED, SERVER_CANDIDATES, actArguments, allowRules, assertPaneTool, readResult } from './terylon'
+import { MISSING_SERVER, NEEDS_TEXT, NOT_ALLOWED, SERVER_CANDIDATES, actArguments, allowRules, assertPaneTool, isSendable, readResult } from './terylon'
 import type { TerylonAnswer } from './terylon'
 import {
   alertItems,
@@ -65,6 +65,7 @@ import {
   planItems,
   policyChanges,
   policyFieldLabel,
+  policyProblems,
   policyRows,
   POLICY_FIELDS,
   proposalItems,
@@ -97,7 +98,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.2.3'
+export const MOD_VERSION = '1.3.0'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -886,7 +887,7 @@ async function openAct($: EngineInterface, key: string, tool: string): Promise<v
 const actsInFlight = new Set<string>()
 
 async function takeAct($: EngineInterface, key: string, tool: string, subject: number | null, words: string, args?: Record<string, unknown>): Promise<void> {
-  if (actsInFlight.has(key) || (NEEDS_TEXT.has(tool) && words.trim() === '')) {
+  if (actsInFlight.has(key) || !isSendable(tool, subject, words)) {
     return
   }
 
@@ -911,16 +912,22 @@ async function takeAct($: EngineInterface, key: string, tool: string, subject: n
 
 function outcomeOf(tool: string, answered: TerylonAnswer): PaneActOutcome {
   switch (answered.kind) {
+    // EVERY OWNER ACT ANSWERS {accepted, sentence, commandId, subjectId} (Terylon main aaf07e8): true the leader took
+    // it, false the leader refused it, null no answer within 10 s. Refused before the leader, it is {refused, status?}.
     case 'ok':
+      if (text(answered.value.refused) !== null) {
+        return { kind: 'refused', tool, sentence: text(answered.value.refused), status: number(answered.value.status) }
+      }
+
+      if (answered.value.accepted === true) {
+        return { kind: 'done', tool, sentence: text(answered.value.sentence), status: null }
+      }
+
       if (answered.value.accepted === false) {
-        return { kind: 'refused', tool, sentence: text(answered.value.sentence) ?? text(answered.value.refused), status: null }
+        return { kind: 'refused', tool, sentence: text(answered.value.sentence), status: null }
       }
 
-      if (answered.value.accepted == null && text(answered.value.commandId) !== null) {
-        return { kind: 'pending', tool, sentence: COPY.actPending(text(answered.value.commandId)), status: null }
-      }
-
-      return { kind: 'done', tool, sentence: text(answered.value.sentence), status: null }
+      return { kind: 'pending', tool, sentence: COPY.actPending(text(answered.value.commandId)), status: null }
     case 'refused':
       return { kind: 'refused', tool, sentence: answered.sentence, status: answered.status }
     case 'not-allowed':
@@ -965,7 +972,7 @@ async function howToFix($: EngineInterface): Promise<void> {
   await show($, { screen: 'status' }, true)
 }
 
-// THE POLICY: Edit fills the form with what policy_get answered; Save sends what changed, under its version.
+// THE POLICY: Edit fills the form with what policy_get answered; Save sends only what changed.
 async function editPolicy($: EngineInterface, isAgain: boolean): Promise<void> {
   await setAct($, 'policy', current => ({ ...current, outcome: null }))
   await update($, policyForm, (current: PanePolicyForm): PanePolicyForm => ({
@@ -984,8 +991,13 @@ async function savePolicy($: EngineInterface): Promise<void> {
     return
   }
 
-  const version = number(policy?.version)
-  const args: Json = { ...(version === null ? {} : { version }), ...Object.fromEntries(changes.map(change => [change.key, change.value])) }
+  // ONLY WHAT CHANGED, AND ONLY WITHIN policy_get's LIMITS: no version, no concurrency check, the last write wins
+  // (Terylon main aaf07e8), and Terylon checks no argument against a schema.
+  if (policyProblems(policy, form.values).length > 0) {
+    return
+  }
+
+  const args: Json = Object.fromEntries(changes.map(change => [change.key, change.value]))
 
   await takeAct($, 'policy', 'policy_save', null, '', args)
 
@@ -1556,7 +1568,7 @@ export const register: Register = on => {
           ? <Text weight="semibold" color="success">{COPY.actDoneLine(COPY.actDone[outcome.tool] ?? outcome.tool, outcome.sentence)}</Text>
           : <Text weight="semibold">{outcome.sentence ?? ''}</Text>, null, [
           after === null ? null : <Text color="inactive" size="footnote">{after}</Text>,
-          ...extra,
+          ...(outcome.kind === 'done' ? extra : [<Button key={`act-${key}-refresh`} label={COPY.actRefresh} variant="primary" onPress={() => refreshAct($, key)} />]),
         ])
       }
 
@@ -1737,15 +1749,17 @@ export const register: Register = on => {
             onPress: () => go({ screen: 'story', story: item.story }),
           })),
       ])
-      // THE POLICY (S27): read as policy_get answered it, edited in place, saved with policy_save under its version.
+      // THE POLICY (S27): read as policy_get answered it, edited in place within its limits, saved with policy_save.
       const form = { ...EMPTY_POLICY_FORM, ...(await read($, policyForm)) }
       const rows = policyRows(policy)
       const changes = policyChanges(policy, form.values)
+      const problems_ = policyProblems(policy, form.values)
+      const isSavable = changes.length > 0 && problems_.length === 0
       const policyState = actState('policy')
       const isPolicyEditing = form.isEditing && hasInput && 'Input' in elements
       const policyCard = cardOf('status-policy', COPY.policy, (
         <Box flexDirection="row" gap={1} alignItems="center">
-          <Text color="subtle" size="footnote" tabular>{isPolicyEditing ? COPY.policyEditing : COPY.policyVersion(number(policy?.version), text(policy?.updatedAt ?? policy?.changedAt) !== null)}</Text>
+          {isPolicyEditing && <Text color="subtle" size="footnote">{COPY.policyEditing}</Text>}
           {!isPolicyEditing && hasInput && rows.length > 0 && <Button key="act-policy-edit" label={COPY.policyEdit} dimColor={policyState.busy !== null ? true : undefined} onPress={() => (policyState.busy === null ? editPolicy($, false) : undefined)} />}
         </Box>
       ), isPolicyEditing && 'Input' in elements
@@ -1753,15 +1767,16 @@ export const register: Register = on => {
             ...POLICY_FIELDS.filter(field => form.values[field.key] !== undefined).map(field => (
               <elements.Input
                 key={`act-policy-field-${field.key}`}
-                label={policyFieldLabel(field)}
+                label={policyFieldLabel(field, policy)}
                 value={form.values[field.key] ?? ''}
                 onInput={value => update($, policyForm, (state: PanePolicyForm): PanePolicyForm => ({ ...EMPTY_POLICY_FORM, ...state, values: { ...state.values, [field.key]: value } }))}
                 onSubmit={() => savePolicy($)}
               />
             )),
+            ...problems_.map((problem, index) => <Text key={`policy-problem-${index}`} color="error">{problem}</Text>),
             <Text color="subtle" size="footnote" tabular>{COPY.policyChanges(changes)}</Text>,
             <Box flexDirection="row" gap={1}>
-              <Button key="act-policy-send" label={policyState.busy === null ? COPY.actButton.policy_save ?? 'Save' : COPY.actBusy.policy_save ?? 'Saving…'} variant={changes.length === 0 || policyState.busy !== null ? undefined : 'primary'} dimColor={changes.length === 0 || policyState.busy !== null ? true : undefined} onPress={() => (policyState.busy === null ? savePolicy($) : undefined)} />
+              <Button key="act-policy-send" label={policyState.busy === null ? COPY.actButton.policy_save ?? 'Save' : COPY.actBusy.policy_save ?? 'Saving…'} variant={!isSavable || policyState.busy !== null ? undefined : 'primary'} dimColor={!isSavable || policyState.busy !== null ? true : undefined} onPress={() => (policyState.busy === null && isSavable ? savePolicy($) : undefined)} />
               <Button key="act-policy-cancel" label={COPY.actCancel} dimColor onPress={() => (policyState.busy === null ? update($, policyForm, (): PanePolicyForm => EMPTY_POLICY_FORM) : undefined)} />
             </Box>,
             actBusyNote('policy'),

@@ -484,7 +484,8 @@ export function storyView(id: number, document: Json, inFlight: Json, question: 
 }
 
 // THE POLICY'S FIELDS (S27), in the order the Status tab draws them: the key policy_get answers with, the label, the
-// range the edit form says beside it, and how the value is read. Only the keys policy_get sends are drawn.
+// range the edit form says beside it when policy_get sends no limit for it, and how the value is read. Only the keys
+// policy_get sends are drawn; the range it sends under `limits` wins (Terylon main aaf07e8).
 export type PolicyField = { key: string; label: string; change: string; range: string | null; show: (value: number) => string; isMemory?: boolean }
 
 export const POLICY_FIELDS: readonly PolicyField[] = [
@@ -501,9 +502,50 @@ export const POLICY_FIELDS: readonly PolicyField[] = [
   { key: 'topicsPerProject', label: 'Topics per project', change: 'topics per project', range: '1–50', show: value => `${value}` },
 ]
 
-// The label a field is edited under: "Slots (1–8)", "Story budget ($)".
-export function policyFieldLabel(field: PolicyField): string {
-  return field.range === null ? field.label : `${field.label} (${field.range})`
+// A field's range as policy_get's `limits` sends it: { min, max } or [min, max]; null when it sends none.
+export function policyLimit(policy: Json | null, key: string): { min: number; max: number } | null {
+  const limits = policy?.limits
+
+  if (limits === null || typeof limits !== 'object') {
+    return null
+  }
+
+  const limit = (limits as Json)[key]
+  const [min, max] = Array.isArray(limit) ? [number(limit[0]), number(limit[1])] : limit !== null && typeof limit === 'object' ? [number((limit as Json).min), number((limit as Json).max)] : [null, null]
+
+  return min === null || max === null ? null : { min, max }
+}
+
+// The label a field is edited under: "Slots (1–8)", "Story budget ($1–500)", from its limit where Terylon sends one.
+export function policyFieldLabel(field: PolicyField, policy: Json | null = null): string {
+  const limit = policyLimit(policy, field.key)
+  const isMoney = field.range === '$'
+  const range = limit === null ? field.range : `${isMoney ? '$' : ''}${limit.min}–${limit.max}`
+
+  return range === null ? field.label : `${field.label} (${range})`
+}
+
+// WHAT IS WRONG WITH THE FORM, in the pane's own words: Terylon checks no act's arguments against a schema, so a
+// value outside its limit, or not a number, is caught here and nothing is sent.
+export function policyProblems(policy: Json | null, values: Record<string, string>): string[] {
+  return policyChanges(policy, values).flatMap(change => {
+    const field = POLICY_FIELDS.find(item => item.key === change.key)
+    const limit = policyLimit(policy, change.key)
+    const isMoney = field?.range === '$'
+    const name = change.label.charAt(0).toUpperCase() + change.label.slice(1)
+    const value = typeof change.value === 'number' ? change.value : NaN
+    const isNumber = Number.isFinite(value) && (isMoney ? value >= 0 : Number.isInteger(value))
+    const isInLimit = limit === null || (value >= limit.min && value <= limit.max)
+
+    if (isNumber && isInLimit) {
+      return []
+    }
+
+    const kind = isMoney ? 'an amount in dollars' : 'a whole number'
+    const range = limit === null ? '' : ` from ${isMoney ? '$' : ''}${limit.min} to ${isMoney ? '$' : ''}${limit.max}`
+
+    return [`${name} is ${kind}${range}; ${change.to === '' ? 'an empty field' : change.to} is not.`]
+  })
 }
 
 // The fields policy_get sent, as the Status tab reads them: one row each, the three memory sizes in one row.

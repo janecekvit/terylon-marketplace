@@ -130,9 +130,24 @@ export function allowRules(): string {
 // returned its note. Unblock, Abandon and Pause offer a field and send without it.
 export const NEEDS_TEXT: ReadonlySet<string> = new Set(['plan_rethink', 'story_return'])
 
+// The acts that name a subject: sent only with its id. The leader's two and the policy name none.
+const NEEDS_SUBJECT: ReadonlySet<string> = new Set(OWNER_ACTS.filter(tool => !tool.startsWith('leader_') && tool !== 'policy_save'))
+
+// WHETHER AN ACT MAY BE SENT. Terylon does not check an act's arguments against a schema (Terylon main aaf07e8),
+// so the pane does: a subject's id present, and the text a plan sent back or a story returned carries.
+export function isSendable(tool: string, subject: number | null, words: string): boolean {
+  if (NEEDS_SUBJECT.has(tool) && !(subject !== null && Number.isInteger(subject) && subject > 0)) {
+    return false
+  }
+
+  return !(NEEDS_TEXT.has(tool) && words.trim() === '')
+}
+
 // WHAT EACH ACT SENDS, in one place: the subject's id under the name the pane's other calls give it ({story},
-// {goal}, {plan}), and the owner's words under the act's own. Inferred, not copied: the orchestrator's prep patch
-// named the tools but not their arguments, and Terylon's repository is not reachable from here.
+// {goal}, {plan}, {proposal}), and the owner's words under the act's own. From Terylon main aaf07e8: plan_approve
+// {plan, stories?, edits?}, of which the pane sends {plan} (picking stories and editing criteria stay the
+// console's); memory_confirm {proposal, text?}, sent without a text. The rest are inferred from the pane's own
+// calls: Terylon's tool table was not reachable when S27 was built.
 export function actArguments(tool: string, subject: number | null, words: string): Record<string, unknown> {
   const said = words.trim()
   const optional = (name: string) => (said === '' ? {} : { [name]: said })

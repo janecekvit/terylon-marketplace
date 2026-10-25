@@ -460,7 +460,6 @@ export const COPY = {
   proposalWhy: (why: string) => `Why: ${why}`,
   memoryBrowser: "Versions, roll-back and dropped proposals stay in the console's memory browser ↗",
   policy: 'Policy',
-  policyVersion: (version: number | null, isChanged: boolean) => [version === null ? null : `version ${version}`, isChanged ? null : 'never changed'].filter(part => part !== null).join(' · '),
   policyEditing: 'editing',
   policyEdit: 'Edit',
   policyAgain: 'Edit again',

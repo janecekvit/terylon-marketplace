@@ -45,7 +45,9 @@ On 2026-10-21 the operator decided that merge alone carries enough risk to need 
 | good | the owner decides in Desktop what Desktop shows them, and the phone keeps the same acts through the `terylon-os` tools |
 | good | the one decision that changes `main` keeps its passkey, and no surface but the console can take it |
 | cost | the allow rules grow from eighteen to thirty-one, and an allowed act can be called by Claude in a session as well as by the pane |
-| cost | the acts' arguments were inferred, not copied: Terylon's repository was not reachable when S27 was built (`actArguments` in `hooks/terylon.ts` holds them in one place) |
+| cost | Terylon checks no act's arguments against a schema (Terylon main `aaf07e8`), so the pane validates them itself: the subject's id, a return's note and a rethink's comment, the policy's fields within `policy_get`'s `limits` |
+| cost | `policy_save` has no version and no concurrency check: the last write wins, from the pane, the console or a session alike |
+| cost | some arguments are inferred from the pane's own calls rather than read from Terylon; `actArguments` in `hooks/terylon.ts` holds them all in one place, and says which |
 | **constraint** | **`story_merge` in `PANE_TOOLS`, `OWNER_ACTS` or the README's allow rules undoes this**: the copy of Terylon's tool table, `tests/terylon-pane/tool-table.test.js` and a mutation each turn red on it |
 | **constraint** | **an act fired when its card is drawn undoes this**: `tests/acts.test.ts` draws every card and requires no act call, and a mutation that fires one turns it red |
 
