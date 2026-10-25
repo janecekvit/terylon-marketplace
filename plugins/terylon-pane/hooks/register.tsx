@@ -98,7 +98,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.3.0'
+export const MOD_VERSION = '1.3.1'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -1653,6 +1653,14 @@ export const register: Register = on => {
     const warned = (title: string, tone: 'wait' | 'bad' = 'bad') => <Text size="heading" weight="semibold" color={tone === 'bad' ? 'error' : 'text'}>{title}</Text>
 
 
+    // THE ALLOW RULES' FIX, ONE DRAWING for a refused poll and an act Claude Code refused (S27): the steps, then the
+    // rules the pane needs.
+    const rulesFix = () => [
+      steps(COPY.fixNotAllowed),
+      // THE ALLOW RULES AS CODE (S32): json, the pane's whole own list, no gate; selected and copied by hand.
+      <Code key="allow-rules" source={allowRules()} language="json" />,
+    ]
+
     // THE STATES THAT ARE NOT A QUEUE: what happened, why, and the step that fixes it.
     let problemCard: unknown = null
 
@@ -1667,9 +1675,7 @@ export const register: Register = on => {
       problemCard = cardOf('problem', warned(COPY.notAllowedTitle), COPY.notAllowedHint, [
         <Text color="inactive">{COPY.notAllowedBody}</Text>,
         reason(current.problem),
-        steps(COPY.fixNotAllowed),
-        // THE ALLOW RULES AS CODE (S32): json, the pane's whole own list, no gate; selected and copied by hand.
-        <Code key="allow-rules" source={allowRules()} language="json" />,
+        ...rulesFix(),
         retry,
       ], 'bad')
     } else if (current.connection === 'refused') {
@@ -1725,8 +1731,7 @@ export const register: Register = on => {
       // THE RULES, ASKED FOR BY How to fix (S27): an act Claude Code refused needs the same rules as a refused poll.
       const rulesCard = current.connection === 'not-allowed' || !(await read($, rulesAsked)) ? null : cardOf('problem-rules', warned(COPY.notAllowedTitle, 'wait'), COPY.notAllowedHint, [
         <Text color="inactive">{COPY.notAllowedBody}</Text>,
-        steps(COPY.fixNotAllowed),
-        <Code key="allow-rules" source={allowRules()} language="json" />,
+        ...rulesFix(),
       ], 'wait')
       const alertCards = current.alertNotices.map(notice =>
         cardOf(`problem-alert-${notice.id}`, warned(notice.title), COPY.alertHint(notice.source, notice.when), [

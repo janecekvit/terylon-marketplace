@@ -144,7 +144,7 @@ const MUTATIONS = [
     {
         name: "the Status tab is missing a fix step for not-allowed",
         file: "hooks/register.tsx",
-        find: "        steps(COPY.fixNotAllowed),\n",
+        find: "      steps(COPY.fixNotAllowed),\n",
         replace: "",
     },
     {
