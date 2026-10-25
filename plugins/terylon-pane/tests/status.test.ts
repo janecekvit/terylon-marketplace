@@ -20,20 +20,20 @@ test('well: ok, the slots and the runs in them, the cost today and over 30 days,
     const ui = await $.ui.mount({ ...PANE, surface })
     await ui.press({ key: 'tab-status' })
 
-    expect((await ui.find({ key: 'tab-status' }))?.props.label).toBe('● Status')
+    expect((await ui.find({ key: 'tab-status' }))?.props.variant).toBe('primary')
     expect((await ui.find({ type: 'Text', text: exact('ok') }))?.props.color).toBe('success')
-    expect(await ui.find({ type: 'Text', text: /^last answer at \d\d:\d\d$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^\s*last answer at \d\d:\d\d$/ })).toBeDefined()
     expect(await ui.find({ key: 'status-refresh' })).toBeDefined()
 
     expect(await ui.find({ type: 'Text', text: exact('2 of 4 running') })).toBeDefined()
-    expect((await ui.find({ key: 'status-story-333' }))?.text).toBe('#333 Direct dispatch')
+    expect((await ui.find({ key: 'status-story-333' }))?.text).toMatch(/^\s*(?:●\s+)?running\s+#333 Direct dispatch\s+5\/8 · \$2\.10$/)
     expect(await ui.find({ type: 'Text', text: exact('$5.50 of the $20 daily limit today') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('43 stories · $1.10 per story · 0 merged · 1 open PR') })).toBeDefined()
 
     expect(await ui.find({ type: 'Text', text: exact('Problems · 0') })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: exact('Nothing wrong.') }))?.props.color).toBe('subtle')
 
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.2.1') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.3.0') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('TERYLON_URL https://terylon.example.ts.net') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('server plugin:terylon-os:terylon') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Every failure is in claude --debug under terylon-pane:') })).toBeDefined()
@@ -41,7 +41,7 @@ test('well: ok, the slots and the runs in them, the cost today and over 30 days,
     await ui.press({ key: 'status-story-333' })
     expect((await ui.find({ key: 'back' }))?.props.label).toBe('‹ Status')
     await ui.press({ key: 'back' })
-    expect((await ui.find({ key: 'tab-status' }))?.props.label).toBe('● Status')
+    expect((await ui.find({ key: 'tab-status' }))?.props.variant).toBe('primary')
     await ui.unmount()
   }
 })
@@ -60,10 +60,11 @@ test('not allowed: the reason in the engine\'s words, how to fix it in steps, an
     expect(await ui.find({ type: 'Text', text: exact('Problems · 1') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^Reason: .*auto mode classifier gave no verdict/ })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: exact('How to fix') }))?.props.bold).toBe(true)
-    expect(await ui.find({ type: 'Text', text: /^1\. Add these rules to ~\/\.claude\/settings\.json/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^\s*1\. Add these rules to ~\/\.claude\/settings\.json/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('2. Press Try again.') })).toBeDefined()
 
-    const rules = await ui.find({ type: 'Markdown', text: /"allow"/ })
+    const rules = await ui.find({ type: 'Code', text: /"allow"/ })
+    expect(rules?.props.language).toBe('json')
     expect(String(rules?.text)).toContain('"mcp__plugin_terylon-os_terylon__question_answer"')
 
     for (const gate of GATES) {
@@ -125,8 +126,8 @@ test('an alert: its own card with the notice\'s body, which says what to do, and
     await ui.press({ key: 'tab-status' })
 
     expect((await ui.find({ type: 'Text', text: exact('1 alert') }))?.props.color).toBe('warning')
-    expect((await ui.find({ type: 'Text', text: exact('the page is not well') }))?.props.color).toBe('warning')
-    expect(await ui.find({ type: 'Text', text: /^gatus · / })).toBeDefined()
+    expect((await ui.find({ type: 'Text', text: exact('the page is not well') }))?.props.color).toBe('error')
+    expect(await ui.find({ type: 'Text', text: /^\s*gatus · / })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('gatus says it stopped answering; check the container.') })).toBeDefined()
     expect((await ui.find({ type: 'Link', text: 'Bell in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=bell')
     await ui.unmount()
@@ -145,17 +146,17 @@ test('the band\'s Open always opens the pane where the owner left it, the queue 
   expect(terylon.opens).toEqual(['terylon'])
 
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await pane.find({ key: 'tab-queue' }))?.props.label).toBe('● Queue')
+  expect((await pane.find({ key: 'tab-queue' }))?.props.variant).toBe('primary')
   expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Status ⚠')
 
   await pane.press({ key: 'tab-goals' })
   await band.press({ key: 'band-open' })
-  expect((await pane.find({ key: 'tab-goals' }))?.props.label).toBe('● Goals')
+  expect((await pane.find({ key: 'tab-goals' }))?.props.variant).toBe('primary')
 
   terylon.answers.notices_list = { unhandled: 0, notices: [] }
   await terylon.clock.advance(30000)
   await band.press({ key: 'band-open' })
   expect((await band.find({ key: 'band-open' }))?.props.label).toBe('Open')
-  expect((await pane.find({ key: 'tab-goals' }))?.props.label).toBe('● Goals')
+  expect((await pane.find({ key: 'tab-goals' }))?.props.variant).toBe('primary')
   expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Status')
 })

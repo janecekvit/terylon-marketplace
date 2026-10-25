@@ -15,12 +15,17 @@
 //   "Přidat" ──▶ tasks_add, which becomes a plan the owner approves in the console
 //
 // The mod holds no rule the endpoint does not: every decision is a Link to the console.
+//
+// THE DRAWING is S32's (#25), on the 2.1.304 mod API: a row is one Button, type has a size and a weight, numbers
+// are tabular, the phases, slots and spend are Svg (hooks/drawing.ts), the pickers are Selects, the allow rules
+// Code. What 2.1.304 declares but Desktop has not proven sits behind TERYLON_PANE_PROOFS and draws 1.1.2 until named.
 
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type {
   PaneAdd,
+  PanePhase,
   PaneAnswer,
   PaneBand,
   PaneBell,
@@ -34,7 +39,9 @@ import type {
 } from '../types'
 
 import { COPY } from './copy'
-import { alertCount, healthLine, stateWord } from './health'
+import { CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, NARROW_COLUMNS, STEPPER_COLUMNS, dots, meter, phaseGlyph, planChain, proofsOf, segments, slotsGauge, spendBar, splitHash, stepper } from './drawing'
+import type { Picture, Proofs } from './drawing'
+import { ALERT_SOURCES, alertCount, healthLine, stateWord } from './health'
 import type { Health } from './health'
 import { MISSING_SERVER, NOT_ALLOWED, SERVER_CANDIDATES, allowRules, assertPaneTool, readResult } from './terylon'
 import type { TerylonAnswer } from './terylon'
@@ -82,7 +89,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.2.1'
+export const MOD_VERSION = '1.3.0'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -130,11 +137,15 @@ const EMPTY_SNAPSHOT: PaneSnapshot = {
 
 const QUEUE: PaneScreen = { screen: 'queue' }
 
-const EMPTY_ADD: PaneAdd = { phase: 'form', title: '', criteria: '', goal: '', after: '', goals: [], stories: [], sentence: null, link: null }
+const EMPTY_ADD: PaneAdd = { phase: 'form', title: '', criteria: '', goal: '', after: '', size: 'M', goals: [], stories: [], sentence: null, link: null }
 
 const EMPTY_MEMORY: PaneMemory = { phase: 'loading', files: [], rules: [], pending: 0, edit: null, sentence: null, proposed: [] }
 
-const EMPTY_GOALS: PaneGoals = { phase: 'loading', sentence: null, open: [], closed: [], plans: [], draft: '', adding: 'idle', addSentence: null }
+// A new goal goes to Terylon's own list at priority 2 unless the owner picks otherwise: goal_add's own defaults.
+const DEFAULT_PRIORITY = '2'
+const OWN_LIST = 'list'
+
+const EMPTY_GOALS: PaneGoals = { phase: 'loading', sentence: null, open: [], closed: [], plans: [], draft: '', priority: DEFAULT_PRIORITY, target: OWN_LIST, targets: [], adding: 'idle', addSentence: null }
 
 const EMPTY_BELL: PaneBell = { phase: 'loading', sentence: null, unhandledCount: 0, unhandled: [], handled: [], leader: { isPaused: false, text: '' }, metrics: [], handling: null, handleSentence: null }
 
@@ -603,7 +614,13 @@ async function openStory($: EngineInterface, id: number): Promise<void> {
   }
 
   const document = answered.kind === 'ok' ? answered.value : {}
-  await update($, story, (): PaneStory | null => storyView(id, document, inFlight, question, now, zoneOffset(now)))
+  const view_ = storyView(id, document, inFlight, question, now, zoneOffset(now))
+  await update($, story, (): PaneStory | null => view_)
+
+  // A RUNNING STORY OPENS ON "NOW WORKING" (S32): the pane moves the least that shows it, and not at all when it shows.
+  if (view_.working !== null) {
+    await $.ui.scroll({ to: { key: 'story-working' }, in: PANE, block: 'nearest' }).catch(() => undefined)
+  }
 }
 
 async function openQuestion($: EngineInterface, id: number): Promise<void> {
@@ -674,6 +691,8 @@ async function loadGoals($: EngineInterface): Promise<void> {
   await update($, goals, (current: PaneGoals): PaneGoals => ({
     ...EMPTY_GOALS,
     draft: typeof current?.draft === 'string' ? current.draft : '',
+    priority: typeof current?.priority === 'string' ? current.priority : DEFAULT_PRIORITY,
+    target: typeof current?.target === 'string' ? current.target : OWN_LIST,
     adding: current?.adding ?? 'idle',
     addSentence: typeof current?.addSentence === 'string' ? current.addSentence : null,
   }))
@@ -693,13 +712,26 @@ async function readGoalsFromTerylon($: EngineInterface): Promise<void> {
 
   const items = goalItems(goalsAnswer.value, questions)
   const plans = plansAnswer.kind === 'ok' ? planItems(plansAnswer.value, base) : []
+  const targets = targetsOf(goalsAnswer.value)
 
-  await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, phase: 'ok', sentence: plansAnswer.kind === 'ok' ? null : why(plansAnswer), open: items.open, closed: items.closed, plans }))
+  await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, phase: 'ok', sentence: plansAnswer.kind === 'ok' ? null : why(plansAnswer), open: items.open, closed: items.closed, plans, targets }))
 }
 
-// A NEW GOAL: goal_add; the leader breaks it into a plan that waits for the owner in the console.
+// WHERE A GOAL CAN LAND: Terylon's own list, then every repository target goals_list shows, each once.
+function targetsOf(answer: Json): { value: string; label: string }[] {
+  const named = [
+    ...(Array.isArray(answer.targets) ? answer.targets : []),
+    ...list(answer.goals).map(item => item.target),
+  ].filter((target): target is string => typeof target === 'string' && target.trim() !== '' && target !== OWN_LIST)
+
+  return [{ value: OWN_LIST, label: COPY.ownList }, ...[...new Set(named)].map(target => ({ value: target, label: target }))]
+}
+
+// A NEW GOAL: goal_add with its priority and target; the leader breaks it into a plan that waits for the owner in
+// the console.
 async function addGoal($: EngineInterface): Promise<void> {
-  const title = (await read($, goals)).draft.trim()
+  const form = await readGoals($)
+  const title = form.draft.trim()
 
   if (title === '') {
     return
@@ -707,7 +739,8 @@ async function addGoal($: EngineInterface): Promise<void> {
 
   await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, adding: 'sending', addSentence: null }))
 
-  const answered = await callTerylon($, 'goal_add', { title })
+  const priority = Number(form.priority)
+  const answered = await callTerylon($, 'goal_add', { title, priority: Number.isInteger(priority) && priority >= 1 && priority <= 4 ? priority : Number(DEFAULT_PRIORITY), target: form.target === '' ? OWN_LIST : form.target })
   const isAccepted = answered.kind === 'ok' && answered.value.accepted !== false
 
   await update($, goals, (current: PaneGoals): PaneGoals => ({
@@ -827,9 +860,10 @@ async function sendTask($: EngineInterface): Promise<void> {
   const task: Json = {
     title: form.title.trim(),
     brief: form.title.trim(),
-    criteria: form.criteria.split(';').map(line => line.trim()).filter(line => line !== ''),
+    // ONE CRITERION PER LINE where the field holds several (input-rows), by semicolons as in 1.1.2 either way.
+    criteria: form.criteria.split(/[;\n]/).map(line => line.trim()).filter(line => line !== ''),
     files: [],
-    size: 'M',
+    size: COPY.sizes.includes(form.size) ? form.size : 'M',
   }
 
   if (Number.isInteger(after) && after > 0) {
@@ -967,33 +1001,70 @@ function backLabel(stack: readonly PaneScreen[]): string {
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
-type Tone = 'text' | 'inactive' | 'subtle' | 'suggestion' | 'success' | 'warning' | 'error'
+type Tone = 'text' | 'inactive' | 'subtle' | 'suggestion' | 'success' | 'warning' | 'error' | 'merged'
 
-// A Kraken card: a round subtle border, a bold title left and a quiet hint right, then its rows with air between
-// them. On the terminal, where every gap is a whole line, the rows stay together and only the title stands apart.
-function card(elements: Elements, key: string, title: unknown, hint: string | null, children: unknown[], isRoomy: boolean): unknown {
+// HOW A SURFACE DRAWS (S32): a graphic one (Desktop, the phone, VS Code) takes Svg, type sizes and spacing steps;
+// the terminal draws whole cells, no Svg, and the text fallbacks the canvas's terminal board draws. Below
+// NARROW_COLUMNS the pane is the narrow dock.
+// isCompact: too few columns for the stepper of eight at its size (STEPPER_COLUMNS), so it is drawn compact.
+type Look = { isGraphic: boolean; isNarrow: boolean; isCompact: boolean; proofs: Proofs }
+
+// The tint of a card: plain, waiting for the owner (warning), or a problem (error).
+type CardTone = 'plain' | 'wait' | 'bad'
+
+// A card: a round border, a heading left and a quiet hint right, then its rows. On a graphic surface the spacing is
+// the surface's own steps; on the terminal, where every gap is a whole line, the rows stay together and only the
+// heading stands apart. A CARD THAT WAITS FOR THE OWNER, OR A PROBLEM, IS STROKED IN ITS COLOUR AND NEVER FILLED (the
+// owner's walk of 1.2.0): on a tinted fill the hints, links and chips could not be read.
+function card(elements: Elements, look: Look, key: string, title: unknown, hint: unknown, children: unknown[], tone: CardTone = 'plain'): unknown {
   const { Box, Text } = elements
+  const toneKey = tone === 'wait' ? 'warning' : tone === 'bad' ? 'error' : 'subtle'
 
   return (
-    <Box key={key} flexDirection="column" borderStyle="round" borderColor="subtle" paddingX={1} gap={1}>
-      <Box flexDirection="row" justifyContent="space-between">
-        {typeof title === 'string' ? <Text bold>{title}</Text> : title}
-        {hint !== null && <Text color="subtle">{hint}</Text>}
+    <Box
+      key={key}
+      flexDirection="column"
+      borderStyle="round"
+      borderColor={toneKey}
+      paddingX={look.isGraphic ? 'md' : 1}
+      paddingY={look.isGraphic ? 'sm' : 0}
+      gap={look.isGraphic ? 'sm' : 1}
+    >
+      <Box flexDirection="row" justifyContent="space-between" gap={1}>
+        {typeof title === 'string' ? heading(elements, title) : title}
+        {typeof hint === 'string' ? <Text color="subtle" size="footnote">{hint}</Text> : hint ?? null}
       </Box>
-      <Box flexDirection="column" gap={isRoomy ? 1 : 0}>
+      <Box flexDirection="column" gap={look.isGraphic ? 'xs' : 0}>
         {children}
       </Box>
     </Box>
   )
 }
 
-// The width of a row's kind column, in cells: every title starts under the one above it. A card whose kinds are
-// wider ("orchestrator") takes its widest, up to KIND_WIDEST, past which a kind is cut.
+// A card's heading: semibold at the heading size, its count beside it in tabular digits and the count's colour.
+function heading(elements: Elements, title: string, count?: string, countTone?: Tone, titleTone?: Tone): unknown {
+  const { Text } = elements
+
+  return (
+    <Text size="heading" weight="semibold" color={titleTone}>
+      {title}
+      {count === undefined ? null : <Text tabular color={countTone}>{count}</Text>}
+    </Text>
+  )
+}
+
+// The width of a row's kind column on the terminal, in cells: every title starts under the one above it. A card
+// whose kinds are wider ("orchestrator") takes its widest, up to KIND_WIDEST, past which a kind is cut.
 const KIND_WIDTH = 12
 const KIND_WIDEST = 14
 
 export function kindWidth(kinds: readonly string[]): number {
   return Math.min(KIND_WIDEST, Math.max(KIND_WIDTH, ...kinds.map(kind => kind.length)))
+}
+
+// The kind as the terminal draws it, padded to its column so the titles line up, cut with … past it.
+function kindCell(kind: string, width: number): string {
+  return kind.length > width ? `${kind.slice(0, width - 1)}…` : kind.padEnd(width)
 }
 
 type Row = {
@@ -1005,40 +1076,55 @@ type Row = {
   titleTone?: Tone
   detail?: string | null
   detailTone?: Tone
-  link?: string | null
+  // The console link the pointer reveals over the row's right edge (hover-reveal); without the proof it sits in the body.
+  reveal?: { href: string; label: string } | null
   onPress: () => unknown
   body?: unknown
 }
 
-// One row, always one line: the kind in its own column, the title cut at its end, never the detail or the ↗.
-// The kind sits outside the Button, since a native desktop Button draws its children in its own colour.
-function row(elements: Elements, input: Row): unknown {
+// ONE ROW, ONE PRESS (S32): a plain Button whose children are the kind chip, the title cut at its end, and the detail
+// in tabular digits, keyed by its subject's id. The narrow dock drops the detail; the row's body holds it whole.
+function row(elements: Elements, look: Look, input: Row): unknown {
   const { Box, Text, Button, Link } = elements
+  const hasDetail = !look.isNarrow && input.detail !== undefined && input.detail !== null && input.detail !== ''
+  const children: unknown[] = []
+
+  // THE KIND AS A CHIP: a dot in the kind's colour, then the word in `inactive`, which reads on the chip in both themes
+  // where the kind's colour does not (tests/contrast.ts). A graphic surface lays it on the theme's neutral grey with a
+  // space of air inside; the terminal pads it to its column instead, and paints nothing behind it.
+  if (input.kind !== null) {
+    children.push(
+      look.isGraphic
+        ? <Text size="caption" color={CHIP_WORD} backgroundColor={CHIP_BACKGROUND}>{'\u00a0'}<Text color={input.kindTone ?? 'subtle'}>{CHIP_DOT}</Text>{`\u00a0${input.kind}\u00a0`}</Text>
+        : <Text size="caption" color={CHIP_WORD}><Text color={input.kindTone ?? 'subtle'}>{CHIP_DOT}</Text>{` ${kindCell(input.kind, input.kindColumn ?? KIND_WIDTH)}`}</Text>,
+      ' ',
+    )
+  }
+
+  children.push(<Text color={input.titleTone} wrap="truncate-end">{input.title}</Text>)
+
+  if (hasDetail) {
+    children.push('  ', <Text size="footnote" tabular color={input.detailTone ?? 'subtle'}>{input.detail}</Text>)
+  }
+
+  // NO REVEAL OVER AN OPEN ROW (the owner's walk of 1.2.0): laid over its first line it covered the question; the open
+  // row's body carries the same link.
+  const isOpen = input.body !== undefined && input.body !== null
+  const isRevealed = look.proofs.hoverReveal && look.isGraphic && !isOpen && input.reveal !== undefined && input.reveal !== null
 
   return (
-    <Box key={`row-${input.key}`} flexDirection="column">
-      <Box flexDirection="row" gap={1}>
-        {input.kind !== null && (
-          <Box width={input.kindColumn ?? KIND_WIDTH} flexShrink={0}>
-            <Text color={input.kindTone ?? 'subtle'} wrap="truncate-end">{input.kind}</Text>
-          </Box>
-        )}
-        <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
-          <Button key={input.key} plain onPress={input.onPress}>
-            <Text color={input.titleTone} wrap="truncate-end">{input.title}</Text>
-          </Button>
-        </Box>
-        {input.detail !== undefined && input.detail !== null && input.detail !== '' && (
-          <Box flexShrink={0}>
-            <Text color={input.detailTone ?? 'subtle'}>{input.detail}</Text>
-          </Box>
-        )}
-        {input.link !== undefined && input.link !== null && (
-          <Box flexShrink={0}>
-            <Link href={input.link} label="↗" />
-          </Box>
-        )}
+    <Box key={`row-${input.key}`} flexDirection="column" hover={isRevealed ? { backgroundColor: 'userMessageBackgroundHover' } : undefined}>
+      <Box flexDirection="row" minWidth={0} overflow="hidden">
+        <Button key={input.key} plain onPress={input.onPress}>
+          {children}
+        </Button>
       </Box>
+      {isRevealed && input.reveal !== undefined && input.reveal !== null && (
+        // NO KEY ON THE REVEAL: a keyed Box is a hover scope of its own, and one drawn "none" is never under the pointer.
+        <Box position="absolute" top={0} right={0} display="none" hover={{ display: 'flex' }}>
+          <Link href={input.reveal.href} label={input.reveal.label} />
+        </Box>
+      )}
       {input.body ?? null}
     </Box>
   )
@@ -1048,6 +1134,42 @@ function quiet(elements: Elements, line: string): unknown {
   const { Text } = elements
 
   return <Text color="subtle">{line}</Text>
+}
+
+// A picture where the surface draws one, nothing where it does not: the terminal draws its own text instead.
+function picture(elements: Elements, value: Picture | null, options: { isInteractive?: boolean } = {}): unknown {
+  if (value === null || !('Svg' in elements)) {
+    return null
+  }
+
+  const { Svg } = elements
+
+  // ITS OWN HEIGHT, given: left to itself, the frame of an interactive Svg drew an empty band above and below it.
+  return <Svg source={value.source} alt={value.alt} height={value.height} isInteractive={options.isInteractive === true ? true : undefined} />
+}
+
+// THE TERMINAL'S STEPPER: ✓ ✓ ✓ ✓ ● ○ ○ ◇, done in success, now in suggestion (warning when stuck), the rest subtle.
+function phaseLine(elements: Elements, phases: readonly PanePhase[], isStuck: boolean, after: string | null): unknown {
+  const { Text } = elements
+
+  return (
+    <Text wrap="truncate-end">
+      {phases.map((phase, index) => (
+        <Text color={phase.status === 'done' ? 'success' : phase.status === 'now' ? (isStuck ? 'warning' : 'suggestion') : 'subtle'}>{`${phaseGlyph(phase, index === phases.length - 1)} `}</Text>
+      ))}
+      {after === null ? null : <Text color="subtle">{` ${after}`}</Text>}
+    </Text>
+  )
+}
+
+// A line with a commit or an image hash in it, the hash in the monospaced face.
+function withHash(elements: Elements, line: string, tone?: Tone): unknown {
+  const { Text } = elements
+  const parts = splitHash(line)
+
+  return parts.hash === null
+    ? <Text color={tone}>{line}</Text>
+    : <Text color={tone}>{parts.before}<Text mono>{parts.hash}</Text>{parts.after}</Text>
 }
 
 export const register: Register = on => {
@@ -1112,14 +1234,15 @@ export const register: Register = on => {
     const now = await $.clock.now()
     const offset = zoneOffset(now)
     const stuck = current.running.filter(item => item.isStuck).length
+    // THE BAND IS UNCHANGED BUT FOR ITS DIGITS (S32): tabular, so a count that moves at a poll does not shift the row.
     const pair = (name: string, value: string, color: 'inactive' | 'warning' | 'suggestion') => [
       <Text color="subtle">{` · ${name} `}</Text>,
-      <Text color={color}>{value}</Text>,
+      <Text color={color} tabular>{value}</Text>,
     ]
     const counts = [
       ...pair(COPY.bandWaiting, String(current.waiting.length), current.waiting.length > 0 ? 'warning' : 'inactive'),
       ...pair(COPY.bandRunning, String(current.running.length), current.running.length > 0 ? 'suggestion' : 'inactive'),
-      ...(stuck > 0 ? [<Text color="warning">{COPY.bandStuck(stuck)}</Text>] : []),
+      ...(stuck > 0 ? [<Text color="warning" tabular>{COPY.bandStuck(stuck)}</Text>] : []),
     ]
     let segments: unknown[]
     switch (current.connection) {
@@ -1141,7 +1264,7 @@ export const register: Register = on => {
       case 'unreachable':
         segments = [
           <Text color="subtle">{' · '}</Text>,
-          <Text color="warning">{COPY.disconnected(current.failingSince === null ? '?' : clock(new Date(current.failingSince).toISOString(), offset) ?? '?')}</Text>,
+          <Text color="warning" tabular>{COPY.disconnected(current.failingSince === null ? '?' : clock(new Date(current.failingSince).toISOString(), offset) ?? '?')}</Text>,
           ...pair(COPY.bandWaiting, String(current.waiting.length), 'inactive'),
           ...pair(COPY.bandRunning, String(current.running.length), 'inactive'),
           <Text color="subtle">{` · ${COPY.bandRetrying}`}</Text>,
@@ -1159,7 +1282,7 @@ export const register: Register = on => {
               ...counts,
               ...pair(COPY.bandQueued, String(current.queued.length), 'inactive'),
               ...pair(COPY.bandBell, String(current.notices), current.notices > 0 ? 'warning' : 'inactive'),
-              ...(current.alerts > 0 ? [<Text color="warning">{COPY.bandAlerts(current.alerts)}</Text>] : []),
+              ...(current.alerts > 0 ? [<Text color="warning" tabular>{COPY.bandAlerts(current.alerts)}</Text>] : []),
             ]
     }
 
@@ -1179,8 +1302,14 @@ export const register: Register = on => {
   // THE PANE: tabs, then the screen on top of the stack.
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const elements = $.ui.resolve(e)
-    const { Box, Text, Button, Link, Markdown } = elements
+    const { Box, Text, Button, Link, Markdown, Code } = elements
     const hasInput = e.surface !== 'mobile' && 'Input' in elements
+    const look: Look = {
+      isGraphic: e.surface !== 'terminal',
+      isNarrow: e.props.bodyColumns < NARROW_COLUMNS,
+      isCompact: e.props.bodyColumns < STEPPER_COLUMNS,
+      proofs: proofsOf(await $.env.get('TERYLON_PANE_PROOFS')),
+    }
     const current = await readSnapshot($)
     const stack = stackOf(await read($, view))
     const screen = stack[stack.length - 1] ?? QUEUE
@@ -1194,25 +1323,41 @@ export const register: Register = on => {
     const isStale = current.connection === 'unreachable'
     const stale = isStale ? COPY.stale : ''
     const go = (target: PaneScreen) => show($, target, false)
-    const cardOf = (key: string, title: unknown, hint: string | null, children: unknown[]) => card(elements, key, title, hint, children, e.surface !== 'terminal')
+    const cardOf = (key: string, title: unknown, hint: unknown, children: unknown[], tone: CardTone = 'plain') => card(elements, look, key, title, hint, children, tone)
+    const rowOf = (input: Row) => row(elements, look, input)
+    const headingOf = (title: string, count?: number, countTone?: Tone, suffix = '') => heading(elements, title, count === undefined ? undefined : `${COPY.count(count)}${suffix}`, countTone)
 
-    const tabButton = (key: string, label: string, target: PaneScreen, isSelected: boolean) => (
-      <Button key={key} label={isSelected ? COPY.selected(label) : label} variant={isSelected ? 'primary' : undefined} dimColor={!isSelected} onPress={() => show($, target, true)} />
+    // A TAB is a Button with children: its name and a count chip in tabular digits; the selected one primary, its
+    // digit a hotkey while the pane holds the keyboard. The terminal marks the selected one ●, as 1.1.2 did.
+    const tabButton = (key: string, hotkey: string, name: string, target: PaneScreen, isSelected: boolean, chip: { text: string; tone: Tone } | null) => (
+      <Button
+        key={key}
+        label={chip === null ? name : `${name}${chip.text === '⚠' ? ' ⚠' : ` · ${chip.text}`}`}
+        hotkey={hotkey}
+        variant={isSelected ? 'primary' : undefined}
+        dimColor={!isSelected}
+        onPress={() => show($, target, true)}
+      >
+        {!look.isGraphic && isSelected ? '● ' : ''}
+        {name}
+        {chip === null ? '' : ' '}
+        {chip === null ? null : <Text tabular color={chip.tone}>{chip.text}</Text>}
+      </Button>
     )
     const tabs = (
-      <Box key="tabs" flexDirection="row" gap={1} flexWrap="wrap">
-        {tabButton('tab-queue', COPY.tabQueue, QUEUE, tab === 'queue')}
-        {tabButton('tab-goals', COPY.tabGoals, { screen: 'goals' }, tab === 'goals')}
-        {tabButton('tab-bell', COPY.tabBell(current.notices), { screen: 'bell' }, tab === 'bell')}
-        {tabButton('tab-memory', COPY.tabMemory, { screen: 'memory' }, tab === 'memory')}
-        {tabButton('tab-status', COPY.tabStatus(hasProblem(current)), { screen: 'status' }, tab === 'status')}
+      <Box key="tabs" flexDirection="row" gap={look.isGraphic ? 'xs' : 1} flexWrap="wrap">
+        {tabButton('tab-queue', '1', COPY.tabQueue, QUEUE, tab === 'queue', null)}
+        {tabButton('tab-goals', '2', COPY.tabGoals, { screen: 'goals' }, tab === 'goals', null)}
+        {tabButton('tab-bell', '3', COPY.tabBell(0), { screen: 'bell' }, tab === 'bell', current.notices > 0 ? { text: String(current.notices), tone: 'warning' } : null)}
+        {tabButton('tab-memory', '4', COPY.tabMemory, { screen: 'memory' }, tab === 'memory', null)}
+        {tabButton('tab-status', '5', COPY.tabStatus(false), { screen: 'status' }, tab === 'status', hasProblem(current) ? { text: '⚠', tone: 'warning' } : null)}
       </Box>
     )
     const context = (
       <Box key="context" flexDirection="row" justifyContent="space-between" gap={1}>
         <Link href={base === '' ? 'https://' : base} label={hostName(base)} />
         <Box flexDirection="row" gap={1}>
-          <Text color={isStale ? 'warning' : 'subtle'}>
+          <Text color={isStale ? 'warning' : 'subtle'} size="footnote" tabular>
             {screen.screen === 'memory'
               ? COPY.memoryContext
               : current.connection === 'connecting' ? COPY.connecting : isStale ? COPY.disconnected(at(current.failingSince)) : COPY.connected(age ?? '')}
@@ -1221,15 +1366,20 @@ export const register: Register = on => {
         </Box>
       </Box>
     )
-    const footer = <Text key="footer" color="subtle">{COPY.footer}</Text>
-    const reason = (problem: string | null) => (problem === null ? null : <Text color="subtle" wrap="truncate-end">{COPY.reason(problem)}</Text>)
-    const retry = <Button key="retry" label={COPY.retry} onPress={() => tick($, true)} />
+    const footer = <Text key="footer" color="subtle" size="footnote" mono>{COPY.footer}</Text>
+    // A FAULT OF THE MACHINE, for a bell row's chip: an alert source, or a notice the Status tab counts as an alert.
+    const isMachineFault = (notice: { id: number; source: string }) => ALERT_SOURCES.includes(notice.source) || current.alertNotices.some(alert => alert.id === notice.id)
+    const reason = (problem: string | null) => (problem === null ? null : <Text color="subtle" size="footnote" wrap="truncate-end">{COPY.reason(problem)}</Text>)
+    const retry = <Button key="retry" label={COPY.retry} variant="primary" onPress={() => tick($, true)} />
     const steps = (lines: readonly string[]) => (
       <Box flexDirection="column">
         <Text bold>{COPY.howToFix}</Text>
         {lines.map((line, index) => <Text key={`step-${index}`} color="inactive">{COPY.fixStep(index + 1, line)}</Text>)}
       </Box>
     )
+    // A CARD'S TITLE THAT WARNS (the owner's walk of 1.2.0): a problem's in `error`, a waiting card's in `text`, its
+    // stroke carrying the warning. Amber text reads under 4.5:1 on light (tests/contrast.ts), so no card's text is amber.
+    const warned = (title: string, tone: 'wait' | 'bad' = 'bad') => <Text size="heading" weight="semibold" color={tone === 'bad' ? 'error' : 'text'}>{title}</Text>
 
     // THE STATES THAT ARE NOT A QUEUE: what happened, why, and the step that fixes it.
     let problemCard: unknown = null
@@ -1237,41 +1387,42 @@ export const register: Register = on => {
     if (current.connection === 'no-server') {
       problemCard = cardOf('problem', COPY.noServerTitle, null, [
         <Text color="inactive">{COPY.noServerBody}</Text>,
-        <Markdown text={'`' + COPY.noServerCommand + '`'} />,
+        <Code source={COPY.noServerCommand} />,
         steps(COPY.fixNoServer),
         retry,
-      ])
+      ], 'bad')
     } else if (current.connection === 'not-allowed') {
-      problemCard = cardOf('problem', <Text bold color="warning">{COPY.notAllowedTitle}</Text>, COPY.notAllowedHint, [
+      problemCard = cardOf('problem', warned(COPY.notAllowedTitle), COPY.notAllowedHint, [
         <Text color="inactive">{COPY.notAllowedBody}</Text>,
         reason(current.problem),
         steps(COPY.fixNotAllowed),
-        <Markdown text={allowRules()} />,
+        // THE ALLOW RULES AS CODE (S32): json, the pane's whole own list, no gate; selected and copied by hand.
+        <Code key="allow-rules" source={allowRules()} language="json" />,
         retry,
-      ])
+      ], 'bad')
     } else if (current.connection === 'refused') {
-      problemCard = cardOf('problem', <Text bold color="warning">{COPY.refusedTitle}</Text>, null, [
+      problemCard = cardOf('problem', warned(COPY.refusedTitle), null, [
         <Text color="inactive">{COPY.refusedBody}</Text>,
         reason(current.problem),
         steps(COPY.fixRefused),
         retry,
-      ])
+      ], 'bad')
     } else if (current.connection === 'error') {
-      problemCard = cardOf('problem', <Text bold color="warning">{COPY.errorTitle}</Text>, null, [
+      problemCard = cardOf('problem', warned(COPY.errorTitle), null, [
         <Text color="inactive">{COPY.errorBody}</Text>,
         reason(current.problem),
         steps(COPY.fixError),
         <Link href={consoleLink(base, 'health')} label={COPY.health} />,
         retry,
-      ])
+      ], 'bad')
     } else if (isStale) {
-      problemCard = cardOf('problem', <Text bold color="warning">{COPY.unreachableTitle}</Text>, COPY.unreachableWhen(at(current.failingSince)), [
+      problemCard = cardOf('problem', warned(COPY.unreachableTitle), COPY.unreachableWhen(at(current.failingSince)), [
         <Text color="inactive">{COPY.unreachableBody(at(current.fetchedAt))}</Text>,
         reason(current.problem),
         steps(COPY.fixUnreachable(base)),
         <Text color="subtle">{COPY.unreachableFix}</Text>,
         retry,
-      ])
+      ], 'bad')
     }
 
     if (current.connection === 'connecting') {
@@ -1284,69 +1435,83 @@ export const register: Register = on => {
       )
     }
 
+    // The slots and today's spend, as gauges where the surface draws Svg, as ▰▱ cells on the terminal.
+    const runningUsd = Number(current.runningUsd)
+    const budgetUsd = current.dayBudget === null ? null : Number(current.dayBudget)
+
     // THE STATUS TAB: the machine, its slots and cost, every problem with how to fix it, and where to look.
     if (screen.screen === 'status') {
       const health = healthOf(current, offset)
       const state = stateWord(health)
       const bellState = await readBell($)
-      const pausedCard = current.paused === null ? null : cardOf('problem-paused', <Text bold color="warning">{COPY.pausedTitle}</Text>, current.pausedSince === null ? null : COPY.statusSince(current.pausedSince), [
+      const pausedCard = current.paused === null ? null : cardOf('problem-paused', warned(COPY.pausedTitle, 'wait'), current.pausedSince === null ? null : COPY.statusSince(current.pausedSince), [
         <Text color="inactive">{current.paused}</Text>,
         steps(COPY.fixPaused),
         <Link href={consoleLink(base, 'work')} label={COPY.resumeInConsole} />,
-      ])
+      ], 'wait')
       const alertCards = current.alertNotices.map(notice =>
-        cardOf(`problem-alert-${notice.id}`, <Text bold color="warning">{notice.title}</Text>, COPY.alertHint(notice.source, notice.when), [
+        cardOf(`problem-alert-${notice.id}`, warned(notice.title), COPY.alertHint(notice.source, notice.when), [
           notice.body === '' ? null : <Text color="inactive">{notice.body}</Text>,
           <Text color="subtle">{COPY.fixAlert}</Text>,
           <Link href={notice.link === null ? consoleLink(base, 'bell') : `${base}${notice.link}`} label={COPY.bellInConsole} />,
-        ]))
+        ], 'bad'))
       const problems = [problemCard, pausedCard, ...alertCards].filter(item => item !== null)
+      const slotsCard = cardOf('status-slots', COPY.statusSlots, COPY.statusSlotsHint, [
+        look.isGraphic ? picture(elements, slotsGauge(current.slotsUsed, current.slots, true)) : null,
+        <Text tabular>{COPY.statusSlotsLine(current.slotsUsed, current.slots)}</Text>,
+        current.running.length === 0 ? quiet(elements, COPY.nothingRunning) : null,
+        ...current.running.map(item =>
+          rowOf({
+            key: `status-story-${item.story}`,
+            kind: item.isStuck ? COPY.kindStuck : item.isVerifying ? COPY.verifying : COPY.kindRunning,
+            kindTone: item.isStuck ? 'warning' : 'subtle',
+            title: item.title,
+            detail: item.detail,
+            onPress: () => go({ screen: 'story', story: item.story }),
+          })),
+      ])
+      const costCard = cardOf('status-cost', COPY.statusCost, null, [
+        look.isGraphic && budgetUsd !== null ? picture(elements, spendBar(runningUsd, budgetUsd, 'wide', COPY.statusToday(current.runningUsd, current.dayBudget))) : null,
+        <Text tabular>{COPY.statusToday(current.runningUsd, current.dayBudget)}</Text>,
+        bellState.metrics.length === 0 ? null : (
+          <Text tabular>
+            <Text color="subtle">{`${COPY.statusMonth} `}</Text>
+            <Text color="inactive">{bellState.metrics.map(metric => `${metric.value} ${metric.label}`).join(' · ')}</Text>
+          </Text>
+        ),
+      ])
 
       return (
         <Box flexDirection="column" gap={1}>
           {tabs}
-          {cardOf('status-machine', COPY.statusMachine, null, [
+          {cardOf('status-machine', <Text size="caption" color="subtle">{COPY.statusMachine.toUpperCase()}</Text>, null, [
             <Box flexDirection="row" justifyContent="space-between" gap={1}>
-              <Box flexDirection="row">
-                <Text bold color={state.tone}>{state.word}</Text>
-                {health.failingSince !== null && current.connection !== 'ok' && <Text color="subtle">{` · ${COPY.statusSince(health.failingSince)}`}</Text>}
-                {current.connection === 'ok' && current.pausedSince !== null && <Text color="subtle">{` · ${COPY.statusSince(current.pausedSince)}`}</Text>}
+              <Box flexDirection="row" gap={1}>
+                <Text size="title" weight="semibold" color={state.tone}>{state.word}</Text>
+                {health.failingSince !== null && current.connection !== 'ok' && <Text color="subtle" tabular>{` · ${COPY.statusSince(health.failingSince)}`}</Text>}
+                {current.connection === 'ok' && current.pausedSince !== null && <Text color="subtle" tabular>{` · ${COPY.statusSince(current.pausedSince)}`}</Text>}
               </Box>
               <Button key="status-refresh" label={COPY.refresh} dimColor onPress={async () => { await tick($, true); await loadBell($) }} />
             </Box>,
-            <Text color="subtle">{COPY.statusLastAnswer(current.fetchedAt === null ? null : at(current.fetchedAt))}</Text>,
+            <Text color="subtle" size="footnote" tabular>{COPY.statusLastAnswer(current.fetchedAt === null ? null : at(current.fetchedAt))}</Text>,
           ])}
-          {cardOf('status-slots', COPY.statusSlots, COPY.statusSlotsHint, [
-            <Text>{COPY.statusSlotsLine(current.slotsUsed, current.slots)}</Text>,
-            current.running.length === 0 ? quiet(elements, COPY.nothingRunning) : null,
-            ...current.running.map(item =>
-              row(elements, {
-                key: `status-story-${item.story}`,
-                kind: item.isStuck ? COPY.kindStuck : item.isVerifying ? COPY.verifying : COPY.kindRunning,
-                kindTone: item.isStuck ? 'warning' : 'subtle',
-                title: item.title,
-                detail: item.detail,
-                onPress: () => go({ screen: 'story', story: item.story }),
-              })),
-          ])}
-          {cardOf('status-cost', COPY.statusCost, null, [
-            <Text>{COPY.statusToday(current.runningUsd, current.dayBudget)}</Text>,
-            bellState.metrics.length === 0 ? null : (
-              <Text>
-                <Text color="subtle">{`${COPY.statusMonth} `}</Text>
-                <Text color="inactive">{bellState.metrics.map(metric => `${metric.value} ${metric.label}`).join(' · ')}</Text>
-              </Text>
-            ),
-          ])}
-          {cardOf('status-problems', <Text bold>{COPY.statusProblems}<Text color={problems.length > 0 ? 'warning' : 'inactive'}>{COPY.count(problems.length)}</Text></Text>, null, [
+          {look.isGraphic && !look.isNarrow
+            ? (
+                <Box key="status-gauges" flexDirection="row" gap="sm">
+                  <Box flexGrow={1} flexShrink={1} minWidth={0}>{slotsCard}</Box>
+                  <Box flexGrow={1} flexShrink={1} minWidth={0}>{costCard}</Box>
+                </Box>
+              )
+            : [slotsCard, costCard]}
+          {cardOf('status-problems', headingOf(COPY.statusProblems, problems.length, problems.length > 0 ? 'warning' : 'inactive'), null, [
             problems.length === 0 ? quiet(elements, COPY.nothingWrong) : null,
           ])}
           {problems}
-          {cardOf('status-diagnostics', <Text bold color="subtle">{COPY.statusDiagnostics}</Text>, null, [
-            <Text color="subtle">{COPY.diagnosticsVersion(MOD_VERSION)}</Text>,
-            <Text color="subtle">{COPY.diagnosticsUrl(base)}</Text>,
-            <Text color="subtle">{COPY.diagnosticsServer(current.server)}</Text>,
-            <Text color="subtle">{COPY.diagnosticsDebug}</Text>,
+          {cardOf('status-diagnostics', <Text size="heading" weight="semibold" color="subtle">{COPY.statusDiagnostics}</Text>, null, [
+            <Text color="subtle" mono>{COPY.diagnosticsVersion(MOD_VERSION)}</Text>,
+            <Text color="subtle" mono>{COPY.diagnosticsUrl(base)}</Text>,
+            <Text color="subtle" mono>{COPY.diagnosticsServer(current.server)}</Text>,
+            <Text color="subtle" size="footnote">{COPY.diagnosticsDebug}</Text>,
           ])}
           {footer}
         </Box>
@@ -1366,7 +1531,7 @@ export const register: Register = on => {
 
     const backButton = <Button key="back" label={backLabel(stack)} dimColor onPress={() => back($)} />
 
-    // ONE STORY: progress, phases, the run's question, environment, verdict, criteria, what happened.
+    // ONE STORY: its phases, Now working, the run's question, environment, verdict, criteria, what happened.
     if (screen.screen === 'story') {
       const shownStory = await read($, story)
 
@@ -1383,7 +1548,7 @@ export const register: Register = on => {
         return (
           <Box flexDirection="column" gap={1}>
             {backButton}
-            {cardOf('story-error', <Text bold color="warning">{COPY.storyError}</Text>, `#${screen.story}`, [reason(shownStory.sentence)])}
+            {cardOf('story-error', warned(COPY.storyError), `#${screen.story}`, [reason(shownStory.sentence)], 'bad')}
             {footer}
           </Box>
         )
@@ -1392,57 +1557,121 @@ export const register: Register = on => {
       const criteriaOpen = shown.includes(`criteria-${shownStory.story}`)
       const timelineOpen = shown.includes(`timeline-${shownStory.story}`)
       const done = shownStory.phases.filter(item => item.status === 'done').length
+      const nowAt = shownStory.phases.findIndex(item => item.status === 'now')
+      const isStuck = shownStory.stateTone === 'warning'
+      const labels = COPY.phaseShort
+      const tooltips = look.proofs.svgTooltips
+        ? shownStory.phases.map(item => COPY.phaseTooltip(item.label, item.role, item.status, item.status === 'now' ? shownStory.working?.step ?? null : null))
+        : null
+      const stateChip = (
+        // THE STATE AS A CHIP: its colour on the theme's neutral grey. Filled in its own colour, 1.2.0's read as a blank block.
+        <Box key="story-state" flexShrink={0} backgroundColor={look.isGraphic ? CHIP_BACKGROUND : undefined} paddingX={look.isGraphic ? 'xs' : 0}>
+          <Text size="caption" color={CHIP_WORD}>{look.isGraphic ? '\u00a0' : ''}<Text color={shownStory.stateTone}>{CHIP_DOT}</Text>{` ${shownStory.stateText}${look.isGraphic ? '\u00a0' : ''}`}</Text>
+        </Box>
+      )
+      const working = shownStory.working
 
       return (
         <Box flexDirection="column" gap={1}>
           <Box key="story-top" flexDirection="row" justifyContent="space-between">
             {backButton}
-            <Text color={shownStory.stateTone}>{shownStory.stateText}</Text>
+            {age !== null && <Text color="subtle" size="footnote" tabular>{age}</Text>}
           </Box>
           <Box key="story-head" flexDirection="column">
-            <Text bold>{shownStory.title}</Text>
-            <Text color="subtle" wrap="truncate-end">{shownStory.meta}</Text>
+            <Text size="caption" color="subtle">{COPY.storyCaption(shownStory.goal)}</Text>
+            <Text size="title" weight="semibold">{shownStory.title}</Text>
+            <Box flexDirection="row" gap={1}>
+              {stateChip}
+              <Text color="subtle" size="footnote" wrap="truncate-end">
+                {[
+                  shownStory.running === null ? null : <Text tabular>{shownStory.running}</Text>,
+                  COPY.storyAttempt(shownStory.attempt),
+                  shownStory.branch === null ? null : <Text mono>{shownStory.branch}</Text>,
+                  shownStory.model,
+                ]
+                  .filter(part => part !== null)
+                  .flatMap((part, index) => (index === 0 ? [part] : [' · ', part]))}
+              </Text>
+            </Box>
           </Box>
-          {cardOf('story-phases', COPY.phases, COPY.phasesHint(done, shownStory.phases.length), [
-            ...shownStory.phases.map((item, index) => (
-              <Box key={`phase-${index}`} flexDirection="row" justifyContent="space-between" gap={1}>
-                <Text>
-                  <Text color={item.status === 'done' ? 'success' : item.status === 'now' ? 'suggestion' : 'subtle'}>{item.status === 'done' ? '✓ ' : item.status === 'now' ? '● ' : '○ '}</Text>
-                  <Text bold={item.status === 'now'} color={item.status === 'next' ? 'subtle' : 'text'}>{item.label}</Text>
-                  {item.role !== null && <Text color="subtle">{` · ${item.role}`}</Text>}
-                </Text>
-                <Text color="subtle" wrap="truncate-end">{item.detail}</Text>
-              </Box>
-            )),
-          ])}
-          {shownStory.working !== null && cardOf('story-working', COPY.nowWorking, COPY.nowWorkingHint(shownStory.working.agent, shownStory.working.stage), [
-            <Text>{shownStory.working.step}</Text>,
-            shownStory.working.fraction === null ? null : <Text color="suggestion">{bar(shownStory.working.fraction)}</Text>,
-            <Text color="inactive">{shownStory.working.spend}</Text>,
-          ])}
-          {shownStory.working === null && shownStory.step !== null && cardOf('story-progress', COPY.progress, null, [
+          {cardOf('story-phases', COPY.phases, <Text color="subtle" size="footnote" tabular>{COPY.phasesHint(nowAt >= 0 ? nowAt + 1 : done, shownStory.phases.length)}</Text>, look.isGraphic
+            ? [
+                // THE STEPPER (S32): the Svg says no word, the labels sit under it in Text; no stage, no node is now.
+                picture(elements, stepper(shownStory.phases, labels, { isStuck, tooltips, isCompact: look.isCompact }), { isInteractive: tooltips !== null }),
+                // COMPACT, below STEPPER_COLUMNS (the owner's walk, a dock of about 435 px): eight labels ran together, so
+                // only the phase now is named; the tooltips name the rest.
+                look.isCompact
+                  ? (nowAt < 0 ? null : <Text key="phase-now" size="caption" weight="semibold" color={isStuck ? 'warning' : 'suggestion'}>{shownStory.phases[nowAt]?.label ?? ''}</Text>)
+                  : <Box key="phase-labels" flexDirection="row">
+                  {shownStory.phases.map((item, index) => (
+                    <Box key={`phase-label-${index}`} flexGrow={1} flexShrink={1} minWidth={0} width={0} justifyContent="center">
+                      <Text
+                        size="caption"
+                        wrap="truncate-end"
+                        weight={item.status === 'now' ? 'semibold' : undefined}
+                        color={item.status === 'now' ? (isStuck ? 'warning' : 'suggestion') : item.status === 'done' ? 'inactive' : index === shownStory.phases.length - 1 ? 'merged' : 'subtle'}
+                      >
+                        {labels[index] ?? item.label}
+                      </Text>
+                    </Box>
+                  ))}
+                </Box>,
+              ]
+            : shownStory.phases.map((item, index) => (
+                <Box key={`phase-${index}`} flexDirection="row" justifyContent="space-between" gap={1}>
+                  <Text>
+                    <Text color={item.status === 'done' ? 'success' : item.status === 'now' ? 'suggestion' : 'subtle'}>{`${phaseGlyph(item, index === shownStory.phases.length - 1)} `}</Text>
+                    <Text bold={item.status === 'now'} color={item.status === 'next' ? 'subtle' : 'text'}>{item.label}</Text>
+                    {item.role !== null && <Text color="subtle">{` · ${item.role}`}</Text>}
+                  </Text>
+                  <Text color="subtle" wrap="truncate-end">{item.detail}</Text>
+                </Box>
+              )))}
+          {working !== null && (
+            <Box key="story-working" flexDirection="column">
+              {cardOf('story-working-card', COPY.nowWorking, COPY.nowWorkingHint(working.agent, working.stage), look.isGraphic
+                ? [
+                    <Text>{working.step}</Text>,
+                    <Box key="working-numbers" flexDirection="row" gap="lg" flexWrap="wrap">
+                      {working.numbers.map((item, index) => (
+                        <Box key={`working-number-${index}`} flexDirection="column">
+                          <Text size="title" weight="semibold" tabular>{item.value}</Text>
+                          <Text size="footnote" color="subtle">{item.label}</Text>
+                        </Box>
+                      ))}
+                    </Box>,
+                    picture(elements, spendBar(working.spentUsd, working.budgetUsd, 'full', COPY.spendAlt(working.spentUsd.toFixed(2), (working.budgetUsd ?? 0).toFixed(0)))),
+                  ]
+                : [
+                    <Text>{working.step}</Text>,
+                    working.fraction === null ? null : <Text color="suggestion">{bar(working.fraction)}</Text>,
+                    <Text color="inactive">{working.spend}</Text>,
+                  ])}
+            </Box>
+          )}
+          {working === null && shownStory.step !== null && cardOf('story-progress', COPY.progress, null, [
             <Text>{shownStory.step}</Text>,
             shownStory.fraction === null ? null : <Text color="suggestion">{bar(shownStory.fraction)}</Text>,
-            <Text color="inactive">{shownStory.cost}</Text>,
+            <Text color="inactive" tabular>{shownStory.cost}</Text>,
           ])}
-          {shownStory.question !== null && cardOf('story-question', <Text bold color="warning">{COPY.questionFromRun}</Text>, COPY.waitsOnYou, [
+          {shownStory.question !== null && cardOf('story-question', warned(COPY.questionFromRun, 'wait'), COPY.waitsOnYou, [
             <Text>{shownStory.question.text}</Text>,
             <Box flexDirection="row" gap={1}>
-              <Button key="story-answer" label={COPY.answer} onPress={() => go({ screen: 'question', question: shownStory.question?.id ?? 0 })} />
+              <Button key="story-answer" label={COPY.answer} variant="primary" onPress={() => go({ screen: 'question', question: shownStory.question?.id ?? 0 })} />
               <Link href={consoleLink(base, `question&question=${shownStory.question.id}`)} label={COPY.answerInConsole} />
             </Box>,
-          ])}
+          ], 'wait')}
           {shownStory.environment !== null && cardOf('story-environment', COPY.environment(shownStory.environment.name), null, [
             shownStory.environment.url === null ? null : <Link href={shownStory.environment.url} label={`${shownStory.environment.url} ↗`} />,
           ])}
-          {shownStory.verdict !== null && cardOf('story-verdict', <Text bold color={shownStory.verdict.isGreen ? 'success' : 'warning'}>{COPY.verdict}</Text>, COPY.verdictHint(shownStory.verdict.commit), [
+          {shownStory.verdict !== null && cardOf('story-verdict', <Text size="heading" weight="semibold" color={shownStory.verdict.isGreen ? 'success' : 'warning'}>{COPY.verdict}</Text>, <Text color="subtle" size="footnote" mono>{COPY.verdictHint(shownStory.verdict.commit)}</Text>, [
             ...shownStory.verdict.checks.map((check, index) => (
               <Box key={`check-${index}`} flexDirection="row" justifyContent="space-between" gap={1}>
                 <Text>
                   <Text color={check.isPass ? 'success' : 'error'}>{check.isPass ? '✓ ' : '✗ '}</Text>
                   <Text>{check.name}</Text>
                 </Text>
-                <Text color="subtle" wrap="truncate-end">{check.detail}</Text>
+                <Text color="subtle" wrap="truncate-end" tabular>{check.detail}</Text>
               </Box>
             )),
             shownStory.overrun.length === 0 ? null : (
@@ -1463,16 +1692,17 @@ export const register: Register = on => {
           {shownStory.timeline.length > 0 && cardOf('story-timeline', COPY.timeline, COPY.timelineHint, [
             ...(timelineOpen ? shownStory.timeline : shownStory.timeline.slice(0, TIMELINE_SHOWN)).map((event, index) => (
               <Text key={`event-${index}`} wrap="truncate-end">
-                <Text color="subtle">{`${event.time} `}</Text>
+                <Text color="subtle" tabular>{`${event.time} `}</Text>
                 <Text color="inactive">{`${event.actor} `}</Text>
-                <Text>{event.summary}</Text>
+                {withHash(elements, event.summary)}
               </Text>
             )),
             shownStory.timeline.length > TIMELINE_SHOWN ? (
               <Button key="timeline-more" plain dimColor label={timelineOpen ? COPY.less : COPY.more(shownStory.timeline.length - TIMELINE_SHOWN)} onPress={() => toggle($, `timeline-${shownStory.story}`)} />
             ) : null,
           ])}
-          <Box key="story-actions" flexDirection="row" gap={1} flexWrap="wrap">
+          {/* THE SLOT S27 (#27) DRAWS THE STORY'S ACTIONS INTO, dashed; until it lands, 1.1.2's links stay in it. */}
+          <Box key="story-actions" flexDirection="row" gap={1} flexWrap="wrap" borderStyle={look.isGraphic ? 'dashed' : 'single'} borderColor="subtle" paddingX={1}>
             <Button key="summarise" label={COPY.summariseInSession} onPress={() => postPrompt($, COPY.summarisePrompt(screen.story))} />
             {shownStory.goal !== null && <Button key="story-goal" label={COPY.goalOf(shownStory.goal)} dimColor onPress={() => go({ screen: 'goal', goal: shownStory.goal ?? 0 })} />}
             {shownStory.isVerified && <Link href={consoleLink(base, `merge&story=${shownStory.story}`)} label={COPY.mergeInConsole} />}
@@ -1481,7 +1711,7 @@ export const register: Register = on => {
             {shownStory.isRunning && <Link href={consoleLink(base, `work&story=${shownStory.story}`)} label={COPY.stopInConsole} />}
             <Link href={consoleLink(base, `work&story=${shownStory.story}`)} label={COPY.storyInConsole} />
           </Box>
-          <Text key="story-note" color="subtle">{COPY.summariseNote}</Text>
+          <Text key="story-note" color="subtle" size="footnote">{COPY.summariseNote}</Text>
           {footer}
         </Box>
       )
@@ -1514,46 +1744,72 @@ export const register: Register = on => {
       }
 
       const choices = question === null ? [] : questionChoices(question.text)
+      const about = question === null ? '' : question.about === question.subjectLabel ? question.subjectLabel : `${question.about} · ${question.subjectLabel}`
 
       return (
         <Box flexDirection="column" gap={1}>
           <Box key="question-top" flexDirection="row" justifyContent="space-between">
             {backButton}
-            {index >= 0 && <Text color="warning">{COPY.questionOf(index + 1, current.questions.length)}</Text>}
+            {index >= 0 && <Text color="warning" tabular>{COPY.questionOf(index + 1, current.questions.length)}</Text>}
           </Box>
-          {question !== null && cardOf('question', question.about, COPY.questionMeta(question.subjectLabel, clock(question.askedAt, offset)), [
-            <Text>{question.text}</Text>,
-            choices.length === 0 ? null : (
-              <Box key="choices" flexDirection="row" gap={1} flexWrap="wrap">
-                {choices.map((choice, position) => (
+          {question !== null && (
+            <Box key="question" flexDirection="column" gap={look.isGraphic ? 'xs' : 0}>
+              <Text size="caption" color="subtle">{COPY.questionMeta(about, clock(question.askedAt, offset))}</Text>
+              {/* THE QUESTION AS MARKDOWN (S32), in the language Terylon sent it in. */}
+              <Markdown key="question-text" text={question.text} />
+            </Box>
+          )}
+          {choices.length > 0 && (
+            <Box key="choices" flexDirection="column" gap={look.isGraphic ? 'xs' : 0}>
+              {choices.map((choice, position) => {
+                const isChosen = form.choice === choice
+                const letter = /^\(([a-z])\)\s*/.exec(choice)
+
+                // A CHOICE is a Button with its letter and its words: pressed, it only fills the answer; it sends nothing.
+                return (
                   <Button
                     key={`choice-${position}`}
-                    label={form.choice === choice ? COPY.selected(choice) : choice}
-                    variant={form.choice === choice ? 'primary' : undefined}
-                    dimColor={form.choice !== choice}
+                    label={choice}
+                    variant={isChosen ? 'primary' : undefined}
+                    dimColor={!isChosen}
                     onPress={() => update($, answer, (value: PaneAnswer | null): PaneAnswer | null => (value === null ? null : { ...value, choice, text: value.text === '' || value.text === value.choice ? choice : value.text }))}
-                  />
-                ))}
-              </Box>
-            ),
-            form.phase === 'form' && hasInput && 'Input' in elements ? (
-              <elements.Input key="answer-text" label={COPY.answerLabel} value={form.text} onInput={value => update($, answer, (state: PaneAnswer | null): PaneAnswer | null => (state === null ? null : { ...state, text: value }))} onSubmit={value => sendAnswer($, value)} />
-            ) : null,
-            form.phase === 'form' ? (
-              <Box key="answer-actions" flexDirection="row" gap={1} flexWrap="wrap">
-                <Button key="answer-send" label={COPY.answerSend} variant="primary" onPress={() => sendAnswer($)} />
-                <Button key="answer-discuss" label={COPY.discussInSession} dimColor onPress={() => postPrompt($, COPY.discussPrompt(question?.id ?? 0, question?.text ?? ''))} />
-              </Box>
-            ) : null,
-            form.phase === 'sending' ? quiet(elements, COPY.answerSending) : null,
-          ])}
-          {(form.phase === 'answered' || form.phase === 'refused') && cardOf('answer-result', form.phase === 'answered' ? <Text bold color="success">{COPY.answered(form.sentence ?? '')}</Text> : <Text bold color="error">{COPY.notAnswered}</Text>, null, [
-            form.phase === 'answered' ? <Text color="inactive">{COPY.answeredNote}</Text> : reason(form.sentence),
-            form.phase === 'refused' ? <Button key="answer-retry" label={COPY.editAndRetry} onPress={() => update($, answer, (state: PaneAnswer | null): PaneAnswer | null => (state === null ? null : { ...state, phase: 'form' }))} /> : null,
-            next !== null && form.phase === 'answered' ? <Button key="answer-next" label={COPY.nextQuestion} onPress={() => show($, { screen: 'question', question: next.id }, false)} /> : null,
+                  >
+                    {!look.isGraphic && isChosen ? '● ' : ''}
+                    <Text color="suggestion" weight="semibold">{letter?.[1] ?? '·'}</Text>
+                    {` ${letter === null ? choice : choice.slice(letter[0].length)}`}
+                  </Button>
+                )
+              })}
+            </Box>
+          )}
+          {form.phase === 'form' && hasInput && 'Input' in elements ? (
+            // THE ANSWER: four rows where Desktop has proven a multi-line field (input-rows), one line as 1.1.2 otherwise.
+            <elements.Input
+              key="answer-text"
+              label={COPY.answerLabel}
+              value={form.text}
+              rows={look.proofs.inputRows ? 4 : undefined}
+              // ONE WAY TO SEND (the owner's walk of 1.2.0): the Answer button below; the field names no second one.
+              submitLabel={look.isGraphic ? '' : 'answer'}
+              autoFocus
+              onInput={value => update($, answer, (state: PaneAnswer | null): PaneAnswer | null => (state === null ? null : { ...state, text: value }))}
+              onSubmit={value => sendAnswer($, value)}
+            />
+          ) : null}
+          {form.phase === 'form' ? (
+            <Box key="answer-actions" flexDirection="row" gap={1} flexWrap="wrap">
+              <Button key="answer-send" label={COPY.answerSend} variant="primary" onPress={() => sendAnswer($)} />
+              <Button key="answer-discuss" label={COPY.discussInSession} dimColor onPress={() => postPrompt($, COPY.discussPrompt(question?.id ?? 0, question?.text ?? ''))} />
+            </Box>
+          ) : null}
+          {form.phase === 'sending' ? quiet(elements, COPY.answerSending) : null}
+          {(form.phase === 'answered' || form.phase === 'refused') && cardOf('answer-result', form.phase === 'answered' ? <Text weight="semibold" color="success">{COPY.answered(form.sentence ?? '')}</Text> : <Text weight="semibold" color="error">{COPY.notAnswered}</Text>, null, [
+            form.phase === 'answered' ? <Text color="inactive" size="footnote">{COPY.answeredNote}</Text> : reason(form.sentence),
+            form.phase === 'refused' ? <Button key="answer-retry" label={COPY.editAndRetry} variant="primary" onPress={() => update($, answer, (state: PaneAnswer | null): PaneAnswer | null => (state === null ? null : { ...state, phase: 'form' }))} /> : null,
+            next !== null && form.phase === 'answered' ? <Button key="answer-next" label={COPY.nextQuestion} variant="primary" onPress={() => show($, { screen: 'question', question: next.id }, false)} /> : null,
           ])}
           <Link key="answer-console" href={consoleLink(base, `question&question=${screen.question}`)} label={COPY.answerInConsole} />
-          <Text key="answer-note" color="subtle">{COPY.answerNote}</Text>
+          <Text key="answer-note" color="subtle" size="footnote">{COPY.answerNote}</Text>
           {footer}
         </Box>
       )
@@ -1566,7 +1822,7 @@ export const register: Register = on => {
       if (form.phase === 'sending') {
         return (
           <Box flexDirection="column" gap={1}>
-            <Text bold>{COPY.newTask}</Text>
+            <Text size="heading" weight="semibold">{COPY.newTask}</Text>
             <Text color="subtle">{form.title}</Text>
             <Text>{COPY.sending}</Text>
           </Box>
@@ -1576,11 +1832,11 @@ export const register: Register = on => {
       if (form.phase === 'added') {
         return (
           <Box flexDirection="column" gap={1}>
-            <Text bold color="success">{COPY.added}</Text>
+            <Text weight="semibold" color="success">{COPY.added}</Text>
             <Text>{form.sentence ?? ''}</Text>
             {form.link !== null && <Link href={form.link} label={COPY.approveInConsole} />}
-            <Text color="subtle">{COPY.addedNote}</Text>
-            <Button key="add-next" label={COPY.nextTask} onPress={() => openAdd($, '')} />
+            <Text color="subtle" size="footnote">{COPY.addedNote}</Text>
+            <Button key="add-next" label={COPY.nextTask} variant="primary" onPress={() => openAdd($, '')} />
             {backButton}
           </Box>
         )
@@ -1589,7 +1845,7 @@ export const register: Register = on => {
       if (form.phase === 'refused' || form.phase === 'timeout' || form.phase === 'paused') {
         return (
           <Box flexDirection="column" gap={1}>
-            <Text bold color={form.phase === 'paused' ? 'warning' : 'error'}>{form.phase === 'paused' ? COPY.added : COPY.notAdded}</Text>
+            <Text weight="semibold" color={form.phase === 'paused' ? 'warning' : 'error'}>{form.phase === 'paused' ? COPY.added : COPY.notAdded}</Text>
             <Text>{form.sentence ?? ''}</Text>
             <Button key="add-retry" label={COPY.editAndRetry} variant="primary" onPress={() => update($, add, (value: PaneAdd): PaneAdd => ({ ...value, phase: 'form' }))} />
             {backButton}
@@ -1597,28 +1853,54 @@ export const register: Register = on => {
         )
       }
 
+      // THREE PICKERS (S32) over tasks_add's own fields: the goal, the story it runs after, the size.
+      const pickers = [
+        'Select' in elements && form.goals.length > 0 ? (
+          <elements.Select key="add-goal" label={COPY.goal} value={form.goal} options={form.goals} onSelect={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, goal: value }))} />
+        ) : null,
+        'Select' in elements ? (
+          <elements.Select key="add-after" label={COPY.afterLabel} value={form.after} options={form.stories} onSelect={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, after: value }))} />
+        ) : null,
+        'Select' in elements ? (
+          <elements.Select key="add-size" label={COPY.size} value={form.size} options={COPY.sizes.map(size => ({ value: size, label: size }))} onSelect={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, size: value }))} />
+        ) : null,
+      ].filter(item => item !== null)
+
       return (
         <Box flexDirection="column" gap={1}>
-          {backButton}
-          <Text bold>{COPY.newTask}</Text>
+          <Box key="add-top" flexDirection="row" justifyContent="space-between">
+            {backButton}
+            <Text color="subtle" size="footnote">{COPY.newTask}</Text>
+          </Box>
+          <Text size="heading" weight="semibold">{COPY.newTask}</Text>
           {'Input' in elements && (
             <elements.Input key="add-title" label={COPY.whatToDo} value={form.title} onInput={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, title: value }))} onSubmit={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, title: value }))} />
           )}
           {'Input' in elements && (
-            <elements.Input key="add-criteria" label={COPY.criteriaLabel} placeholder={COPY.criteriaPlaceholder} value={form.criteria} onInput={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, criteria: value }))} onSubmit={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, criteria: value }))} />
-          )}
-          {'Select' in elements && form.goals.length > 0 && (
-            <elements.Select key="add-goal" label={COPY.goal} value={form.goal} options={form.goals} onSelect={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, goal: value }))} />
+            // CRITERIA ONE PER LINE where Desktop has proven a multi-line field (input-rows), by semicolons otherwise.
+            <elements.Input
+              key="add-criteria"
+              label={COPY.criteriaLabel}
+              placeholder={look.proofs.inputRows ? COPY.criteriaPlaceholderRows : COPY.criteriaPlaceholder}
+              value={form.criteria}
+              rows={look.proofs.inputRows ? 3 : undefined}
+              onInput={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, criteria: value }))}
+              onSubmit={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, criteria: value }))}
+            />
           )}
           {form.goals.length === 0 && <Text color="warning">{COPY.noGoal}</Text>}
-          {'Select' in elements && (
-            <elements.Select key="add-after" label={COPY.afterLabel} value={form.after} options={form.stories} onSelect={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, after: value }))} />
-          )}
-          <Text color="subtle">{COPY.quickTaskNote}</Text>
+          {look.isGraphic && !look.isNarrow
+            ? (
+                <Box key="add-pickers" flexDirection="row" gap="sm">
+                  {pickers.map((picker, position) => <Box key={`add-picker-${position}`} flexGrow={position === 0 ? 3 : position === 1 ? 2 : 1} flexShrink={1} minWidth={0}>{picker}</Box>)}
+                </Box>
+              )
+            : pickers}
           <Box flexDirection="row" gap={1}>
             <Button key="add-send" label={COPY.handOver} variant="primary" onPress={() => sendTask($)} />
             <Button key="add-cancel" label={COPY.cancel} dimColor onPress={() => back($)} />
           </Box>
+          <Text color="subtle" size="footnote">{COPY.quickTaskNote}</Text>
         </Box>
       )
     }
@@ -1642,10 +1924,10 @@ export const register: Register = on => {
           <Box flexDirection="column" gap={1}>
             {tabs}
             {context}
-            {cardOf('mem-error', <Text bold color="warning">{COPY.memoryError}</Text>, null, [
+            {cardOf('mem-error', warned(COPY.memoryError), null, [
               reason(state.sentence ?? '?'),
-              <Button key="mem-retry" label={COPY.retry} onPress={() => openMemory($)} />,
-            ])}
+              <Button key="mem-retry" label={COPY.retry} variant="primary" onPress={() => openMemory($)} />,
+            ], 'bad')}
             {footer}
           </Box>
         )
@@ -1688,7 +1970,7 @@ export const register: Register = on => {
                 <Button key="mem-back" label={COPY.memoryBack} dimColor onPress={() => openMemory($)} />
               </Box>
             )}
-            {state.phase === 'editing' && <Text color="inactive">{COPY.memoryNote}</Text>}
+            {state.phase === 'editing' && <Text color="inactive" size="footnote">{COPY.memoryNote}</Text>}
           </Box>
         )
       }
@@ -1698,7 +1980,7 @@ export const register: Register = on => {
           {tabs}
           {context}
           {state.rules.length > 0 && cardOf('mem-rules', COPY.memoryRules, COPY.memoryRulesHint(state.rules.length), state.rules.map((rule, index) =>
-            row(elements, {
+            rowOf({
               key: `mem-rule-${index}`,
               kind: null,
               title: rule.rule,
@@ -1708,8 +1990,7 @@ export const register: Register = on => {
             })))}
           {state.files.length === 0 && cardOf('mem-empty', COPY.memoryFiles, null, [quiet(elements, COPY.memoryEmpty)])}
           {state.files.map((file, fileIndex) =>
-            card(
-              elements,
+            cardOf(
               `mem-file-${fileIndex}`,
               file.heading,
               file.text !== null ? COPY.memoryTopic : COPY.memoryEntries(file.file, file.entries.length),
@@ -1728,7 +2009,7 @@ export const register: Register = on => {
                 ...(file.text === null
                   ? [choice(`mem-add-${fileIndex}`, COPY.memoryAdd, isEditing(file.file, null, 'add'), () => startEdit('add', file.file, null))]
                   : [
-                      row(elements, {
+                      rowOf({
                         key: `mem-topic-${fileIndex}`,
                         kind: shown.includes(`mem-topic-${fileIndex}`) ? '▾' : '▸',
                         title: firstLine(file.text),
@@ -1740,8 +2021,8 @@ export const register: Register = on => {
               ],
             ))}
           {cardOf('mem-pending', COPY.memoryPendingHeading, null, state.pending > 0
-            ? [<Text><Text color="warning">{COPY.memoryPending(state.pending)}</Text><Text color="inactive">{COPY.memoryPendingWhere}</Text></Text>, <Link href={memoryLink} label={COPY.memoryConfirmInConsole} />]
-            : [quiet(elements, COPY.nothingYet)])}
+            ? [<Text><Text color="text" tabular>{COPY.memoryPending(state.pending)}</Text><Text color="inactive">{COPY.memoryPendingWhere}</Text></Text>, <Link href={memoryLink} label={COPY.memoryConfirmInConsole} />]
+            : [quiet(elements, COPY.nothingYet)], state.pending > 0 ? 'wait' : 'plain')}
           {cardOf('mem-proposed', COPY.memoryProposedHeading, null, state.proposed.length === 0
             ? [quiet(elements, COPY.nothingYet)]
             : state.proposed.slice().reverse().map((line, position) => <Text key={`mem-proposed-${position}`} color="inactive" wrap="truncate-end">{line}</Text>))}
@@ -1752,11 +2033,23 @@ export const register: Register = on => {
 
     const goalsState = await readGoals($)
 
-    // ONE PLAN: its stories in order, each opening the story; approval and rethinking are the console's.
-    const planCard = (plan: (typeof goalsState.plans)[number]) =>
-      cardOf(`plan-${plan.id}`, <Text bold>{COPY.plan(plan.id)}<Text color="subtle">{` · ${plan.goalTitle}`}</Text></Text>, plan.stateText, [
+    // ONE PLAN: its chain, its stories in order, each opening the story; approval and rethinking are the console's.
+    const planCard = (plan: (typeof goalsState.plans)[number]) => {
+      const chain = plan.stories.map(item => ({ index: item.index, after: item.after }))
+      const sizes = plan.stories.map(item => (item.estimate === null ? item.size : `${item.size} ~$${item.estimate}`)).join(' → ')
+
+      return cardOf(`plan-${plan.id}`, <Text size="heading" weight="semibold">{COPY.plan(plan.id)}<Text color="subtle" weight="regular">{` · ${plan.goalTitle}`}</Text></Text>, plan.stateText, [
+        // A PLAN AS A CHAIN (S32): the order and the "after" of its stories as an Svg, as 1 → 2 → 3 on the terminal.
+        plan.stories.length === 0
+          ? null
+          : (
+              <Box key={`plan-${plan.id}-chain`} flexDirection="row" gap={1} alignItems="center">
+                {look.isGraphic ? picture(elements, planChain(chain)) : <Text color="subtle">{plan.stories.map(item => String(item.index)).join(' → ')}</Text>}
+                <Text color="subtle" size="footnote" tabular>{sizes}</Text>
+              </Box>
+            ),
         ...plan.stories.map(item =>
-          row(elements, {
+          rowOf({
             key: `plan-${plan.id}-story-${item.id}`,
             kind: String(item.index),
             title: item.title,
@@ -1764,13 +2057,14 @@ export const register: Register = on => {
             onPress: () => go({ screen: 'story', story: item.id }),
           })),
         plan.comment === null ? null : <Text color="inactive">{plan.comment}</Text>,
-        <Text color="inactive">{COPY.planNote}</Text>,
+        <Text color="inactive" size="footnote">{COPY.planNote}</Text>,
         <Box flexDirection="row" gap={1} flexWrap="wrap">
           {plan.isProposed && <Link href={plan.console} label={COPY.approveInConsole} />}
           {plan.isProposed && <Link href={plan.console} label={COPY.rethinkInConsole} />}
           <Button key={`plan-${plan.id}-goal`} label={COPY.goalOf(plan.goal)} dimColor onPress={() => go({ screen: 'goal', goal: plan.goal })} />
         </Box>,
-      ])
+      ], plan.isProposed ? 'wait' : 'plain')
+    }
 
     if (screen.screen === 'plan') {
       const plan = goalsState.plans.find(item => item.id === screen.plan) ?? null
@@ -1803,31 +2097,40 @@ export const register: Register = on => {
         <Box flexDirection="column" gap={1}>
           {backButton}
           {shownGoal.phase === 'error'
-            ? cardOf('goal-error', <Text bold color="warning">{COPY.loadError(COPY.goalOf(screen.goal))}</Text>, null, [reason(shownGoal.sentence)])
+            ? cardOf('goal-error', warned(COPY.loadError(COPY.goalOf(screen.goal))), null, [reason(shownGoal.sentence)], 'bad')
             : (
                 <Box key="goal-head" flexDirection="column">
-                  <Text bold>{shownGoal.title}</Text>
-                  <Text color="subtle">{shownGoal.meta}</Text>
+                  <Text size="caption" color="subtle">{COPY.goalOf(screen.goal).toUpperCase()}</Text>
+                  <Text size="title" weight="semibold">{shownGoal.title}</Text>
+                  <Text color="subtle" size="footnote">{shownGoal.meta}</Text>
                 </Box>
               )}
-          {shownGoal.phase === 'ok' && cardOf('goal-stories', COPY.goalStories, String(shownGoal.stories.length), [
+          {shownGoal.phase === 'ok' && cardOf('goal-stories', COPY.goalStories, <Text color="subtle" size="footnote" tabular>{String(shownGoal.stories.length)}</Text>, [
             shownGoal.stories.length === 0 ? quiet(elements, COPY.noGoalStories) : null,
             ...shownGoal.stories.map(item =>
-              row(elements, { key: `goal-story-${item.id}`, kind: COPY.kindStory, title: item.title, detail: item.state, onPress: () => go({ screen: 'story', story: item.id }) })),
+              rowOf({ key: `goal-story-${item.id}`, kind: COPY.kindStory, title: item.title, detail: item.state, onPress: () => go({ screen: 'story', story: item.id }) })),
           ])}
-          {questions.length > 0 && cardOf('goal-questions', <Text bold>{COPY.goalQuestionsHeading}<Text color="warning">{COPY.count(questions.length)}</Text></Text>, null, questions.map(item =>
-            row(elements, { key: `goal-question-${item.id}`, kind: COPY.kindQuestion, title: firstLine(item.text), onPress: () => go({ screen: 'question', question: item.id }) })))}
+          {questions.length > 0 && cardOf('goal-questions', headingOf(COPY.goalQuestionsHeading, questions.length, 'text'), null, questions.map(item =>
+            rowOf({ key: `goal-question-${item.id}`, kind: COPY.kindQuestion, kindTone: 'warning', title: firstLine(item.text), onPress: () => go({ screen: 'question', question: item.id }) })), 'wait')}
           {plans.map(plan =>
-            row(elements, { key: `goal-plan-${plan.id}`, kind: COPY.kindPlan, title: COPY.plan(plan.id), detail: plan.stateText, detailTone: plan.isProposed ? 'warning' : 'subtle', onPress: () => go({ screen: 'plan', plan: plan.id }) }))}
+            rowOf({ key: `goal-plan-${plan.id}`, kind: COPY.kindPlan, title: COPY.plan(plan.id), detail: plan.stateText, detailTone: plan.isProposed ? 'warning' : 'subtle', onPress: () => go({ screen: 'plan', plan: plan.id }) }))}
           <Link key="goal-console" href={consoleLink(base, `goals&goal=${screen.goal}`)} label={COPY.goalInConsole} />
           {footer}
         </Box>
       )
     }
 
-    // THE GOALS TAB: open goals by priority, the plans, and a new goal.
+    // THE GOALS TAB: open goals by priority, the plans, and a new goal with its priority and target.
     if (screen.screen === 'goals') {
       const isClosedShown = shown.includes('goals-closed')
+      const goalPickers = [
+        'Select' in elements ? (
+          <elements.Select key="goal-priority" label={COPY.priority} value={goalsState.priority} options={COPY.priorities} onSelect={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, priority: value }))} />
+        ) : null,
+        'Select' in elements ? (
+          <elements.Select key="goal-target" label={COPY.target} value={goalsState.target} options={goalsState.targets.length === 0 ? [{ value: OWN_LIST, label: COPY.ownList }] : goalsState.targets} onSelect={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, target: value }))} />
+        ) : null,
+      ].filter(item => item !== null)
 
       return (
         <Box flexDirection="column" gap={1}>
@@ -1835,12 +2138,15 @@ export const register: Register = on => {
           {context}
           {problemCard}
           {goalsState.phase === 'loading' && quiet(elements, COPY.loading)}
-          {goalsState.phase === 'error' && cardOf('goals-error', <Text bold color="warning">{COPY.loadError(COPY.tabGoals)}</Text>, null, [reason(goalsState.sentence)])}
-          {goalsState.phase === 'ok' && cardOf('goals-open', <Text bold>{COPY.openGoals}<Text color="inactive">{COPY.count(goalsState.open.length)}</Text></Text>, COPY.goalsHint, [
+          {goalsState.phase === 'error' && cardOf('goals-error', warned(COPY.loadError(COPY.tabGoals)), null, [reason(goalsState.sentence)], 'bad')}
+          {goalsState.phase === 'ok' && cardOf('goals-open', headingOf(COPY.openGoals, goalsState.open.length, 'inactive'), COPY.goalsHint, [
             ...[...goalsState.open, ...(isClosedShown ? goalsState.closed : [])].map(item =>
-              row(elements, {
+              rowOf({
                 key: `goal-${item.id}`,
+                // THE PRIORITY AS A CHIP (S32): P1 in warning, the others inactive.
                 kind: item.priority,
+                kindTone: item.priority === 'P1' ? 'warning' : 'inactive',
+                kindColumn: 3,
                 title: item.title,
                 titleTone: goalsState.closed.includes(item) ? 'subtle' : undefined,
                 detail: item.questions > 0 ? COPY.goalQuestions(item.questions) : item.stories,
@@ -1854,20 +2160,23 @@ export const register: Register = on => {
           {goalsState.phase === 'ok' && goalsState.plans.length === 0 && cardOf('plans-empty', COPY.plans, null, [quiet(elements, COPY.noPlans)])}
           {goalsState.plans.map(plan => planCard(plan))}
           {goalsState.sentence !== null && goalsState.phase === 'ok' && reason(goalsState.sentence)}
-          {hasInput && 'Input' in elements && (
-            <Box key="goal-new" flexDirection="column">
-              <Box flexDirection="row" gap={1}>
-                <Box flexGrow={1}>
-                  <elements.Input key="goal-draft" label={COPY.newGoal} placeholder={COPY.newGoalPlaceholder} value={goalsState.draft} onInput={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, draft: value }))} onSubmit={() => addGoal($)} />
-                </Box>
-                <Button key="goal-add" label={COPY.addGoal} onPress={() => addGoal($)} />
-              </Box>
-              {goalsState.adding === 'sending' && quiet(elements, COPY.goalSending)}
-              {goalsState.adding === 'added' && <Text color="success">{`✓ ${goalsState.addSentence ?? ''}`}</Text>}
-              {goalsState.adding === 'refused' && <Text color="error">{goalsState.addSentence ?? ''}</Text>}
-              <Text color="subtle">{COPY.addGoalNote}</Text>
-            </Box>
-          )}
+          {hasInput && 'Input' in elements && cardOf('goal-new', COPY.newGoal, null, [
+            <elements.Input key="goal-draft" placeholder={COPY.newGoalPlaceholder} value={goalsState.draft} onInput={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, draft: value }))} onSubmit={() => addGoal($)} />,
+            look.isGraphic && !look.isNarrow
+              ? (
+                  <Box key="goal-pickers" flexDirection="row" gap="sm">
+                    {goalPickers.map((picker, position) => <Box key={`goal-picker-${position}`} flexGrow={1} flexShrink={1} minWidth={0}>{picker}</Box>)}
+                  </Box>
+                )
+              : goalPickers,
+            <Box flexDirection="row" gap={1}>
+              <Button key="goal-add" label={COPY.addGoal} variant="primary" onPress={() => addGoal($)} />
+            </Box>,
+            goalsState.adding === 'sending' ? quiet(elements, COPY.goalSending) : null,
+            goalsState.adding === 'added' ? <Text color="success">{`✓ ${goalsState.addSentence ?? ''}`}</Text> : null,
+            goalsState.adding === 'refused' ? <Text color="error">{goalsState.addSentence ?? ''}</Text> : null,
+            <Text color="subtle" size="footnote">{COPY.addGoalNote}</Text>,
+          ])}
           {footer}
         </Box>
       )
@@ -1876,6 +2185,7 @@ export const register: Register = on => {
     // THE BELL TAB: what needs the owner, what the machine did, the leader's state, the last 30 days.
     if (screen.screen === 'bell') {
       const bellState = await readBell($)
+      const sourceColumn = kindWidth(bellState.unhandled.map(item => item.source))
 
       return (
         <Box flexDirection="column" gap={1}>
@@ -1883,34 +2193,36 @@ export const register: Register = on => {
           {context}
           {problemCard}
           {bellState.phase === 'loading' && quiet(elements, COPY.loading)}
-          {bellState.phase === 'error' && cardOf('bell-error', <Text bold color="warning">{COPY.loadError(COPY.tabBell(0))}</Text>, null, [reason(bellState.sentence)])}
-          {bellState.phase === 'ok' && cardOf('bell-needs', <Text bold>{COPY.needsYou}<Text color={bellState.unhandledCount > 0 ? 'warning' : 'inactive'}>{COPY.count(bellState.unhandledCount)}</Text></Text>, COPY.bellHint, [
+          {bellState.phase === 'error' && cardOf('bell-error', warned(COPY.loadError(COPY.tabBell(0))), null, [reason(bellState.sentence)], 'bad')}
+          {bellState.phase === 'ok' && cardOf('bell-needs', headingOf(COPY.needsYou, bellState.unhandledCount, bellState.unhandledCount > 0 ? 'text' : 'inactive'), COPY.bellHint, [
             bellState.unhandled.length === 0 ? quiet(elements, COPY.nothingYet) : null,
             ...bellState.unhandled.map(notice =>
-              row(elements, {
+              rowOf({
                 key: `notice-${notice.id}`,
+                // THE SOURCE AS A CHIP (S32): a fault of the machine in error, everything else inactive.
                 kind: notice.source,
-                kindColumn: kindWidth(bellState.unhandled.map(item => item.source)),
+                kindTone: isMachineFault(notice) ? 'error' : 'inactive',
+                kindColumn: sourceColumn,
                 title: notice.title,
                 detail: `${notice.when} ${shown.includes(`notice-${notice.id}`) ? '▾' : '▸'}`,
-                link: notice.link === null ? null : `${base}${notice.link}`,
                 onPress: () => toggle($, `notice-${notice.id}`),
                 body: shown.includes(`notice-${notice.id}`) ? (
-                  <Box flexDirection="column" paddingLeft={kindWidth(bellState.unhandled.map(item => item.source)) + 1}>
+                  <Box flexDirection="column" paddingLeft={look.isGraphic ? 0 : sourceColumn + 1}>
                     <Text color="inactive">{notice.body === '' ? COPY.noBody : notice.body}</Text>
-                    <Box flexDirection="row" gap={1}>
+                    <Box flexDirection="row" gap={1} flexWrap="wrap">
                       <Button
                         key={`handle-${notice.id}`}
                         label={bellState.handling === notice.id ? COPY.handling : COPY.markHandled}
                         onPress={() => handleNotice($, notice.id)}
                       />
+                      {notice.link !== null && <Link href={`${base}${notice.link}`} label={COPY.bellInConsole} />}
                     </Box>
                   </Box>
                 ) : null,
               })),
             bellState.handleSentence === null ? null : reason(bellState.handleSentence),
-            <Text color="subtle">{COPY.bellNote}</Text>,
-          ])}
+            <Text color="subtle" size="footnote">{COPY.bellNote}</Text>,
+          ], bellState.unhandledCount > 0 ? 'wait' : 'plain')}
           {bellState.phase === 'ok' && cardOf('bell-machine', COPY.machine, COPY.machineHint, [
             <Text>
               <Text color={bellState.leader.isPaused ? 'warning' : 'success'}>{bellState.leader.isPaused ? '! ' : '✓ '}</Text>
@@ -1919,25 +2231,40 @@ export const register: Register = on => {
             ...bellState.handled.map(notice => (
               <Text key={`handled-${notice.id}`} wrap="truncate-end">
                 <Text color="success">{'✓ '}</Text>
-                <Text>{notice.title}</Text>
-                <Text color="subtle">{` ${notice.when}`}</Text>
+                {withHash(elements, notice.title)}
+                <Text color="subtle" size="footnote" tabular>{` ${notice.when}`}</Text>
               </Text>
             )),
           ])}
           {bellState.phase === 'ok' && bellState.metrics.length > 0 && cardOf('bell-metrics', COPY.metrics, COPY.metricsHint, [
-            <Box flexDirection="row" gap={2} flexWrap="wrap">
-              {bellState.metrics.map((metric, index) => (
-                <Text key={`metric-${index}`}>
-                  <Text bold>{metric.value}</Text>
-                  <Text color="subtle">{` ${metric.label}`}</Text>
-                </Text>
-              ))}
-            </Box>,
+            look.isGraphic
+              ? (
+                  // FOUR NUMBERS, LARGE (S32): metrics reports no per-day series, so there is no 30-day chart.
+                  <Box key="metric-numbers" flexDirection="row" gap="lg" flexWrap="wrap">
+                    {bellState.metrics.map((metric, index) => (
+                      <Box key={`metric-${index}`} flexDirection="column">
+                        <Text size="title" weight="semibold" tabular>{metric.value}</Text>
+                        <Text size="footnote" color="subtle">{metric.label}</Text>
+                      </Box>
+                    ))}
+                  </Box>
+                )
+              : (
+                  <Box flexDirection="row" gap={2} flexWrap="wrap">
+                    {bellState.metrics.map((metric, index) => (
+                      <Text key={`metric-${index}`}>
+                        <Text bold>{metric.value}</Text>
+                        <Text color="subtle">{` ${metric.label}`}</Text>
+                      </Text>
+                    ))}
+                  </Box>
+                ),
           ])}
-          <Box key="bell-links" flexDirection="row" gap={1} flexWrap="wrap">
+          {/* THE SLOT S27 (#27) DRAWS THE LEADER'S PAUSE AND RESUME INTO, dashed; until then, 1.1.2's links. */}
+          <Box key="leader-actions" flexDirection="row" gap={1} flexWrap="wrap" borderStyle={look.isGraphic ? 'dashed' : 'single'} borderColor="subtle" paddingX={1}>
+            <Link href={consoleLink(base, 'work')} label={COPY.pauseInConsole} />
             <Link href={consoleLink(base, 'bell')} label={COPY.bellInConsole} />
             <Link href={consoleLink(base, 'health')} label={COPY.health} />
-            <Link href={consoleLink(base, 'work')} label={COPY.pauseInConsole} />
           </Box>
           {footer}
         </Box>
@@ -1947,29 +2274,55 @@ export const register: Register = on => {
     // THE QUEUE: waiting for you, running, queued or held, done today. Each card stays, quiet when empty.
     const waitingKind = (kind: string) =>
       kind === 'question' ? COPY.kindQuestion : kind === 'merge' ? COPY.kindMerge : kind === 'plan' ? COPY.kindPlan : COPY.kindBlocked
+    const waitingTone = (kind: string): Tone =>
+      kind === 'question' ? 'warning' : kind === 'merge' ? 'merged' : kind === 'blocked' ? 'error' : 'inactive'
+    const waitingReveal = (kind: string) =>
+      kind === 'question' ? COPY.answerInConsole : kind === 'merge' ? COPY.mergeInConsole : kind === 'plan' ? COPY.approveInConsole : COPY.unblockInConsole
+    const slots = slotsGauge(current.slotsUsed, current.slots, false)
+    const spend = budgetUsd === null ? null : spendBar(runningUsd, budgetUsd, 'small', COPY.gaugeSpendAlt(current.runningUsd, current.dayBudget ?? ''))
+
+    // THE RUNNING HEADING'S GAUGES (S32): the slots and today's spend as two small Svg with their numbers; the
+    // narrow dock says the numbers alone, the terminal draws ▰▱ cells.
+    const gauges = !look.isGraphic
+      ? (
+          <Text color="subtle" tabular>
+            {`${meter(current.slotsUsed, Math.min(current.slots, 12))} ${COPY.gaugeSlots(current.slotsUsed, current.slots)} · ${budgetUsd === null || budgetUsd <= 0 ? '' : `${meter((runningUsd / budgetUsd) * 4, 4)} `}${COPY.gaugeSpend(current.runningUsd, current.dayBudget)}`}
+          </Text>
+        )
+      : look.isNarrow
+        ? <Text color="subtle" size="footnote" tabular>{COPY.gaugesNarrow(current.slotsUsed, current.slots, current.runningUsd)}</Text>
+        : (
+            <Box flexDirection="row" gap="sm" alignItems="center">
+              {picture(elements, slots)}
+              <Text color="subtle" size="footnote" tabular>{COPY.gaugeSlots(current.slotsUsed, current.slots)}</Text>
+              {picture(elements, spend)}
+              <Text color="subtle" size="footnote" tabular>{COPY.gaugeSpend(current.runningUsd, current.dayBudget)}</Text>
+            </Box>
+          )
 
     return (
       <Box flexDirection="column" gap={1}>
         {tabs}
         {context}
         {problemCard}
-        {current.paused !== null && cardOf('paused', <Text bold color="warning">{current.paused}</Text>, null, [
+        {current.paused !== null && cardOf('paused', <Text size="heading" weight="semibold" color="text">{current.paused}</Text>, null, [
           <Link href={consoleLink(base, 'work')} label={COPY.resumeInConsole} />,
-        ])}
-        {cardOf('waiting', <Text bold>{COPY.waiting}<Text color={current.waiting.length > 0 ? 'warning' : 'inactive'}>{`${COPY.count(current.waiting.length)}${stale}`}</Text></Text>, COPY.waitingHint, [
+        ], 'wait')}
+        {cardOf('waiting', headingOf(COPY.waiting, current.waiting.length, current.waiting.length > 0 ? 'text' : 'inactive', stale), look.isNarrow ? null : COPY.waitingHint, [
           current.waiting.length === 0 ? quiet(elements, COPY.nothingWaiting) : null,
           ...current.waiting.map(item =>
-            row(elements, {
+            rowOf({
               key: item.key,
               kind: waitingKind(item.kind),
+              kindTone: waitingTone(item.kind),
               title: item.kind === 'merge' ? `${item.title} · ${item.detail}` : item.title,
-              link: item.console,
+              reveal: { href: item.console, label: waitingReveal(item.kind) },
               onPress: () => toggle($, item.key),
               body: shown.includes(item.key) ? (
-                <Box flexDirection="column" paddingLeft={KIND_WIDTH + 1}>
+                <Box flexDirection="column" paddingLeft={look.isGraphic ? 0 : KIND_WIDTH + 1}>
                   <Text color="inactive">{item.detail}</Text>
                   <Box flexDirection="row" gap={1} flexWrap="wrap">
-                    {item.kind === 'question' && <Button key={`answer-${item.target}`} label={COPY.answer} onPress={() => go({ screen: 'question', question: item.target })} />}
+                    {item.kind === 'question' && <Button key={`answer-${item.target}`} label={COPY.answer} variant="primary" onPress={() => go({ screen: 'question', question: item.target })} />}
                     {item.kind === 'question' && <Link href={item.console} label={COPY.answerInConsole} />}
                     {(item.kind === 'merge' || item.kind === 'blocked') && <Button key={`open-story-${item.target}`} label={COPY.openStory} onPress={() => go({ screen: 'story', story: item.target })} />}
                     {item.kind === 'merge' && <Link href={item.console} label={COPY.mergeInConsole} />}
@@ -1980,30 +2333,33 @@ export const register: Register = on => {
                 </Box>
               ) : null,
             })),
-        ])}
-        {cardOf('running', <Text bold>{COPY.running}<Text color={current.running.length > 0 ? 'suggestion' : 'inactive'}>{`${COPY.count(current.running.length)}${stale}`}</Text></Text>, current.header === '' ? null : current.header, [
+        ], current.waiting.length > 0 ? 'wait' : 'plain')}
+        {cardOf('running', headingOf(COPY.running, current.running.length, current.running.length > 0 ? 'suggestion' : 'inactive', stale), gauges, [
           current.running.length === 0 ? quiet(elements, COPY.nothingRunning) : null,
           ...current.running.map(item =>
-            row(elements, {
+            rowOf({
               key: `story-${item.story}`,
-              kind: item.isStuck ? COPY.kindStuck : item.isVerifying ? COPY.verifying : COPY.kindRunning,
-              kindTone: item.isStuck ? 'warning' : 'subtle',
+              kind: null,
               title: item.title,
-              detail: item.detail,
+              detail: look.isNarrow ? null : item.detail,
               detailTone: item.isStuck ? 'warning' : 'inactive',
               onPress: () => go({ screen: 'story', story: item.story }),
+              // THE RUN'S PHASES (S32): eight segments from progress.stage, dots in the narrow dock, ✓●○◇ on the terminal.
               body: (
-                <Box flexDirection="column" paddingLeft={KIND_WIDTH + 1}>
-                  {item.fraction !== null && <Text color={item.isStuck ? 'warning' : 'suggestion'}>{bar(item.fraction)}</Text>}
-                  {item.step !== null && <Text color="inactive" wrap="truncate-end">{item.step}</Text>}
+                <Box flexDirection="column" paddingLeft={look.isGraphic ? 0 : 1}>
+                  {look.isGraphic
+                    ? picture(elements, (look.isNarrow ? dots : segments)(item.phases, COPY.phaseShort, item.isStuck))
+                    : phaseLine(elements, item.phases, item.isStuck, item.stageLine)}
+                  {look.isGraphic && (item.stageLine ?? item.step) !== null && <Text color="inactive" size="footnote" wrap="truncate-end">{item.stageLine ?? item.step}</Text>}
+                  {!look.isGraphic && item.stageLine === null && item.step !== null && <Text color="inactive" wrap="truncate-end">{item.step}</Text>}
                 </Box>
               ),
             })),
         ])}
-        {cardOf('queued', <Text bold>{COPY.queued}<Text color="inactive">{`${COPY.count(current.queued.length)}${stale}`}</Text></Text>, null, [
+        {cardOf('queued', headingOf(COPY.queued, current.queued.length, 'inactive', stale), null, [
           current.queued.length === 0 ? quiet(elements, COPY.nothingQueued) : null,
           ...current.queued.map(item =>
-            row(elements, {
+            rowOf({
               key: `queued-${item.story}`,
               kind: item.isHeld ? COPY.kindHeld : COPY.kindQueued,
               title: item.title,
@@ -2012,13 +2368,13 @@ export const register: Register = on => {
               onPress: () => go({ screen: 'story', story: item.story }),
             })),
         ])}
-        {cardOf('done', <Text bold>{COPY.doneToday}<Text color={current.doneToday.length > 0 ? 'success' : 'inactive'}>{COPY.count(current.doneToday.length)}</Text></Text>, null, [
+        {cardOf('done', headingOf(COPY.doneToday, current.doneToday.length, current.doneToday.length > 0 ? 'success' : 'inactive'), null, [
           current.doneToday.length === 0 ? quiet(elements, COPY.nothingDone) : null,
           ...current.doneToday.map(item =>
-            row(elements, {
+            rowOf({
               key: `done-${item.story}`,
               kind: COPY.kindMerged,
-              kindTone: 'success',
+              kindTone: 'merged',
               title: item.title,
               detail: item.detail,
               onPress: () => go({ screen: 'story', story: item.story }),
@@ -2033,13 +2389,13 @@ export const register: Register = on => {
               </Box>
               <Button key="quick-open" label={COPY.quickAdd} variant="primary" onPress={async () => { const value = await read($, quick); await update($, quick, (): string => ''); await openAdd($, value) }} />
             </Box>
-            <Text color="subtle">{COPY.quickNote}</Text>
+            <Text color="subtle" size="footnote">{COPY.quickNote}</Text>
           </Box>
         )}
         {!isStale && !hasInput && (
           <Box key="phone-add" flexDirection="column">
             <Button key="phone-add" label={COPY.addOnPhone} onPress={() => postPrompt($, COPY.addOnPhonePrompt)} />
-            <Text color="subtle">{COPY.addOnPhoneNote}</Text>
+            <Text color="subtle" size="footnote">{COPY.addOnPhoneNote}</Text>
           </Box>
         )}
         {footer}

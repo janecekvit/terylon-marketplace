@@ -17,7 +17,7 @@ test('frame E: no terylon server tells the owner to install the plugin, and asks
 
   const ui = await $.ui.mount(MOUNT)
   expect(await ui.find({ type: 'Text', text: exact('The pane found no MCP server terylon') })).toBeDefined()
-  expect(await ui.find({ type: 'Markdown', text: '`/plugin install terylon-os@terylon`' })).toBeDefined()
+  expect(await ui.find({ type: 'Code', text: exact('/plugin install terylon-os@terylon') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /No token: your tailnet login is the identity\./ })).toBeDefined()
   expect(terylon.calls.map(call => call.server)).toEqual(['plugin:terylon-os:terylon', 'terylon'])
 
@@ -35,7 +35,7 @@ test('frame G: unreachable keeps the last state, says it is stale and why, and r
   await terylon.clock.advance(30000)
 
   const ui = await $.ui.mount(MOUNT)
-  expect((await ui.find({ type: 'Text', text: exact('TerylonLab does not answer') }))?.props.color).toBe('warning')
+  expect((await ui.find({ type: 'Text', text: exact('TerylonLab does not answer') }))?.props.color).toBe('error')
   expect(await ui.find({ type: 'Text', text: /^since \d\d:\d\d · retrying every minute$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Showing the state of \d\d:\d\d\. Work on the homelab goes on\.$/ })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: /Reason: .*fetch failed: connect ETIMEDOUT/ }))?.props.color).toBe('subtle')
@@ -59,7 +59,7 @@ test('frame H: refused as not the owner, and Terylon returning an error, each sa
   await terylon.clock.settle()
 
   const ui = await $.ui.mount(MOUNT)
-  expect((await ui.find({ type: 'Text', text: exact('Refused: you are not the owner') }))?.props.color).toBe('warning')
+  expect((await ui.find({ type: 'Text', text: exact('Refused: you are not the owner') }))?.props.color).toBe('error')
   expect(await ui.find({ type: 'Text', text: exact('Reason: Only the owner of this Terylon configures its provider. (403)') })).toBeDefined()
 
   terylon.mode.server = 'error'
@@ -101,13 +101,16 @@ test('frame I: a call Claude Code did not allow is said as that, with the rules 
   await terylon.clock.settle()
 
   const ui = await $.ui.mount(MOUNT)
-  expect((await ui.find({ type: 'Text', text: exact("Claude Code refused the pane's call") }))?.props.color).toBe('warning')
+  expect((await ui.find({ type: 'Text', text: exact("Claude Code refused the pane's call") }))?.props.color).toBe('error')
   expect(await ui.find({ type: 'Text', text: exact('permissions') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /TerylonLab does not answer/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /Reason: .*auto mode classifier gave no verdict/ })).toBeDefined()
 
-  const rules = await ui.find({ type: 'Markdown', text: /permissions/ })
-  expect(rules).toBeDefined()
+  // THE ALLOW RULES AS CODE (S32): json, to select and copy by hand, the pane's whole list and no gate.
+  const rules = await ui.find({ type: 'Code', text: /permissions/ })
+  expect(rules?.props.language).toBe('json')
+  expect(rules?.props.startLine).toBeUndefined()
+  expect(String(rules?.text)).not.toContain('```')
 
   for (const tool of ['briefing', 'work_in_flight', 'stories_list', 'events_since', 'story_get', 'policy_get', 'goals_list', 'goal_get', 'plans_list', 'notices_list', 'leader_status', 'metrics', 'memory_get', 'tasks_add', 'goal_add', 'question_answer', 'memory_propose']) {
     expect(String(rules?.text)).toContain(`"mcp__plugin_terylon-os_terylon__${tool}"`)

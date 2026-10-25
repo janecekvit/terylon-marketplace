@@ -24,7 +24,7 @@ test('the new goal line steers toward a direction, and an added goal says the le
   // A CONCRETE ASK IS NEVER REFUSED: it is added, and the leader decides what becomes of it.
   await ui.input({ key: 'goal-draft', text: 'create an Excel file with the costs', kind: 'change' })
   await ui.press({ key: 'goal-add' })
-  expect(terylon.calls.filter(call => call.tool === 'goal_add').map(call => call.args)).toEqual([{ title: 'create an Excel file with the costs' }])
+  expect(terylon.calls.filter(call => call.tool === 'goal_add').map(call => call.args)).toEqual([{ title: 'create an Excel file with the costs', priority: 2, target: 'list' }])
   expect((await ui.find({ type: 'Text', text: exact(`✓ Goal 12 is set: create an Excel file with the costs. ${READ_FIRST}`) }))?.props.color).toBe('success')
 })
 

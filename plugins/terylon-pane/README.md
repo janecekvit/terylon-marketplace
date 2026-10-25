@@ -3,7 +3,7 @@
 **The Terylon band and pane in Claude Desktop**: a mod, which is a hooks module (`hooks/register.tsx`) that the engine runs in a session. It draws one row above the prompt, the status line, and **one** pane beside the transcript.
 
 - **It shows, asks, answers and posts, but never approves.**
-- It is built to the approved S15 canvas, page *v2*, the band and the pane (#331, #332 c9).
+- Its content and rules are the approved S15 canvas, page *v2*, the band and the pane (#331, #332 c9); its drawing is the approved S32 canvas (#25), [`docs/design/s32/`](../../docs/design/s32/S32-pane-redesign.html), on the mod API of 2.1.304 and later; it is built and tested on 2.1.308, the engine Claude Desktop 3.6556.2.0 runs.
 - **The interface is English**: the band, the tabs, card titles, buttons, hints, empty states, errors and *Reason: …* (the operator's choice of 2026-10-12, on #332, replacing the Czech of S15).
 - **The content is in the language Terylon sent it in**, untranslated: story titles, the leader's questions, memory entries, rules.
 - The prompts the pane posts into the session are the owner's own words to Claude, in Czech.
@@ -74,7 +74,25 @@ This is for the owner of a Terylon, working in a **local** session on the PC: th
 
 **The pane opens only from the band's button or a command:** `/terylon-pane`, its alias `/terylon`, or `/terylon-memory`, which opens the same pane on its Memory tab. There is one pane: the memory is a tab of it, not a second pane. The button always opens the pane on its queue. In a broken state, that queue starts with a card saying what happened, *Reason: …*, and the step that fixes it.
 
-**Every row is one line.** Its kind (*question*, *merge*, *plan*, *held* …) sits in a fixed column in `subtle`, so the titles start under one another. The title is cut at its end, never the ↗ beside it, and a press opens the whole text under the row. A card with nothing in it stays, saying so quietly (*Nothing running.*), so the state is always visible.
+**Every row is one line and one press** (S32): a plain `Button` whose children are its kind chip (*question*, *merge*, *plan*, *held* …: a dot in the kind's colour, then the word, on the theme's neutral chip grey), its title cut at its end, and its detail in tabular digits, keyed by the subject's id. On the terminal the kind is padded to a fixed column, so the titles start under one another. A press opens the whole text under the row, with the console link the row leads to. A card with nothing in it stays, saying so quietly (*Nothing running.*), so the state is always visible.
+
+**How it is drawn** (S32, #25) — the content and the rules above do not change:
+
+| Where | Desktop | Terminal, which has no `Svg` |
+|---|---|---|
+| a card | the surface's spacing steps; *Waiting for you*, a question and a problem **stroked** in their colour, never filled: on a tinted fill, the owner's walk of 1.2.0 could not read the hints, links and chips | whole cells, nothing painted behind text |
+| contrast | every word and link on a card that waits or warns reads at 4.5:1 or more, and a chip's dot at 3:1, in the S32 canvas's light and dark palettes: no word there is amber (a problem's title is `error`, a waiting card's is `text`), and a chip's word is `inactive` | the same theme keys |
+| type | headings semibold at the heading size, the run's and the bell's numbers at the title size, every number tabular, branches and hashes monospaced | one size; bold for semibold |
+| a running story | 8 segments from `progress.stage`; the slots and today's spend as two gauges | `✓ ✓ ✓ ✓ ● ○ ○ ◇` and `▰▰▱▱` |
+| one story | a stepper of 8 nodes with its labels under it in `Text`, each node at its label's column centre so the two line up at any width, a tooltip on each node; below 60 body columns (a dock of about 435 px) compact, its nodes at their size and only the phase now named. The run's numbers large, the spend against the story's budget as a bar | the phases as a list |
+| a plan | its stories as a chain | `1 → 2 → 3` |
+| *New task*, *New goal* | `Select`s over `tasks_add` (goal, after, size) and `goal_add` (priority, target) | the same `Select`s |
+| the allow rules | `Code`, json | the same |
+| the narrow dock, below 44 body columns | no row detail, the phases as dots, the gauges as numbers | — |
+
+**An `Svg` reads no theme**, so its colours are fixed and medium, legible on light and dark alike, and it holds **no word**: every word sits in a `Text` beside it, and its `alt` says the whole picture. No stage reported, no node is drawn as now. The band is unchanged but for its tabular digits, and there is no 30-day cost chart: `metrics` reports no per-day series.
+
+**The dashed slots in a story's card and beside the leader's links are S27's (#27)**, which draws the story's and the leader's actions there. Until it lands they hold 1.1.2's links, and the pane draws none of S27's buttons.
 
 **Everything in the pane opens.** Every row is a press away from its whole subject, and ‹ walks back the way the owner came. A gate (merge, approve, return, unblock, pause, stop) is always a link to the console, never a button:
 
@@ -107,6 +125,8 @@ This is for the owner of a Terylon, working in a **local** session on the PC: th
 - More than 2 000 events behind, the pane posts nothing and the band links the console's history instead.
 
 ## Setup
+
+**It needs Claude Code 2.1.304 or later**: an older one does not know `Text` `size`, `weight` and `tabular`. A plugin cannot declare that floor, so it is said here. It is built and tested on **2.1.308**, the engine Claude Desktop 3.6556.2.0 runs (seen in the owner's walk of 2026-10-23).
 
 `terylon-os` must reach your Terylon: set `TERYLON_URL` as its README says. Then, at a terminal prompt:
 
@@ -162,6 +182,22 @@ Either way the call is refused, and only an allow rule lets it through. Add thes
 
 **Never allow the server as a whole** (`mcp__plugin_terylon-os_terylon`): that would let the model call the owner's gates without asking too. The list is the pane's own allow-list, `PANE_TOOLS` in `hooks/terylon.ts`. A test holds the block to that list and to no gate, and a planted gate in either turns the tests red.
 
+### Three drawings Desktop had to prove
+
+2.1.304 declares them; the owner walked them in Claude Desktop 3.6556.2.0, engine 2.1.308, on 2026-10-23, and **all three work**: they are on. `TERYLON_PANE_PROOFS`, in the `env` of your own `~/.claude/settings.json`, is the escape hatch: `no-` and a name turns that one off, and off draws what 1.1.2 drew.
+
+| Name | On, the default | Off |
+|---|---|---|
+| `input-rows` | the answer in four rows; the criteria in three, one per line | one line each; criteria split by semicolons |
+| `hover-reveal` | a waiting row lights under the pointer and lays its console link over its right edge; never over an open row, whose body holds the link | the link in the row's body, one press away |
+| `svg-tooltips` | a stepper node says its stage, role and step under a pointer held still on it | the labels under the stepper |
+
+```json
+"env": { "TERYLON_PANE_PROOFS": "no-hover-reveal" }
+```
+
+The names are separated by commas or spaces; anything else changes nothing.
+
 ## Debugging
 
 **Every failed call goes to the debug log**, in the engine's own words, with the tool and the server: start a session with `claude --debug` and look for `terylon-pane:`. The band names the state and the pane's card says why under *Reason:*, so a stale number is never the only clue.
@@ -181,13 +217,14 @@ Either way the call is refused, and only an allow rule lets it through. Add thes
 - A Terylon answering from memory (`tests/fixtures.ts`) records every call.
 - Every view is tested on the terminal and on the desktop, colours and labels included.
 - The band is held to its states, to *Open* reopening the last tab on every one of them, and to yielding to a survey; the Status tab to each state with its fix in steps; the status line to each problem, their order, what is an alert and its 60 characters.
-- The pane is held to opening only when asked and only once, to one-line rows that keep their kind and ↗ on a title over 200 characters, to quiet empty cards, to walking from row to subject and back, and to pressing every button without one gate call.
+- The pane is held to opening only when asked and only once, to one-line rows that are one Button with their kind on a title over 200 characters, to quiet empty cards, to walking from row to subject and back, and to pressing every button without one gate call.
+- The S32 drawing is held too: each Desktop proof at the default the owner's walk set and switchable, no card filled and the kinds and the state as chips, every word and link on a card that waits or warns at 4.5:1 in both themes (`tests/contrast.test.ts`, computed from the canvas's palette in `tests/contrast.ts`, since the kit gives theme keys and not painted colours), no word and no theme colour inside an `Svg` and each at its own height, the compact stepper in a dock of about 435 px, each label of the wide stepper within half a node gap of its node at ~660 and ~1060 px (`tests/stepper.test.ts`), a blocked story timed as blocked and never as running, no node now without a stage, the narrow dock, the pickers sending what was picked, the dashed S27 slots with no S27 button, and the band's digits tabular.
 
 **Run it with the engine the desktop app runs.** A `claude` on `PATH` older than the desktop's may not know `plugin test`, and may refuse the module in `plugin validate` for a rule the desktop's engine no longer holds.
 
 Two more checks live at the repository root:
 
-- `tests/terylon-pane/mutations.test.js` plants mutations, and each must turn the tests red. It covers the done-signal, the catch-up, a refusal of Claude Code's taken for the tailnet, the debug log silenced and the reason hidden. It also covers the band ignoring a survey, the band showing the spend again or a *Fix*, *Open* forgetting the tab, the Status tab missing the fix step for a refused call, the status line counting the briefing as an alert or no longer saying the health, the pane opening by itself, a repeated notice shown each time on the machine card, `/terylon-memory` opening a second pane, a waiting count drawn calm, a row's title no longer cut, an empty card saying nothing, a pressed choice that no longer fills the answer, a gate among the pane's tools or its allow rules, the guard opened to a gate, and a waiting item approving from the pane. Since #360 also: a tab's load no longer bounded (Goals, Bell), the pane's prompts posted twice, an answer sent twice, one story said as *stories*, the phases inferred from the timeline again, *Mark handled* sending nothing, the band dropping the bell's count or never reading it again, `goal_drop` among the pane's tools, and the copied gate list losing `goal_drop`. Since #26 also: an answer sent by Enter read from before its last keystroke, and an added goal no longer saying how the leader reads it.
+- `tests/terylon-pane/mutations.test.js` plants mutations, and each must turn the tests red. It covers the done-signal, the catch-up, a refusal of Claude Code's taken for the tailnet, the debug log silenced and the reason hidden. It also covers the band ignoring a survey, the band showing the spend again or a *Fix*, *Open* forgetting the tab, the Status tab missing the fix step for a refused call, the status line counting the briefing as an alert or no longer saying the health, the pane opening by itself, a repeated notice shown each time on the machine card, `/terylon-memory` opening a second pane, a waiting count drawn calm, a row's title no longer cut, an empty card saying nothing, a pressed choice that no longer fills the answer, a gate among the pane's tools or its allow rules, the guard opened to a gate, and a waiting item approving from the pane. Since #360 also: a tab's load no longer bounded (Goals, Bell), the pane's prompts posted twice, an answer sent twice, one story said as *stories*, the phases inferred from the timeline again, *Mark handled* sending nothing, the band dropping the bell's count or never reading it again, `goal_drop` among the pane's tools, and the copied gate list losing `goal_drop`. Since S32 (#25) also: a running row with no stage drawn with a phase now, a gate in the allow rules the Status tab draws, a Desktop proof's default flipped (each of the three), a word inside an `Svg`, the band's digits no longer tabular, the narrow dock drawn as the wide pane, a picked priority or size not sent, an S27 button in the story's slot, and a row's kind and detail outside its Button. Since the owner's walk of 1.2.0: a card that waits filled again or losing its stroke, a row's kind chip losing its grey or its word drawn in the kind's colour, the story's state chip filled in its own colour, a problem's title or the waiting count amber again, the hover reveal laid over an open row, an `Svg` left to size its own box, the stepper shrinking in a dock of about 435 px, and the answer field naming a second way to send. Since the owner's walk of 1.2.2: the wide stepper's nodes a strip of fixed width again, apart from its labels, and a blocked story's header saying it is running. Since #26 also: an answer sent by Enter read from before its last keystroke, and an added goal no longer saying how the leader reads it.
 - `tests/terylon-pane/commands.test.js` holds every command the mod registers to a name that no skill of the mod or of `terylon-os` takes.
 - `tests/terylon-pane/version.test.js` holds the version the Status tab says to the one `plugin.json` ships.
 
