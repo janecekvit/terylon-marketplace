@@ -3,7 +3,7 @@
 **The Terylon band and pane in Claude Desktop**: a mod, which is a hooks module (`hooks/register.tsx`) that the engine runs in a session. It draws one row above the prompt, the status line, and **one** pane beside the transcript.
 
 - **It shows, asks, answers and posts, but never approves.**
-- Its content and rules are the approved S15 canvas, page *v2*, the band and the pane (#331, #332 c9); its drawing is the approved S32 canvas (#25), [`docs/design/s32/`](../../docs/design/s32/S32-pane-redesign.html), on the mod API of 2.1.304 and later; it is built and tested on 2.1.308, the engine Claude Desktop 3.6556.2.0 runs.
+- Its content and rules are the approved S15 canvas, page *v2*, the band and the pane (#331, #332 c9); its drawing follows the approved S32 canvas, attached to issue #25, on the mod API of 2.1.304 and later; it is built and tested on 2.1.308, the engine Claude Desktop 3.6556.2.0 runs.
 - **The interface is English**: the band, the tabs, card titles, buttons, hints, empty states, errors and *Reason: …* (the operator's choice of 2026-10-12, on #332, replacing the Czech of S15).
 - **The content is in the language Terylon sent it in**, untranslated: story titles, the leader's questions, memory entries, rules.
 - The prompts the pane posts into the session are the owner's own words to Claude, in Czech.
