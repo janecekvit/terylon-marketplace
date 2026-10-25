@@ -373,6 +373,18 @@ const MUTATIONS = [
         find: "submitLabel={look.isGraphic ? '' : 'answer'}",
         replace: "submitLabel=\"answer\"",
     },
+    {
+        name: "the wide stepper's nodes are a strip of fixed width again, apart from the labels",
+        file: "hooks/drawing.ts",
+        find: "    : `<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100%\" height=\"${height}\">${parts.join('')}</svg>`",
+        replace: "    : svg(456, height, parts.join(''))",
+    },
+    {
+        name: "a blocked story's header says it is running again",
+        file: "hooks/queue.ts",
+        find: "  const timed = state === 'blocked'",
+        replace: "  const timed = state === 'never'",
+    },
 ];
 
 // Capability, not presence: an older claude answers --version yet has no `plugin test`, and running

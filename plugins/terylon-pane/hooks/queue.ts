@@ -399,6 +399,13 @@ function workingOf(progress: Json | null, state: string, spent: { usd: number; b
   }
 }
 
+// "75 h 46 min": a span of milliseconds, in whole hours and minutes.
+function duration(milliseconds: number): string {
+  const span = Math.max(0, milliseconds)
+
+  return `${Math.floor(span / 3600000)} h ${Math.floor((span % 3600000) / 60000)} min`
+}
+
 export function storyView(id: number, document: Json, inFlight: Json, question: PaneQuestionItem | null, now: number, zoneOffsetMinutes = 0): PaneStory {
   const state = String(inFlight.state ?? document.state ?? '')
   const progress = (inFlight.progress ?? document.progress ?? null) as Json | null
@@ -406,7 +413,13 @@ export function storyView(id: number, document: Json, inFlight: Json, question: 
   const steps = number(progress?.steps)
   const startedAt = Date.parse(String(inFlight.startedAt ?? document.startedAt ?? ''))
   const isRunning = ['dispatched', 'running', 'pr-open', 'verifying', 'blocked'].includes(state)
-  const hours = !isRunning || Number.isNaN(startedAt) ? null : `${Math.floor((now - startedAt) / 3600000)} h ${Math.floor(((now - startedAt) % 3600000) / 60000)} min`
+  const hours = !isRunning || Number.isNaN(startedAt) ? null : duration(now - startedAt)
+  // A BLOCKED STORY IS NOT RUNNING (the owner's walk of 1.2.2, #87: "running 75 h 46 min" beside its blocked chip): its
+  // header says how long it has been blocked, from blockedFrom, else from its last update.
+  const blockedAt = Date.parse(String(inFlight.blockedFrom ?? document.blockedFrom ?? inFlight.updatedAt ?? document.updatedAt ?? ''))
+  const timed = state === 'blocked'
+    ? (Number.isNaN(blockedAt) ? null : COPY.storyBlocked(duration(now - blockedAt)))
+    : hours === null ? null : COPY.storyRunning(hours)
   const pullRequest = (document.pullRequest ?? null) as Json | null
   const budget = number(inFlight.budgetUsd ?? document.budgetUsd)
   const environment = (inFlight.environment ?? document.environment ?? null) as Json | null
@@ -429,8 +442,8 @@ export function storyView(id: number, document: Json, inFlight: Json, question: 
     phase: 'ok',
     sentence: null,
     title: `#${id} ${text(document.title) ?? text(inFlight.title) ?? ''}`.trim(),
-    meta: COPY.storyMeta(hours, number(inFlight.attempt ?? document.attempt) ?? 1, text(pullRequest?.branch), model === '' ? null : model),
-    running: hours,
+    meta: COPY.storyMeta(timed, number(inFlight.attempt ?? document.attempt) ?? 1, text(pullRequest?.branch), model === '' ? null : model),
+    running: timed,
     attempt: number(inFlight.attempt ?? document.attempt) ?? 1,
     branch: text(pullRequest?.branch),
     model: model === '' ? null : model,

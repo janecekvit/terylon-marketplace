@@ -107,47 +107,72 @@ function fillOf(phase: PanePhase, isStuck: boolean): string {
   return phase.status === 'done' ? SVG_COLOURS.done : phase.status === 'now' ? (isStuck ? SVG_COLOURS.stuck : SVG_COLOURS.now) : SVG_COLOURS.rest
 }
 
+// Where the centre of each of `count` equal columns falls, as a share of the row's width: the label row's columns,
+// and so the stepper's nodes. One scale for both, so a label sits under its node at any width (the owner's walk of
+// 1.2.2: at ~1060 px a node strip of fixed width sat centred under labels that stretched with the pane).
+export function columnCentres(count: number): number[] {
+  return Array.from({ length: count }, (_, index) => (index + 0.5) / count)
+}
+
+function percent(share: number): string {
+  return `${round(share * 100)}%`
+}
+
+// One node drawn at the origin, in pixels, so it keeps its size and stays round whatever the picture's width.
+function stepperNode(phase: PanePhase, isGate: boolean, isStuck: boolean): string {
+  if (phase.status === 'done') {
+    return `<circle cx="0" cy="11" r="6" fill="${SVG_COLOURS.done}"/><path d="M-3 11l2 2 4-4" stroke="${SVG_COLOURS.check}" stroke-width="1.6" fill="none"/>`
+  }
+
+  if (phase.status === 'now') {
+    const fill = fillOf(phase, isStuck)
+
+    return `<circle cx="0" cy="11" r="9" fill="${fill}" fill-opacity=".25"/><circle cx="0" cy="11" r="6" fill="${fill}"/>`
+  }
+
+  if (isGate) {
+    return `<rect x="-6" y="5" width="12" height="12" transform="rotate(45 0 11)" fill="none" stroke="${SVG_COLOURS.gate}" stroke-width="1.5"/>`
+  }
+
+  return `<circle cx="0" cy="11" r="5.5" fill="none" stroke="${SVG_COLOURS.rest}" stroke-opacity=".7" stroke-width="1.5"/>`
+}
+
 // THE STEPPER of one story: a node per phase on a line, done ✓ green, now blue (amber when stuck), the rest
 // hollow grey, Merge a hollow purple square — the owner's gate. No phase is now unless Terylon said so.
+//
+// WIDE, the picture is as wide as its slot (`width="100%"`, no viewBox) and each node sits at its column's centre
+// as a percentage, the label row's own columns, so the two share one x-scale; the nodes are drawn in pixels about
+// that point and keep their size. COMPACT, a fixed strip with the nodes 24 px apart, never scaled down, and only the
+// phase now labelled under it.
 export function stepper(phases: readonly PanePhase[], labels: readonly string[], options: { isStuck?: boolean; tooltips?: readonly string[] | null; isCompact?: boolean } = {}): Picture {
-  // COMPACT: the nodes 24 px apart, so the picture is never wider than a narrow dock and never scaled down.
-  const width = options.isCompact === true ? 28 + (phases.length - 1) * 24 : 456
   const height = 22
-  const first = 14
-  const last = width - 14
-  const step = phases.length > 1 ? (last - first) / (phases.length - 1) : 0
-  const xOf = (index: number) => first + index * step
   const isStuck = options.isStuck === true
+  const isCompact = options.isCompact === true
+  const compactWidth = 28 + (phases.length - 1) * 24
+  const centres = columnCentres(phases.length)
+  const xOf = (index: number) => (isCompact ? `${14 + index * 24}` : percent(centres[index] ?? 0))
   const lastDone = phases.reduce((found, phase, index) => (phase.status === 'done' || phase.status === 'now' ? index : found), -1)
+  const last = phases.length - 1
   const parts: string[] = [
-    `<line x1="${first}" y1="11" x2="${last}" y2="11" stroke="${SVG_COLOURS.rest}" stroke-opacity=".35" stroke-width="2"/>`,
+    `<line x1="${xOf(0)}" y1="11" x2="${xOf(last)}" y2="11" stroke="${SVG_COLOURS.rest}" stroke-opacity=".35" stroke-width="2"/>`,
   ]
 
   if (lastDone > 0) {
-    parts.push(`<line x1="${first}" y1="11" x2="${round(xOf(lastDone))}" y2="11" stroke="${SVG_COLOURS.done}" stroke-width="2"/>`)
+    parts.push(`<line x1="${xOf(0)}" y1="11" x2="${xOf(lastDone)}" y2="11" stroke="${SVG_COLOURS.done}" stroke-width="2"/>`)
   }
 
   phases.forEach((phase, index) => {
-    const x = round(xOf(index))
-    const isGate = index === phases.length - 1
     const title = options.tooltips?.[index]
-    let node: string
-
-    if (phase.status === 'done') {
-      node = `<circle cx="${x}" cy="11" r="6" fill="${SVG_COLOURS.done}"/><path d="M${round(xOf(index) - 3)} 11l2 2 4-4" stroke="${SVG_COLOURS.check}" stroke-width="1.6" fill="none"/>`
-    } else if (phase.status === 'now') {
-      const fill = fillOf(phase, isStuck)
-      node = `<circle cx="${x}" cy="11" r="9" fill="${fill}" fill-opacity=".25"/><circle cx="${x}" cy="11" r="6" fill="${fill}"/>`
-    } else if (isGate) {
-      node = `<rect x="${round(xOf(index) - 6)}" y="5" width="12" height="12" transform="rotate(45 ${x} 11)" fill="none" stroke="${SVG_COLOURS.gate}" stroke-width="1.5"/>`
-    } else {
-      node = `<circle cx="${x}" cy="11" r="5.5" fill="none" stroke="${SVG_COLOURS.rest}" stroke-opacity=".7" stroke-width="1.5"/>`
-    }
+    const node = `<svg x="${xOf(index)}" y="0" width="1" height="${height}" overflow="visible">${stepperNode(phase, index === last, isStuck)}</svg>`
 
     parts.push(title === undefined || title === null ? node : `<g><title>${escape(title)}</title>${node}</g>`)
   })
 
-  return { source: svg(width, height, parts.join('')), alt: phasesAlt(phases, labels, isStuck), height }
+  const source = isCompact
+    ? svg(compactWidth, height, parts.join(''))
+    : `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="${height}">${parts.join('')}</svg>`
+
+  return { source, alt: phasesAlt(phases, labels, isStuck), height }
 }
 
 // A RUNNING ROW's phases: eight segments in a bar, the last one Merge, dashed purple until it is reached.

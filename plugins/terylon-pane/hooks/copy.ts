@@ -174,8 +174,8 @@ export const COPY = {
   returnInConsole: 'Return with a note ↗',
   storyLoading: 'Loading the story…',
   storyError: 'The story did not load',
-  storyMeta: (hours: string | null, attempt: number, branch: string | null, model: string | null) =>
-    [hours === null ? null : `running ${hours}`, `attempt ${attempt}`, branch, model].filter(part => part !== null).join(' · '),
+  storyMeta: (timed: string | null, attempt: number, branch: string | null, model: string | null) =>
+    [timed, `attempt ${attempt}`, branch, model].filter(part => part !== null).join(' · '),
   progress: 'Progress',
   step: (step: number, steps: number, current: string | null) =>
     `Step ${step} of ${steps}${current === null ? '' : `: ${current}`}`,
@@ -191,6 +191,7 @@ export const COPY = {
     [label, role, status === 'now' ? 'now' : status === 'done' ? 'done' : 'to come', step].filter(part => part !== null).join(' · '),
   storyCaption: (goal: number | null) => (goal === null ? 'STORY' : `STORY · GOAL ${goal}`),
   storyRunning: (hours: string) => `running ${hours}`,
+  storyBlocked: (hours: string) => `blocked for ${hours}`,
   storyAttempt: (attempt: number) => `attempt ${attempt}`,
   stageLabel: (stage: string) => STAGE_LABEL[stage] ?? stage,
   stageRole: (stage: string) => STAGE_ROLE[stage] ?? null,

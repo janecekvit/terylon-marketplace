@@ -61,6 +61,13 @@ What the owner's walk of 1.2.0 in Desktop 3.6556.2.0 (engine 2.1.308) found, on 
 | in the light theme the waiting tint drew dark brown, an open question's body and its link unreadable on it | no fill; every word and link on a card that waits or warns at 4.5:1 in both themes, computed from the canvas's palette (`tests/contrast.ts`) |
 | an `answer` submit beside the field and an *Answer* button under it | on Desktop the field names no submit; the button sends |
 
+What the owner's walk of 1.2.2 found, on 2026-10-25, fixed in 1.2.3:
+
+| Seen | 1.2.3 |
+|---|---|
+| at ~1060 px the stepper's nodes a narrow strip centred under eight labels spread over the pane; at ~660 px nearly aligned | the stepper `width="100%"` with no `viewBox`, each node at its label column's centre as a percentage and drawn in pixels about it |
+| a blocked story's header said *running 75 h 46 min* | *blocked for* the time since `blockedFrom`, else since its last update |
+
 What the 2.1.304 engine refused while the pane was built, on 2026-10-22, by `claude plugin test`:
 
 | The engine said | Why | Do instead |

@@ -106,6 +106,7 @@ export type PaneStory = {
   title: string
   meta: string
   // The meta's parts, drawn apart on the desktop (S32): the time tabular, the branch monospaced.
+  // "running 12 h 0 min", or "blocked for 2 h 5 min": the time a story's header names, by its state.
   running: string | null
   attempt: number
   branch: string | null

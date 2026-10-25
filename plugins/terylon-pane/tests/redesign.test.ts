@@ -175,7 +175,7 @@ test('A DOCK OF ABOUT 435 PX (52 body columns): the stepper keeps its nodes\' si
   // THE WIDE PANE names all eight.
   const wide = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(await wide.find({ key: 'phase-labels' })).toBeDefined()
-  expect((await pictures(wide))[0]?.source).toMatch(/^<svg [^>]*width="456"/)
+  expect((await pictures(wide))[0]?.source).toMatch(/^<svg [^>]*width="100%"/)
 })
 
 test('svg-tooltips, named: each node of the stepper says its stage, role and state, and only what Terylon reports', async ($, on) => {
@@ -267,7 +267,7 @@ test('the Status tab says the machine in one word, large, in its colour, its tim
 
     expect(word?.props).toMatchObject({ size: 'title', weight: 'semibold', color: 'success' })
     expect((await ui.find({ type: 'Text', text: /^\s*last answer at / }))?.props.tabular).toBe(true)
-    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.2.2') }))?.props.mono).toBe(true)
+    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.2.3') }))?.props.mono).toBe(true)
     await ui.unmount()
   }
 })
