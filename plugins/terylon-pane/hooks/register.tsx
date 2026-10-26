@@ -89,7 +89,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.2.3'
+export const MOD_VERSION = '1.3.0'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -632,7 +632,8 @@ async function openQuestion($: EngineInterface, id: number): Promise<void> {
 // a double click, or Enter and the button — both read the answer as a form, so the state alone cannot tell.
 let isAnswerSending = false
 
-async function sendAnswer($: EngineInterface): Promise<void> {
+// Enter hands over the field's own value: what the owner sees is sent, whether or not its last onInput arrived first.
+async function sendAnswer($: EngineInterface, submitted?: string): Promise<void> {
   if (isAnswerSending) {
     return
   }
@@ -640,6 +641,10 @@ async function sendAnswer($: EngineInterface): Promise<void> {
   isAnswerSending = true
 
   try {
+    if (typeof submitted === 'string') {
+      await update($, answer, (current: PaneAnswer | null): PaneAnswer | null => (current === null || current.phase === 'sending' ? current : { ...current, text: submitted }))
+    }
+
     await sendAnswerOnce($)
   } finally {
     isAnswerSending = false
@@ -741,7 +746,9 @@ async function addGoal($: EngineInterface): Promise<void> {
   await update($, goals, (current: PaneGoals): PaneGoals => ({
     ...current,
     adding: isAccepted ? 'added' : 'refused',
-    addSentence: answered.kind === 'ok' && answered.value.accepted == null ? COPY.timeout(text(answered.value.commandId)) : why(answered),
+    addSentence: answered.kind === 'ok' && answered.value.accepted == null
+      ? COPY.timeout(text(answered.value.commandId))
+      : isAccepted ? COPY.goalAdded(why(answered)) : why(answered),
     draft: isAccepted ? '' : current.draft,
   }))
 
@@ -1786,7 +1793,7 @@ export const register: Register = on => {
               submitLabel={look.isGraphic ? '' : 'answer'}
               autoFocus
               onInput={value => update($, answer, (state: PaneAnswer | null): PaneAnswer | null => (state === null ? null : { ...state, text: value }))}
-              onSubmit={() => sendAnswer($)}
+              onSubmit={value => sendAnswer($, value)}
             />
           ) : null}
           {form.phase === 'form' ? (

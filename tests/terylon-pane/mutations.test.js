@@ -228,6 +228,18 @@ const MUTATIONS = [
         replace: "",
     },
     {
+        name: "an answer sent by Enter is read from before its last keystroke again",
+        file: "hooks/register.tsx",
+        find: "onSubmit={value => sendAnswer($, value)}",
+        replace: "onSubmit={() => sendAnswer($)}",
+    },
+    {
+        name: "an added goal no longer says how the leader reads it",
+        file: "hooks/register.tsx",
+        find: ": isAccepted ? COPY.goalAdded(why(answered)) : why(answered),",
+        replace: ": why(answered),",
+    },
+    {
         name: "one story is said as stories again",
         file: "hooks/copy.ts",
         find: "`${count === 1 ? 'story' : 'stories'}",

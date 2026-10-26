@@ -239,16 +239,18 @@ test('the goals tab: open goals by priority with their questions, the closed one
   expect((await ui.find({ key: 'goal-1' }))?.text).toContain('Old')
 
   expect(await ui.find({ type: 'Text', text: exact('Plan 41 · Agentic OS') })).toBeDefined()
+  // GOALS ARE GENERAL (Terylon #369, S31): the New goal note steers a concrete ask to a task, and adding one is never refused.
+  expect(await ui.find({ type: 'Text', text: exact('A goal is a general direction. A concrete ask — a file, a document, one change — becomes a task under a goal. The leader asks its questions first, then makes a plan you approve.') })).toBeDefined()
 
   // A NEW GOAL WITH ITS PRIORITY AND TARGET (S32), picked over goal_add's own fields.
   expect((await ui.find({ key: 'goal-priority' }))?.props.value).toBe('2')
   expect((await ui.find({ key: 'goal-priority' }))?.props.options).toEqual([{ value: '1', label: '1 · most urgent' }, { value: '2', label: '2 · normal' }, { value: '3', label: '3 · later' }, { value: '4', label: '4 · someday' }])
   expect((await ui.find({ key: 'goal-target' }))?.props.options).toEqual([{ value: 'list', label: "Terylon's own list" }, { value: 'github:contoso/agentic-os', label: 'github:contoso/agentic-os' }])
-  await ui.input({ key: 'goal-draft', text: 'Excel s rozpočtem domácnosti', kind: 'change' })
+  await ui.input({ key: 'goal-draft', text: 'Household budget in Excel', kind: 'change' })
   await ui.select({ key: 'goal-priority', value: '1' })
   await ui.press({ key: 'goal-add' })
-  expect(terylon.calls.filter(call => call.tool === 'goal_add').map(call => call.args)).toEqual([{ title: 'Excel s rozpočtem domácnosti', priority: 1, target: 'list' }])
-  expect((await ui.find({ type: 'Text', text: exact('✓ Goal 12 is set: Excel s rozpočtem domácnosti') }))?.props.color).toBe('success')
+  expect(terylon.calls.filter(call => call.tool === 'goal_add').map(call => call.args)).toEqual([{ title: 'Household budget in Excel', priority: 1, target: 'list' }])
+  expect((await ui.find({ type: 'Text', text: /^✓ Goal 12 is set: Household budget in Excel\. The leader reads it first: / }))?.props.color).toBe('success')
 
   await ui.press({ key: 'goal-11' })
   expect(await ui.find({ key: 'goal-question-606' })).toBeDefined()
