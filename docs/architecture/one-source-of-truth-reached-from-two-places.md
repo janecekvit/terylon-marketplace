@@ -1,17 +1,17 @@
 # One source of truth, reached from two places
 
-**Status:** accepted, 2026-10-12, on work item #332 (criterion c10). **Agentic OS on TerylonLab holds every fact the owner works with, and is reached the same way from two places: from the PC, in Claude Desktop, with the whole pane, and from terylon-remote, through Remote Control, when the PC is off.** The pane only ever shows what Agentic OS is doing. It holds nothing and decides nothing; a decision is a link to the console.
+**Status:** accepted, 2026-10-12, on work item #332 (criterion c10). **Agentic OS on the owner's host holds every fact the owner works with, and is reached the same way from two places: from the PC, in Claude Desktop, with the whole pane, and from terylon-remote, through Remote Control, when the PC is off.** The pane only ever shows what Agentic OS is doing. It holds nothing and decides nothing; a decision is a link to the console.
 
 ## Context
 
 The owner's own words on #332:
 
-> Agentic OS on TerylonLab is the only source of truth. The main place to work is Claude Desktop on the PC, with the whole pane. When the PC is off, the owner works from the phone through Remote Control on terylon-remote, which has the same access through `/mcp`. The pane only ever shows what Agentic OS is doing.
+> Agentic OS on the owner's host is the only source of truth. The main place to work is Claude Desktop on the PC, with the whole pane. When the PC is off, the owner works from the phone through Remote Control on terylon-remote, which has the same access through `/mcp`. The pane only ever shows what Agentic OS is doing.
 
-The diagram below is copied unchanged from #332, rev 28, section *Use case: one source of truth, reached from two places*:
+The diagram below is copied from #332, rev 28, section *Use case: one source of truth, reached from two places*, with its phone line settled on 2026-10-26:
 
 ```
-                                Agentic OS on TerylonLab                                as designed, 2026-10-12
+                                Agentic OS on its host                                  as designed, 2026-10-12
                                 leader · stories · plans · bell · memory
                                 /mcp over the tailnet — THE ONLY SOURCE OF TRUTH
                                      ▲                              ▲
@@ -20,8 +20,8 @@ The diagram below is copied unchanged from #332, rev 28, section *Use case: one 
   ├─ terylon-os: the /mcp tools + skills                 ├─ terylon-os: the same tools + skills
   └─ terylon-pane: the bar + the pane                    ├─ the orchestrator (a Remote Control session)
      EVERYTHING IS SEEN AND CLICKED HERE                 └─ from the PHONE through Remote Control:
-     (the pane shows, it never decides)                     skills and tools always; the pane on the
-                                                            phone read-only, NOT YET VERIFIED (walk 2)
+     (the pane shows, it never decides)                     skills and tools always; no pane on the
+                                                            phone: a mod draws on the machine
 ```
 
 ## The alternatives
@@ -30,7 +30,7 @@ The diagram below is copied unchanged from #332, rev 28, section *Use case: one 
 |---|---|---|
 | The pane keeps its own copy of the queue, the goals or the memory, and syncs it | two truths, and the phone sees a third; every disagreement is the owner's to resolve | no |
 | The pane reaches the console's routes directly, beside `/mcp` | a second door with its own identity, refusals and gates, and Remote Control would not have it | no |
-| **Every surface reads and writes through the one `/mcp`, and the pane holds only what it last read** | the pane is stale while TerylonLab does not answer, and says so | **yes** |
+| **Every surface reads and writes through the one `/mcp`, and the pane holds only what it last read** | the pane is stale while Terylon does not answer, and says so | **yes** |
 
 ## Decision
 
@@ -40,7 +40,7 @@ The diagram below is copied unchanged from #332, rev 28, section *Use case: one 
 | terylon-remote | `terylon-os`, the same tools and skills; the orchestrator runs there as a Remote Control session | nothing of its own |
 | The phone | Remote Control on terylon-remote: skills and tools always | nothing |
 
-- The pane on the phone is read-only and **NOT YET VERIFIED**. The operator's walk 2 settles it, and replaces this mark with what it measured.
+- **The phone shows no pane.** A mod's hooks run in the session on the machine, and under Remote Control its drawing appears in the terminal on that machine, not in the web or mobile app (Claude Code's mods overview, checked 2026-10-26). On the phone the skills and tools do everything the pane would.
 - A gate is always the person's, confirmed in Terylon's form or in the console: plan approve or rethink, story merge, return, unblock, abandon, stop or accept, leader pause or resume.
 - A surface may write only what decides nothing: a task, a goal, an answer to the leader's question, a proposed memory edit.
 
@@ -50,7 +50,7 @@ The diagram below is copied unchanged from #332, rev 28, section *Use case: one 
 |---|---|
 | good | the PC and the phone never disagree about what waits, runs or is done: both read the same `/mcp` |
 | good | the PC being off loses no capability that matters: the gates live in the console, and everything else is a skill or a tool on terylon-remote |
-| cost | while TerylonLab does not answer, the pane shows the last state it read, marked stale, with the time and the reason |
+| cost | while Terylon does not answer, the pane shows the last state it read, marked stale, with the time and the reason |
 | **constraint** | **giving the pane a store of its own that survives a session, or a write that decides, undoes this.** The pane's `$.state` holds only the last answer and the screen it is on. Its `$.store` holds only where it last read the events and which signals it posted. |
 | **constraint** | **a tool in the pane's allow-list that is a gate undoes it**: `PANE_TOOLS` names reads and the five writes that decide nothing — `notice_handle` the fifth since #360, and `goal_drop` a gate the pane links to the console for — and a mutation planting a gate there must turn the tests red |
 

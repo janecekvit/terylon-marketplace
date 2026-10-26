@@ -9,7 +9,7 @@ import { PANE_PROPS, SESSION, exact, world } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
-// A bell as TerylonLab rings it: a long source, a notice with its own console link, one key raised three times.
+// A bell as a Terylon rings it: a long source, a notice with its own console link, one key raised three times.
 const BELL = {
   unhandled: 2,
   notices: [
@@ -21,7 +21,7 @@ const BELL = {
     { id: 174, source: 'production', title: 'Production is at d577b984', body: '', key: 'production-follow:terylon-production', raisedAt: '2026-10-11T08:39:55Z', handledAt: '2026-10-11T08:39:55Z' },
     { id: 169, source: 'production', title: 'Production is at 6bfbcb51', body: '', key: 'production-follow:terylon-production', raisedAt: '2026-10-11T05:13:01Z', handledAt: '2026-10-11T05:13:01Z' },
     { id: 156, source: 'host', title: 'terylon-remote is signed in', body: '', key: 'remote-login', raisedAt: '2026-10-11T04:33:33Z', handledAt: '2026-10-11T04:33:33Z' },
-    { id: 140, source: 'host', title: 'TerylonLab host: all well again', body: '', key: 'host-health', raisedAt: '2026-10-11T04:24:19Z', handledAt: '2026-10-11T04:24:19Z' },
+    { id: 140, source: 'host', title: 'alice-host: all well again', body: '', key: 'host-health', raisedAt: '2026-10-11T04:24:19Z', handledAt: '2026-10-11T04:24:19Z' },
     { id: 139, source: 'production', title: 'Production is at a8c9f99d', body: '', key: 'production-follow:terylon-production', raisedAt: '2026-10-11T03:26:19Z', handledAt: '2026-10-11T03:26:19Z' },
   ],
 }

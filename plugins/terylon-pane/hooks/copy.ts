@@ -149,7 +149,7 @@ export const COPY = {
   noServerBody: 'Install the plugin terylon-os from the Terylon Marketplace; it brings the /mcp address on the tailnet. No token: your tailnet login is the identity.',
   noServerCommand: '/plugin install terylon-os@terylon',
   retry: 'Try again',
-  unreachableTitle: 'TerylonLab does not answer',
+  unreachableTitle: 'Terylon does not answer',
   unreachableWhen: (since: string) => `since ${since} · retrying every minute`,
   unreachableBody: (time: string) => `Showing the state of ${time}. Work on the homelab goes on.`,
   unreachableFix: 'Check tailscale status and TERYLON_URL; every failure is also in claude --debug under terylon-pane:',
