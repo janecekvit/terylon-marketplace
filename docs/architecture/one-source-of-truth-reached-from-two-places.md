@@ -1,6 +1,6 @@
 # One source of truth, reached from two places
 
-**Status:** accepted, 2026-10-12, on work item #332 (criterion c10). **Superseded in part on 2026-10-21** by [the pane takes the owner's acts](./the-pane-takes-the-owners-acts.md): the pane now takes the owner's acts on their cards, and only merge stays a link to the console. The one source of truth and the one `/mcp` stand. **Agentic OS on TerylonLab holds every fact the owner works with, and is reached the same way from two places: from the PC, in Claude Desktop, with the whole pane, and from terylon-remote, through Remote Control, when the PC is off.** The pane only ever shows what Agentic OS is doing. It holds nothing and decides nothing; a decision is a link to the console.
+**Status:** accepted, 2026-10-12, on work item #332 (criterion c10). **Superseded in part on 2026-10-21** by [the pane takes the owner's acts](./the-pane-takes-the-owners-acts.md): the pane now takes the owner's acts on their cards, and only merge stays a link to the console. The one source of truth and the one `/mcp` stand. **Agentic OS on Terylon holds every fact the owner works with, and is reached the same way from two places: from the PC, in Claude Desktop, with the whole pane, and from terylon-remote, through Remote Control, when the PC is off.** The pane only ever shows what Agentic OS is doing. It holds nothing and decides nothing; a decision is a link to the console.
 
 ## Context
 
