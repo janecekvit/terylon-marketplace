@@ -46,7 +46,7 @@ import { CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, NARROW_COLUMNS, STEPPER_COLUMNS, 
 import type { Picture, Proofs } from './drawing'
 import { ALERT_SOURCES, alertCount, healthLine, stateWord } from './health'
 import type { Health } from './health'
-import { MISSING_SERVER, NEEDS_TEXT, NOT_ALLOWED, SERVER_CANDIDATES, actArguments, allowRules, assertPaneTool, isSendable, readResult } from './terylon'
+import { MISSING_SERVER, NEEDS_TEXT, NOT_ALLOWED, SERVER_CANDIDATES, TEXT_LIMITS, actArguments, allowRules, assertPaneTool, isSendable, readResult } from './terylon'
 import type { TerylonAnswer } from './terylon'
 import {
   alertItems,
@@ -63,10 +63,12 @@ import {
   number,
   pausedOf,
   planItems,
+  policyArguments,
   policyChanges,
   policyFieldLabel,
   policyProblems,
   policyRows,
+  policyValue,
   POLICY_FIELDS,
   proposalItems,
   questionChoices,
@@ -98,7 +100,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.3.1'
+export const MOD_VERSION = '1.3.2'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -979,7 +981,7 @@ async function editPolicy($: EngineInterface, isAgain: boolean): Promise<void> {
     isEditing: true,
     values: isAgain && current?.values !== undefined && Object.keys(current.values).length > 0
       ? current.values
-      : Object.fromEntries(POLICY_FIELDS.filter(field => number(policy?.[field.key]) !== null).map(field => [field.key, String(number(policy?.[field.key]))])),
+      : Object.fromEntries(POLICY_FIELDS.filter(field => policyValue(policy, field.key) !== null).map(field => [field.key, String(policyValue(policy, field.key))])),
   }))
 }
 
@@ -997,7 +999,7 @@ async function savePolicy($: EngineInterface): Promise<void> {
     return
   }
 
-  const args: Json = Object.fromEntries(changes.map(change => [change.key, change.value]))
+  const args = policyArguments(changes)
 
   await takeAct($, 'policy', 'policy_save', null, '', args)
 
@@ -1526,7 +1528,9 @@ export const register: Register = on => {
     const actField = (key: string, tool: string, subject: number | null, field: { label: string; placeholder?: string; send?: string; isDanger?: boolean; hasCancel?: boolean; hasText?: boolean }) => {
       const state = actState(key)
       const isEmpty = state.text.trim() === ''
-      const isDim = state.busy !== null || (NEEDS_TEXT.has(tool) && isEmpty)
+      const limit = TEXT_LIMITS[tool]
+      const isLong = limit !== undefined && state.text.trim().length > limit
+      const isDim = state.busy !== null || (NEEDS_TEXT.has(tool) && isEmpty) || isLong
       const sendLabel = state.busy === tool ? COPY.actBusy[tool] ?? tool : field.send ?? COPY.actSend[tool] ?? COPY.actButton[tool] ?? tool
 
       return (
@@ -1542,6 +1546,7 @@ export const register: Register = on => {
               onSubmit={() => takeAct($, key, tool, subject, state.text)}
             />
           )}
+          {isLong && <Text key={`act-${key}-long`} color="error">{COPY.textTooLong(limit ?? 0, state.text.trim().length)}</Text>}
           <Box flexDirection="row" gap={1} flexWrap="wrap">
             <Button key={`act-${key}-send`} label={sendLabel} variant={isDim || field.isDanger === true ? undefined : 'primary'} dimColor={isDim ? true : undefined} onPress={() => (isDim ? undefined : takeAct($, key, tool, subject, state.text))}>
               {field.isDanger === true && !isDim ? <Text color="error">{sendLabel}</Text> : sendLabel}
@@ -1764,7 +1769,7 @@ export const register: Register = on => {
       const isPolicyEditing = form.isEditing && hasInput && 'Input' in elements
       const policyCard = cardOf('status-policy', COPY.policy, (
         <Box flexDirection="row" gap={1} alignItems="center">
-          {isPolicyEditing && <Text color="subtle" size="footnote">{COPY.policyEditing}</Text>}
+          <Text color="subtle" size="footnote" tabular>{isPolicyEditing ? COPY.policyEditing : COPY.policyVersion(number(policy?.version), policy?.changedAt === undefined || policy?.changedAt === null ? null : clock(policy.changedAt, offset))}</Text>
           {!isPolicyEditing && hasInput && rows.length > 0 && <Button key="act-policy-edit" label={COPY.policyEdit} dimColor={policyState.busy !== null ? true : undefined} onPress={() => (policyState.busy === null ? editPolicy($, false) : undefined)} />}
         </Box>
       ), isPolicyEditing && 'Input' in elements
@@ -2056,9 +2061,12 @@ export const register: Register = on => {
                       onSubmit={() => takeAct($, storyKey, 'story_unblock', screen.story, storyAct.text)}
                     />
                   ) : null,
+                  storyAct.text.trim().length > (TEXT_LIMITS.story_return ?? 0)
+                    ? <Text key="act-blocked-long" color="error">{COPY.textTooLong(TEXT_LIMITS.story_return ?? 0, storyAct.text.trim().length)}</Text>
+                    : null,
                   <Box key="act-blocked-buttons" flexDirection="row" gap={1} flexWrap="wrap">
-                    {actButton(storyKey, 'story_unblock', screen.story, { isPrimary: true })}
-                    {actButton(storyKey, 'story_return', screen.story, { isDim: storyAct.text.trim() === '' })}
+                    {actButton(storyKey, 'story_unblock', screen.story, { isPrimary: true, isDim: storyAct.text.trim().length > (TEXT_LIMITS.story_unblock ?? 0) })}
+                    {actButton(storyKey, 'story_return', screen.story, { isDim: storyAct.text.trim() === '' || storyAct.text.trim().length > (TEXT_LIMITS.story_return ?? 0) })}
                     {actButton(storyKey, 'story_abandon', screen.story, { isDanger: true, opens: true })}
                   </Box>,
                 ],
@@ -2400,14 +2408,21 @@ export const register: Register = on => {
                 return (
                   <Box key={`mem-proposal-${proposal.id}`} flexDirection="column" gap={look.isGraphic ? 'xs' : 0}>
                     <Text size="footnote" color="subtle" wrap="truncate-end">
-                      <Text color="inactive">{proposal.file === 'owner' ? COPY.memoryOwnerFile : proposal.file.replace(/^topic:/, '')}</Text>
+                      <Text color="inactive">{proposal.file === 'owner' ? COPY.memoryOwnerFile : proposal.file.replace(/^(topic|project):/, '')}</Text>
                       {' · '}
                       <Text>{COPY.proposedBy(proposal.by, proposal.story, null)}</Text>
                       {proposal.at === null ? null : ' · '}
                       {proposal.at === null ? null : <Text tabular>{proposal.at}</Text>}
                     </Text>
-                    {proposal.oldText !== null && proposal.action !== 'add' && <Text strikethrough color="error">{proposal.oldText}</Text>}
-                    {proposal.text !== null && proposal.action !== 'remove' && <Text color="success">{proposal.action === 'add' ? `+ ${proposal.text}` : proposal.text}</Text>}
+                    {/* NO DIFF FIELD (Terylon main aaf07e8): a replace is its old text struck, then its new; an add +text; a remove −oldText. */}
+                    {proposal.operations.flatMap((operation, index) => [
+                      operation.oldText !== null && operation.action !== 'add'
+                        ? <Text key={`mem-proposal-${proposal.id}-old-${index}`} strikethrough color="error">{operation.action === 'remove' ? `− ${operation.oldText}` : operation.oldText}</Text>
+                        : null,
+                      operation.text !== null && operation.action !== 'remove'
+                        ? <Text key={`mem-proposal-${proposal.id}-new-${index}`} color="success">{operation.action === 'add' ? `+ ${operation.text}` : operation.text}</Text>
+                        : null,
+                    ])}
                     {proposal.why !== null && <Text color="subtle" size="footnote">{COPY.proposalWhy(proposal.why)}</Text>}
                     <Box flexDirection="row" gap={1}>
                       {actButton(proposalKey, 'memory_confirm', proposal.id, { isPrimary: true })}

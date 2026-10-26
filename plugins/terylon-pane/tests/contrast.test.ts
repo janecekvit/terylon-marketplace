@@ -130,7 +130,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
     terylon.answers.story_get = (args: Record<string, unknown>) => ({ id: args.story, goal: 3, title: 'Memory proposals', state: 'blocked', attempt: 2, pullRequest: null, timeline: [] })
     terylon.answers.work_in_flight = { ...FLIGHT, stories: [FLIGHT.stories[0], { ...FLIGHT.stories[1], state: 'blocked' }] }
     terylon.answers.story_unblock = refusal('Story 329 is running; only a blocked story is unblocked.', 409)
-    terylon.answers.memory_get = { ...MEMORY, proposals: [{ id: 5, file: 'owner', action: 'replace', oldText: 'Old text.', text: 'New text.', why: 'Because.', by: 'owner', at: '2026-10-11T19:14:00Z' }] }
+    terylon.answers.memory_get = { ...MEMORY, proposals: [{ id: 5, file: 'owner', action: 'replace', oldText: 'Old text.', text: 'New text.', why: 'Because.', by: 'web:alice@contoso', at: '2026-10-11T19:14:00Z' }] }
     await $.session.start(SESSION)
     await terylon.clock.settle()
 

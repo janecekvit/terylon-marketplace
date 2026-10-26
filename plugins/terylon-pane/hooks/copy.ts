@@ -422,7 +422,9 @@ export const COPY = {
     memory_confirm: 'The leader reads it from its next run.',
     policy_save: 'The leader reads it at its next pass.',
   } as Record<string, string>,
-  actDoneLine: (done: string, sentence: string | null) => (sentence === null || sentence === '' ? `✓ ${done}.` : `✓ ${done}: ${sentence}`),
+  // Terylon's own sentence, whole, after the ✓; the pane's word only when Terylon sent none.
+  actDoneLine: (done: string, sentence: string | null) => (sentence === null || sentence === '' ? `✓ ${done}.` : `✓ ${sentence}`),
+  textTooLong: (limit: number, length: number) => `At most ${limit} characters; this is ${length}.`,
   actPending: (command: string | null) => `The leader did not answer within 10 s. It may have taken the act; Refresh shows where it stands${command === null ? '' : ` (command ${command})`}.`,
   actRefused: (status: number | null) => (status === null ? '✗ Refused' : `✗ Refused (${status})`),
   actNotAllowed: (tool: string) => `Claude Code refused the pane's call to ${tool}`,
@@ -455,12 +457,14 @@ export const COPY = {
     ].filter(part => part !== null).join(' '),
   proposalsHeading: 'Proposals waiting',
   proposalsHint: 'memory changes when you confirm',
+  // Who proposed it, never their login: "web:<login>" is the owner, "brain" the leader (Terylon main aaf07e8).
   proposedBy: (by: string, story: number | null, time: string | null) =>
-    [by === 'owner' ? 'proposed by you' : by === 'leader' ? 'proposed by the leader' : `proposed by ${by}`, story === null ? null : `#${story}`, time].filter(part => part !== null).join(' · '),
+    [by === 'owner' ? 'proposed by you' : 'proposed by the leader', story === null ? null : `#${story}`, time].filter(part => part !== null).join(' · '),
   proposalWhy: (why: string) => `Why: ${why}`,
   memoryBrowser: "Versions, roll-back and dropped proposals stay in the console's memory browser ↗",
   policy: 'Policy',
   policyEditing: 'editing',
+  policyVersion: (version: number | null, since: string | null) => [version === null ? null : `version ${version}`, since === null ? 'never changed' : `in force since ${since}`].filter(part => part !== null).join(' · '),
   policyEdit: 'Edit',
   policyAgain: 'Edit again',
   policyChanges: (changes: readonly { label: string; from: string; to: string }[]) =>

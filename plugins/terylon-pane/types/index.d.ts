@@ -233,8 +233,10 @@ export type PaneMemoryEdit = {
   why: string
 }
 
-// A memory proposal waiting for the owner (S27): what it changes, why, and who proposed it.
-export type PaneProposal = { id: number; file: string; action: string; oldText: string | null; text: string | null; why: string | null; by: string; story: number | null; at: string | null }
+// A memory proposal waiting for the owner (S27): what it changes, why, and who proposed it, the owner or the leader.
+export type PaneProposalOperation = { action: string; file: string; text: string | null; oldText: string | null }
+
+export type PaneProposal = { id: number; file: string; action: string; oldText: string | null; text: string | null; operations: PaneProposalOperation[]; why: string | null; by: 'owner' | 'leader'; story: number | null; at: string | null }
 
 export type PaneMemory = {
   phase: 'loading' | 'ok' | 'error' | 'editing' | 'sending' | 'proposed' | 'refused'

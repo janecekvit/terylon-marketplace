@@ -130,6 +130,9 @@ export function allowRules(): string {
 // returned its note. Unblock, Abandon and Pause offer a field and send without it.
 export const NEEDS_TEXT: ReadonlySet<string> = new Set(['plan_rethink', 'story_return'])
 
+// THE LONGEST TEXT EACH ACT TAKES, in characters (Terylon main aaf07e8): the leader refuses a longer one.
+export const TEXT_LIMITS: Readonly<Record<string, number>> = { plan_rethink: 2000, story_return: 4000, story_unblock: 4000 }
+
 // The acts that name a subject: sent only with its id. The leader's two and the policy name none.
 const NEEDS_SUBJECT: ReadonlySet<string> = new Set(OWNER_ACTS.filter(tool => !tool.startsWith('leader_') && tool !== 'policy_save'))
 
@@ -140,14 +143,19 @@ export function isSendable(tool: string, subject: number | null, words: string):
     return false
   }
 
+  const limit = TEXT_LIMITS[tool]
+
+  if (limit !== undefined && words.trim().length > limit) {
+    return false
+  }
+
   return !(NEEDS_TEXT.has(tool) && words.trim() === '')
 }
 
-// WHAT EACH ACT SENDS, in one place: the subject's id under the name the pane's other calls give it ({story},
-// {goal}, {plan}, {proposal}), and the owner's words under the act's own. From Terylon main aaf07e8: plan_approve
-// {plan, stories?, edits?}, of which the pane sends {plan} (picking stories and editing criteria stay the
-// console's); memory_confirm {proposal, text?}, sent without a text. The rest are inferred from the pane's own
-// calls: Terylon's tool table was not reachable when S27 was built.
+// WHAT EACH ACT SENDS, in one place, as Terylon main aaf07e8 declares each tool: the subject's id ({plan}, {story},
+// {goal}, {proposal}), and the owner's words as `comment`, `note` or `reason`. plan_approve also takes stories? and
+// edits?, and memory_confirm a text?: the pane sends neither, so picking stories, editing criteria and editing a
+// proposal stay the console's. A blank text counts as absent there, so the pane sends none.
 export function actArguments(tool: string, subject: number | null, words: string): Record<string, unknown> {
   const said = words.trim()
   const optional = (name: string) => (said === '' ? {} : { [name]: said })

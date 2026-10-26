@@ -40,6 +40,11 @@ export function refusal(refused: string, status: number): Record<string, unknown
   return { [REFUSAL]: true, refused, status }
 }
 
+// The leader's own refusal, as Terylon main aaf07e8 returns it: the success shape with accepted false, an error result.
+export function leaderRefusal(sentence: string): Record<string, unknown> {
+  return { [REFUSAL]: true, accepted: false, sentence, commandId: 'c0', subjectId: null }
+}
+
 export type Call = { server: string; tool: string; args: Record<string, unknown> }
 
 export type Answer = unknown | ((args: Record<string, unknown>) => unknown)
@@ -161,7 +166,8 @@ export const MEMORY = {
     { file: 'owner', kind: 'owner', entries: ['Píše česky; kód anglicky.', 'Merge potvrzuje passkey.'] },
     { file: 'topic:terylon/deploy', kind: 'topic', text: 'Dlouhá poznámka.' },
   ],
-  proposals: [{ id: 5, file: 'owner', action: 'add', text: 'Merge zůstává za passkey.', why: 'Since #363.', by: 'leader', story: 333, at: '2026-10-11T19:14:00Z' }],
+  // One pending proposal as memory_get lists it on Terylon main aaf07e8: the leader's ("brain"), from story 333.
+  proposals: [{ id: 5, consolidates: null, operations: [{ action: 'add', file: 'owner', text: 'Merge zůstává za passkey.', oldText: null }], suggestsRule: false, action: 'add', file: 'owner', text: 'Merge zůstává za passkey.', oldText: null, why: 'Since #363.', judgement: 'story-run', by: 'brain', subject: 'story/333', at: '2026-10-11T19:14:00Z' }],
 }
 
 // One events_since page, as Terylon answers it: `last` is where to ask from next, `head` the newest sequence.

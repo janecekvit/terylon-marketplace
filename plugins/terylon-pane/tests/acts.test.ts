@@ -7,7 +7,7 @@ import { test, expect } from 'claude-code/testing'
 
 import { OWNER_ACTS } from '../hooks/terylon'
 
-import { ACTS, BRIEFING, FLIGHT, GATES, MEMORY, PANE_PROPS, POLICY, SESSION, STORY_327, exact, refusal, world } from './fixtures'
+import { ACTS, BRIEFING, FLIGHT, GATES, MEMORY, PANE_PROPS, POLICY, SESSION, STORY_327, exact, leaderRefusal, refusal, world } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -59,7 +59,7 @@ test('the acts are the thirteen owner writes S11 made of the former gates, and m
 
 test('NOTHING IS CALLED ON RENDER: every screen with acts drawn, and no act reaches Terylon until it is pressed', async ($, on) => {
   const terylon = world(on)
-  terylon.answers.memory_get = { ...MEMORY, proposals: [{ id: 5, file: 'owner', action: 'add', text: 'A new entry.', why: 'Because.', by: 'owner', at: '2026-10-11T19:14:00Z' }] }
+  terylon.answers.memory_get = { ...MEMORY, proposals: [{ id: 5, file: 'owner', action: 'add', text: 'A new entry.', why: 'Because.', by: 'web:alice@contoso', at: '2026-10-11T19:14:00Z' }] }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
@@ -90,7 +90,7 @@ test('NOTHING IS CALLED ON RENDER: every screen with acts drawn, and no act reac
 
 test('PLAN: Approve calls plan_approve for that plan once, on the press, and says Terylon\'s answer', async ($, on) => {
   const terylon = world(on)
-  terylon.answers.plan_approve = { accepted: true, sentence: '3 stories go to the queue.' }
+  terylon.answers.plan_approve = { accepted: true, sentence: 'Plan 41: 2 approved, 0 dropped.', commandId: 'c1', subjectId: 3 }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
@@ -103,14 +103,14 @@ test('PLAN: Approve calls plan_approve for that plan once, on the press, and say
 
   await ui.press({ key: 'act-plan-41-approve' })
   expect(actCalls(terylon.calls)).toEqual([{ tool: 'plan_approve', args: { plan: 41 } }])
-  expect(await ui.find({ type: 'Text', text: exact('✓ Approved: 3 stories go to the queue.') })).toBeDefined()
-  expect((await ui.find({ type: 'Text', text: exact('✓ Approved: 3 stories go to the queue.') }))?.props.color).toBe('success')
+  expect(await ui.find({ type: 'Text', text: exact('✓ Plan 41: 2 approved, 0 dropped.') })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: exact('✓ Plan 41: 2 approved, 0 dropped.') }))?.props.color).toBe('success')
   expect(await ui.find({ key: 'act-plan-41-queue' })).toBeDefined()
 })
 
 test('PLAN: Rethink needs its comment; Send back stays dim and sends nothing until the comment says something', async ($, on) => {
   const terylon = world(on)
-  terylon.answers.plan_rethink = { accepted: true, sentence: 'The leader proposes a new plan for goal 3.' }
+  terylon.answers.plan_rethink = { accepted: true, sentence: 'Plan 41 goes back to the leader with your comment; a new plan follows.', commandId: 'c2', subjectId: 3 }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
@@ -130,7 +130,7 @@ test('PLAN: Rethink needs its comment; Send back stays dim and sends nothing unt
   expect((await ui.find({ key: 'act-plan-41-send' }))?.props.variant).toBe('primary')
   await ui.press({ key: 'act-plan-41-send' })
   expect(actCalls(terylon.calls)).toEqual([{ tool: 'plan_rethink', args: { plan: 41, comment: 'Merge 2 and 3 into one story.' } }])
-  expect(await ui.find({ type: 'Text', text: exact('✓ Sent back with your comment: The leader proposes a new plan for goal 3.') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('✓ Plan 41 goes back to the leader with your comment; a new plan follows.') })).toBeDefined()
 })
 
 test('BUSY: between the press and the answer the act reads "…ing", the card\'s other buttons wait, and a second press sends nothing', async ($, on) => {
@@ -200,7 +200,7 @@ test('NOT ALLOWED: Claude Code refused the act, nothing happened, and How to fix
 
 test('STORY, VERIFIED IN A REPOSITORY: merge is only ever the console\'s link; Return needs its note', async ($, on) => {
   const terylon = world(on)
-  terylon.answers.story_return = { accepted: true, sentence: '#327 starts attempt 3 on feat/events with your note.' }
+  terylon.answers.story_return = { accepted: true, sentence: 'Story 327 is running again with your note, as attempt 3.', commandId: 'c3', subjectId: 327 }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
@@ -225,14 +225,14 @@ test('STORY, VERIFIED IN A REPOSITORY: merge is only ever the console\'s link; R
   await ui.input({ key: 'act-story-327-text', text: 'Cover the gap case.', kind: 'change' })
   await ui.press({ key: 'act-story-327-send' })
   expect(actCalls(terylon.calls)).toEqual([{ tool: 'story_return', args: { story: 327, note: 'Cover the gap case.' } }])
-  expect(await ui.find({ type: 'Text', text: exact('✓ Returned: #327 starts attempt 3 on feat/events with your note.') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('✓ Story 327 is running again with your note, as attempt 3.') })).toBeDefined()
 })
 
 test('STORY, VERIFIED IN TERYLON\'S LIST: Accept, and no merge at all', async ($, on) => {
   const terylon = world(on)
   terylon.answers.story_get = (args: Record<string, unknown>) => (args.story === 352 ? STORY_LIST : STORY_327)
   terylon.answers.work_in_flight = { ...FLIGHT, stories: [...FLIGHT.stories, { id: 352, title: 'Weekly cost summary', state: 'verified', attempt: 1, progress: null, costUsd: 1.8, budgetUsd: 4 }] }
-  terylon.answers.story_accept = { accepted: true, sentence: '#352 is done.' }
+  terylon.answers.story_accept = { accepted: true, sentence: "Story 352's result is accepted.", commandId: 'c4', subjectId: 352 }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
@@ -244,15 +244,15 @@ test('STORY, VERIFIED IN TERYLON\'S LIST: Accept, and no merge at all', async ($
 
   await ui.press({ key: 'act-story-352-accept' })
   expect(actCalls(terylon.calls)).toEqual([{ tool: 'story_accept', args: { story: 352 } }])
-  expect(await ui.find({ type: 'Text', text: exact('✓ Accepted: #352 is done.') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact("✓ Story 352's result is accepted.") })).toBeDefined()
 })
 
 test('STORY, BLOCKED: Unblock with or without a note, Return only with one, Abandon after a second press', async ($, on) => {
   const terylon = world(on)
   terylon.answers.story_get = (args: Record<string, unknown>) => (args.story === 329 ? STORY_BLOCKED : STORY_327)
   terylon.answers.work_in_flight = { ...FLIGHT, stories: [FLIGHT.stories[0], { ...FLIGHT.stories[1], state: 'blocked' }] }
-  terylon.answers.story_unblock = { accepted: true, sentence: '#329 goes back to running.' }
-  terylon.answers.story_abandon = { accepted: true, sentence: '#329 is closed for good.' }
+  terylon.answers.story_unblock = { accepted: true, sentence: 'Story 329 goes on: it is running again.', commandId: 'c5', subjectId: 329 }
+  terylon.answers.story_abandon = { accepted: true, sentence: 'Story 329 is abandoned.', commandId: 'c6', subjectId: 329 }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
@@ -273,7 +273,7 @@ test('STORY, BLOCKED: Unblock with or without a note, Return only with one, Aban
   await ui.input({ key: 'act-story-329-text', text: 'S19 covers it.', kind: 'change' })
   await ui.press({ key: 'act-story-329-send' })
   expect(actCalls(terylon.calls)).toEqual([{ tool: 'story_abandon', args: { story: 329, reason: 'S19 covers it.' } }])
-  expect(await ui.find({ type: 'Text', text: exact('✓ Abandoned: #329 is closed for good.') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('✓ Story 329 is abandoned.') })).toBeDefined()
 
   await ui.press({ key: 'act-story-329-unblock' })
   expect(actCalls(terylon.calls).slice(1)).toEqual([{ tool: 'story_unblock', args: { story: 329 } }])
@@ -281,7 +281,7 @@ test('STORY, BLOCKED: Unblock with or without a note, Return only with one, Aban
 
 test('STORY, RUNNING: Stop in one press, Summarise beside it, the story in the console', async ($, on) => {
   const terylon = world(on)
-  terylon.answers.story_stop = { accepted: true, sentence: 'the run is cancelled.' }
+  terylon.answers.story_stop = { accepted: true, sentence: "Story 333's run is stopped; it stays blocked until you unblock, return or abandon it.", commandId: 'c7', subjectId: 333 }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
@@ -293,7 +293,7 @@ test('STORY, RUNNING: Stop in one press, Summarise beside it, the story in the c
 
   await ui.press({ key: 'act-story-333-stop' })
   expect(actCalls(terylon.calls)).toEqual([{ tool: 'story_stop', args: { story: 333 } }])
-  expect(await ui.find({ type: 'Text', text: exact('✓ Stopped: the run is cancelled.') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact("✓ Story 333's run is stopped; it stays blocked until you unblock, return or abandon it.") })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('The story waits, blocked as stopped. Unblock, Return or Abandon now show here.') })).toBeDefined()
 })
 
@@ -312,8 +312,8 @@ test('THE S27 SLOTS ARE GONE: the story\'s and the leader\'s acts sit on plain r
 
 test('LEADER: Pause… in the queue\'s header with an optional reason; Resume on the paused card, in the queue and on Status', async ($, on) => {
   const terylon = world(on)
-  terylon.answers.leader_pause = { accepted: true, sentence: 'Paused at 14:05.' }
-  terylon.answers.leader_resume = { accepted: true, sentence: 'the leader continues from its log.' }
+  terylon.answers.leader_pause = { accepted: true, sentence: 'Paused: nothing new is dispatched, no effect is issued and no judgement starts until you resume.', commandId: 'c8', subjectId: null }
+  terylon.answers.leader_resume = { accepted: true, sentence: 'Resumed: the leader continues from where it stopped.', commandId: 'c9', subjectId: null }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
@@ -325,7 +325,7 @@ test('LEADER: Pause… in the queue\'s header with an optional reason; Resume on
   await ui.input({ key: 'act-leader-text', text: 'Host maintenance tonight.', kind: 'change' })
   await ui.press({ key: 'act-leader-send' })
   expect(actCalls(terylon.calls)).toEqual([{ tool: 'leader_pause', args: { reason: 'Host maintenance tonight.' } }])
-  expect(await ui.find({ type: 'Text', text: exact('✓ Paused: Paused at 14:05.') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('✓ Paused: nothing new is dispatched, no effect is issued and no judgement starts until you resume.') })).toBeDefined()
 
   terylon.answers.briefing = { ...BRIEFING, leader: { paused: true, pausedAt: '2026-10-11T12:05:00Z', reason: 'Host maintenance tonight.' } }
   terylon.answers.work_in_flight = { ...FLIGHT, paused: true }
@@ -342,7 +342,7 @@ test('LEADER: Pause… in the queue\'s header with an optional reason; Resume on
 test('GOAL: Drop goal… asks once more, says what it withdraws, then goal_drop', async ($, on) => {
   const terylon = world(on)
   terylon.answers.plans_list = { plans: [{ id: 44, goal: 3, goalTitle: 'Agentic OS', state: 'proposed', estimateUsd: 4, comment: null, stories: [] }] }
-  terylon.answers.goal_drop = { accepted: true, sentence: 'plan 44 withdrawn; the goal moves under “dropped”.' }
+  terylon.answers.goal_drop = { accepted: true, sentence: 'Goal 3 is dropped.', commandId: 'c10', subjectId: 3 }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
@@ -356,7 +356,7 @@ test('GOAL: Drop goal… asks once more, says what it withdraws, then goal_drop'
 
   await ui.press({ key: 'act-goal-3-send' })
   expect(actCalls(terylon.calls)).toEqual([{ tool: 'goal_drop', args: { goal: 3 } }])
-  expect(await ui.find({ type: 'Text', text: exact('✓ Dropped: plan 44 withdrawn; the goal moves under “dropped”.') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('✓ Goal 3 is dropped.') })).toBeDefined()
 })
 
 test('MEMORY: a proposal waits on the Memory tab, old text struck and new, with Confirm and Drop', async ($, on) => {
@@ -364,64 +364,104 @@ test('MEMORY: a proposal waits on the Memory tab, old text struck and new, with 
   terylon.answers.memory_get = {
     ...MEMORY,
     proposals: [
-      { id: 5, file: 'owner', action: 'replace', oldText: 'Merge potvrzuje passkey.', text: 'Merge potvrzuje passkey; produkci nasazuje follower.', why: 'Since #287 a timer deploys production on its own.', by: 'owner', at: '2026-10-11T19:14:00Z' },
-      { id: 6, file: 'topic:terylon/deploy', action: 'add', text: 'pr-environments share the host lock only for create and remove.', why: 'Seen in #333.', by: 'leader', story: 333, at: '2026-10-11T19:20:00Z' },
+      // The shape of Terylon main aaf07e8: `by` is "web:<login>" for the owner and "brain" for the leader.
+      { id: 5, consolidates: null, operations: [{ action: 'replace', file: 'owner', text: 'Merge potvrzuje passkey; produkci nasazuje follower.', oldText: 'Merge potvrzuje passkey.' }], suggestsRule: false, action: 'replace', file: 'owner', oldText: 'Merge potvrzuje passkey.', text: 'Merge potvrzuje passkey; produkci nasazuje follower.', why: 'Since #287 a timer deploys production on its own.', judgement: 'desktop', by: 'web:alice@contoso', subject: 'memory', at: '2026-10-11T19:14:00Z' },
+      { id: 6, consolidates: null, operations: [{ action: 'add', file: 'topic:terylon/deploy', text: 'pr-environments share the host lock only for create and remove.', oldText: null }], suggestsRule: false, action: 'add', file: 'topic:terylon/deploy', text: 'pr-environments share the host lock only for create and remove.', oldText: null, why: 'Seen in #333.', judgement: 'story-run', by: 'brain', subject: 'story/333', at: '2026-10-11T19:20:00Z' },
+      { id: 7, consolidates: null, operations: [{ action: 'remove', file: 'project:terylon', text: null, oldText: 'PRs stay drafts' }], suggestsRule: false, action: 'remove', file: 'project:terylon', text: null, oldText: 'PRs stay drafts', why: 'Superseded.', judgement: 'desktop', by: 'web:alice@contoso', subject: 'memory', at: '2026-10-11T19:30:00Z' },
     ],
   }
-  terylon.answers.memory_confirm = { accepted: true, sentence: '“owner” is at version 7.' }
-  terylon.answers.memory_drop = { accepted: true, sentence: 'the proposal is kept under dropped in the console.' }
+  terylon.answers.memory_confirm = { accepted: true, sentence: "Remembered: the leader's memory takes it as a new version.", commandId: 'c11', subjectId: null }
+  terylon.answers.memory_drop = { accepted: true, sentence: 'Discarded: nothing was written.', commandId: 'c12', subjectId: null }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'tab-memory' })
-  expect(await ui.find({ type: 'Text', text: exact('Proposals waiting · 2') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('Proposals waiting · 3') })).toBeDefined()
   expect((await ui.find({ key: 'mem-proposals' }))?.props.borderColor).toBe('warning')
   // The owner's memory holds the same entry, unstruck: the proposal's old text is the struck one.
   expect((await ui.findAll({ type: 'Text', text: exact('Merge potvrzuje passkey.') })).map(node => [node.props.strikethrough, node.props.color])).toContainEqual([true, 'error'])
   expect((await ui.find({ type: 'Text', text: exact('Merge potvrzuje passkey; produkci nasazuje follower.') }))?.props.color).toBe('success')
   expect(await ui.find({ type: 'Text', text: exact('proposed by the leader · #333') })).toBeDefined()
+  expect((await ui.findAll({ type: 'Text', text: exact('proposed by you') })).length).toBe(2)
+  // NEVER THE LOGIN: "web:<login>" is said as "you".
+  expect(await ui.find({ type: 'Text', text: /alice/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: exact('terylon/deploy') })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: exact('− PRs stay drafts') }))?.props).toMatchObject({ strikethrough: true, color: 'error' })
   expect(await ui.find({ type: 'Link', text: 'Confirm in the console ↗' })).toBeUndefined()
 
   await ui.press({ key: 'act-proposal-5-confirm' })
   await ui.press({ key: 'act-proposal-6-drop' })
   expect(actCalls(terylon.calls)).toEqual([{ tool: 'memory_confirm', args: { proposal: 5 } }, { tool: 'memory_drop', args: { proposal: 6 } }])
-  expect(await ui.find({ type: 'Text', text: exact('✓ Confirmed: “owner” is at version 7.') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: exact('✓ Dropped: the proposal is kept under dropped in the console.') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact("✓ Remembered: the leader's memory takes it as a new version.") })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('✓ Discarded: nothing was written.') })).toBeDefined()
 })
 
-test('POLICY: read on Status, edited in place within policy_get\'s limits, only what changed sent; a refusal keeps what was typed', async ($, on) => {
+// policy_get as Terylon main aaf07e8 answers it: the values, the memory's bounds nested, the version, and the limits.
+const LIMIT = (minimum: number, maximum: number, whole: boolean, unit: string, aboveMinimum = false) => ({ minimum, maximum, aboveMinimum, whole, unit })
+const POLICY_AAF = {
+  slots: 4,
+  storyBudgetUsd: 25,
+  dayBudgetUsd: 100,
+  retryLimit: 2,
+  continueLimit: 3,
+  storyHours: 6,
+  stuckMinutes: 30,
+  memory: { ownerCharacters: 1375, projectCharacters: 2200, topicCharacters: 4000, topicsPerProject: 12 },
+  version: 1,
+  changedAt: null,
+  changedBy: null,
+  limits: {
+    slots: LIMIT(1, 8, true, 'stories'),
+    storyBudgetUsd: LIMIT(0, 10000, false, 'USD', true),
+    dayBudgetUsd: LIMIT(0, 10000, false, 'USD', true),
+    retryLimit: LIMIT(0, 10, true, 'retries'),
+    continueLimit: LIMIT(0, 10, true, 'continuations'),
+    storyHours: LIMIT(0, 168, false, 'hours', true),
+    stuckMinutes: LIMIT(1, 1440, true, 'minutes'),
+    memory: { ownerCharacters: LIMIT(200, 20000, true, 'characters'), projectCharacters: LIMIT(200, 20000, true, 'characters'), topicCharacters: LIMIT(200, 20000, true, 'characters'), topicsPerProject: LIMIT(1, 50, true, 'topics') },
+  },
+}
+
+test('POLICY: read on Status with its version, edited within policy_get\'s limits, only what changed sent, the memory nested', async ($, on) => {
   const terylon = world(on)
-  // Terylon main aaf07e8: no version and no concurrency check; the ranges are policy_get's own `limits`.
-  terylon.answers.policy_get = { ...POLICY, storyBudgetUsd: 25, limits: { slots: { min: 1, max: 8 }, storyBudgetUsd: { min: 1, max: 500 }, dayBudgetUsd: { min: 1, max: 1000 } } }
-  terylon.answers.policy_save = refusal('The daily budget must be at least the story budget.', 400)
+  terylon.answers.policy_get = POLICY_AAF
+  terylon.answers.policy_save = refusal("A memory file's bound is 200 to 20000 characters.", 400)
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'tab-status' })
+  expect(await ui.find({ type: 'Text', text: exact('version 1 · never changed') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('4 stories') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('$25') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /version/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: exact('Memory: owner · project · topic') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('1375 · 2200 · 4000 chars') })).toBeDefined()
 
   await ui.press({ key: 'act-policy-edit' })
   expect((await ui.find({ key: 'act-policy-field-slots' }))?.props.label).toBe('Slots (1–8)')
-  expect((await ui.find({ key: 'act-policy-field-storyBudgetUsd' }))?.props.label).toBe('Story budget ($1–500)')
+  expect((await ui.find({ key: 'act-policy-field-storyBudgetUsd' }))?.props.label).toBe('Story budget (over $0, up to $10000)')
+  expect((await ui.find({ key: 'act-policy-field-memory.ownerCharacters' }))?.props.label).toBe('Owner memory, chars (200–20000)')
   expect(actCalls(terylon.calls)).toEqual([])
 
-  // VALIDATED IN THE PANE: Terylon does not check an act's arguments against a schema.
+  // VALIDATED IN THE PANE: Terylon checks no act's arguments against a schema.
   await ui.input({ key: 'act-policy-field-slots', text: '12', kind: 'change' })
+  await ui.input({ key: 'act-policy-field-storyBudgetUsd', text: '0', kind: 'change' })
   expect(await ui.find({ type: 'Text', text: exact('Slots is a whole number from 1 to 8; 12 is not.') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('Story budget is more than $0 and at most $10000; 0 is not.') })).toBeDefined()
   expect((await ui.find({ key: 'act-policy-send' }))?.props.dimColor).toBe(true)
   await ui.press({ key: 'act-policy-send' })
   expect(actCalls(terylon.calls)).toEqual([])
 
   await ui.input({ key: 'act-policy-field-slots', text: '3', kind: 'change' })
-  expect(await ui.find({ type: 'Text', text: exact('1 change: slots 4 → 3.') })).toBeDefined()
+  await ui.input({ key: 'act-policy-field-storyBudgetUsd', text: '25', kind: 'change' })
+  await ui.input({ key: 'act-policy-field-memory.ownerCharacters', text: '1500', kind: 'change' })
+  expect(await ui.find({ type: 'Text', text: exact('2 changes: slots 4 → 3, owner memory 1375 → 1500.') })).toBeDefined()
   await ui.press({ key: 'act-policy-send' })
-  expect(actCalls(terylon.calls)).toEqual([{ tool: 'policy_save', args: { slots: 3 } }])
+  // A PARTIAL memory OBJECT keeps the other bounds; no version is sent, the last write wins.
+  expect(actCalls(terylon.calls)).toEqual([{ tool: 'policy_save', args: { slots: 3, memory: { ownerCharacters: 1500 } } }])
   expect(await ui.find({ type: 'Text', text: exact('✗ Refused (400)') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: exact('The daily budget must be at least the story budget.') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact("A memory file's bound is 200 to 20000 characters.") })).toBeDefined()
 
   await ui.press({ key: 'act-policy-again' })
   expect((await ui.find({ key: 'act-policy-field-slots' }))?.props.value).toBe('3')
@@ -429,8 +469,8 @@ test('POLICY: read on Status, edited in place within policy_get\'s limits, only 
 
 test('EVERY ACT ANSWERS {accepted, sentence}: null is no answer within 10 s, false the leader\'s refusal, its sentence word for word', async ($, on) => {
   const terylon = world(on)
-  terylon.answers.plan_approve = { accepted: null, sentence: null, commandId: 'c9', subjectId: 41 }
-  terylon.answers.story_stop = { accepted: false, sentence: 'The run already ended; nothing to stop.', commandId: 'c10', subjectId: 333 }
+  terylon.answers.plan_approve = { accepted: null, sentence: 'The leader has not answered within 10 s; ask leader_answer with this commandId.', commandId: 'c9', subjectId: null }
+  terylon.answers.story_stop = leaderRefusal("Story 333 is pr-open; it cannot be moved by 'Stop'.")
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
@@ -444,12 +484,34 @@ test('EVERY ACT ANSWERS {accepted, sentence}: null is no answer within 10 s, fal
   await openStory($, ui, 333)
   await ui.press({ key: 'act-story-333-stop' })
   expect((await ui.find({ type: 'Text', text: exact('✗ Refused') }))?.props.color).toBe('error')
-  expect(await ui.find({ type: 'Text', text: exact('The run already ended; nothing to stop.') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact("Story 333 is pr-open; it cannot be moved by 'Stop'.") })).toBeDefined()
+})
+
+test('THE TEXT LIMITS (Terylon main aaf07e8): a rethink\'s comment at most 2000 characters, a return\'s note at most 4000', async ($, on) => {
+  const terylon = world(on)
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await openPlan(ui)
+  await ui.press({ key: 'act-plan-41-rethink' })
+  await ui.input({ key: 'act-plan-41-text', text: 'x'.repeat(2001), kind: 'change' })
+  expect(await ui.find({ type: 'Text', text: exact('At most 2000 characters; this is 2001.') })).toBeDefined()
+  expect((await ui.find({ key: 'act-plan-41-send' }))?.props.dimColor).toBe(true)
+  await ui.press({ key: 'act-plan-41-send' })
+  expect(actCalls(terylon.calls)).toEqual([])
+
+  await openStory($, ui, 327)
+  await ui.press({ key: 'act-story-327-return' })
+  await ui.input({ key: 'act-story-327-text', text: 'y'.repeat(4001), kind: 'change' })
+  expect(await ui.find({ type: 'Text', text: exact('At most 4000 characters; this is 4001.') })).toBeDefined()
+  await ui.press({ key: 'act-story-327-send' })
+  expect(actCalls(terylon.calls)).toEqual([])
 })
 
 test('AN ACT WITHOUT ITS SUBJECT\'S ID SENDS NOTHING: a proposal memory_get listed with no id', async ($, on) => {
   const terylon = world(on)
-  terylon.answers.memory_get = { ...MEMORY, proposals: [{ file: 'owner', action: 'add', text: 'No id.', why: 'Because.', by: 'owner' }] }
+  terylon.answers.memory_get = { ...MEMORY, proposals: [{ file: 'owner', action: 'add', text: 'No id.', why: 'Because.', by: 'web:alice@contoso' }] }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
