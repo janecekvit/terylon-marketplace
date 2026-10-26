@@ -205,7 +205,7 @@ The names are separated by commas or spaces; anything else changes nothing.
 | The band or the card says | It means | Do |
 |---|---|---|
 | Claude Code refused the pane's call | no allow rule names the tool; the call never left the PC | add the rules above, then *Try again* |
-| not answering since HH:MM / TerylonLab does not answer | the call left and nothing answered | read *Reason:*, then `tailscale status` and `TERYLON_URL` |
+| not answering since HH:MM / Terylon does not answer | the call left and nothing answered | read *Reason:*, then `tailscale status` and `TERYLON_URL` |
 | no terylon server | `terylon-os` is not installed, or its server is not connected | `claude mcp list` |
 | refused: not the owner | Terylon answered, but not to its owner | sign this PC into the tailnet with your own account |
 | a tab says *… did not load* · *Terylon did not answer within 8 s* | the tab's calls did not finish under Desktop's 10 s bound on a press | read the debug log's `terylon-pane: loading … failed:` line, then press the tab again |

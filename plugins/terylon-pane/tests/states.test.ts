@@ -35,7 +35,7 @@ test('frame G: unreachable keeps the last state, says it is stale and why, and r
   await terylon.clock.advance(30000)
 
   const ui = await $.ui.mount(MOUNT)
-  expect((await ui.find({ type: 'Text', text: exact('TerylonLab does not answer') }))?.props.color).toBe('error')
+  expect((await ui.find({ type: 'Text', text: exact('Terylon does not answer') }))?.props.color).toBe('error')
   expect(await ui.find({ type: 'Text', text: /^since \d\d:\d\d · retrying every minute$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Showing the state of \d\d:\d\d\. Work on the homelab goes on\.$/ })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: /Reason: .*fetch failed: connect ETIMEDOUT/ }))?.props.color).toBe('subtle')
@@ -103,7 +103,7 @@ test('frame I: a call Claude Code did not allow is said as that, with the rules 
   const ui = await $.ui.mount(MOUNT)
   expect((await ui.find({ type: 'Text', text: exact("Claude Code refused the pane's call") }))?.props.color).toBe('error')
   expect(await ui.find({ type: 'Text', text: exact('permissions') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /TerylonLab does not answer/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Terylon does not answer/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /Reason: .*auto mode classifier gave no verdict/ })).toBeDefined()
 
   // THE ALLOW RULES AS CODE (S32): json, to select and copy by hand, the pane's whole list and no gate.

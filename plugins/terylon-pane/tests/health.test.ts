@@ -39,7 +39,7 @@ test('an alert is a fault of the machine; the briefing, the questions, a newer i
 
   expect(isAlert({ source: 'gatus', title: 'the page is not well', handledAt: null })).toBe(true)
   expect(isAlert({ source: 'unit', title: 'terylon-leader-verify.service failed', handledAt: null })).toBe(true)
-  expect(isAlert({ source: 'host', title: 'TerylonLab host: the disk is full', handledAt: null })).toBe(true)
+  expect(isAlert({ source: 'host', title: 'alice-host: the disk is full', handledAt: null })).toBe(true)
   expect(isAlert({ source: 'session', key: 'incident:321-egress', title: 'Production has no egress', handledAt: null })).toBe(true)
   expect(isAlert({ source: 'production', title: 'Deploy of 1a2b3c failed; rolled back', handledAt: null })).toBe(true)
 
