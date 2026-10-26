@@ -33,7 +33,7 @@ The structure of the marketplace, drawn in [D2](https://d2lang.com). Each `.d2` 
 | [port-and-adapter-split](./port-and-adapter-split.md) | why `terylon-devops` broke into a port and two adapters, and why the port declares no adapter |
 | [spend-measured-on-output-tokens](./spend-measured-on-output-tokens.md) | why a run's cost is measured from its own transcripts, weighted, rather than from the harness's figures |
 | [superpowers-left-the-dependency-set](./superpowers-left-the-dependency-set.md) | why a dependency on a foreign marketplace was removed, and what replaced its six skills |
-| [one-source-of-truth-reached-from-two-places](./one-source-of-truth-reached-from-two-places.md) | why Agentic OS on Terylon is the only source of truth, reached through one `/mcp` from the PC's pane and from the phone through Remote Control, and why the pane holds nothing; superseded in part by the next row |
+| [one-source-of-truth-reached-from-two-places](./one-source-of-truth-reached-from-two-places.md) | why Agentic OS on the owner's host is the only source of truth, reached through one `/mcp` from the PC's pane and from the phone through Remote Control, and why the pane holds nothing; superseded in part by the next row |
 | [the-pane-takes-the-owners-acts](./the-pane-takes-the-owners-acts.md) | why the pane approves, returns, unblocks, pauses and the rest on their subject's cards since Terylon PR 228, and why merge, the one gate, stays in the console behind the passkey |
 | [every-rule-has-one-owner](./every-rule-has-one-owner.md) | why a rule is stated once and pointed at everywhere else, what the first sweep found, and why nothing but review enforces it yet |
 

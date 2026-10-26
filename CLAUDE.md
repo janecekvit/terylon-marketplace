@@ -40,6 +40,7 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /tests/                            local tests of what the plugins ship, across plugin boundaries — not distributed
 /tests/versions/                   the version check versions.yml runs, and its tests
 /tests/git-guard/                  the tests of .claude/hooks/git-guard.js, against real throwaway repositories and worktrees
+/tests/published-names/            no published file names the owner's host, tailnet or forge organisation
 /tests/property/                   property tests with fast-check — the repository's one npm dependency, confined here
 ```
 
@@ -139,6 +140,8 @@ Five stores coexist here, and one of them ships to other repositories. Writing i
 
 One-line test: **if the answer is "go read this code", it belongs in a `CLAUDE.md`; if the answer is a diagram, a table of rules, and the reasoning behind a decision, it belongs in `docs/`.**
 
+**Design canvases, mock-ups and design inventories are not committed** (the owner, 2026-10-25): they live on the issue that carries the change, and a committed file names that issue rather than linking a copy.
+
 The knowledge base carries what a `CLAUDE.md` structurally cannot: a **flow spans components**, so no single component's file can see the whole path, and an **ADR records reasoning that was overturned**, which orientation documents have no place for. Two rules keep the two stores honest — `claude-md-sync.md` asks whether the nearest `CLAUDE.md` still orients a reader, `docs-sync.md` asks whether an article anywhere in `docs/` still tells the truth. Both can fire on one change.
 
 This section is the **one** statement of that boundary. `docs/README.md` links here rather than restating it, and the rule deciding which decisions earn an article of their own is stated once too, in `docs/architecture/README.md`. Authoring conventions are in `docs/README.md`.
@@ -172,6 +175,7 @@ The suites under `/tests/`, none distributed, and a mod's own tests beside it. *
 | terylon-pane tool table | `node --test tests/terylon-pane/tool-table.test.js` | the pane's owner acts are exactly the former gates Terylon PR 228 made owner writes and its gate list is merge alone, both held to the copy of Terylon's tool table in `mcp-tool-table.json`; the README's allow rules are exactly `PANE_TOOLS`, merge in neither. With `TERYLON_SOURCE` set to a Terylon checkout, the copy is also held to the C# | free, milliseconds |
 | terylon-pane commands | `node --test tests/terylon-pane/commands.test.js` | no command the mod registers shares a name with a skill of the mod or of `terylon-os` | free, milliseconds |
 | terylon-pane version | `node --test tests/terylon-pane/version.test.js` | the version the Status tab says is the one `plugin.json` ships | free, milliseconds |
+| published names | `node --test tests/published-names/published-names.test.js` | no tracked file under `plugins/` or `docs/` names the owner's host, tailnet or forge organisation, and a planted name is caught (#32) | free, milliseconds |
 | terylon-os plugin | `node --test tests/terylon-os/terylon-os-plugin.test.js` | the `terylon-os` plugin's one server is `${TERYLON_URL}/mcp` with no header or token, every prompt Terylon's `/mcp` serves has exactly one skill mirroring it, and nothing published names a host | free, milliseconds |
 | plugin versions | `node --test tests/versions/check-plugin-versions.test.js` | a changed plugin without a raised version fails, a patch or minor raise passes, a major raise fails without the label `major` and passes with it, a new plugin passes from 1.0.0 up, a deleted one passes, a malformed version fails, and a version `marketplace.json` lists must equal `plugin.json`'s — the pure rules, and the command line end to end in a throwaway repository | free, seconds |
 | diagrams | `node --test tests/diagrams/render-diagrams.test.js` | the render script's arguments, where a source renders to, how git's path listings are read, and that the D2 it pins is the one `diagrams.yml` installs; the D2 calls themselves run in the Diagrams workflow | free, milliseconds |

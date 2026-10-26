@@ -110,7 +110,7 @@ export function consoleLink(base: string, query: string): string {
   return `${base}/?cockpit=${query}`
 }
 
-// "terylonlab" from https://terylonlab.tail79a80a.ts.net: the name the owner knows the machine by.
+// "alice-host" from https://alice-host.example.ts.net: the name the owner knows the machine by.
 export function hostName(base: string): string {
   const match = /^[a-z]+:\/\/([^./:]+)/i.exec(base)
 

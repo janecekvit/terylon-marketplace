@@ -2,6 +2,9 @@
 // What Terylon sends (story titles, the leader's questions, memory entries, rules) is drawn in the language it
 // came in, untranslated. The prompts the pane posts into the session are the owner's words to Claude, in Czech.
 
+// What the leader does with a new goal, as the owner is told after Add goal (S31).
+const GOAL_READ_FIRST = 'The leader reads it first: a general direction stays a goal; a concrete ask — a file, a document, one change — becomes a task under a goal.'
+
 export const COPY = {
   title: 'Terylon',
   connecting: 'connecting…',
@@ -142,7 +145,7 @@ export const COPY = {
   noServerBody: 'Install the plugin terylon-os from the Terylon Marketplace; it brings the /mcp address on the tailnet. No token: your tailnet login is the identity.',
   noServerCommand: '/plugin install terylon-os@terylon',
   retry: 'Try again',
-  unreachableTitle: 'TerylonLab does not answer',
+  unreachableTitle: 'Terylon does not answer',
   unreachableWhen: (since: string) => `since ${since} · retrying every minute`,
   unreachableBody: (time: string) => `Showing the state of ${time}. Work on the homelab goes on.`,
   unreachableFix: 'Check tailscale status and TERYLON_URL; every failure is also in claude --debug under terylon-pane:',
@@ -259,6 +262,9 @@ export const COPY = {
   ownList: "Terylon's own list",
   // GOALS ARE GENERAL (Terylon #369, S31; the operator, 2026-10-22, the approved S31 canvas)
   addGoalNote: 'A goal is a general direction. A concrete ask — a file, a document, one change — becomes a task under a goal. The leader asks its questions first, then makes a plan you approve.',
+  // The leader's own answer, then how it reads a goal, unless its answer already says so (S31).
+  goalAdded: (sentence: string) =>
+    sentence.includes(GOAL_READ_FIRST) ? sentence : `${sentence.replace(/[.\s]*$/, '')}. ${GOAL_READ_FIRST}`,
   goalSending: 'Handing the goal over…',
   goalMeta: (priority: string, state: string) => `${priority} · ${state}`,
   goalStories: 'Stories',
