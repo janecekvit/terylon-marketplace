@@ -14,5 +14,17 @@ allowed-tools: mcp__plugin_terylon-os_terylon__*, mcp__terylon__*
 
 ## What binds it
 
-- **Offer, never act.** `story_unblock`, `story_stop`, `story_return` and `story_abandon` are gates the person confirms in Terylon's form.
+- **Offer; act only on the owner's word.** Unblocking, stopping, returning, abandoning and accepting are acts the owner takes — here, in the pane or in the console. Call one only on the owner's word, never to be helpful: it applies at once, with no confirmation asked. `story_accept` is offered too, for a story kept in Terylon's own list.
+- **Send exactly these shapes**; Terylon validates no schema:
+
+  | Act | Arguments | Only when |
+  |---|---|---|
+  | `story_unblock` | `{story, note?}` | the story is blocked |
+  | `story_stop` | `{story}` | the story is dispatched or running |
+  | `story_return` | `{story, note}` | the story is verified or blocked |
+  | `story_abandon` | `{story, reason?}` | |
+  | `story_accept` | `{story}` | the story is kept in Terylon's own list |
+
+- **The answer is `{accepted, sentence, commandId, subjectId}`.** `accepted: null` means the leader has not decided within 10 s: say so and do not retry. A refusal, `{refused, status?, console?}` or `accepted: false`, carries a sentence: relay it.
+- **Merge is the one gate**, and it is not taken here: `merge-gate` walks a verified story's evidence, and the owner confirms the exact commit with the passkey in the console.
 - **This is what the pane's "Shrň mi to v session" asks for**: the `terylon-pane` mod posts the request into the session, and this skill answers it.

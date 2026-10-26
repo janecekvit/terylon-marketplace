@@ -18,4 +18,4 @@ allowed-tools: mcp__plugin_terylon-os_terylon__*, mcp__terylon__*
 
 - **Goals are general; a concrete ask is a task** (the operator, 2026-10-22, Terylon #369): steer it in one sentence, never refuse it. The leader reads every goal it is given and files a concrete one as a task under a goal itself.
 - **The target is `<forge>:<organisation>/<project>/<repository>`** as `goals_list` shows targets, or `list` for Terylon's own list. **`repositories`** names the others it works in, the same shape: each is checked out, to read, for the leader and every run of its stories.
-- **`goal_add` approves nothing**: the plan it leads to waits at the plan gate for the owner. A story worked out in detail goes through `hand-over` instead.
+- **`goal_add` approves nothing**: the plan it leads to waits for the owner's approval, given in the pane, the console or this session; `plan_approve` is the owner's act, called only on the owner's word. Nor is `story_merge` ever called to finish the job: merge is the one gate, confirmed with the passkey in the console. A story worked out in detail goes through `hand-over` instead.

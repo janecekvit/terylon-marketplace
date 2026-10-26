@@ -16,6 +16,6 @@ allowed-tools: mcp__plugin_terylon-os_terylon__*, mcp__terylon__*, Read, Grep, G
 
 ## What binds it
 
-- **`tasks_add` proposes; it approves nothing.** The leader turns the task into a plan that waits at the plan gate, and the owner approves it in the console: the person confirms every gate. Never call `plan_approve` to finish the job.
+- **`tasks_add` proposes; it approves nothing.** The leader turns the task into a plan that waits for the owner's approval, given in the pane, the console or this session. `plan_approve` is the owner's act, called only on the owner's word — never to finish the job. Nor is `story_merge`: merge is the one gate, confirmed with the passkey in the console.
 - **The spec is version 1 of the story's specification** (`spec`, markdown), and the plan travels with it (`plan`, the steps in order). A later change goes through `spec_revise`, never a second `tasks_add`.
 - **A write answers when the leader has decided, within 10 s.** An answer of `accepted: null` carries a `commandId`: ask `leader_answer` with it rather than sending the task again.
