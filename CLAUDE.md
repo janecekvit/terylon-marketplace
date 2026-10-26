@@ -19,8 +19,6 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /.github/workflows/release.yml     on a vX.Y.Z tag: source archive + SHA256SUMS, provenance attestation, Sigstore signatures, the GitHub release
 /tests/release/                    release-notes.js — the notes a release carries (every plugin's version, the PRs since the previous tag) — and its tests
 /docs/runbooks/releasing.md        cutting a release, and verifying one
-/.github/workflows/diagrams.yml    renders every docs/**/*.d2 with the pinned D2; red on a bad source or a stale SVG
-/Scripts/render-diagrams.js        formats, validates and renders each .d2 to a light-and-dark .svg beside it; --check is CI's
 /.github/workflows/docs.yml        Markdown lint + link check over every tracked .md, on every PR and push to main
 /.markdownlint-cli2.jsonc          the Markdown lint rules — .claude/rules/markdown.md, encoded
 /lychee.toml                       the link check: relative links, anchors, external links; what is excluded and why
@@ -34,11 +32,12 @@ Claude Code plugin marketplace distributed into product repositories through `ex
 /plugins/<slug>/                   one directory per plugin
 /plugins/CLAUDE.md                 authoring conventions — read before editing a plugin
 /docs/                             the engineering knowledge base — architecture, flows, runbooks, onboarding
-/docs/architecture/*.d2            structure drawn in D2, the rendered .svg committed beside each; flows are Mermaid
+/docs/architecture/README.md       the architecture diagrams, Mermaid flowcharts with ELK; the plugin graph is in README.md
 /docs/terylon/                     terylon working tree: intake, specs, plans, ledgers (gitignored)
 /docs/superpowers/                 the same, when those skills run directly (gitignored)
 /tests/                            local tests of what the plugins ship, across plugin boundaries — not distributed
 /tests/versions/                   the version check versions.yml runs, and its tests
+/tests/architecture-diagrams/      every architecture diagram takes ELK; the plugin graph's edges are plugin.json#dependencies
 /tests/git-guard/                  the tests of .claude/hooks/git-guard.js, against real throwaway repositories and worktrees
 /tests/property/                   property tests with fast-check — the repository's one npm dependency, confined here
 ```
@@ -173,7 +172,7 @@ The suites under `/tests/`, none distributed, and a mod's own tests beside it. *
 | terylon-pane version | `node --test tests/terylon-pane/version.test.js` | the version the Status tab says is the one `plugin.json` ships | free, milliseconds |
 | terylon-os plugin | `node --test tests/terylon-os/terylon-os-plugin.test.js` | the `terylon-os` plugin's one server is `${TERYLON_URL}/mcp` with no header or token, every prompt Terylon's `/mcp` serves has exactly one skill mirroring it, and nothing published names a host | free, milliseconds |
 | plugin versions | `node --test tests/versions/check-plugin-versions.test.js` | a changed plugin without a raised version fails, a patch or minor raise passes, a major raise fails without the label `major` and passes with it, a new plugin passes from 1.0.0 up, a deleted one passes, a malformed version fails, and a version `marketplace.json` lists must equal `plugin.json`'s — the pure rules, and the command line end to end in a throwaway repository | free, seconds |
-| diagrams | `node --test tests/diagrams/render-diagrams.test.js` | the render script's arguments, where a source renders to, how git's path listings are read, and that the D2 it pins is the one `diagrams.yml` installs; the D2 calls themselves run in the Diagrams workflow | free, milliseconds |
+| architecture diagrams | `node --test tests/architecture-diagrams/architecture-diagrams.test.js` | every Mermaid block in `docs/architecture/` and the root `README.md`'s plugin graph opens with the ELK front matter and is a flowchart, no `.d2` or `.svg` is left there, and the plugin graph draws exactly the edges every `plugin.json#dependencies` declares, dashed exactly where the chain already reaches the target; whether a block parses is checked by hand with mermaid-cli, since no job starts a browser | free, milliseconds |
 | git guard | `node --test tests/git-guard/git-guard.test.js` | `.claude/hooks/git-guard.js` refuses a commit, an `Edit`/`Write` or a push of `HEAD` on `main` and any push naming `main`, follows `cd` and `git -C` through `$VAR`, `${VAR}`, `%VAR%`, earlier assignments and `~`, names a target it cannot resolve in the refusal, and passes everything else — against real throwaway repositories and a linked worktree | free, seconds |
 | property tests | `npm ci && npm test` in `tests/property/` | over generated inputs: `git-guard.js` never crashes and always answers allow or a well-formed deny, refuses a push to `main` in any quoting and behind any chain separator, allows a branch that merely contains `main`; `compareVersions` is the numeric total order and `parseVersion` accepts one spelling per version; `resolveRef` never passes a detached HEAD on. fast-check is the only npm dependency in the repository and lives only in that folder; the root `node --test` skips these files with a stated reason, and `.github/workflows/property.yml` runs them | free, about 30 seconds |
 | harness unit checks | `node --test tests/e2e/ref.test.js` | which ref the harness installs, and that a detached HEAD is refused rather than passed on as `HEAD` | free, milliseconds |

@@ -3,7 +3,6 @@
 [![CI](https://github.com/janecekvit/terylon-marketplace/actions/workflows/ci.yml/badge.svg)](https://github.com/janecekvit/terylon-marketplace/actions/workflows/ci.yml)
 [![Security](https://github.com/janecekvit/terylon-marketplace/actions/workflows/security.yml/badge.svg)](https://github.com/janecekvit/terylon-marketplace/actions/workflows/security.yml)
 [![Docs](https://github.com/janecekvit/terylon-marketplace/actions/workflows/docs.yml/badge.svg)](https://github.com/janecekvit/terylon-marketplace/actions/workflows/docs.yml)
-[![Diagrams](https://github.com/janecekvit/terylon-marketplace/actions/workflows/diagrams.yml/badge.svg)](https://github.com/janecekvit/terylon-marketplace/actions/workflows/diagrams.yml)
 [![codecov](https://codecov.io/gh/janecekvit/terylon-marketplace/graph/badge.svg)](https://codecov.io/gh/janecekvit/terylon-marketplace)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/janecekvit/terylon-marketplace/badge)](https://scorecard.dev/viewer/?uri=github.com/janecekvit/terylon-marketplace)
 [![Latest release](https://img.shields.io/github/v/release/janecekvit/terylon-marketplace?sort=semver)](https://github.com/janecekvit/terylon-marketplace/releases)
@@ -75,9 +74,74 @@ Each agent is a role with its own instructions, dispatched by the `leader` and r
 
 ## Plugins
 
-![The plugin dependency graph: terylon-git sits on the root terylon-core; terylon-forge, the forge port that declares no adapter, sits on terylon-git; the adapters terylon-ado and terylon-github and the role plugins terylon-product, terylon-dev and terylon-test sit on terylon-forge, with terylon-dev also declaring terylon-git and terylon-core directly and terylon-test also declaring terylon-core directly; outside the chain, terylon-pane sits on terylon-os, which has no dependencies](docs/architecture/plugins.svg)
+```mermaid
+---
+config:
+  layout: elk
+---
+%% The marketplace's plugins and the dependencies their manifests declare.
+%% The source of truth is this block: edit it here; nothing is generated from it.
+%% Every edge between two plugins is one entry of a plugin.json#dependencies array, drawn from the
+%% plugin that declares it to the plugin it names. A dashed one is declared although the chain
+%% already reaches it. The manifests are the source of truth; when they change, redraw this.
+flowchart BT
+    %% One colour per kind: roots (indigo), the git layer (blue), the port (amber), adapters (green),
+    %% role plugins (slate), Terylon's own plugins (violet), notes (grey). A subgraph takes a stroke
+    %% and no fill, so the theme fills it in light and dark mode alike: .claude/rules/markdown.md says why.
+    classDef root fill:#E0E7FF,stroke:#4F46E5,color:#312E81
+    classDef layer fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A
+    classDef port fill:#FEF3C7,stroke:#D97706,color:#78350F
+    classDef adapter fill:#D1FAE5,stroke:#059669,color:#064E3B
+    classDef role fill:#F1F5F9,stroke:#475569,color:#1E293B
+    classDef terylon fill:#F3E8FF,stroke:#9333EA,color:#581C87
+    classDef note fill:#F9FAFB,stroke:#9CA3AF,color:#374151
 
-Drawn from [`docs/architecture/plugins.d2`](docs/architecture/plugins.d2), which follows every `plugin.json#dependencies`; an arrow points from a plugin to one it declares, and a dashed one is declared although the chain already reaches it.
+    core["terylon-core<br/>the root: shared conventions, measurement<br/>no dependencies"]:::root
+    git["terylon-git<br/>+ git; no forge, no MCP server"]:::layer
+    forge["terylon-forge<br/>the forge port: the pull request workflow<br/>declares no adapter, on purpose"]:::port
+
+    subgraph adapters ["Adapters: one body of forge-ops each"]
+        ado["terylon-ado<br/>Azure DevOps, Microsoft's remote MCP server"]:::adapter
+        github["terylon-github<br/>GitHub, over the gh CLI; no server"]:::adapter
+    end
+
+    subgraph roles ["Role plugins"]
+        product["terylon-product<br/>user stories, Feature specs"]:::role
+        dev["terylon-dev<br/>the build pipeline"]:::role
+        test["terylon-test<br/>a test plan and acceptance criteria"]:::role
+    end
+
+    %% Terylon's own plugins: the owner's product, not a role in the development workflow.
+    subgraph outside ["Outside the chain: Terylon itself"]
+        os["terylon-os<br/>Terylon's /mcp server + one skill per prompt<br/>no dependencies"]:::root
+        pane["terylon-pane<br/>a mod: the band, the status line, the pane"]:::terylon
+    end
+
+    consumer[/"A consumer repository enables two keys:<br/>a role plugin + an adapter.<br/>Everything else arrives as a dependency."/]:::note
+
+    git --> core
+    forge --> git
+    ado --> forge
+    github --> forge
+    product --> forge
+    dev --> forge
+    test --> forge
+    dev -.->|"also direct: leader dispatches code-reviewer"| git
+    dev -.->|"also direct: measure-token-spend"| core
+    test -.->|"also direct: measure-token-spend"| core
+    pane --> os
+
+    consumer -.->|"enables one"| roles
+    consumer -.->|"enables one"| adapters
+
+    style adapters stroke:#10B981
+    style roles stroke:#64748B
+    style outside stroke:#A855F7,stroke-dasharray:3
+    %% The two consumer edges, grey: the 12th and 13th edge above.
+    linkStyle 11,12 stroke:#9CA3AF
+```
+
+The plugin graph is drawn here and only here, from every `plugin.json#dependencies`; an arrow points from a plugin to one it declares, and a dashed one is declared although the chain already reaches it. [`docs/architecture/README.md`](./docs/architecture/README.md) links to it rather than drawing a second copy.
 
 | Plugin | For | Skills | Agents |
 |---|---|---|---|
