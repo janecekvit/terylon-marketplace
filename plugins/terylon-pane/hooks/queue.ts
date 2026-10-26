@@ -10,6 +10,7 @@ import type {
   PanePhase,
   PaneWorking,
   PanePlan,
+  PaneProposal,
   PaneQuestionItem,
   PaneQueuedItem,
   PaneRunningItem,
@@ -474,7 +475,163 @@ export function storyView(id: number, document: Json, inFlight: Json, question: 
     goal: number(document.goal),
     isRunning,
     isVerified: state === 'verified',
+    isBlocked: state === 'blocked',
+    // A STORY IN TERYLON'S OWN LIST has no pull request to merge: it is accepted instead (S27).
+    isList: text(document.target ?? inFlight.target) === 'list' || (pullRequest === null && state === 'verified'),
+    canStop: state === 'dispatched' || state === 'running',
+    commit: verdict === null ? (text(pullRequest?.head) ?? '').slice(0, 7) || null : (text(verdict.commit) ?? '').slice(0, 7) || null,
   }
+}
+
+// THE POLICY'S FIELDS (S27), as Terylon main aaf07e8 names them, in the order the Status tab draws them: the path in
+// policy_get's answer (the memory's bounds nest under `memory`), the label, the word a change is said with, whether it
+// is money, and how its value reads. Only the fields policy_get sends are drawn; their ranges are its `limits`.
+export type PolicyField = { key: string; label: string; change: string; isMoney?: boolean; isWhole: boolean; show: (value: number) => string; isMemory?: boolean }
+
+export const POLICY_FIELDS: readonly PolicyField[] = [
+  { key: 'slots', label: 'Slots', change: 'slots', isWhole: true, show: value => `${value} ${value === 1 ? 'story' : 'stories'}` },
+  { key: 'storyBudgetUsd', label: 'Story budget', change: 'story budget', isMoney: true, isWhole: false, show: value => `$${value}` },
+  { key: 'dayBudgetUsd', label: 'Daily budget', change: 'daily budget', isMoney: true, isWhole: false, show: value => `$${value}` },
+  { key: 'retryLimit', label: 'Red verdicts before blocked', change: 'retries', isWhole: true, show: value => `${value}` },
+  { key: 'continueLimit', label: 'Continuations', change: 'continuations', isWhole: true, show: value => `${value}` },
+  { key: 'storyHours', label: 'Story hours', change: 'story hours', isWhole: false, show: value => `${value} h` },
+  { key: 'stuckMinutes', label: 'Stuck after, minutes', change: 'stuck after', isWhole: true, show: value => `${value} min` },
+  { key: 'memory.ownerCharacters', label: 'Owner memory, chars', change: 'owner memory', isWhole: true, show: value => `${value} chars`, isMemory: true },
+  { key: 'memory.projectCharacters', label: 'Project memory, chars', change: 'project memory', isWhole: true, show: value => `${value} chars`, isMemory: true },
+  { key: 'memory.topicCharacters', label: 'Topic memory, chars', change: 'topic memory', isWhole: true, show: value => `${value} chars`, isMemory: true },
+  { key: 'memory.topicsPerProject', label: 'Topics per project', change: 'topics per project', isWhole: true, show: value => `${value}` },
+]
+
+// A value at a dotted path: "memory.ownerCharacters".
+function at(value: unknown, path: string): unknown {
+  return path.split('.').reduce<unknown>((found, part) => (found !== null && typeof found === 'object' ? (found as Json)[part] : undefined), value)
+}
+
+export function policyValue(policy: Json | null, key: string): number | null {
+  return number(at(policy, key))
+}
+
+// A field's limit as policy_get sends it under `limits`, nested as the field is: { minimum, maximum, aboveMinimum, whole }.
+export type PolicyLimit = { minimum: number; maximum: number; isAboveMinimum: boolean; isWhole: boolean }
+
+export function policyLimit(policy: Json | null, key: string): PolicyLimit | null {
+  const limit = at(policy?.limits, key)
+
+  if (limit === null || typeof limit !== 'object') {
+    return null
+  }
+
+  const entry = limit as Json
+  const minimum = typeof entry.minimum === 'number' ? entry.minimum : null
+  const maximum = typeof entry.maximum === 'number' ? entry.maximum : null
+
+  return minimum === null || maximum === null ? null : { minimum, maximum, isAboveMinimum: entry.aboveMinimum === true, isWhole: entry.whole === true }
+}
+
+function rangeOf(field: PolicyField, limit: PolicyLimit): string {
+  const unit = field.isMoney === true ? '$' : ''
+
+  return limit.isAboveMinimum ? `over ${unit}${limit.minimum}, up to ${unit}${limit.maximum}` : `${unit}${limit.minimum}–${unit}${limit.maximum}`
+}
+
+// The label a field is edited under, its range from policy_get's limits: "Slots (1–8)", "Story budget (over $0, up to $10000)".
+export function policyFieldLabel(field: PolicyField, policy: Json | null = null): string {
+  const limit = policyLimit(policy, field.key)
+
+  return limit === null ? field.label : `${field.label} (${rangeOf(field, limit)})`
+}
+
+// The fields policy_get sent, as the Status tab reads them: one row each, the three memory sizes in one row.
+export function policyRows(policy: Json | null): { label: string; value: string }[] {
+  if (policy === null) {
+    return []
+  }
+
+  const present = POLICY_FIELDS.filter(field => policyValue(policy, field.key) !== null)
+  const memory = present.filter(field => field.isMemory === true)
+  const rows: { label: string; value: string }[] = []
+
+  for (const field of present) {
+    if (field.isMemory === true) {
+      if (field === memory[0]) {
+        rows.push(memory.length === 1
+          ? { label: field.label.replace(/, chars$/, ''), value: field.show(policyValue(policy, field.key) ?? 0) }
+          : { label: `Memory: ${memory.map(item => item.label.replace(/ memory, chars$/, '').toLowerCase()).join(' · ')}`, value: `${memory.map(item => String(policyValue(policy, item.key))).join(' · ')} chars` })
+      }
+
+      continue
+    }
+
+    rows.push({ label: field.label.replace(/, minutes$/, ''), value: field.show(policyValue(policy, field.key) ?? 0) })
+  }
+
+  return rows
+}
+
+// What the form changes against policy_get's answer: the field, the value before and the value typed.
+export function policyChanges(policy: Json | null, values: Record<string, string>): { key: string; label: string; from: string; to: string; value: number | string }[] {
+  if (policy === null) {
+    return []
+  }
+
+  return POLICY_FIELDS
+    .filter(field => policyValue(policy, field.key) !== null && values[field.key] !== undefined && values[field.key]?.trim() !== String(policyValue(policy, field.key)))
+    .map(field => {
+      const typed = (values[field.key] ?? '').trim()
+      const asNumber = Number(typed)
+
+      return { key: field.key, label: field.change, from: String(policyValue(policy, field.key)), to: typed, value: typed !== '' && Number.isFinite(asNumber) ? asNumber : typed }
+    })
+}
+
+// What policy_save is sent: only what changed, the memory's bounds as a partial `memory` object (Terylon main aaf07e8).
+export function policyArguments(changes: readonly { key: string; value: number | string }[]): Json {
+  const args: Json = {}
+
+  for (const change of changes) {
+    const [head, tail] = change.key.split('.')
+
+    if (tail === undefined) {
+      args[head ?? change.key] = change.value
+    } else {
+      args[head ?? ''] = { ...((args[head ?? ''] as Json | undefined) ?? {}), [tail]: change.value }
+    }
+  }
+
+  return args
+}
+
+// WHAT IS WRONG WITH THE FORM, in the pane's own words: Terylon checks no act's arguments against a schema, so a
+// value outside its limit, or not a number of the right kind, is caught here and nothing is sent.
+export function policyProblems(policy: Json | null, values: Record<string, string>): string[] {
+  return policyChanges(policy, values).flatMap(change => {
+    const field = POLICY_FIELDS.find(item => item.key === change.key)
+
+    if (field === undefined) {
+      return []
+    }
+
+    const limit = policyLimit(policy, change.key)
+    const isWhole = limit?.isWhole ?? field.isWhole
+    const unit = field.isMoney === true ? '$' : ''
+    const name = field.label.replace(/, (chars|minutes)$/, '')
+    const value = typeof change.value === 'number' ? change.value : NaN
+    const isKind = Number.isFinite(value) && (!isWhole || Number.isInteger(value))
+    const isInLimit = limit === null || ((limit.isAboveMinimum ? value > limit.minimum : value >= limit.minimum) && value <= limit.maximum)
+
+    if (isKind && isInLimit) {
+      return []
+    }
+
+    const typed = change.to === '' ? 'an empty field' : change.to
+    const said = limit === null
+      ? `${name} is ${isWhole ? 'a whole number' : 'a number'}`
+      : limit.isAboveMinimum
+        ? `${name} is more than ${unit}${limit.minimum} and at most ${unit}${limit.maximum}`
+        : `${name} is ${isWhole ? 'a whole number' : 'a number'} from ${unit}${limit.minimum} to ${unit}${limit.maximum}`
+
+    return [`${said}; ${typed} is not.`]
+  })
 }
 
 // "(a) web na mobilu": the options a question offers in its own text, to press instead of typing.
@@ -607,4 +764,29 @@ export function bellView(notices: Json, leader: Json | null, metrics: Json | nul
     handling: null,
     handleSentence: null,
   }
+}
+
+// THE MEMORY'S PROPOSALS (S27), as memory_get lists them on Terylon main aaf07e8: the pending ones only, each with its
+// operations (several for a consolidation), why, and who proposed it. `by` is "web:<login>" for the owner and "brain"
+// for the leader: the pane keeps only which of the two, never the login.
+export function proposalItems(memory: Json, zoneOffsetMinutes = 0): PaneProposal[] {
+  return list(memory.proposals).map(proposal => {
+    const by = text(proposal.by) ?? ''
+    const subject = /^story\/(\d+)$/.exec(text(proposal.subject) ?? '')
+    const operations = list(proposal.operations).map(operation => ({ action: text(operation.action) ?? '', file: text(operation.file) ?? '', text: text(operation.text), oldText: text(operation.oldText) }))
+    const flattened = { action: text(proposal.action) ?? '', file: text(proposal.file) ?? '', text: text(proposal.text), oldText: text(proposal.oldText) }
+
+    return {
+      id: number(proposal.id) ?? 0,
+      file: flattened.file,
+      action: flattened.action,
+      oldText: flattened.oldText,
+      text: flattened.text,
+      operations: operations.length === 0 ? [flattened] : operations,
+      why: text(proposal.why),
+      by: by.startsWith('web:') || by === 'owner' ? 'owner' : 'leader',
+      story: subject === null ? number(proposal.story) : Number(subject[1]),
+      at: clock(proposal.at, zoneOffsetMinutes),
+    }
+  })
 }

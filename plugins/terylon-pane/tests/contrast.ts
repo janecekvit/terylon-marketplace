@@ -79,7 +79,7 @@ export function inks(node: unknown, color = 'text', on = 'background'): Ink[] {
   const ownColor = element.type === 'Text' && typeof props.color === 'string' ? props.color : color
   const ownOn = element.type === 'Text' && typeof props.backgroundColor === 'string' ? props.backgroundColor : on
   const words = element.type === 'Text' ? children.filter((child): child is string => typeof child === 'string').join('').trim() : ''
-  const own = words === '' ? [] : [{ text: words, color: ownColor, on: ownOn, isMark: /^[●○◇✓]$/u.test(words) }]
+  const own = words === '' ? [] : [{ text: words, color: ownColor, on: ownOn, isMark: /^[●○◇✓⚠]$/u.test(words) }]
 
   return [...own, ...children.flatMap(child => inks(child, ownColor, ownOn))]
 }

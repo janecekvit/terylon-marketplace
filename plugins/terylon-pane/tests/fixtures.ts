@@ -26,8 +26,24 @@ export function exact(text: string): RegExp {
   return new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)
 }
 
-// The owner's gates, spelled out here rather than imported, so a mutation of the mod's own list cannot hide one.
-export const GATES = ['plan_approve', 'plan_rethink', 'story_merge', 'story_return', 'story_unblock', 'story_abandon', 'story_stop', 'story_accept', 'leader_pause', 'leader_resume', 'goal_drop']
+// The owner's one gate since Terylon PR 228, spelled out here rather than imported, so a mutation of the mod's own
+// list cannot hide it: merge, confirmed with the person's passkey in the console.
+export const GATES = ['story_merge']
+
+// The former gates Terylon PR 228 made owner writes, which the pane takes on its subject's card (S27, #27).
+export const ACTS = ['plan_approve', 'plan_rethink', 'story_return', 'story_unblock', 'story_abandon', 'story_stop', 'story_accept', 'leader_pause', 'leader_resume', 'goal_drop', 'memory_confirm', 'memory_drop', 'policy_save']
+
+// An answer Terylon refuses, as its tools return one: an error result whose text says why, with the status.
+const REFUSAL = '__refusal'
+
+export function refusal(refused: string, status: number): Record<string, unknown> {
+  return { [REFUSAL]: true, refused, status }
+}
+
+// The leader's own refusal, as Terylon main aaf07e8 returns it: the success shape with accepted false, an error result.
+export function leaderRefusal(sentence: string): Record<string, unknown> {
+  return { [REFUSAL]: true, accepted: false, sentence, commandId: 'c0', subjectId: null }
+}
 
 export type Call = { server: string; tool: string; args: Record<string, unknown> }
 
@@ -150,7 +166,8 @@ export const MEMORY = {
     { file: 'owner', kind: 'owner', entries: ['Píše česky; kód anglicky.', 'Merge potvrzuje passkey.'] },
     { file: 'topic:terylon/deploy', kind: 'topic', text: 'Dlouhá poznámka.' },
   ],
-  proposals: [{ id: 5 }],
+  // One pending proposal as memory_get lists it on Terylon main aaf07e8: the leader's ("brain"), from story 333.
+  proposals: [{ id: 5, consolidates: null, operations: [{ action: 'add', file: 'owner', text: 'Merge zůstává za passkey.', oldText: null }], suggestsRule: false, action: 'add', file: 'owner', text: 'Merge zůstává za passkey.', oldText: null, why: 'Since #363.', judgement: 'story-run', by: 'brain', subject: 'story/333', at: '2026-10-11T19:14:00Z' }],
 }
 
 // One events_since page, as Terylon answers it: `last` is where to ask from next, `head` the newest sequence.
@@ -303,6 +320,12 @@ export function world(on: On, options: { store?: Record<string, unknown>; now?: 
 
     const answer = state.answers[e.tool]
     const value = typeof answer === 'function' ? (answer as (args: Record<string, unknown>) => unknown)(e.args) : answer
+
+    if (value !== null && typeof value === 'object' && (value as Record<string, unknown>)[REFUSAL] === true) {
+      const { [REFUSAL]: _marker, ...refused } = value as Record<string, unknown>
+
+      return { value: { content: [{ type: 'text', text: JSON.stringify(refused) }], isError: true } } as never
+    }
 
     if (value === undefined) {
       return { value: { content: [{ type: 'text', text: JSON.stringify({ refused: `no such tool ${e.tool}`, status: 404 }) }], isError: true } } as never

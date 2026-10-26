@@ -149,7 +149,7 @@ test('a notice Terylon refuses to mark handled stays, and the refusal is said wi
   expect(await ui.find({ type: 'Text', text: /no such tool notice_handle/ })).toBeDefined()
 })
 
-test('a goal is dropped in the console: its screen links there, to the goals screen, and the pane offers no drop', async ($, on) => {
+test('a goal is dropped from its own screen (S27), the console\'s goals screen still a link away, and nothing is sent until pressed', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -158,8 +158,9 @@ test('a goal is dropped in the console: its screen links there, to the goals scr
   await ui.press({ key: 'story-333' })
   await ui.press({ key: 'story-goal' })
 
-  // goal_drop IS A GATE (#360): the console's goals screen is where the person drops it — "goal" is no screen there.
+  // goal_drop IS AN OWNER WRITE SINCE TERYLON PR 228 (S27): the goal's own screen drops it; the console's goals
+  // screen stays a link away — "goal" is no screen there.
   expect((await ui.find({ type: 'Link', text: 'Goal in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=goals&goal=3')
-  expect(await ui.find({ type: 'Button', text: /drop/i })).toBeUndefined()
+  expect((await ui.find({ key: 'act-goal-3-drop' }))?.props.label).toBe('Drop goal…')
   expect(terylon.calls.filter(call => call.tool === 'goal_drop')).toEqual([])
 })

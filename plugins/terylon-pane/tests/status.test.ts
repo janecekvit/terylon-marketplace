@@ -33,7 +33,7 @@ test('well: ok, the slots and the runs in them, the cost today and over 30 days,
     expect(await ui.find({ type: 'Text', text: exact('Problems · 0') })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: exact('Nothing wrong.') }))?.props.color).toBe('subtle')
 
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.4.0') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.5.0') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('TERYLON_URL https://terylon.example.ts.net') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('server plugin:terylon-os:terylon') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Every failure is in claude --debug under terylon-pane:') })).toBeDefined()
@@ -108,9 +108,10 @@ test('paused: resuming is the owner\'s gate, a link to the console and never a b
 
     expect((await ui.find({ type: 'Text', text: exact('paused') }))?.props.color).toBe('warning')
     expect(await ui.find({ type: 'Text', text: exact('The leader is paused') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('1. Resuming is your gate, confirmed in the console.') })).toBeDefined()
-    expect((await ui.find({ type: 'Link', text: 'Resume in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=work')
-    expect(await ui.find({ type: 'Button', text: /Resume/ })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: exact('1. Press Resume, here or on the queue: the leader continues from its log.') })).toBeDefined()
+    // RESUME IS THE OWNER'S ACT ON THE PAUSED CARD (S27): a button, no longer a link to the console.
+    expect(await ui.find({ type: 'Link', text: 'Resume in the console ↗' })).toBeUndefined()
+    expect((await ui.find({ key: 'act-leader-resume' }))?.props.variant).toBe('primary')
     await ui.unmount()
   }
 })
