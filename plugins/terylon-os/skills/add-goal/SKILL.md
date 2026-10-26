@@ -12,7 +12,7 @@ allowed-tools: mcp__plugin_terylon-os_terylon__*, mcp__terylon__*
 
 > I want the leader to take this goal: {the goal, in a sentence, and where it lands}
 >
-> A goal is a general direction or outcome. If what I said is a concrete ask — a file, a document, one change — say in one sentence that it becomes a task under a goal, and go on: hand it over with tasks_add under the goal it serves (goals_list), or add it with goal_add and the leader files it as a task. If the target repository, or another repository it works in, is not clear, ask me once. Then call goal_add with the title, the priority (2 unless I said otherwise), the target and the repositories. Tell me the leader's answer: it asks every question it has first, and then its plan appears in plans_list and waits for my approval, which I give in the pane, the console or this session.
+> A goal is a general direction or outcome. If what I said is a concrete ask — a file, a document, one change — say in one sentence that it becomes a task under a goal, and go on: hand it over with tasks_add under the goal it serves (goals_list), or add it with goal_add and the leader files it as a task. If the target repository, or another repository it works in, is not clear, ask me once. Then call goal_add with the title, the priority (2 unless I said otherwise), the target and the repositories. Tell me the leader's answer: it asks every question it has first, and then its plan appears in plans_list, for me to approve.
 
 ## What binds it
 

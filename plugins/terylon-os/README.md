@@ -20,7 +20,7 @@ The owner of a Terylon, in any Claude Code session that can reach it over the ta
 | `hand-over` | `hand-over` | a story from a rough idea to a specification, a plan, and `tasks_add` |
 | `merge-gate` | `merge-gate` | a verified story's evidence, then merge or return |
 | `add-goal` | `goal` | a goal in one sentence — a general direction, a concrete ask steered to a task under a goal — to `goal_add` |
-| `review-plan` | `plan-review` | a plan waiting for the owner's approval |
+| `review-plan` | `plan-review` | a plan at the plan gate |
 | `show-story` | `story` | one story in flight |
 
 **What it does not contain: the pane.** The Desktop pane is the mod `terylon-pane`, a separate plugin, because a mod draws only where a surface can and the skills and tools must work everywhere — an SSH session and a Remote Control session have the plugin alone.
@@ -56,7 +56,7 @@ Terylon's `/mcp` sorts what a session can call into three kinds, and only the fi
 | Kind | Tools | Who takes it, and how | What the tool answers |
 |---|---|---|---|
 | **The gate: merge** | `story_merge` | the owner, confirming the exact commit with the passkey in the console. Over MCP the tool applies nothing; it pushes the merge sheet to the owner's phone | *pending*, with the console's merge-sheet link — passed on, never retried or worked around |
-| **The owner's acts** | `plan_approve`, `plan_rethink`, `story_return`, `story_unblock`, `story_abandon`, `story_stop`, `story_accept`, `leader_pause`, `leader_resume`, `goal_drop`, `memory_confirm`, `memory_drop`, `policy_save` | the owner, in the console, in the pane, or in a session — where Claude calls one only on the owner's word given in the conversation, never to be helpful. Terylon shows nothing to confirm them | `{accepted, sentence, commandId, subjectId}`; `accepted: null` means the leader has not decided within 10 s — say so and do not retry; a refusal, `{refused, status?, console?}` or `accepted: false`, carries a sentence to relay |
+| **The owner's acts** | `plan_approve`, `plan_rethink`, `story_return`, `story_unblock`, `story_abandon`, `story_stop`, `story_accept`, `leader_pause`, `leader_resume`, `goal_drop`, `memory_confirm`, `memory_drop`, `policy_save` | the owner, in the console, in the pane, or in a session — where Claude calls one only on the owner's word given in the conversation, never to be helpful. Each applies at once, with no confirmation asked | `{accepted, sentence, commandId, subjectId}`; `accepted: null` means the leader has not decided within 10 s — say so and do not retry; a refusal, `{refused, status?, console?}` or `accepted: false`, carries a sentence to relay |
 | **Writes that decide nothing** | `goal_add`, `tasks_add`, `leader_answer`, `memory_propose`, `notice_handle` and the like | anyone in the session, as a skill describes | the leader's answer |
 
 The other gate, removing a passkey, exists only in the console and has no tool.

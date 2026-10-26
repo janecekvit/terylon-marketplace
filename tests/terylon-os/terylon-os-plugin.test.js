@@ -27,8 +27,8 @@ const GATE = ["story_merge"];
 // The owner's acts: writes that are not gates and show no form, which Claude in a session calls only on the owner's word.
 const OWNER_ACTS = ["plan_approve", "plan_rethink", "story_return", "story_unblock", "story_abandon", "story_stop", "story_accept", "leader_pause", "leader_resume", "goal_drop", "memory_confirm", "memory_drop", "policy_save"];
 
-// The phrase a skill naming an owner's act must carry, so the model never takes one to be helpful.
-const OWNER_WORD_PATTERN = /only on the owner's word/i;
+// The wording a skill naming an owner's act must carry, as Terylon's own prompts say it, so the model never takes one to be helpful.
+const OWNER_WORD_PATTERN = /only on (my|the owner's) word|appl(y|ies) at once, with no confirmation asked/i;
 
 // A form the owner is sent to: none exists any more, for the gate or for an owner's act.
 const FORM_PATTERN = /\bform\b/i;
@@ -63,7 +63,7 @@ function gateProblemsIn(text)
         problems.push(`names ${namedActs.join(", ")} without saying it is called only on the owner's word`);
     }
 
-    if (GATE.some(gate => text.includes(gate)) && !(/passkey/i.test(text) && /console/i.test(text)))
+    if (GATE.some(gate => text.includes(gate)) && !/passkey in the console/i.test(text))
     {
         problems.push("names story_merge without the passkey in the console");
     }
@@ -121,7 +121,7 @@ test("the merge-gate skill still takes story_merge through the one gate", () =>
 
     assert.ok(text.includes("story_merge"));
     assert.match(text, /merge is the one gate/i);
-    assert.match(text, /Terylon asks me to confirm the exact commit/);
+    assert.match(text, /I confirm the exact commit with my passkey in the console/);
 });
 
 test("teeth: an owner's act called a gate confirmed in Terylon's form is caught", () =>
@@ -141,7 +141,7 @@ test("teeth: story_merge without the passkey in the console is caught", () =>
 
 test("teeth: a clean text passes", () =>
 {
-    const clean = "Offer `story_unblock`, and call it only on the owner's word; merge is the one gate. `story_merge` answers pending with the console's link, and the owner confirms with the passkey.";
+    const clean = "Offer `story_unblock`, and call it only on my word; merge is the one gate. `story_merge` answers pending with a link, and I confirm with my passkey in the console.";
 
     assert.deepEqual(gateProblemsIn(clean), []);
 });
