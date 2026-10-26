@@ -351,7 +351,7 @@ test('GOAL: Drop goal… asks once more, says what it withdraws, then goal_drop'
   await ui.press({ key: 'goal-3' })
   await ui.press({ key: 'act-goal-3-drop' })
   expect(actCalls(terylon.calls)).toEqual([])
-  expect(await ui.find({ type: 'Text', text: exact('Drop it for good: the leader stops working on it and withdraws plan 44. #333 keeps running until you stop it.') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('Drop it for good: the leader stops working on it. It withdraws plan 44, which waits for a decision. It abandons #333 Direct dispatch and #329 Memory proposals, stopping the run of #333 first.') })).toBeDefined()
   expect((await ui.find({ key: 'act-goal-3-outcome' }))).toBeUndefined()
 
   await ui.press({ key: 'act-goal-3-send' })

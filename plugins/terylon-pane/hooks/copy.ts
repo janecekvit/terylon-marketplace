@@ -60,6 +60,9 @@ export const COPY = {
   howToFix: 'How to fix',
   fixStep: (index: number, text: string) => `${index}. ${text}`,
   fixNotAllowed: ['Add these rules to ~/.claude/settings.json, under "permissions" → "allow":', 'Press Try again.'],
+  // THE SAME RULES, ASKED FOR BY AN ACT'S How to fix (the owner's walk of 1.5.0, #35): that card has no Try again, so
+  // its last step names the button the owner presses instead.
+  fixNotAllowedAct: ['Add these rules to ~/.claude/settings.json, under "permissions" → "allow":', 'Press the act again on its card.'],
   fixNoServer: ['Install the plugin terylon-os: /plugin install terylon-os@terylon', 'Check that its server is connected: claude mcp list', 'Press Try again.'],
   fixRefused: ['Sign this PC into the tailnet with your own account.', 'Press Try again.'],
   fixError: ['Open Health in the console to see why.', 'Press Try again.'],
@@ -122,6 +125,10 @@ export const COPY = {
   after: (stories: string) => `after ${stories}`,
   held: (reason: string) => reason,
   waitsForSlot: 'waits for a slot',
+  // AN APPROVED STORY NOT STARTED WHILE A SLOT IS FREE (the owner's walk of 1.5.0, #35): it does not wait for a slot,
+  // and /mcp names no reason, so the pane says only what it can see.
+  notStarted: 'not started, though a slot is free',
+  heldTitle: 'Held',
   mergedAt: (time: string, cost: string) => `${time} · $${cost}`,
   answer: 'Answer',
   answerInConsole: 'Answer in the console ↗',
@@ -177,6 +184,10 @@ export const COPY = {
   step: (step: number, steps: number, current: string | null) =>
     `Step ${step} of ${steps}${current === null ? '' : `: ${current}`}`,
   noStep: 'No step reported yet',
+  // A RUN WHOSE progress NAMES NO AGENT OR NO STAGE still draws Now working (the owner's walk of 1.5.0, #35), saying so.
+  noAgent: 'no agent reported',
+  noStage: 'no stage reported',
+  phasesNoStage: (done: number, all: number) => `${done} of ${all} · no stage reported`,
   stepOf: (step: number, steps: number) => `step ${step} of ${steps}`,
   costOf: (cost: string, budget: string | null) => (budget === null ? `$${cost}` : `$${cost} of the story's $${budget}`),
   phases: 'Phases',
@@ -243,6 +254,9 @@ export const COPY = {
   plan: (plan: number) => `Plan ${plan}`,
   planStoryDetail: (size: string, estimate: string | null, after: string | null) =>
     [size, estimate === null ? null : `~$${estimate}`, after === null ? null : `after ${after}`].filter(part => part !== null).join(' · '),
+  // A plan's order said in words, by its stories' titles: "A; B; C after A" (#35).
+  planOrderAlt: (stories: readonly { title: string; after: readonly string[] }[]) =>
+    stories.map(story => (story.after.length === 0 ? story.title : `${story.title} after ${story.after.join(' and ')}`)).join('; '),
   planNote: 'Each story carries its criteria, declared files and estimate; the whole text is in plans_list.',
   planInConsole: 'Plan in the console ↗',
   noPlans: 'No plan waits.',
@@ -313,6 +327,10 @@ export const COPY = {
   handOver: 'Hand to the leader',
   sending: 'Handing to the leader…',
   added: '✓ Handed over',
+  // WHAT THE PANE HANDED OVER, word for word (the owner's walk of 1.5.0, #35): the story the leader writes from it may
+  // differ, and this says which side changed it.
+  handedTitle: (title: string) => `Title: ${title}`,
+  handedCriteria: (criteria: readonly string[]) => (criteria.length === 0 ? 'Criteria: none sent; the leader writes them.' : `Criteria: ${criteria.join(' · ')}`),
   addedNote: 'The plan it becomes waits for you under “Waiting for you”.',
   nextTask: 'Next task',
   notAdded: 'Not handed over',
@@ -452,15 +470,24 @@ export const COPY = {
   blockedTitle: 'Blocked',
   whyOptional: 'Why (optional)',
   abandonNote: 'The branch and its pull request stay; the story never runs again.',
+  abandonApprovedNote: 'It has not started; abandoned, it never will.',
   mergeNote: (commit: string | null) => `Merge is the one gate: your passkey confirms it in the console${commit === null ? '' : `, at exactly commit ${commit}`}. The pane never merges.`,
   acceptNote: 'A list story has no merge: Accept ends it as done.',
   stopNote: 'Stop cancels the run; the story waits, blocked as stopped, until you unblock, return or abandon it.',
   pauseNote: 'Nothing new is admitted, issued, judged or written until you resume. Runs already going keep going.',
-  dropGoalWarning: (plans: readonly number[], running: readonly number[]) =>
+  // WHAT A DROP WITHDRAWS AND ABANDONS, from the goal's own data, none included (the owner's walk of 1.5.0, #35): since
+  // Terylon S35 (#388) goal_drop withdraws the goal's waiting plans and abandons every story of it that has not ended,
+  // stopping a run first. Nothing of the goal keeps running.
+  dropGoalWarning: (plans: readonly number[], stories: readonly { id: number; title: string; isRunning: boolean }[]) =>
     [
-      `Drop it for good: the leader stops working on it${plans.length === 0 ? '' : ` and withdraws ${plans.length === 1 ? 'plan' : 'plans'} ${plans.join(', ')}`}.`,
-      running.length === 0 ? null : `${running.map(story => `#${story}`).join(', ')} ${running.length === 1 ? 'keeps' : 'keep'} running until you stop ${running.length === 1 ? 'it' : 'them'}.`,
-    ].filter(part => part !== null).join(' '),
+      'Drop it for good: the leader stops working on it.',
+      plans.length === 0
+        ? 'No plan of it waits.'
+        : `It withdraws ${plans.length === 1 ? 'plan' : 'plans'} ${andList(plans.map(String))}, which ${plans.length === 1 ? 'waits' : 'wait'} for a decision.`,
+      stories.length === 0
+        ? 'No story of it is open.'
+        : `It abandons ${andList(stories.map(story => `#${story.id} ${story.title}`))}${stories.some(story => story.isRunning) ? `, stopping the run of ${andList(stories.filter(story => story.isRunning).map(story => `#${story.id}`))} first` : ''}.`,
+    ].join(' '),
   proposalsHeading: 'Proposals waiting',
   proposalsHint: 'memory changes when you confirm',
   // Who proposed it, never their login: "web:<login>" is the owner, "brain" the leader (Terylon main aaf07e8).
@@ -480,6 +507,11 @@ export const COPY = {
   policyInConsole: 'Policy in the console ↗',
   workInConsole: 'Work in the console ↗',
 } as const
+
+// "a, b and c".
+function andList(items: readonly string[]): string {
+  return items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
+}
 
 // A story's, a goal's or a plan's state, as the pane says it.
 // The stages Terylon reports on progress.stage (#360), as the S15 canvas names them, and who works in each.

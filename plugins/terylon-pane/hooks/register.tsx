@@ -42,7 +42,7 @@ import type {
 } from '../types'
 
 import { COPY } from './copy'
-import { CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, NARROW_COLUMNS, STEPPER_COLUMNS, dots, meter, phaseGlyph, planChain, proofsOf, segments, slotsGauge, spendBar, splitHash, stepper } from './drawing'
+import { CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, NARROW_COLUMNS, STEPPER_COLUMNS, dots, meter, phaseGlyph, planChain, planOrder, proofsOf, segments, slotsGauge, spendBar, splitHash, stepper } from './drawing'
 import type { Picture, Proofs } from './drawing'
 import { ALERT_SOURCES, alertCount, healthLine, stateWord } from './health'
 import type { Health } from './health'
@@ -100,7 +100,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.5.0'
+export const MOD_VERSION = '1.6.0'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -148,7 +148,7 @@ const EMPTY_SNAPSHOT: PaneSnapshot = {
 
 const QUEUE: PaneScreen = { screen: 'queue' }
 
-const EMPTY_ADD: PaneAdd = { phase: 'form', title: '', criteria: '', goal: '', after: '', size: 'M', goals: [], stories: [], sentence: null, link: null }
+const EMPTY_ADD: PaneAdd = { phase: 'form', title: '', criteria: '', goal: '', after: '', size: 'M', goals: [], stories: [], sentence: null, link: null, sent: null }
 
 const EMPTY_MEMORY: PaneMemory = { phase: 'loading', files: [], rules: [], pending: 0, proposals: [], edit: null, sentence: null, proposed: [] }
 
@@ -188,6 +188,77 @@ let policy: Json | null = null
 let lastAttemptAt = 0
 let isPolling = false
 let answeringServer: string | null = null
+
+// WHAT AN ACT JUST CHANGED, drawn at once and kept until Terylon's own answer shows the subject moved (the owner's walk
+// of 1.5.0, #35): the leader takes an act before its read models catch up, so a read right after ✓ still answered the
+// old state, and the card stayed one poll stale. Keyed by subject ("plan-41", "goal-3"); the state it was acted from,
+// and the state it reads until Terylon's answer leaves the first. Bounded, so a lost act cannot hold a card for good.
+const SETTLE_MILLISECONDS = 300000
+
+// The states of a story that has not ended: what a goal's drop abandons (Terylon S35, #388).
+const OPEN_STORY_STATES: readonly string[] = ['approved', 'dispatched', 'running', 'blocked', 'pr-open', 'verifying', 'verified']
+const settled = new Map<string, { from: readonly string[]; to: string; until: number }>()
+
+// The policy just saved, laid over what policy_get answers until policy_get answers it too (#35).
+let savedPolicy: { values: Json; until: number } | null = null
+
+function settledState(key: string, state: string, now: number): string {
+  const entry = settled.get(key)
+
+  if (entry === undefined) {
+    return state
+  }
+
+  if (now < entry.until && entry.from.includes(state)) {
+    return entry.to
+  }
+
+  settled.delete(key)
+
+  return state
+}
+
+// The acts whose subject's state the pane draws at once, and the states each moves it from.
+function settle(tool: string, subject: number | null, now: number): void {
+  if (subject === null) {
+    return
+  }
+
+  const until = now + SETTLE_MILLISECONDS
+
+  if (tool === 'plan_approve' || tool === 'plan_rethink') {
+    settled.set(`plan-${subject}`, { from: ['proposed'], to: tool === 'plan_approve' ? 'approved' : 'rethink', until })
+  } else if (tool === 'goal_drop') {
+    settled.set(`goal-${subject}`, { from: ['open', 'active', 'planned'], to: 'dropped', until })
+  }
+}
+
+// One object's values laid over another's, a nested one (the memory's bounds) merged rather than replaced.
+function overlay(base: Json, values: Json): Json {
+  return Object.fromEntries([...new Set([...Object.keys(base), ...Object.keys(values)])].map(key => {
+    const over = values[key]
+    const under = base[key]
+
+    return [key, over !== null && typeof over === 'object' && under !== null && typeof under === 'object' ? overlay(under as Json, over as Json) : over ?? under]
+  }))
+}
+
+// Whether every value saved is what an answer now holds.
+function holds(answer: Json, values: Json): boolean {
+  return Object.entries(values).every(([key, value]) =>
+    value !== null && typeof value === 'object' ? holds((answer[key] ?? {}) as Json, value as Json) : answer[key] === value)
+}
+
+// policy_get's answer with the policy just saved laid over it, until it answers that policy itself.
+function policyAfterSave(answer: Json, now: number): Json {
+  if (savedPolicy === null || now >= savedPolicy.until || holds(answer, savedPolicy.values)) {
+    savedPolicy = null
+
+    return answer
+  }
+
+  return overlay(answer, savedPolicy.values)
+}
 
 // Calls one of the pane's tools on whichever terylon server the session has, through the allow-list.
 async function callTerylon($: EngineInterface, tool: string, args: Record<string, unknown> = {}): Promise<TerylonAnswer> {
@@ -329,11 +400,12 @@ async function refresh($: EngineInterface): Promise<boolean> {
 
   if (policy === null) {
     const answered = await callTerylon($, 'policy_get')
-    policy = answered.kind === 'ok' ? answered.value : null
+    policy = answered.kind === 'ok' ? policyAfterSave(answered.value, now) : null
   }
 
   lastFlight = flight.value
-  lastBriefing = briefing.value
+  // A PLAN THE OWNER JUST DECIDED leaves "Waiting for you" at once, whatever the briefing still lists (#35).
+  lastBriefing = { ...briefing.value, plansWaiting: list(briefing.value.plansWaiting).filter(plan => settledState(`plan-${number(plan.id) ?? 0}`, 'proposed', now) === 'proposed') }
   lastStories = list(stories.value.stories)
 
   const base = await baseUrl($)
@@ -341,6 +413,8 @@ async function refresh($: EngineInterface): Promise<boolean> {
   const running = runningItems(lastFlight, offset)
   const inFlight = new Set(running.map(item => item.story))
   const paused = pausedOf((lastBriefing.leader ?? null) as Json | null, lastFlight.paused === true, offset)
+  const slots = number(lastFlight.slots) ?? number(policy?.slots) ?? 0
+  const queuedStories = await withHeldReasons($, lastStories, inFlight)
 
   await update($, snapshot, (): PaneSnapshot => ({
     connection: 'ok',
@@ -350,7 +424,7 @@ async function refresh($: EngineInterface): Promise<boolean> {
     header: header(lastFlight, policy),
     runningUsd: spend(lastFlight),
     dayBudget: dayBudget(policy),
-    slots: number(lastFlight.slots) ?? number(policy?.slots) ?? 0,
+    slots,
     slotsUsed: running.length,
     paused: paused === null ? null : COPY.paused(paused.since, paused.reason),
     pausedSince: paused?.since ?? null,
@@ -361,13 +435,37 @@ async function refresh($: EngineInterface): Promise<boolean> {
     server: answeringServer,
     waiting: waitingItems(lastBriefing, base),
     running,
-    queued: queuedItems(lastStories, inFlight),
+    queued: queuedItems(queuedStories, inFlight, paused === null && running.length < slots),
     doneToday: doneTodayItems(lastStories, now, offset),
     questions: questionItems(lastBriefing),
   }))
   await showHealth($)
 
   return true
+}
+
+// WHY AN APPROVED STORY HAS NOT STARTED (the owner's walk of 1.5.0, #35): story_get carries a held story's reason as
+// `blockedReason` while its state stays approved ("after #12; #12 was abandoned, so order it again"). For an approved
+// story stories_list gives no reason and no order for, it is read there, so the row says why rather than "waits for
+// a slot". Such a story is rare; one whose read fails keeps what stories_list said.
+async function withHeldReasons($: EngineInterface, stories: Json[], inFlight: ReadonlySet<number>): Promise<Json[]> {
+  const read_: Json[] = []
+
+  for (const story of stories) {
+    const id = number(story.id)
+    const isUnexplained = story.state === 'approved' && id !== null && !inFlight.has(id) && text(story.blockedReason) === null && !(Array.isArray(story.after) && story.after.length > 0)
+
+    if (!isUnexplained) {
+      read_.push(story)
+      continue
+    }
+
+    const answered = await callTerylon($, 'story_get', { story: id })
+    const reason = answered.kind === 'ok' ? text(answered.value.blockedReason) : null
+    read_.push(reason === null ? story : { ...story, blockedReason: reason })
+  }
+
+  return read_
 }
 
 async function signalled($: EngineInterface): Promise<string[]> {
@@ -625,6 +723,12 @@ async function openStory($: EngineInterface, id: number): Promise<void> {
 
   const answered = await callTerylon($, 'story_get', { story: id })
   const now = await $.clock.now()
+
+  // THE ROW AND THE CARD DRAW ONE ANSWER (the owner's walk of 1.5.0, #35: the queue said "3/8 · Develop" and the card,
+  // seconds later, "2 of 8 · Plan"): work_in_flight is read again with the story, and the queue's running rows are
+  // drawn from that same answer.
+  await readFlight($, now)
+
   const inFlight = list(lastFlight.stories).find(item => number(item.id) === id) ?? {}
   const question = (await readSnapshot($)).questions.find(item => item.subject === `story/${id}`) ?? null
 
@@ -641,6 +745,29 @@ async function openStory($: EngineInterface, id: number): Promise<void> {
   if (view_.working !== null) {
     await $.ui.scroll({ to: { key: 'story-working' }, in: PANE, block: 'nearest' }).catch(() => undefined)
   }
+}
+
+// work_in_flight read again on its own: the running rows, the slots in use and the spend, from its answer. One that
+// does not answer leaves the last; the next poll says why.
+async function readFlight($: EngineInterface, now: number): Promise<void> {
+  const flight = await callTerylon($, 'work_in_flight')
+
+  if (flight.kind !== 'ok') {
+    return
+  }
+
+  lastFlight = flight.value
+
+  const running = runningItems(lastFlight, zoneOffset(now))
+
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({
+    ...EMPTY_SNAPSHOT,
+    ...current,
+    header: header(lastFlight, policy),
+    runningUsd: spend(lastFlight),
+    slotsUsed: running.length,
+    running,
+  }))
 }
 
 async function openQuestion($: EngineInterface, id: number): Promise<void> {
@@ -730,8 +857,12 @@ async function readGoalsFromTerylon($: EngineInterface): Promise<void> {
     return
   }
 
-  const items = goalItems(goalsAnswer.value, questions)
-  const plans = plansAnswer.kind === 'ok' ? planItems(plansAnswer.value, base) : []
+  // WHAT AN ACT JUST CHANGED, over what the two lists still answer (#35).
+  const now = await $.clock.now()
+  const goalsNow = { ...goalsAnswer.value, goals: list(goalsAnswer.value.goals).map(item => ({ ...item, state: settledState(`goal-${number(item.id) ?? 0}`, String(item.state ?? ''), now) })) }
+  const plansNow = plansAnswer.kind === 'ok' ? { ...plansAnswer.value, plans: list(plansAnswer.value.plans).map(item => ({ ...item, state: settledState(`plan-${number(item.id) ?? 0}`, String(item.state ?? ''), now) })) } : {}
+  const items = goalItems(goalsNow, questions)
+  const plans = plansAnswer.kind === 'ok' ? planItems(plansNow, base) : []
   const targets = targetsOf(goalsAnswer.value)
 
   await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, phase: 'ok', sentence: plansAnswer.kind === 'ok' ? null : why(plansAnswer), open: items.open, closed: items.closed, plans, targets }))
@@ -778,26 +909,30 @@ async function addGoal($: EngineInterface): Promise<void> {
 }
 
 async function openGoal($: EngineInterface, id: number): Promise<void> {
-  await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'loading', sentence: null, title: '', meta: '', stories: [], isOpen: false, running: [] }))
+  await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'loading', sentence: null, title: '', meta: '', stories: [], isOpen: false, openStories: [] }))
 
   const answered = await callTerylon($, 'goal_get', { goal: id })
 
   if (answered.kind !== 'ok') {
-    await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'error', sentence: why(answered), title: '', meta: '', stories: [], isOpen: false, running: [] }))
+    await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'error', sentence: why(answered), title: '', meta: '', stories: [], isOpen: false, openStories: [] }))
     return
   }
 
   const document = answered.value
+  const state = settledState(`goal-${id}`, String(document.state ?? ''), await $.clock.now())
 
   await update($, goal, (): PaneGoal | null => ({
     goal: id,
     phase: 'ok',
     sentence: null,
     title: text(document.title) ?? `#${id}`,
-    meta: COPY.goalMeta(`P${number(document.priority) ?? 2}`, COPY.stateText(String(document.state ?? ''))),
+    meta: COPY.goalMeta(`P${number(document.priority) ?? 2}`, COPY.stateText(state)),
     stories: list(document.storyList).map(item => ({ id: number(item.id) ?? 0, title: `#${number(item.id) ?? 0} ${text(item.title) ?? ''}`.trim(), state: COPY.stateText(String(item.state ?? '')) })),
-    isOpen: ['open', 'active'].includes(String(document.state ?? '')),
-    running: list(document.storyList).filter(item => ['dispatched', 'running'].includes(String(item.state ?? ''))).map(item => number(item.id) ?? 0),
+    isOpen: ['open', 'active'].includes(state),
+    // EVERY STORY OF IT THAT HAS NOT ENDED, which a drop abandons (Terylon S35, #388), by title; a run is stopped first.
+    openStories: list(document.storyList)
+      .filter(item => OPEN_STORY_STATES.includes(String(item.state ?? '')))
+      .map(item => ({ id: number(item.id) ?? 0, title: text(item.title) ?? '', isRunning: ['dispatched', 'running'].includes(String(item.state ?? '')) })),
   }))
 
   if ((await read($, goals)).phase !== 'ok') {
@@ -905,8 +1040,21 @@ async function takeAct($: EngineInterface, key: string, tool: string, subject: n
   try {
     await setAct($, key, current => ({ ...current, busy: tool, outcome: null }))
 
-    const answered = await callTerylon($, tool, args ?? actArguments(tool, subject, words))
+    const sent = args ?? actArguments(tool, subject, words)
+    const answered = await callTerylon($, tool, sent)
     const outcome = outcomeOf(tool, answered)
+
+    // ✓ IS DRAWN WITH WHAT IT CHANGED (#35): the subject's new state first, then the reads that catch up with it.
+    if (outcome.kind === 'done') {
+      const now = await $.clock.now()
+      settle(tool, subject, now)
+
+      if (tool === 'policy_save' && policy !== null) {
+        savedPolicy = { values: sent, until: now + SETTLE_MILLISECONDS }
+        policy = overlay(policy, sent)
+        await update($, policyForm, (): PanePolicyForm => EMPTY_POLICY_FORM)
+      }
+    }
 
     await setAct($, key, current => ({ ...current, busy: null, outcome, open: outcome.kind === 'done' || outcome.kind === 'pending' ? null : current.open, text: outcome.kind === 'done' ? '' : current.text }))
 
@@ -948,8 +1096,14 @@ function outcomeOf(tool: string, answered: TerylonAnswer): PaneActOutcome {
 
 // WHAT AN ACT CHANGED, read again: the queue always, then the screen the act was taken on.
 async function afterAct($: EngineInterface, tool: string, subject: number | null): Promise<void> {
+  // THE POLICY IS READ AGAIN, NEVER DROPPED FIRST (#35): with it dropped, a draw in between lost the fields' ranges and
+  // said "No change yet." on a form already saved.
   if (tool === 'policy_save') {
-    policy = null
+    const answered = await callTerylon($, 'policy_get')
+
+    if (answered.kind === 'ok') {
+      policy = policyAfterSave(answered.value, await $.clock.now())
+    }
   }
 
   await refresh($)
@@ -1010,8 +1164,12 @@ async function savePolicy($: EngineInterface): Promise<void> {
 
   await takeAct($, 'policy', 'policy_save', null, '', args)
 
+  // A SAVE TAKEN closed the form as it was answered; a refused one keeps what was typed, for Edit again.
   const outcome = actOf(await readActs($), 'policy').outcome
-  await update($, policyForm, (current: PanePolicyForm): PanePolicyForm => (outcome?.kind === 'done' ? EMPTY_POLICY_FORM : { ...current, isEditing: false }))
+
+  if (outcome?.kind !== 'done') {
+    await update($, policyForm, (current: PanePolicyForm): PanePolicyForm => ({ ...current, isEditing: false }))
+  }
 }
 
 async function openAdd($: EngineInterface, title: string): Promise<void> {
@@ -1033,19 +1191,23 @@ async function openAdd($: EngineInterface, title: string): Promise<void> {
 async function sendTask($: EngineInterface): Promise<void> {
   const form = await read($, add)
   const goalId = Number(form.goal)
+  // THE TITLE AS ONE LINE: "What to do" is a field of several rows (#35), and a title is one line wherever it is drawn.
+  const title = form.title.replace(/\s*\n\s*/g, ' ').trim()
 
-  if (form.title.trim() === '' || !Number.isInteger(goalId) || goalId < 1) {
+  if (title === '' || !Number.isInteger(goalId) || goalId < 1) {
     return
   }
 
   await update($, add, (current: PaneAdd): PaneAdd => ({ ...current, phase: 'sending' }))
 
   const after = Number(form.after)
+  // ONE CRITERION PER LINE where the field holds several (input-rows), by semicolons as in 1.1.2 either way; an empty
+  // field sends none, and the leader writes them.
+  const criteria = form.criteria.split(/[;\n]/).map(line => line.trim()).filter(line => line !== '')
   const task: Json = {
-    title: form.title.trim(),
-    brief: form.title.trim(),
-    // ONE CRITERION PER LINE where the field holds several (input-rows), by semicolons as in 1.1.2 either way.
-    criteria: form.criteria.split(/[;\n]/).map(line => line.trim()).filter(line => line !== ''),
+    title,
+    brief: title,
+    criteria,
     files: [],
     size: COPY.sizes.includes(form.size) ? form.size : 'M',
   }
@@ -1060,7 +1222,7 @@ async function sendTask($: EngineInterface): Promise<void> {
 
   await update($, add, (current: PaneAdd): PaneAdd => {
     if (answered.kind === 'ok' && answered.value.accepted === true) {
-      return { ...current, phase: 'added', sentence: text(answered.value.sentence), link: consoleLink(base, `plan&goal=${goalId}`) }
+      return { ...current, phase: 'added', sentence: text(answered.value.sentence), link: consoleLink(base, `plan&goal=${goalId}`), sent: { title, criteria } }
     }
 
     if (answered.kind === 'ok' && answered.value.accepted == null) {
@@ -1525,9 +1687,14 @@ export const register: Register = on => {
       const name = tool.replace(/^[a-z]+_/, '')
       const press = () => (isWaiting || state.busy !== null ? undefined : options.opens === true ? openAct($, key, tool) : takeAct($, key, tool, subject, options.words ?? state.text))
 
+      // A DANGER ACT IS PLAIN, ITS WORD IN error (the owner's walk of 1.5.0, #35): a Button with chrome drew its children
+      // in its own grey in Desktop 3.6556.2.0 (engine 2.1.308), while a plain one draws them in their colour, as each
+      // row's kind dot shows.
+      const isRed = options.isDanger === true && !isWaiting
+
       return (
-        <Button key={`act-${key}-${name}`} label={label} variant={options.isPrimary === true && !isWaiting && state.busy === null ? 'primary' : undefined} dimColor={isWaiting ? true : undefined} onPress={press}>
-          {options.isDanger === true && !isWaiting ? <Text color="error">{label}</Text> : label}
+        <Button key={`act-${key}-${name}`} label={label} plain={isRed ? true : undefined} variant={options.isPrimary === true && !isWaiting && state.busy === null ? 'primary' : undefined} dimColor={isWaiting ? true : undefined} onPress={press}>
+          {isRed ? <Text color="error">{label}</Text> : label}
         </Button>
       )
     }
@@ -1555,7 +1722,7 @@ export const register: Register = on => {
           )}
           {isLong && <Text key={`act-${key}-long`} color="error">{COPY.textTooLong(limit ?? 0, state.text.trim().length)}</Text>}
           <Box flexDirection="row" gap={1} flexWrap="wrap">
-            <Button key={`act-${key}-send`} label={sendLabel} variant={isDim || field.isDanger === true ? undefined : 'primary'} dimColor={isDim ? true : undefined} onPress={() => (isDim ? undefined : takeAct($, key, tool, subject, state.text))}>
+            <Button key={`act-${key}-send`} label={sendLabel} plain={field.isDanger === true && !isDim ? true : undefined} variant={isDim || field.isDanger === true ? undefined : 'primary'} dimColor={isDim ? true : undefined} onPress={() => (isDim ? undefined : takeAct($, key, tool, subject, state.text))}>
               {field.isDanger === true && !isDim ? <Text color="error">{sendLabel}</Text> : sendLabel}
             </Button>
             {field.hasCancel !== false && <Button key={`act-${key}-cancel`} label={COPY.actCancel} dimColor onPress={() => (state.busy === null ? setAct($, key, current => ({ ...current, open: null, text: '' })) : undefined)} />}
@@ -1667,8 +1834,8 @@ export const register: Register = on => {
 
     // THE ALLOW RULES' FIX, ONE DRAWING for a refused poll and an act Claude Code refused (S27): the steps, then the
     // rules the pane needs.
-    const rulesFix = () => [
-      steps(COPY.fixNotAllowed),
+    const rulesFix = (lines: readonly string[] = COPY.fixNotAllowed) => [
+      steps(lines),
       // THE ALLOW RULES AS CODE (S32): json, the pane's whole own list, no gate; selected and copied by hand.
       <Code key="allow-rules" source={allowRules()} language="json" />,
     ]
@@ -1743,7 +1910,8 @@ export const register: Register = on => {
       // THE RULES, ASKED FOR BY How to fix (S27): an act Claude Code refused needs the same rules as a refused poll.
       const rulesCard = current.connection === 'not-allowed' || !(await read($, rulesAsked)) ? null : cardOf('problem-rules', warned(COPY.notAllowedTitle, 'wait'), COPY.notAllowedHint, [
         <Text color="inactive">{COPY.notAllowedBody}</Text>,
-        ...rulesFix(),
+        // NO Try again ON THIS CARD (#35): its last step names the act's own button instead.
+        ...rulesFix(COPY.fixNotAllowedAct),
       ], 'wait')
       const alertCards = current.alertNotices.map(notice =>
         cardOf(`problem-alert-${notice.id}`, warned(notice.title), COPY.alertHint(notice.source, notice.when), [
@@ -1937,7 +2105,7 @@ export const register: Register = on => {
               </Text>
             </Box>
           </Box>
-          {cardOf('story-phases', COPY.phases, <Text color="subtle" size="footnote" tabular>{COPY.phasesHint(nowAt >= 0 ? nowAt + 1 : done, shownStory.phases.length)}</Text>, look.isGraphic
+          {cardOf('story-phases', COPY.phases, <Text color="subtle" size="footnote" tabular>{nowAt >= 0 || shownStory.hasStage ? COPY.phasesHint(nowAt >= 0 ? nowAt + 1 : done, shownStory.phases.length) : COPY.phasesNoStage(done, shownStory.phases.length)}</Text>, look.isGraphic
             ? [
                 // THE STEPPER (S32): the Svg says no word, the labels sit under it in Text; no stage, no node is now.
                 picture(elements, stepper(shownStory.phases, labels, { isStuck, tooltips, isCompact: look.isCompact }), { isInteractive: tooltips !== null }),
@@ -1992,6 +2160,8 @@ export const register: Register = on => {
                   ])}
             </Box>
           )}
+          {/* HELD (#35): an approved story story_get says is held, with its reason, as the queue's row says it. */}
+          {shownStory.heldReason !== null && shownStory.heldReason !== undefined && cardOf('story-held', COPY.heldTitle, null, [<Text color="inactive">{shownStory.heldReason}</Text>])}
           {working === null && shownStory.step !== null && cardOf('story-progress', COPY.progress, null, [
             <Text>{shownStory.step}</Text>,
             shownStory.fraction === null ? null : <Text color="suggestion">{bar(shownStory.fraction)}</Text>,
@@ -2085,12 +2255,15 @@ export const register: Register = on => {
             {shownStory.isVerified && shownStory.isList && actButton(storyKey, 'story_accept', screen.story, { isPrimary: true })}
             {shownStory.isVerified && actButton(storyKey, 'story_return', screen.story, { opens: true })}
             {shownStory.canStop && actButton(storyKey, 'story_stop', screen.story)}
+            {shownStory.canAbandon && actButton(storyKey, 'story_abandon', screen.story, { isDanger: true, opens: true })}
             <Button key="summarise" label={COPY.summariseInSession} onPress={() => postPrompt($, COPY.summarisePrompt(screen.story))} />
             {shownStory.goal !== null && <Button key="story-goal" label={COPY.goalOf(shownStory.goal)} dimColor onPress={() => go({ screen: 'goal', goal: shownStory.goal ?? 0 })} />}
             {shownStory.pullRequest !== null && <Link href={shownStory.pullRequest.url} label={shownStory.pullRequest.label} />}
             <Link href={consoleLink(base, `work&story=${shownStory.story}`)} label={COPY.storyInConsole} />
           </Box>
           {shownStory.isVerified && storyAct.open === 'story_return' && actField(storyKey, 'story_return', screen.story, { label: COPY.returnLabel, placeholder: COPY.returnPlaceholder })}
+          {shownStory.canAbandon && storyAct.open === 'story_abandon' && actField(storyKey, 'story_abandon', screen.story, { label: COPY.whyOptional, isDanger: true })}
+          {shownStory.canAbandon && storyAct.open === 'story_abandon' && <Text key="story-abandon-note" color="subtle" size="footnote">{COPY.abandonApprovedNote}</Text>}
           {shownStory.isVerified && storyAct.open === 'story_return' && storyAct.text.trim() === '' && (
             <Text key="act-return-needs" size="footnote"><Text color="warning">⚠</Text>{' '}<Text color="inactive">{COPY.returnNeedsNote}</Text></Text>
           )}
@@ -2221,6 +2394,9 @@ export const register: Register = on => {
           <Box flexDirection="column" gap={1}>
             <Text weight="semibold" color="success">{COPY.added}</Text>
             <Text>{form.sentence ?? ''}</Text>
+            {/* WHAT WAS HANDED OVER, word for word (#35): the story the leader writes from it is the leader's. */}
+            {form.sent !== null && form.sent !== undefined && <Text key="add-sent-title" color="inactive">{COPY.handedTitle(form.sent.title)}</Text>}
+            {form.sent !== null && form.sent !== undefined && <Text key="add-sent-criteria" color="inactive">{COPY.handedCriteria(form.sent.criteria)}</Text>}
             {form.link !== null && <Link href={form.link} label={COPY.planInConsole} />}
             <Text color="subtle" size="footnote">{COPY.addedNote}</Text>
             <Button key="add-next" label={COPY.nextTask} variant="primary" onPress={() => openAdd($, '')} />
@@ -2261,7 +2437,9 @@ export const register: Register = on => {
           </Box>
           <Text size="heading" weight="semibold">{COPY.newTask}</Text>
           {'Input' in elements && (
-            <elements.Input key="add-title" label={COPY.whatToDo} value={form.title} onInput={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, title: value }))} onSubmit={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, title: value }))} />
+            // "WHAT TO DO" IN THREE ROWS where Desktop has proven a multi-line field (the owner's walk of 1.5.0, #35: one line
+            // showed only a slice of a long task); its lines are sent as one.
+            <elements.Input key="add-title" label={COPY.whatToDo} value={form.title} rows={look.proofs.inputRows ? 3 : undefined} onInput={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, title: value }))} onSubmit={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, title: value }))} />
           )}
           {'Input' in elements && (
             // CRITERIA ONE PER LINE where Desktop has proven a multi-line field (input-rows), by semicolons otherwise.
@@ -2457,7 +2635,9 @@ export const register: Register = on => {
 
     // ONE PLAN: its chain, its stories in order, each opening the story; approval and rethinking are the console's.
     const planCard = (plan: (typeof goalsState.plans)[number]) => {
+      // ITS ORDER IS ITS STORIES' after (#35): an arrow only where a story waits for another, said by their titles.
       const chain = plan.stories.map(item => ({ index: item.index, after: item.after }))
+      const orderAlt = COPY.planOrderAlt(plan.stories.map(item => ({ title: item.title, after: item.after.map(place => plan.stories[place - 1]?.title ?? `#${place}`) })))
       const sizes = plan.stories.map(item => (item.estimate === null ? item.size : `${item.size} ~$${item.estimate}`)).join(' → ')
 
       const planKey = `plan-${plan.id}`
@@ -2467,7 +2647,7 @@ export const register: Register = on => {
           ? null
           : (
               <Box key={`plan-${plan.id}-chain`} flexDirection="row" gap={1} alignItems="center">
-                {look.isGraphic ? picture(elements, planChain(chain)) : <Text color="subtle">{plan.stories.map(item => String(item.index)).join(' → ')}</Text>}
+                {look.isGraphic ? picture(elements, planChain(chain, orderAlt)) : <Text color="subtle">{planOrder(chain)}</Text>}
                 <Text color="subtle" size="footnote" tabular>{sizes}</Text>
               </Box>
             ),
@@ -2555,7 +2735,7 @@ export const register: Register = on => {
           {shownGoal.phase === 'ok' && shownGoal.isOpen && goalAct.open !== 'goal_drop' && (
             <Box key="goal-actions" flexDirection="row" gap={1}>{actButton(goalKey, 'goal_drop', screen.goal, { isDanger: true, opens: true })}</Box>
           )}
-          {shownGoal.phase === 'ok' && goalAct.open === 'goal_drop' && cardOf(`act-${goalKey}-confirm`, <Text>{COPY.dropGoalWarning(plans.filter(plan => plan.isProposed).map(plan => plan.id), shownGoal.running)}</Text>, null, [
+          {shownGoal.phase === 'ok' && goalAct.open === 'goal_drop' && cardOf(`act-${goalKey}-confirm`, <Text>{COPY.dropGoalWarning(plans.filter(plan => plan.isProposed || plan.state === 'rethink').map(plan => plan.id), shownGoal.openStories ?? [])}</Text>, null, [
             actField(goalKey, 'goal_drop', screen.goal, { label: '', isDanger: true, hasText: false }),
           ], 'wait')}
           {actBusyNote(goalKey)}
@@ -2569,6 +2749,8 @@ export const register: Register = on => {
     // THE GOALS TAB: open goals by priority, the plans, and a new goal with its priority and target.
     if (screen.screen === 'goals') {
       const isClosedShown = shown.includes('goals-closed')
+      // A CLOSED GOAL'S PLANS LEAVE THE TAB (the owner's walk of 1.5.0, #35): they stay on the goal's own screen.
+      const openPlans = goalsState.plans.filter(plan => !goalsState.closed.some(item => item.id === plan.goal))
       const goalPickers = [
         'Select' in elements ? (
           <elements.Select key="goal-priority" label={COPY.priority} value={goalsState.priority} options={COPY.priorities} onSelect={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, priority: value }))} />
@@ -2603,8 +2785,8 @@ export const register: Register = on => {
               <Button key="goals-closed" plain dimColor label={isClosedShown ? COPY.hideClosed : COPY.closedGoals(goalsState.closed.length)} onPress={() => toggle($, 'goals-closed')} />
             ) : null,
           ])}
-          {goalsState.phase === 'ok' && goalsState.plans.length === 0 && cardOf('plans-empty', COPY.plans, null, [quiet(elements, COPY.noPlans)])}
-          {goalsState.plans.map(plan => planCard(plan))}
+          {goalsState.phase === 'ok' && openPlans.length === 0 && cardOf('plans-empty', COPY.plans, null, [quiet(elements, COPY.noPlans)])}
+          {openPlans.map(plan => planCard(plan))}
           {goalsState.sentence !== null && goalsState.phase === 'ok' && reason(goalsState.sentence)}
           {hasInput && 'Input' in elements && cardOf('goal-new', COPY.newGoal, null, [
             <elements.Input key="goal-draft" placeholder={COPY.newGoalPlaceholder} value={goalsState.draft} onInput={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, draft: value }))} onSubmit={() => addGoal($)} />,

@@ -144,7 +144,7 @@ const MUTATIONS = [
     {
         name: "the Status tab is missing a fix step for not-allowed",
         file: "hooks/register.tsx",
-        find: "      steps(COPY.fixNotAllowed),\n",
+        find: "      steps(lines),\n",
         replace: "",
     },
     {
@@ -448,6 +448,121 @@ const MUTATIONS = [
         file: "hooks/queue.ts",
         find: "  const timed = state === 'blocked'",
         replace: "  const timed = state === 'never'",
+    },
+    // Since the owner's walk of 1.5.0 (#35).
+    {
+        name: "a new task's title loses its first character",
+        file: "hooks/register.tsx",
+        find: "  const title = form.title.replace(/\\s*\\n\\s*/g, ' ').trim()\n",
+        replace: "  const title = form.title.replace(/\\s*\\n\\s*/g, ' ').trim().slice(1)\n",
+    },
+    {
+        name: "an empty Criteria is sent as the goal picker's label",
+        file: "hooks/register.tsx",
+        find: "  const criteria = form.criteria.split(/[;\\n]/).map(line => line.trim()).filter(line => line !== '')\n",
+        replace: "  const criteria = form.criteria.split(/[;\\n]/).map(line => line.trim()).filter(line => line !== '')\n  criteria.push(...(criteria.length === 0 ? [form.goals.find(choice => choice.value === form.goal)?.label ?? ''] : []))\n",
+    },
+    {
+        name: "a card acted on is drawn from the read that has not caught up",
+        file: "hooks/register.tsx",
+        find: "      settle(tool, subject, now)\n",
+        replace: "",
+    },
+    {
+        name: "the policy just saved is no longer laid over a policy_get that lags",
+        file: "hooks/register.tsx",
+        find: "  return overlay(answer, savedPolicy.values)\n",
+        replace: "  return answer\n",
+    },
+    {
+        name: "a danger act is drawn with chrome again, its word grey",
+        file: "hooks/register.tsx",
+        find: "plain={isRed ? true : undefined} ",
+        replace: "",
+    },
+    {
+        name: "the rules an act needs ask for a Try again the card does not have",
+        file: "hooks/register.tsx",
+        find: "...rulesFix(COPY.fixNotAllowedAct),",
+        replace: "...rulesFix(),",
+    },
+    {
+        name: "Drop goal… says nothing when it withdraws nothing",
+        file: "hooks/copy.ts",
+        find: "        ? 'No plan of it waits.'\n",
+        replace: "        ? ''\n",
+    },
+    {
+        name: "an approved story waits for a slot while one is free",
+        file: "hooks/queue.ts",
+        find: ": hasFreeSlot ? COPY.notStarted : COPY.waitsForSlot",
+        replace: ": COPY.waitsForSlot",
+    },
+    {
+        name: "an approved story offers no act again",
+        file: "hooks/queue.ts",
+        find: "    canAbandon: state === 'approved',\n",
+        replace: "    canAbandon: false,\n",
+    },
+    {
+        name: "a closed goal's plans stay on the Goals tab",
+        file: "hooks/register.tsx",
+        find: "const openPlans = goalsState.plans.filter(plan => !goalsState.closed.some(item => item.id === plan.goal))",
+        replace: "const openPlans = goalsState.plans",
+    },
+    {
+        name: "a plan is drawn as one chain again",
+        file: "hooks/queue.ts",
+        find: "        const after = afterPlaces(story, ids)\n",
+        replace: "        const after = index === 0 ? [] : [index]\n",
+    },
+    {
+        name: "a plan's after names a story number again",
+        file: "hooks/queue.ts",
+        find: "after.map(place => titles[place - 1] ?? `#${place}`)",
+        replace: "after.map(place => String(ids[place - 1]))",
+    },
+    {
+        name: "a story opened draws the stage of the last poll",
+        file: "hooks/register.tsx",
+        find: "  await readFlight($, now)\n",
+        replace: "",
+    },
+    {
+        name: "Now working is drawn only with an agent and a stage again",
+        file: "hooks/queue.ts",
+        find: "  if (!['running', 'dispatched'].includes(state)) {\n    return null\n  }\n\n  const agent",
+        replace: "  if (!['running', 'dispatched'].includes(state) || progress?.agent == null || text(progress?.stage) === null) {\n    return null\n  }\n\n  const agent",
+    },
+    {
+        name: "a progress with no stage hides the stage story_get reports",
+        file: "hooks/queue.ts",
+        find: "  const progress = progressOf(inFlight, document)\n",
+        replace: "  const progress = (inFlight.progress ?? document.progress ?? null) as Json | null\n",
+    },
+    {
+        name: "the hour a story stood stopped is counted as running",
+        file: "hooks/queue.ts",
+        find: "duration(now - startedAt - blockedSpan(list(document.timeline), startedAt, now))",
+        replace: "duration(now - startedAt)",
+    },
+    {
+        name: "the New task's What to do is one line again",
+        file: "hooks/register.tsx",
+        find: "value={form.title} rows={look.proofs.inputRows ? 3 : undefined} ",
+        replace: "value={form.title} ",
+    },
+    {
+        name: "an approved story's held reason is not read from story_get",
+        file: "hooks/register.tsx",
+        find: "    read_.push(reason === null ? story : { ...story, blockedReason: reason })\n",
+        replace: "    read_.push(story)\n",
+    },
+    {
+        name: "Drop goal… names none of the stories it abandons",
+        file: "hooks/register.tsx",
+        find: "const OPEN_STORY_STATES: readonly string[] = ['approved', 'dispatched', 'running', 'blocked', 'pr-open', 'verifying', 'verified']",
+        replace: "const OPEN_STORY_STATES: readonly string[] = []",
     },
 ];
 
