@@ -614,6 +614,12 @@ const MUTATIONS = [
         replace: "        plan.stories.length === 0\n",
     },
     {
+        name: "the unreachable fix no longer says to reconnect after a network outage",
+        file: "hooks/copy.ts",
+        find: "    'After a network outage: /mcp → terylon → Reconnect, or restart Claude Desktop.',\n",
+        replace: "",
+    },
+    {
         name: "the sizes stand beside the plan's chain again",
         file: "hooks/register.tsx",
         find: "                {look.isGraphic ? picture(elements, planChain(chain, orderAlt)) : <Text color=\"subtle\">{planOrder(chain)}</Text>}\n",

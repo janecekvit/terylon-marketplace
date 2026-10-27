@@ -66,7 +66,14 @@ export const COPY = {
   fixNoServer: ['Install the plugin terylon-os: /plugin install terylon-os@terylon', 'Check that its server is connected: claude mcp list', 'Press Try again.'],
   fixRefused: ['Sign this PC into the tailnet with your own account.', 'Press Try again.'],
   fixError: ['Open Health in the console to see why.', 'Press Try again.'],
-  fixUnreachable: (url: string) => ['Check the tailnet: tailscale status', `Check TERYLON_URL: ${url === '' ? '(not set)' : url}`, 'The pane retries every minute; Try again does it now.'],
+  // AFTER A NETWORK OUTAGE a running session does not reconnect the plugin's server by itself (Terylon S40, #402), until
+  // Terylon S42 (#404) makes /mcp stateless.
+  fixUnreachable: (url: string) => [
+    'Check the tailnet: tailscale status',
+    `Check TERYLON_URL: ${url === '' ? '(not set)' : url}`,
+    'After a network outage: /mcp → terylon → Reconnect, or restart Claude Desktop.',
+    'The pane retries every minute; Try again does it now.',
+  ],
   pausedTitle: 'The leader is paused',
   fixPaused: ['Press Resume, here or on the queue: the leader continues from its log.'],
   alertHint: (source: string, time: string) => `${source} · ${time}`,
@@ -302,11 +309,12 @@ export const COPY = {
     `The leader is paused${since === null ? '' : ` since ${since}`}${reason === null ? '' : ` (${reason})`}`,
   metrics: 'Last 30 days',
   metricsHint: 'metrics',
-  // ONE STORY, ONE OPEN PR: the operator's walk of 1.1.1 read "1 stories" on the Status tab.
+  // ONE STORY, ONE PR OPENED: the operator's walk of 1.1.1 read "1 stories" on the Status tab. The number is the PRs
+  // opened over the 30 days, not the PRs open now (Terylon S40, #402).
   metricStories: (count: number, hostProof: number | null) => `${count === 1 ? 'story' : 'stories'}${hostProof === null || hostProof === 0 ? '' : ` (+${hostProof} host proof)`}`,
   metricCost: 'per story',
   metricMerged: 'merged',
-  metricOpened: (count: number) => (count === 1 ? 'open PR' : 'open PRs'),
+  metricOpened: (count: number) => (count === 1 ? 'PR opened' : 'PRs opened'),
   loadTimedOut: (seconds: number) => `Terylon did not answer within ${seconds} s. Press the tab again to retry.`,
   bellInConsole: 'Bell in the console ↗',
   bellNote: 'Mark handled is notice_handle, which decides nothing about work. Pause and Resume are on the queue and the Status tab.',

@@ -28,12 +28,12 @@ test('well: ok, the slots and the runs in them, the cost today and over 30 days,
     expect(await ui.find({ type: 'Text', text: exact('2 of 4 running') })).toBeDefined()
     expect((await ui.find({ key: 'status-story-333' }))?.text).toMatch(/^\s*(?:●\s+)?running\s+#333 Direct dispatch\s+5\/8 · \$2\.10$/)
     expect(await ui.find({ type: 'Text', text: exact('$5.50 of the $20 daily limit today') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('43 stories · $1.10 per story · 0 merged · 1 open PR') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('43 stories · $1.10 per story · 0 merged · 1 PR opened') })).toBeDefined()
 
     expect(await ui.find({ type: 'Text', text: exact('Problems · 0') })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: exact('Nothing wrong.') }))?.props.color).toBe('subtle')
 
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.7.1') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.7.2') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('TERYLON_URL https://terylon.example.ts.net') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('server plugin:terylon-os:terylon') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Every failure is in claude --debug under terylon-pane:') })).toBeDefined()
@@ -92,6 +92,8 @@ test('not answering: since when, the last answer, the reason, and the tailnet an
     expect(await ui.find({ type: 'Text', text: /^Reason: .*ETIMEDOUT/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('1. Check the tailnet: tailscale status') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('2. Check TERYLON_URL: https://terylon.example.ts.net') })).toBeDefined()
+    // AFTER A NETWORK OUTAGE (Terylon S40, #402): the session's server is reconnected by hand until /mcp is stateless.
+    expect(await ui.find({ type: 'Text', text: exact('3. After a network outage: /mcp → terylon → Reconnect, or restart Claude Desktop.') })).toBeDefined()
     await ui.unmount()
   }
 })

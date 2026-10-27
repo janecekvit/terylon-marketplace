@@ -292,7 +292,7 @@ test('the bell tab reads the notices, the leader and the metrics; a notice is ha
   expect(await ui.find({ type: 'Text', text: exact('✓ The leader runs') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^✓ The backup ran/ })).toBeDefined()
   // FOUR NUMBERS, LARGE (S32), and no 30-day chart: metrics reports no per-day series.
-  for (const [value, label] of [['43', 'stories'], ['$1.10', 'per story'], ['0', 'merged'], ['1', 'open PR']]) {
+  for (const [value, label] of [['43', 'stories'], ['$1.10', 'per story'], ['0', 'merged'], ['1', 'PR opened']]) {
     const number = await ui.find({ type: 'Text', text: exact(value ?? '') })
     expect(number?.props.size).toBe('title')
     expect(number?.props.tabular).toBe(true)
