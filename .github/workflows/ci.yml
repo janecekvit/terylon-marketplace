@@ -135,3 +135,7 @@ jobs:
       # Each planted mutation must turn the mod's tests red; with claude on PATH none of them skips.
       - name: node --test tests/terylon-pane/mutations.test.js
         run: node --test tests/terylon-pane/mutations.test.js
+
+      # The runner is UTC, and plugin test runs in UTC on Linux whatever TZ says: each zone is planted in a copy (#39).
+      - name: node --test tests/terylon-pane/zones.test.js
+        run: node --test tests/terylon-pane/zones.test.js

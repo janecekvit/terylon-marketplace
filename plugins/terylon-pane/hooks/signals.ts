@@ -159,7 +159,7 @@ function hours(milliseconds: number): string {
 export function catchUpSummary(input: { awayMs: number; events: Json[]; briefing: Json; flight: Json; policy: Json | null }): { prompt: string; waitingCount: number; band: string } {
   const ended = candidatesFromEvents(input.events).filter(candidate => candidate.kind === 'merged' || candidate.kind === 'accepted' || candidate.kind === 'abandoned')
   const done = ended.map(candidate => `#${candidate.story} ${candidate.kind === 'merged' ? 'mergnutá' : candidate.kind === 'accepted' ? 'přijatá' : 'opuštěná'}`)
-  const verified = list(input.briefing.storiesVerified).map(story => `#${number(story.id) ?? 0} ověřená (merge)`)
+  const verified = list(input.briefing.storiesVerified).map(story => `#${number(story.id) ?? 0} ověřená (${text(story.target) === 'list' ? 'accept' : 'merge'})`)
   const plans = list(input.briefing.plansWaiting).map(plan => `plán ${number(plan.id) ?? 0}, ${number(plan.stories) ?? 0} story (schválení)`)
   const questions = list(input.briefing.questionsOpen).map(question => `otázka ${number(question.id) ?? 0}`)
   const waiting = [...verified, ...plans, ...questions]

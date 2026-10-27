@@ -146,6 +146,42 @@ test("teeth: a clean text passes", () =>
     assert.deepEqual(gateProblemsIn(clean), []);
 });
 
+// An act Terylon has not decided within 10 s answers accepted: null; the write is not sent again, and leader_answer with
+// its commandId reads the decision later (Terylon S34's server instructions).
+const PENDING_PATTERN = /`accepted: null`/;
+const NOT_AGAIN_PATTERN = /rather than send|not send the (write|task) again/i;
+const READ_LATER_PATTERN = /`leader_answer` with (it|the `commandId`)/;
+
+function pendingProblemsIn(text)
+{
+    if (!PENDING_PATTERN.test(text))
+    {
+        return [];
+    }
+
+    return [
+        NOT_AGAIN_PATTERN.test(text) ? null : "says accepted: null without saying the write is not sent again",
+        READ_LATER_PATTERN.test(text) ? null : "says accepted: null without leader_answer and the commandId",
+    ].filter(problem => problem !== null);
+}
+
+test("every text that says accepted: null says not to send the write again, and to read the decision with leader_answer", () =>
+{
+    for (const skill of Object.values(PROMPT_TO_SKILL))
+    {
+        assert.deepEqual(pendingProblemsIn(readSkill(skill)), [], skill);
+    }
+
+    assert.deepEqual(pendingProblemsIn(fs.readFileSync(path.join(PLUGIN_ROOT, "README.md"), "utf8")), [], "README.md");
+});
+
+test("teeth: accepted: null with only \"do not retry\" is caught", () =>
+{
+    const planted = "`accepted: null` means the leader has not decided within 10 s: say so and do not retry.";
+
+    assert.deepEqual(pendingProblemsIn(planted), ["says accepted: null without saying the write is not sent again", "says accepted: null without leader_answer and the commandId"]);
+});
+
 test("the published plugin names no host, tailnet or organisation", () =>
 {
     const files = [];

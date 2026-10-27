@@ -200,7 +200,7 @@ The marketplace is built with itself: its stories, builds, reviews and test-plan
 |---|---|---|
 | Unit suites | `node --test "**/*.test.js"`: the forge-port contract and fixture tests, the harness's ref checks, the hook and measurement scripts, the Terylon pane's command and version checks. The pane's mutation suite skips in this job, which installs no `claude` CLI, and runs in the pane's own job instead | nothing |
 | End-to-end install stage | `node tests/e2e/run.js --stages install`: installs the marketplace from the commit under test as a consumer does, and checks every plugin, skill, agent, hook and MCP server loads | nothing: no login, no token, no model call |
-| terylon-pane mod | `claude plugin validate` and `claude plugin test` on `plugins/terylon-pane`, then `node --test tests/terylon-pane/mutations.test.js`: the mod's own tests against the engine, and each planted mutation turning them red | nothing: no login, no session, every service stubbed |
+| terylon-pane mod | `claude plugin validate` and `claude plugin test` on `plugins/terylon-pane`, then `node --test tests/terylon-pane/mutations.test.js` and `zones.test.js`: the mod's own tests against the engine, each planted mutation turning them red, and the tests green with a time zone planted (the runner is UTC) | nothing: no login, no session, every service stubbed |
 
 The two jobs that need `claude` install the same pinned Claude Code, from the lockfile in [`.github/claude-code/`](./.github/claude-code/package.json) with `npm ci`, every package checked against its integrity hash; Dependabot proposes a newer one 14 days after its release.
 

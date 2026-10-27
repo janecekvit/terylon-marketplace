@@ -89,6 +89,8 @@ export const COPY = {
   // The queue.
   waiting: 'Waiting for you',
   waitingHint: 'decide here · merge in the console',
+  waitingHintAccept: 'decide here · accept on its card',
+  waitingHintBoth: 'decide here · merge in the console, accept on its card',
   running: 'Running',
   queued: 'Queued',
   doneToday: 'Done today',
@@ -100,6 +102,7 @@ export const COPY = {
   stale: ' (stale)',
   kindQuestion: 'question',
   kindMerge: 'merge',
+  kindAccept: 'accept',
   kindPlan: 'plan',
   kindBlocked: 'blocked',
   kindQueued: 'queued',
@@ -129,6 +132,7 @@ export const COPY = {
   // and /mcp names no reason, so the pane says only what it can see.
   notStarted: 'not started, though a slot is free',
   heldTitle: 'Held',
+  verifiedAccept: 'verified · waiting for your acceptance',
   mergedAt: (time: string, cost: string) => `${time} · $${cost}`,
   answer: 'Answer',
   answerInConsole: 'Answer in the console ↗',
@@ -317,6 +321,13 @@ export const COPY = {
   criteriaLabel: 'Criteria (optional)',
   criteriaPlaceholder: 'Separate them with semicolons, or the leader writes them',
   criteriaPlaceholderRows: 'One per line, or the leader writes them',
+  // A task over a repository declares the files it will change (#39); Terylon refuses it without 1 to 30.
+  filesLabel: 'Files (1 to 30, one per line)',
+  filesPlaceholder: 'The paths it will change, separated by semicolons',
+  filesPlaceholderRows: 'The paths it will change, one per line',
+  filesNone: 'A task over a repository declares 1 to 30 files it will change, one per line.',
+  filesBlank: (line: number) => `Files: line ${line} is blank. Write one path per line, with no blank line between.`,
+  filesTooMany: (count: number) => `Files: ${count} paths; a task declares at most 30.`,
   size: 'Size',
   sizes: ['M', 'L', 'XL'] as readonly string[],
   goal: 'Goal',
@@ -331,6 +342,7 @@ export const COPY = {
   // differ, and this says which side changed it.
   handedTitle: (title: string) => `Title: ${title}`,
   handedCriteria: (criteria: readonly string[]) => (criteria.length === 0 ? 'Criteria: none sent; the leader writes them.' : `Criteria: ${criteria.join(' · ')}`),
+  handedFiles: (files: readonly string[]) => `Files: ${files.join(' · ')}`,
   addedNote: 'The plan it becomes waits for you under “Waiting for you”.',
   nextTask: 'Next task',
   notAdded: 'Not handed over',
@@ -473,6 +485,8 @@ export const COPY = {
   abandonApprovedNote: 'It has not started; abandoned, it never will.',
   mergeNote: (commit: string | null) => `Merge is the one gate: your passkey confirms it in the console${commit === null ? '' : `, at exactly commit ${commit}`}. The pane never merges.`,
   acceptNote: 'A list story has no merge: Accept ends it as done.',
+  acceptPhase: 'Accept — your act',
+  acceptShort: 'Accept',
   stopNote: 'Stop cancels the run; the story waits, blocked as stopped, until you unblock, return or abandon it.',
   pauseNote: 'Nothing new is admitted, issued, judged or written until you resume. Runs already going keep going.',
   // WHAT A DROP WITHDRAWS AND ABANDONS, from the goal's own data, none included (the owner's walk of 1.5.0, #35): since

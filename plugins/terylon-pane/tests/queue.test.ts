@@ -92,7 +92,8 @@ test('the counts carry their colours in tabular digits: waiting warning, running
 })
 
 test('the house style: theme keys only, round cards, a card that waits stroked and never filled, and the kinds as chips on the desktop', async ($, on) => {
-  const terylon = world(on)
+  // LATE ON THE LOCAL DAY of the merge (#39): "done today" is the host's day, and the merged chip is drawn in every zone.
+  const terylon = world(on, { now: lateOnTheLocalDayOf('2026-10-11T12:20:00Z') })
   await $.session.start(SESSION)
   await terylon.clock.settle()
 

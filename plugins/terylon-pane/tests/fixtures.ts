@@ -91,12 +91,22 @@ export const STORIES = {
   ],
 }
 
+// The world's clock when a test names none: 22:00 UTC, which is already the next day from UTC+1 east.
+export const WORLD_NOW = Date.parse('2026-10-11T22:00:00Z')
+
+// The host's offset from UTC at `moment`, in minutes, read as the pane reads it (zoneOffset in hooks/register.tsx). A
+// test that computes its expectation through this holds in every time zone (#39: two tests failed in Prague time).
+// `claude plugin test` ignores TZ, so tests/terylon-pane/zones.test.js plants a zone here and in the pane alike.
+export function hostZoneOffset(moment: number): number {
+  return new Date(moment).getTimezoneOffset()
+}
+
 // A clock at 23:00 on the local day of `at`, wherever the test runs. The pane reads "today" in the host's own
 // time zone, and the world's clock at 22:00 UTC is already tomorrow from UTC+2 east: a Prague host dropped
 // the story merged at 12:20 UTC out of "done today", while a UTC runner kept it.
 export function lateOnTheLocalDayOf(at: string): number {
   const moment = Date.parse(at)
-  const offsetMilliseconds = new Date(moment).getTimezoneOffset() * 60000
+  const offsetMilliseconds = hostZoneOffset(moment) * 60000
   const localDay = new Date(moment - offsetMilliseconds).toISOString().slice(0, 10)
 
   return Date.parse(`${localDay}T23:00:00Z`) + offsetMilliseconds
@@ -229,7 +239,7 @@ export const STORY_327 = {
 // The world beneath the plugin: the clock, the store, the environment, and Terylon at /mcp.
 // `env` adds to the environment: TERYLON_PANE_PROOFS turns on a drawing Desktop has to prove first (S32).
 export function world(on: On, options: { store?: Record<string, unknown>; now?: number; env?: Record<string, string> } = {}): World & { clock: ReturnType<typeof mock.clock> } {
-  const clock = mock.clock(on, { now: options.now ?? Date.parse('2026-10-11T22:00:00Z') })
+  const clock = mock.clock(on, { now: options.now ?? WORLD_NOW })
   mock.store(on, options.store ?? {})
   mock.env(on, { TERYLON_URL: BASE, ...(options.env ?? {}) })
   const state: World = {

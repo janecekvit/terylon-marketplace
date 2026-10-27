@@ -106,6 +106,45 @@ export function when(iso: unknown, now: number, zoneOffsetMinutes = 0): string {
   return `${local.getUTCDate()}. ${local.getUTCMonth() + 1}.`
 }
 
+// THE FILES A TASK OVER A REPOSITORY DECLARES (#39): Terylon takes 1 to 30, and refuses the task otherwise. One path per
+// line, or per semicolon where the field is one line; the field's own leading and trailing blank lines are forgiven,
+// a blank line between two paths is not.
+export const FILES_MOST = 30
+
+export function filesOf(field: string): { files: string[]; problem: string | null } {
+  const whole = field.trim()
+
+  if (whole === '') {
+    return { files: [], problem: COPY.filesNone }
+  }
+
+  const files = whole.split(/[;\n]/).map(line => line.trim())
+  const blank = files.indexOf('')
+
+  if (blank >= 0) {
+    return { files: [], problem: COPY.filesBlank(blank + 1) }
+  }
+
+  if (files.length > FILES_MOST) {
+    return { files: [], problem: COPY.filesTooMany(files.length) }
+  }
+
+  return { files, problem: null }
+}
+
+// A STORY IN TERYLON'S OWN LIST has no pull request to merge: it is accepted instead (S27). Its target says so, and a
+// verified story with no pull request is one too.
+export function isListStory(document: Json): boolean {
+  return text(document.target) === 'list' || ((document.pullRequest ?? null) === null && document.state === 'verified')
+}
+
+// A goal's target over a repository, `<forge>:<org>/<project>/<repo>`, rather than Terylon's own list.
+export function isRepositoryTarget(target: unknown): boolean {
+  const named = text(target)
+
+  return named !== null && named !== 'list'
+}
+
 export function consoleLink(base: string, query: string): string {
   return `${base}/?cockpit=${query}`
 }
@@ -162,6 +201,20 @@ export function waitingItems(briefing: Json, base: string): PaneWaitingItem[] {
   for (const story of list(briefing.storiesVerified)) {
     const id = number(story.id) ?? 0
     const environment = story.environment as Json | null | undefined
+
+    // A STORY IN TERYLON'S OWN LIST has no merge (#39): it waits for story_accept, on its card.
+    if (text(story.target) === 'list') {
+      items.push({
+        kind: 'accept',
+        key: `accept-${id}`,
+        target: id,
+        title: `#${id} ${text(story.title) ?? ''}`.trim(),
+        detail: COPY.verifiedAccept,
+        console: consoleLink(base, `work&story=${id}`),
+      })
+      continue
+    }
+
     items.push({
       kind: 'merge',
       key: `merge-${id}`,
@@ -342,11 +395,13 @@ export function phasesOf(document: Json, stage: string | null): PanePhase[] {
     verify: verdict === null ? '—' : `${text(verdict.environment) ?? ''} · ${verdict.green === true ? '✓' : '✗'}`,
     merge: state === 'verified' ? COPY.waitsOnYou : '—',
   }
+  // THE LAST PHASE OF A LIST STORY is its acceptance, never a merge (#39).
+  const isList = isListStory(document)
 
   return [
     { label: COPY.phaseAdmitted, role: null, detail: '—', status: isOver || at >= 0 || ADMITTED_STATES.has(state) ? 'done' : 'next' },
     ...STAGES.map((name, index): PanePhase => ({
-      label: COPY.stageLabel(name),
+      label: name === 'merge' && isList ? COPY.acceptPhase : COPY.stageLabel(name),
       role: COPY.stageRole(name),
       detail: details[name],
       status: status(index),
@@ -521,8 +576,7 @@ export function storyView(id: number, document: Json, inFlight: Json, question: 
     isRunning,
     isVerified: state === 'verified',
     isBlocked: state === 'blocked',
-    // A STORY IN TERYLON'S OWN LIST has no pull request to merge: it is accepted instead (S27).
-    isList: text(document.target ?? inFlight.target) === 'list' || (pullRequest === null && state === 'verified'),
+    isList: isListStory({ ...document, state, target: document.target ?? inFlight.target }),
     canStop: state === 'dispatched' || state === 'running',
     // AN APPROVED STORY THAT HAS NOT STARTED can be ended (the owner's walk of 1.5.0, #35: a story the leader could not
     // brief offered no act at all). Terylon answers whether it takes it.
