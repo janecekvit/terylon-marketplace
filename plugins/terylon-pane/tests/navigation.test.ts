@@ -8,6 +8,11 @@ import { BRIEFING, GOALS, GOAL_QUESTION, NOTICES, PANE_PROPS, SESSION, WORLD_NOW
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
+// A text matched literally inside a pattern: every character a pattern gives a meaning is escaped.
+function escapeRegExp(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 for (const surface of ['desktop', 'terminal'] as const) {
   test(`${surface}: a running story opens whole, its goal opens from it, and ‹ walks back the same way`, async ($, on) => {
     const terylon = world(on)
@@ -277,7 +282,7 @@ test('the bell tab reads the notices, the leader and the metrics; a notice is ha
   const raised = when(NOTICES.notices.find(notice => notice.id === 117)?.raisedAt, WORLD_NOW, hostZoneOffset(WORLD_NOW))
   expect(raised).toBe(hostZoneOffset(WORLD_NOW) === 0 ? '07:26' : raised)
   expect(raised).toMatch(/^(\d\d:\d\d|\d{1,2}\. \d{1,2}\.)$/)
-  expect((await ui.find({ key: 'notice-117' }))?.text).toMatch(new RegExp(`^\\s*(?:●\\s+)?diun\\s+A newer docker\\.io/amir20/dozzle:latest is published\\s+${raised.replace(/\./g, '\\.')} ▸$`))
+  expect((await ui.find({ key: 'notice-117' }))?.text).toMatch(new RegExp(`^\\s*(?:●\\s+)?diun\\s+A newer docker\\.io/amir20/dozzle:latest is published\\s+${escapeRegExp(raised)} ▸$`))
   // THE SOURCE AS A CHIP (S32): a fault of the machine in error, everything else inactive.
   expect((await chipOf(ui, 'notice-117'))?.dot).toBe('inactive')
   expect(await ui.find({ type: 'Text', text: exact('Nothing was pulled: update the pin when you choose.') })).toBeUndefined()
