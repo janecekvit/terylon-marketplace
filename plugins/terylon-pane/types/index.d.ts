@@ -134,6 +134,11 @@ export type PaneStory = {
   isBlocked: boolean
   isList: boolean
   canStop: boolean
+  // An approved story that has not started can be abandoned (#35); whether Terylon reported a stage for it.
+  canAbandon: boolean
+  hasStage: boolean
+  // Why an approved story has not started, as story_get says it (`blockedReason`): held after another (#35).
+  heldReason: string | null
   // The commit a merge would take: the verdict's, else the pull request's head.
   commit: string | null
 }
@@ -151,6 +156,8 @@ export type PaneAdd = {
   stories: PaneChoice[]
   sentence: string | null
   link: string | null
+  // What tasks_add was sent, word for word, said under ✓ Handed over (#35).
+  sent: { title: string; criteria: string[] } | null
 }
 
 export type PaneAnswer = {
@@ -163,6 +170,7 @@ export type PaneAnswer = {
 
 export type PaneGoalItem = { id: number; title: string; priority: string; state: string; questions: number; stories: string }
 
+// `after`: the places in the plan, 1-based, of the stories this one waits for (#35).
 export type PanePlanStory = { id: number; index: number; title: string; detail: string; criteria: string[]; after: number[]; size: string; estimate: string | null }
 
 export type PanePlan = {
@@ -199,10 +207,10 @@ export type PaneGoal = {
   title: string
   meta: string
   stories: { id: number; title: string; state: string }[]
-  // An open or active goal can be dropped (S27); a done or dropped one cannot. Its stories with a run going keep
-  // going when it is dropped, and the drop says so.
+  // An open or active goal can be dropped (S27); a done or dropped one cannot. A drop abandons every story of it that
+  // has not ended, stopping a run first (Terylon S35, #388), and the drop says which, by title (#35).
   isOpen: boolean
-  running: number[]
+  openStories: { id: number; title: string; isRunning: boolean }[]
 }
 
 export type PaneNotice = { id: number; source: string; title: string; body: string; when: string; link: string | null }

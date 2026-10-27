@@ -251,7 +251,9 @@ export function runningItems(flight: Json, zoneOffsetMinutes = 0): PaneRunningIt
   })
 }
 
-export function queuedItems(stories: Json[], inFlight: ReadonlySet<number>): PaneQueuedItem[] {
+// A story waiting for a slot says so only while none is free: with one free and nothing before it, it has not
+// started for a reason /mcp does not name (the owner's walk of 1.5.0, #35: a brief the leader could not write).
+export function queuedItems(stories: Json[], inFlight: ReadonlySet<number>, hasFreeSlot = false): PaneQueuedItem[] {
   return stories
     .filter(story => QUEUED_STATES.has(String(story.state)) && !inFlight.has(number(story.id) ?? -1))
     .map(story => {
@@ -261,7 +263,7 @@ export function queuedItems(stories: Json[], inFlight: ReadonlySet<number>): Pan
         ? COPY.held(held)
         : afterIds.length > 0
           ? COPY.after(afterIds.map(id => `#${id}`).join(', '))
-          : COPY.waitsForSlot
+          : hasFreeSlot ? COPY.notStarted : COPY.waitsForSlot
 
       return { story: number(story.id) ?? 0, title: `#${number(story.id) ?? 0} ${text(story.title) ?? ''}`.trim(), detail, isHeld: held !== null }
     })
@@ -368,25 +370,26 @@ export function tokensText(tokens: number | null): string | null {
   return count === null ? null : COPY.tokens(count)
 }
 
-// Who works in the run now, at which stage, on which step, and what it has spent: read from progress, while a run goes.
+// Who works in the run now, at which stage, on which step, and what it has spent: read from progress, WHILE A RUN GOES,
+// whatever progress names (the owner's walk of 1.5.0, #35: one running story showed Now working, the other did not).
+// An agent or a stage progress does not name is said as not reported, never worked out.
 function workingOf(progress: Json | null, state: string, spent: { usd: number; budget: number | null }, hours: string | null): PaneWorking | null {
-  const agent = (progress?.agent ?? null) as Json | null
-  const stage = text(progress?.stage)
-
-  if (agent === null || stage === null || !['running', 'dispatched'].includes(state)) {
+  if (!['running', 'dispatched'].includes(state)) {
     return null
   }
 
+  const agent = (progress?.agent ?? null) as Json | null
+  const stage = text(progress?.stage)
   const step = number(progress?.step)
   const steps = number(progress?.steps)
-  const name = text(agent.name) ?? 'main'
-  const others = (number(agent.running) ?? 0) - 1
+  const name = agent === null ? null : text(agent.name) ?? 'main'
+  const others = (number(agent?.running) ?? 0) - 1
   const cost = COPY.costOf(spent.usd.toFixed(2), spent.budget === null ? null : spent.budget.toFixed(0))
   const tokens = tokenCount(number(progress?.tokens))
 
   return {
-    agent: `${name === 'main' ? COPY.mainAgent : name}${others > 0 ? ` +${others}` : ''}`,
-    stage: COPY.stageLabel(stage),
+    agent: name === null ? COPY.noAgent : `${name === 'main' ? COPY.mainAgent : name}${others > 0 ? ` +${others}` : ''}`,
+    stage: stage === null ? COPY.noStage : COPY.stageLabel(stage),
     step: step !== null && steps !== null ? COPY.step(step, steps, text(progress?.current)) : text(progress?.current) ?? COPY.noStep,
     fraction: step !== null && steps !== null && steps > 0 ? step / steps : null,
     spend: [cost, tokensText(number(progress?.tokens)), hours === null ? null : COPY.sinceStart(hours)].filter(part => part !== null).join(' · '),
@@ -407,14 +410,56 @@ function duration(milliseconds: number): string {
   return `${Math.floor(span / 3600000)} h ${Math.floor((span % 3600000) / 60000)} min`
 }
 
+// A story's progress, field by field: work_in_flight's where it names a value, story_get's where it does not. A
+// progress whose stage is null must not hide the stage story_get reports (the owner's walk of 1.5.0, #35: a stopped
+// story fell back to "1 of 8").
+export function progressOf(inFlight: Json, document: Json): Json | null {
+  const flight = (inFlight.progress ?? null) as Json | null
+  const own = (document.progress ?? null) as Json | null
+
+  if (flight === null || own === null) {
+    return flight ?? own
+  }
+
+  return Object.fromEntries([...new Set([...Object.keys(own), ...Object.keys(flight)])].map(key => [key, flight[key] ?? own[key] ?? null]))
+}
+
+// "running → blocked": a move a story_get timeline event says in its summary.
+const MOVE = /^\s*([a-z-]+)\s*→\s*([a-z-]+)\s*$/
+
+// HOW LONG A STORY STOOD BLOCKED since it started, from the moves its timeline records: the owner's walk of 1.5.0 (#35)
+// read "running 1 h 9 min" on a story unblocked after an hour stopped. A block still open counts up to now.
+function blockedSpan(timeline: Json[], since: number, now: number): number {
+  let blockedFrom: number | null = null
+  let total = 0
+
+  for (const event of [...timeline].sort((first, second) => String(first.at ?? '').localeCompare(String(second.at ?? '')))) {
+    const move = MOVE.exec(text(event.summary) ?? '')
+    const at = Date.parse(String(event.at ?? ''))
+
+    if (move === null || Number.isNaN(at)) {
+      continue
+    }
+
+    if (move[2] === 'blocked' && blockedFrom === null) {
+      blockedFrom = Math.max(at, since)
+    } else if (move[1] === 'blocked' && blockedFrom !== null) {
+      total += Math.max(0, at - blockedFrom)
+      blockedFrom = null
+    }
+  }
+
+  return blockedFrom === null ? total : total + Math.max(0, now - blockedFrom)
+}
+
 export function storyView(id: number, document: Json, inFlight: Json, question: PaneQuestionItem | null, now: number, zoneOffsetMinutes = 0): PaneStory {
   const state = String(inFlight.state ?? document.state ?? '')
-  const progress = (inFlight.progress ?? document.progress ?? null) as Json | null
+  const progress = progressOf(inFlight, document)
   const step = number(progress?.step)
   const steps = number(progress?.steps)
   const startedAt = Date.parse(String(inFlight.startedAt ?? document.startedAt ?? ''))
   const isRunning = ['dispatched', 'running', 'pr-open', 'verifying', 'blocked'].includes(state)
-  const hours = !isRunning || Number.isNaN(startedAt) ? null : duration(now - startedAt)
+  const hours = !isRunning || Number.isNaN(startedAt) ? null : duration(now - startedAt - blockedSpan(list(document.timeline), startedAt, now))
   // A BLOCKED STORY IS NOT RUNNING (the owner's walk of 1.2.2, #87: "running 75 h 46 min" beside its blocked chip): its
   // header says how long it has been blocked, from blockedFrom, else from its last update.
   const blockedAt = Date.parse(String(inFlight.blockedFrom ?? document.blockedFrom ?? inFlight.updatedAt ?? document.updatedAt ?? ''))
@@ -479,6 +524,11 @@ export function storyView(id: number, document: Json, inFlight: Json, question: 
     // A STORY IN TERYLON'S OWN LIST has no pull request to merge: it is accepted instead (S27).
     isList: text(document.target ?? inFlight.target) === 'list' || (pullRequest === null && state === 'verified'),
     canStop: state === 'dispatched' || state === 'running',
+    // AN APPROVED STORY THAT HAS NOT STARTED can be ended (the owner's walk of 1.5.0, #35: a story the leader could not
+    // brief offered no act at all). Terylon answers whether it takes it.
+    canAbandon: state === 'approved',
+    hasStage: text(progress?.stage) !== null,
+    heldReason: state === 'approved' ? text(document.blockedReason ?? inFlight.blockedReason) : null,
     commit: verdict === null ? (text(pullRequest?.head) ?? '').slice(0, 7) || null : (text(verdict.commit) ?? '').slice(0, 7) || null,
   }
 }
@@ -668,12 +718,26 @@ export function goalItems(goals: Json, questions: readonly PaneQuestionItem[]): 
   return { open: items.filter(goal => OPEN_GOAL_STATES.has(goal.state)), closed: items.filter(goal => !OPEN_GOAL_STATES.has(goal.state)) }
 }
 
+// WHICH OF THE PLAN'S STORIES ONE RUNS AFTER, as their places in the plan (1-based): `after` names them by story id,
+// `runsAfter` by place (the walk's plan 144 said "after 12", a story id). A value that names neither is left out.
+function afterPlaces(story: Json, ids: readonly (number | null)[]): number[] {
+  const named = Array.isArray(story.after) ? story.after.filter((value): value is number => typeof value === 'number') : []
+  const placed = Array.isArray(story.runsAfter) ? story.runsAfter.filter((value): value is number => typeof value === 'number') : []
+  const byId = named.map(value => ids.indexOf(value) + 1).filter(place => place > 0)
+  const byPlace = placed.filter(place => Number.isInteger(place) && place >= 1 && place <= ids.length)
+
+  return [...new Set([...byId, ...byPlace])].sort((first, second) => first - second)
+}
+
 export function planItems(plans: Json, base: string): PanePlan[] {
   return list(plans.plans).map(plan => {
     const id = number(plan.id) ?? 0
     const state = String(plan.state ?? '')
     const estimate = number(plan.estimateUsd)
     const isProposed = state === 'proposed'
+    const stories = list(plan.stories)
+    const ids = stories.map(story => number(story.id))
+    const titles = stories.map(story => text(story.title) ?? '')
 
     return {
       id,
@@ -683,18 +747,18 @@ export function planItems(plans: Json, base: string): PanePlan[] {
       stateText: isProposed ? COPY.planWaiting(estimate === null ? null : estimate.toFixed(0)) : COPY.stateText(state),
       isProposed,
       comment: text(plan.comment),
-      stories: list(plan.stories).map((story, index) => {
-        const after = (Array.isArray(story.runsAfter) && story.runsAfter.length > 0 ? story.runsAfter : story.after) as unknown
-        const afterIds = Array.isArray(after) ? after.filter((value): value is number => typeof value === 'number') : []
+      stories: stories.map((story, index) => {
+        const after = afterPlaces(story, ids)
         const storyEstimate = number(story.estimateUsd)
 
         return {
           id: number(story.id) ?? 0,
           index: index + 1,
-          title: text(story.title) ?? '',
-          detail: COPY.planStoryDetail(text(story.size) ?? '?', storyEstimate === null ? null : storyEstimate.toFixed(0), afterIds.length === 0 ? null : afterIds.join(', ')),
+          title: titles[index] ?? '',
+          // "after <title>": the story it waits for by its title, never by a number (#35).
+          detail: COPY.planStoryDetail(text(story.size) ?? '?', storyEstimate === null ? null : storyEstimate.toFixed(0), after.length === 0 ? null : after.map(place => titles[place - 1] ?? `#${place}`).join(', ')),
           criteria: strings(story.criteria),
-          after: afterIds,
+          after,
           size: text(story.size) ?? '?',
           estimate: storyEstimate === null ? null : storyEstimate.toFixed(0),
         }

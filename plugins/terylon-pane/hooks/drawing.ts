@@ -247,33 +247,82 @@ export function spendBar(spent: number, limit: number | null, size: 'small' | 'w
   return { source: svg(width, height, track + bar), alt, height }
 }
 
-// A PLAN AS A CHAIN: a node per story in its order, an arrow into each that runs after another.
-export function planChain(stories: readonly { index: number; after: readonly number[] }[]): Picture | null {
+// A PLAN'S ORDER: a node per story in the plan's order, and an arrow only where a story runs after another, from the
+// one it waits for (the owner's walk of 1.5.0, #35: plan 144 drew 1 → 2 → 3 although only C ran after A). A story's
+// `after` is the places, 1-based, of the stories it waits for. Next to each other, a straight arrow; further apart, an
+// arc above the nodes.
+export function planChain(stories: readonly { index: number; after: readonly number[] }[], alt: string): Picture | null {
   if (stories.length === 0) {
     return null
   }
 
   const spacing = 67
+  const height = 22
+  const nodeY = 15
   const width = 16 + (stories.length - 1) * spacing
+  const xOf = (place: number) => 8 + (place - 1) * spacing
+  const parts: string[] = stories.map(story => `<circle cx="${xOf(story.index)}" cy="${nodeY}" r="5.5" fill="none" stroke="${SVG_COLOURS.rest}" stroke-width="1.4"/>`)
+
+  for (const story of stories) {
+    for (const place of story.after) {
+      const from = xOf(place)
+      const to = xOf(story.index)
+
+      if (place === story.index - 1) {
+        parts.push(`<line x1="${from + 7}" y1="${nodeY}" x2="${to - 11}" y2="${nodeY}" stroke="${SVG_COLOURS.rest}" stroke-opacity=".6" stroke-width="1.4"/>`)
+        parts.push(`<path d="M${to - 11} ${nodeY - 3}l5 3-5 3z" fill="${SVG_COLOURS.rest}" fill-opacity=".6"/>`)
+      } else if (place !== story.index) {
+        // AN ARC from above one node to above the other, its head pointing down into the story that waits.
+        parts.push(`<path d="M${from} ${nodeY - 7} C${from} 1 ${to} 1 ${to} ${nodeY - 9}" fill="none" stroke="${SVG_COLOURS.rest}" stroke-opacity=".6" stroke-width="1.4"/>`)
+        parts.push(`<polygon points="${to - 3},${nodeY - 10} ${to + 3},${nodeY - 10} ${to},${nodeY - 6}" fill="${SVG_COLOURS.rest}" fill-opacity=".6"/>`)
+      }
+    }
+  }
+
+  return { source: svg(width, height, parts.join('')), alt, height }
+}
+
+// THE TERMINAL'S ORDER: each run of stories that wait one for the next, "1 → 3", then the stories that wait for none
+// and that none waits for, alone: "1 → 3 · 2". A story waiting for several says them all: "1, 2 → 3".
+export function planOrder(stories: readonly { index: number; after: readonly number[] }[]): string {
+  const waitsFor = new Map(stories.map(story => [story.index, story.after.filter(place => place !== story.index)]))
+  const followers = (place: number) => stories.filter(story => (waitsFor.get(story.index) ?? []).includes(place)).map(story => story.index)
+  const said = new Set<number>()
   const parts: string[] = []
 
-  stories.forEach((story, position) => {
-    const x = 8 + position * spacing
-    parts.push(`<circle cx="${x}" cy="7" r="5.5" fill="none" stroke="${SVG_COLOURS.rest}" stroke-width="1.4"/>`)
-
-    if (position > 0) {
-      const from = x - spacing + 7
-      const to = x - 11
-      parts.push(`<line x1="${from}" y1="7" x2="${to}" y2="7" stroke="${SVG_COLOURS.rest}" stroke-opacity=".6" stroke-width="1.4"/>`)
-      parts.push(`<path d="M${to} 4l5 3-5 3z" fill="${SVG_COLOURS.rest}" fill-opacity=".6"/>`)
+  for (const story of stories) {
+    if (said.has(story.index) || (waitsFor.get(story.index) ?? []).length === 1) {
+      continue
     }
-  })
 
-  const alt = stories
-    .map((story, position) => (position === 0 ? `Story ${story.index}` : `then ${story.index}${story.after.length === 0 ? '' : ` after ${story.after.join(', ')}`}`))
-    .join(', ')
+    const before = waitsFor.get(story.index) ?? []
+    const path = [story.index]
+    let next = followers(story.index)
 
-  return { source: svg(width, 14, parts.join('')), alt, height: 14 }
+    while (next.length === 1 && (waitsFor.get(next[0] ?? 0) ?? []).length === 1 && !path.includes(next[0] ?? 0)) {
+      path.push(next[0] ?? 0)
+      next = followers(next[0] ?? 0)
+    }
+
+    path.forEach(place => said.add(place))
+
+    // A story alone that others wait for is said in their runs, not on its own as well.
+    if (path.length === 1 && before.length === 0 && next.length > 0) {
+      continue
+    }
+
+    parts.push(before.length > 1 ? `${before.join(', ')} → ${path.join(' → ')}` : path.join(' → '))
+  }
+
+  // What a branch left unsaid: a story waiting for one that already heads another run.
+  for (const story of stories) {
+    if (!said.has(story.index)) {
+      said.add(story.index)
+      parts.push(`${(waitsFor.get(story.index) ?? []).join(', ')} → ${story.index}`)
+    }
+  }
+
+  return parts.join(' · ')
 }
 
 // THE TERMINAL'S STEPPER: ✓ ✓ ✓ ✓ ● ○ ○ ◇, one glyph per phase, Merge the diamond.

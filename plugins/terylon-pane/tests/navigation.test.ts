@@ -201,10 +201,10 @@ test('a waiting plan opens with its stories, each opening the story; approve and
 
   expect(await ui.find({ type: 'Text', text: exact('Plan 41 · Agentic OS') })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: exact('to approve · ~$14') }))?.props.color).toBe('subtle')
-  expect((await ui.find({ key: 'plan-41-story-351' }))?.text).toMatch(/^\s*(?:●\s+)?2\s+Notice handle přes MCP\s+M · ~\$5 · after 1$/)
-  expect(await ui.find({ type: 'Text', text: exact('M · ~$5 · after 1') })).toBeDefined()
-  // A PLAN AS A CHAIN (S32): its order and its "after" as an Svg, the sizes and estimates in tabular digits.
-  expect((await pictures(ui)).map(item => item.alt)).toEqual(['Story 1, then 2 after 1'])
+  expect((await ui.find({ key: 'plan-41-story-351' }))?.text).toMatch(/^\s*(?:●\s+)?2\s+Notice handle přes MCP\s+M · ~\$5 · after Health: tlačítko Check now$/)
+  expect(await ui.find({ type: 'Text', text: exact('M · ~$5 · after Health: tlačítko Check now') })).toBeDefined()
+  // A PLAN'S ORDER (S32, #35): its stories' "after" as an Svg, said by their titles; the sizes and estimates in tabular digits.
+  expect((await pictures(ui)).map(item => item.alt)).toEqual(['Health: tlačítko Check now; Notice handle přes MCP after Health: tlačítko Check now'])
   expect((await ui.find({ type: 'Text', text: exact('S ~$3 → M ~$5') }))?.props.tabular).toBe(true)
   expect((await ui.find({ type: 'Link', text: 'Edit criteria or pick stories in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=plan&plan=41')
   expect((await ui.find({ key: 'act-plan-41-approve' }))?.props.label).toBe('Approve')
