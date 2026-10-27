@@ -1,5 +1,6 @@
 // The architecture diagrams (#36): each is a Mermaid flowchart with the ELK layout, written in the Markdown that owns it,
-// and the plugin graph in the root README.md draws exactly the edges every plugin.json#dependencies declares.
+// every flowchart follows the adaptive style of .claude/rules/markdown.md (no theme of its own, so GitHub's light and dark
+// themes both draw it), and the plugin graph in the root README.md draws exactly the edges every plugin.json#dependencies declares.
 // Whether a block parses is checked by hand with mermaid-cli; no job here starts a browser.
 "use strict";
 
@@ -10,13 +11,18 @@ const path = require("node:path");
 
 const REPOSITORY_ROOT = path.join(__dirname, "..", "..");
 const ARCHITECTURE_DIRECTORY = path.join(REPOSITORY_ROOT, "docs", "architecture");
+const DOCS_DIRECTORY = path.join(REPOSITORY_ROOT, "docs");
 const PLUGINS_DIRECTORY = path.join(REPOSITORY_ROOT, "plugins");
 
 // A fenced Mermaid block: its body, up to the closing fence.
 const MERMAID_BLOCK = /^```mermaid\n([\s\S]*?)^```$/gm;
 
-// The front matter that selects the ELK layout, as the first lines of a block.
-const ELK_FRONT_MATTER = /^---\nconfig:\n  layout: elk\n---\n/;
+// The front matter every flowchart opens with, exactly: the ELK layout and the padding that keeps labels off the border.
+const ELK_FRONT_MATTER = /^---\nconfig:\n  layout: elk\n  flowchart:\n    padding: 16\n---\n/;
+
+// What a flowchart must never set: a theme of its own stops GitHub switching it between light and dark, and a font
+// family is measured in one font and drawn in another, which clips the labels.
+const FORBIDDEN_SETTINGS = /\b(theme|themeVariables|fontFamily)\b["']?\s*:/;
 
 // A node definition whose label starts with a plugin slug: `id["terylon-…<br/>…"]`, with or without a class.
 const PLUGIN_NODE = /^\s*(\w+)\["(terylon-[a-z]+)[<"]/gm;
@@ -29,6 +35,21 @@ function mermaidBlocksOf(filePath)
     const content = fs.readFileSync(filePath, "utf8");
 
     return [...content.matchAll(MERMAID_BLOCK)].map((match) => match[1]);
+}
+
+function markdownFilesUnder(directory)
+{
+    return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) =>
+    {
+        const entryPath = path.join(directory, entry.name);
+
+        if (entry.isDirectory())
+        {
+            return markdownFilesUnder(entryPath);
+        }
+
+        return entry.name.endsWith(".md") ? [entryPath] : [];
+    });
 }
 
 function pluginGraphBlock()
@@ -86,7 +107,7 @@ function isReachableWithout(dependencies, fromSlug, toSlug)
     return false;
 }
 
-test("every Mermaid block in docs/architecture and the README's plugin graph takes the ELK layout and is a flowchart", () =>
+test("every Mermaid block in docs/architecture and the README's plugin graph is a flowchart", () =>
 {
     const architectureFiles = fs.readdirSync(ARCHITECTURE_DIRECTORY)
         .filter((fileName) => fileName.endsWith(".md"))
@@ -97,8 +118,25 @@ test("every Mermaid block in docs/architecture and the README's plugin graph tak
 
     for (const block of blocks)
     {
-        assert.match(block, ELK_FRONT_MATTER, `a block lacks the ELK front matter:\n${block.slice(0, 200)}`);
         assert.match(block, /^flowchart (TD|TB|BT|LR|RL)$/m, `a block is not a flowchart:\n${block.slice(0, 200)}`);
+    }
+});
+
+test("every flowchart in README.md and docs/ opens with the ELK front matter and sets no theme, theme variables or font", () =>
+{
+    const files = [path.join(REPOSITORY_ROOT, "README.md")].concat(markdownFilesUnder(DOCS_DIRECTORY));
+    const flowcharts = files
+        .flatMap((filePath) => mermaidBlocksOf(filePath).map((block) => ({ filePath, block })))
+        .filter((entry) => /^flowchart /m.test(entry.block));
+
+    assert.ok(flowcharts.length >= 5, `expected at least the five flowcharts, found ${flowcharts.length}`);
+
+    for (const { filePath, block } of flowcharts)
+    {
+        const where = path.relative(REPOSITORY_ROOT, filePath);
+
+        assert.match(block, ELK_FRONT_MATTER, `${where}: a flowchart lacks the exact front matter:\n${block.slice(0, 200)}`);
+        assert.doesNotMatch(block, FORBIDDEN_SETTINGS, `${where}: a flowchart sets a theme, theme variables or a font family`);
     }
 });
 

@@ -7,6 +7,12 @@ Every transport in `terylon-forge` is written against an operation catalog with 
 First hit wins. **There is no default and no guess.**
 
 ```mermaid
+---
+config:
+  layout: elk
+  flowchart:
+    padding: 16
+---
 flowchart TD
     remote(["a transport is about to do something remote"])
     explicitUrl{"Step 1. did the user pass an explicit URL?"}
@@ -29,8 +35,10 @@ flowchart TD
     adapterInstalled -- "yes" --> proceed
     adapterInstalled -- "no" --> stopNoAdapter
 
-    classDef stop fill:#FEE2E2,stroke:#DC2626,color:#7F1D1D
+    %% The stop takes the palette's red, as in the forge port's drawing; every other node keeps the theme's colours.
+    classDef stop fill:#B91C1C,stroke:#991B1B,color:#FFFFFF
     class stopUnresolved,stopNoAdapter stop
+    linkStyle default stroke:#8B949E
 ```
 
 | Source | Supplies | Precedence |

@@ -45,6 +45,12 @@ You enable **two** plugins for a repository: the **role** you work in, and the *
 ## How a story travels
 
 ```mermaid
+---
+config:
+  layout: elk
+  flowchart:
+    padding: 16
+---
 flowchart LR
     subgraph develop ["develop: terylon-dev"]
         direction TB
@@ -68,6 +74,8 @@ flowchart LR
     createUserStory --> develop
     develop --> createPr["create-pr<br/>terylon-forge"]
     createPr --> reviewAndTest["review-pr / test<br/>terylon-forge, terylon-test"]
+
+    linkStyle default stroke:#8B949E
 ```
 
 Each agent is a role with its own instructions, dispatched by the `leader` and reporting back. Repository-local agents your project ships take over where they fit better, through `delegate-to-repo-agents`. The full dispatch chains are in [`plugins/CLAUDE.md`](./plugins/CLAUDE.md).
@@ -78,6 +86,8 @@ Each agent is a role with its own instructions, dispatched by the `leader` and r
 ---
 config:
   layout: elk
+  flowchart:
+    padding: 16
 ---
 %% The marketplace's plugins and the dependencies their manifests declare.
 %% The source of truth is this block: edit it here; nothing is generated from it.
@@ -85,19 +95,18 @@ config:
 %% plugin that declares it to the plugin it names. A dashed one is declared although the chain
 %% already reaches it. The manifests are the source of truth; when they change, redraw this.
 flowchart BT
-    %% One colour per kind: roots (indigo), the git layer (blue), the port (amber), adapters (green),
-    %% role plugins (slate), Terylon's own plugins (violet), notes (grey). A subgraph takes a stroke
-    %% and no fill, so the theme fills it in light and dark mode alike: .claude/rules/markdown.md says why.
-    classDef root fill:#E0E7FF,stroke:#4F46E5,color:#312E81
-    classDef layer fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A
-    classDef port fill:#FEF3C7,stroke:#D97706,color:#78350F
-    classDef adapter fill:#D1FAE5,stroke:#059669,color:#064E3B
-    classDef role fill:#F1F5F9,stroke:#475569,color:#1E293B
-    classDef terylon fill:#F3E8FF,stroke:#9333EA,color:#581C87
-    classDef note fill:#F9FAFB,stroke:#9CA3AF,color:#374151
+    %% One colour per kind, the palette of .claude/rules/markdown.md: the chain (blue), the port (amber),
+    %% adapters (green), role plugins (indigo), Terylon's own plugins (purple), notes (grey).
+    %% No theme is set, so GitHub draws the block in its light or dark theme.
+    classDef chain fill:#2563EB,stroke:#1E40AF,color:#FFFFFF
+    classDef port fill:#B45309,stroke:#92400E,color:#FFFFFF
+    classDef adapter fill:#047857,stroke:#065F46,color:#FFFFFF
+    classDef role fill:#4F46E5,stroke:#3730A3,color:#FFFFFF
+    classDef terylon fill:#7E22CE,stroke:#6B21A8,color:#FFFFFF
+    classDef note fill:#4B5563,stroke:#374151,color:#FFFFFF
 
-    core["terylon-core<br/>the root: shared conventions, measurement<br/>no dependencies"]:::root
-    git["terylon-git<br/>+ git; no forge, no MCP server"]:::layer
+    core["terylon-core<br/>the root: shared conventions, measurement<br/>no dependencies"]:::chain
+    git["terylon-git<br/>+ git; no forge, no MCP server"]:::chain
     forge["terylon-forge<br/>the forge port: the pull request workflow<br/>declares no adapter, on purpose"]:::port
 
     subgraph adapters ["Adapters: one body of forge-ops each"]
@@ -112,8 +121,9 @@ flowchart BT
     end
 
     %% Terylon's own plugins: the owner's product, not a role in the development workflow.
+    %% Dashed: outside the chain.
     subgraph outside ["Outside the chain: Terylon itself"]
-        os["terylon-os<br/>Terylon's /mcp server + one skill per prompt<br/>no dependencies"]:::root
+        os["terylon-os<br/>Terylon's /mcp server + one skill per prompt<br/>no dependencies"]:::terylon
         pane["terylon-pane<br/>a mod: the band, the status line, the pane"]:::terylon
     end
 
@@ -134,11 +144,10 @@ flowchart BT
     consumer -.->|"enables one"| roles
     consumer -.->|"enables one"| adapters
 
-    style adapters stroke:#10B981
-    style roles stroke:#64748B
-    style outside stroke:#A855F7,stroke-dasharray:3
-    %% The two consumer edges, grey: the 12th and 13th edge above.
-    linkStyle 11,12 stroke:#9CA3AF
+    style adapters fill:#0478571A,stroke:#047857,color:#047857
+    style roles fill:#4F46E51A,stroke:#4F46E5,color:#4F46E5
+    style outside fill:#7E22CE1A,stroke:#7E22CE,color:#7E22CE,stroke-dasharray:3 3
+    linkStyle default stroke:#8B949E
 ```
 
 The plugin graph is drawn here and only here, from every `plugin.json#dependencies`; an arrow points from a plugin to one it declares, and a dashed one is declared although the chain already reaches it. [`docs/architecture/README.md`](./docs/architecture/README.md) links to it rather than drawing a second copy.

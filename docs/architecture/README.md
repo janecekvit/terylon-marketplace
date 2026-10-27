@@ -20,20 +20,22 @@ The structure of the marketplace, drawn as Mermaid flowcharts with the ELK layou
 ---
 config:
   layout: elk
+  flowchart:
+    padding: 16
 ---
 %% The forge port: who names an operation, who resolves the forge, and which adapter's body runs it.
 %% The source of truth is this block: edit it here; nothing is generated from it.
 %% Why it is a port at all: port-and-adapter-split.md. The resolution step by step:
 %% ../flows/forge-resolution.md.
 flowchart TD
-    %% One colour per kind: callers (slate), the port (amber), adapters (green), the stop (red),
-    %% platforms outside the marketplace (grey). A subgraph takes a stroke and no fill, so the theme
-    %% fills it in light and dark mode alike: .claude/rules/markdown.md says why.
-    classDef caller fill:#F1F5F9,stroke:#475569,color:#1E293B
-    classDef port fill:#FEF3C7,stroke:#D97706,color:#78350F
-    classDef adapter fill:#D1FAE5,stroke:#059669,color:#064E3B
-    classDef stop fill:#FEE2E2,stroke:#DC2626,color:#7F1D1D
-    classDef external fill:#F3F4F6,stroke:#6B7280,color:#374151
+    %% One colour per kind, the palette of .claude/rules/markdown.md: callers (indigo), the port (amber),
+    %% adapters (green), the stop (red), platforms outside the marketplace (grey).
+    %% No theme is set, so GitHub draws the block in its light or dark theme.
+    classDef caller fill:#4F46E5,stroke:#3730A3,color:#FFFFFF
+    classDef port fill:#B45309,stroke:#92400E,color:#FFFFFF
+    classDef adapter fill:#047857,stroke:#065F46,color:#FFFFFF
+    classDef stop fill:#B91C1C,stroke:#991B1B,color:#FFFFFF
+    classDef external fill:#4B5563,stroke:#374151,color:#FFFFFF
 
     subgraph callers ["Callers: name operations, never tools"]
         transports["terylon-forge transports<br/>create-pr, review-pr, address-pr-comments,<br/>write-pr-description, update-pr-checklist,<br/>update-work-item-checklist, pr-reviewer"]:::caller
@@ -77,10 +79,11 @@ flowchart TD
     githubForgeOps -->|"gh subcommands"| gh
     gh --> githubCom
 
-    style callers stroke:#64748B
-    style port stroke:#F59E0B
-    style ado stroke:#10B981
-    style github stroke:#10B981
+    style callers fill:#4F46E51A,stroke:#4F46E5,color:#4F46E5
+    style port fill:#B453091A,stroke:#B45309,color:#B45309
+    style ado fill:#0478571A,stroke:#047857,color:#047857
+    style github fill:#0478571A,stroke:#047857,color:#047857
+    linkStyle default stroke:#8B949E
 ```
 
 ### terylon-os and the pane
@@ -89,41 +92,42 @@ flowchart TD
 ---
 config:
   layout: elk
+  flowchart:
+    padding: 16
 ---
 %% terylon-os and its mod terylon-pane: how a session reaches Terylon's Agentic OS, the owner's
 %% acts the pane takes on their cards, and why merge, the one gate, stays in the console.
 %% The source of truth is this block: edit it here; nothing is generated from it.
 %% Why every surface goes through the one /mcp: one-source-of-truth-reached-from-two-places.md.
 flowchart TD
-    %% One colour per kind: the plugin (indigo), the mod (violet), Agentic OS (blue), gates (red),
-    %% the phone (grey); the owner takes the theme's. A subgraph takes a stroke and no fill, so the
-    %% theme fills it in light and dark mode alike: .claude/rules/markdown.md says why.
-    classDef plugin fill:#E0E7FF,stroke:#4F46E5,color:#312E81
-    classDef mod fill:#F3E8FF,stroke:#9333EA,color:#581C87
-    classDef system fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A
-    classDef gate fill:#FEE2E2,stroke:#DC2626,color:#7F1D1D
-    classDef external fill:#F3F4F6,stroke:#6B7280,color:#374151
+    %% One colour per kind, the palette of .claude/rules/markdown.md: Terylon's own plugins (purple),
+    %% Agentic OS (blue), the gate (red), the phone (grey); the owner takes the theme's.
+    %% No theme is set, so GitHub draws the block in its light or dark theme.
+    classDef terylon fill:#7E22CE,stroke:#6B21A8,color:#FFFFFF
+    classDef service fill:#2563EB,stroke:#1E40AF,color:#FFFFFF
+    classDef gate fill:#B91C1C,stroke:#991B1B,color:#FFFFFF
+    classDef external fill:#4B5563,stroke:#374151,color:#FFFFFF
 
     subgraph session ["Claude Desktop or Claude Code: a local session on the PC"]
         subgraph os ["terylon-os plugin: no dependencies"]
             %% The variable is drawn as written: Mermaid substitutes nothing inside a label.
-            server["server terylon at ${TERYLON_URL}/mcp"]:::plugin
-            skills["one skill per prompt it serves<br/>briefing, hand-over, merge-gate,<br/>add-goal, review-plan, show-story"]:::plugin
+            server["server terylon at ${TERYLON_URL}/mcp"]:::terylon
+            skills["one skill per prompt it serves<br/>briefing, hand-over, merge-gate,<br/>add-goal, review-plan, show-story"]:::terylon
         end
 
         subgraph pane ["terylon-pane mod: shows, asks, answers, posts, takes the owner's acts; never merges"]
-            allowList["PANE_TOOLS: reads, five writes that decide nothing,<br/>the owner's thirteen acts; never story_merge"]:::mod
-            band["the band above the prompt<br/>what calls for the owner"]:::mod
-            statusLine["the status line<br/>the health of Agentic OS, its worst problem"]:::mod
-            tabs["one pane, five tabs<br/>Queue, Goals, Bell, Memory, Status<br/>opened only by the band or a command;<br/>each act on its subject's card, on a press"]:::mod
+            allowList["PANE_TOOLS: reads, five writes that decide nothing,<br/>the owner's thirteen acts; never story_merge"]:::terylon
+            band["the band above the prompt<br/>what calls for the owner"]:::terylon
+            statusLine["the status line<br/>the health of Agentic OS, its worst problem"]:::terylon
+            tabs["one pane, five tabs<br/>Queue, Goals, Bell, Memory, Status<br/>opened only by the band or a command;<br/>each act on its subject's card, on a press"]:::terylon
         end
     end
 
     phone["The phone, through Remote Control<br/>terylon-os on an always-on box; no mod"]:::external
 
     subgraph terylon ["Terylon's Agentic OS: the only source of truth"]
-        mcp["/mcp<br/>the caller's tailnet identity; no header, no token"]:::system
-        leader["leader, goals, plans, stories,<br/>bell, memory"]:::system
+        mcp["/mcp<br/>the caller's tailnet identity; no header, no token"]:::service
+        leader["leader, goals, plans, stories,<br/>bell, memory"]:::service
         console["the console: the one gate<br/>merge, confirmed by the owner's passkey"]:::gate
     end
 
@@ -141,10 +145,12 @@ flowchart TD
     mcp --> leader
     person -->|"confirms every merge"| console
 
-    style session stroke:#475569
-    style os stroke:#6366F1
-    style pane stroke:#A855F7
-    style terylon stroke:#3B82F6
+    %% The session is the large area, so its fill is the fainter 14.
+    style session fill:#8B949E14,stroke:#8B949E,color:#8B949E
+    style os fill:#7E22CE1A,stroke:#7E22CE,color:#7E22CE
+    style pane fill:#7E22CE1A,stroke:#7E22CE,color:#7E22CE
+    style terylon fill:#2563EB1A,stroke:#2563EB,color:#2563EB
+    linkStyle default stroke:#8B949E
 ```
 
 ## Articles
