@@ -115,3 +115,5 @@ English only. Relative links only — GitHub does not render `[[wiki-links]]`.
 
 - **Find the affected article by grepping, not by remembering.** The knowledge base is cross-cutting: a line changed in one plugin can invalidate a paragraph in a flow, a row in a runbook and a consequence in an ADR, none of which live anywhere near the file you edited.
 - **An assumption recorded here is a debt.** This knowledge base is allowed to state open questions, so it collects them — and settling one carries an obligation, stated in [`.claude/rules/claude-md-sync.md`](../.claude/rules/claude-md-sync.md) and binding here too. An article still saying "unverified" about a measured fact costs the next reader the whole experiment again.
+
+A throwaway line for measuring CI on a docs-only pull request (#42); never merged.
