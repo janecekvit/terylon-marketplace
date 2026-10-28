@@ -145,7 +145,8 @@ jobs:
     needs: pane-plan
     if: needs.pane-plan.outputs.run == 'true'
     runs-on: ubuntu-latest
-    # About 25 runs of plugin test at roughly 25 s each; the margin is for the runner's spread.
+    # 24 or 25 runs of plugin test: 6 to 7.5 minutes on most runners, 13.5 on one about twice as slow (2026-10-28, #45).
+    # The margin is for that spread.
     timeout-minutes: 30
     strategy:
       fail-fast: false
