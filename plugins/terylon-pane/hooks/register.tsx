@@ -103,7 +103,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.7.2'
+export const MOD_VERSION = '1.8.0'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -163,7 +163,7 @@ const EMPTY_POLICY_FORM: PanePolicyForm = { isEditing: false, values: {} }
 const DEFAULT_PRIORITY = '2'
 const OWN_LIST = 'list'
 
-const EMPTY_GOALS: PaneGoals = { phase: 'loading', sentence: null, open: [], closed: [], plans: [], draft: '', priority: DEFAULT_PRIORITY, target: OWN_LIST, targets: [], adding: 'idle', addSentence: null }
+const EMPTY_GOALS: PaneGoals = { phase: 'loading', sentence: null, open: [], closed: [], plans: [], draft: '', priority: DEFAULT_PRIORITY, target: OWN_LIST, targets: [], adding: 'idle', addSentence: null, showing: 'open', closedCount: 0, closedFrom: 'list', closedPhase: 'idle', closedSentence: null }
 
 const EMPTY_BELL: PaneBell = { phase: 'loading', sentence: null, unhandledCount: 0, unhandled: [], handled: [], leader: { isPaused: false, text: '' }, metrics: [], handling: null, handleSentence: null }
 
@@ -713,6 +713,11 @@ function stackOf(value: PaneView): PaneScreen[] {
 // NAVIGATION: a stack of screens. A tab starts it over, a row pushes, ‹ pops back to where the owner came from.
 async function show($: EngineInterface, screen: PaneScreen, isTab: boolean): Promise<void> {
   await update($, view, (current: PaneView): PaneView => ({ stack: isTab ? [screen] : [...stackOf(current), screen] }))
+
+  // THE GOALS TAB STARTS OVER ON OPEN (#41); ‹ back to it keeps the list the owner left.
+  if (isTab && screen.screen === 'goals') {
+    await update($, goals, (current: PaneGoals): PaneGoals => ({ ...EMPTY_GOALS, ...current, showing: 'open' }))
+  }
   await leaveActs($)
   await load($, screen)
 }
@@ -890,6 +895,13 @@ async function loadGoals($: EngineInterface): Promise<void> {
     target: typeof current?.target === 'string' ? current.target : OWN_LIST,
     adding: current?.adding ?? 'idle',
     addSentence: typeof current?.addSentence === 'string' ? current.addSentence : null,
+    // THE CLOSED GOALS ALREADY READ stay until the next press of Closed, or a closedCount that changed (#41).
+    showing: current?.showing === 'closed' ? 'closed' : 'open',
+    closed: Array.isArray(current?.closed) ? current.closed : [],
+    closedCount: typeof current?.closedCount === 'number' ? current.closedCount : 0,
+    closedFrom: current?.closedFrom === 'terylon' ? 'terylon' : 'list',
+    closedPhase: typeof current?.closedPhase === 'string' ? current.closedPhase : 'idle',
+    closedSentence: typeof current?.closedSentence === 'string' ? current.closedSentence : null,
   }))
   await bounded($, 'goals', () => readGoalsFromTerylon($), sentence => update($, goals, (current: PaneGoals): PaneGoals => ({ ...EMPTY_GOALS, ...current, phase: 'error', sentence })))
 }
@@ -912,8 +924,59 @@ async function readGoalsFromTerylon($: EngineInterface): Promise<void> {
   const items = goalItems(goalsNow, questions)
   const plans = plansAnswer.kind === 'ok' ? planItems(plansNow, base) : []
   const targets = targetsOf(goalsAnswer.value)
+  // TERYLON S44 (#408) answers the open goals and closedCount; today's Terylon the full list. Read per answer (#41).
+  const closedCount = number(goalsAnswer.value.closedCount)
 
-  await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, phase: 'ok', sentence: plansAnswer.kind === 'ok' ? null : why(plansAnswer), open: items.open, closed: items.closed, plans, targets }))
+  await update($, goals, (current: PaneGoals): PaneGoals => {
+    const read_ = { ...current, phase: 'ok' as const, sentence: plansAnswer.kind === 'ok' ? null : why(plansAnswer), open: items.open, plans, targets }
+
+    // BEFORE S44: the closed goals counted and filtered here, from the full list, as before.
+    if (closedCount === null) {
+      return { ...read_, closed: items.closed, closedCount: items.closed.length, closedFrom: 'list', closedPhase: 'ok', closedSentence: null }
+    }
+
+    // AFTER S44: what a press of Closed read is kept while closedCount says the same; never read again from here.
+    const isKept = current.closedFrom === 'terylon' && current.closedCount === closedCount && current.closedPhase !== 'idle'
+
+    return isKept
+      ? { ...read_, closedCount, closedFrom: 'terylon' }
+      : { ...read_, closed: [], closedCount, closedFrom: 'terylon', closedPhase: current.showing === 'closed' && closedCount > 0 ? 'changed' : 'idle', closedSentence: null }
+  })
+}
+
+// OPEN OR CLOSED, PRESSED (#41). After S44 a press of Closed reads the closed goals, and nothing else ever does.
+async function showGoals($: EngineInterface, showing: 'open' | 'closed'): Promise<void> {
+  await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, showing }))
+
+  const current = await readGoals($)
+
+  if (showing === 'open' || current.closedFrom !== 'terylon' || current.closedPhase === 'loading') {
+    return
+  }
+
+  // NOTHING CLOSED, SAID BY closedCount: nothing to read.
+  if (current.closedCount === 0) {
+    await update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, closed: [], closedPhase: 'ok', closedSentence: null }))
+    return
+  }
+
+  await update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, closedPhase: 'loading', closedSentence: null }))
+  await bounded($, 'closed goals', () => readClosedGoals($), sentence => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, closedPhase: 'error', closedSentence: sentence })))
+}
+
+async function readClosedGoals($: EngineInterface): Promise<void> {
+  const answered = await callTerylon($, 'goals_list', { closed: true })
+
+  if (answered.kind !== 'ok') {
+    await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, closedPhase: 'error', closedSentence: why(answered) }))
+    return
+  }
+
+  const now = await $.clock.now()
+  const questions = (await readSnapshot($)).questions
+  const closedNow = { ...answered.value, goals: list(answered.value.goals).map(item => ({ ...item, state: settledState(`goal-${number(item.id) ?? 0}`, String(item.state ?? ''), now) })) }
+
+  await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, closed: goalItems(closedNow, questions).closed, closedPhase: 'ok', closedSentence: null }))
 }
 
 // WHERE A GOAL CAN LAND: Terylon's own list, then every repository target goals_list shows, each once.
@@ -2825,9 +2888,37 @@ export const register: Register = on => {
 
     // THE GOALS TAB: open goals by priority, the plans, and a new goal with its priority and target.
     if (screen.screen === 'goals') {
-      const isClosedShown = shown.includes('goals-closed')
-      // A CLOSED GOAL'S PLANS LEAVE THE TAB (the owner's walk of 1.5.0, #35): they stay on the goal's own screen.
-      const openPlans = goalsState.plans.filter(plan => !goalsState.closed.some(item => item.id === plan.goal))
+      const isClosedShown = goalsState.showing === 'closed'
+      // A CLOSED GOAL'S PLANS LEAVE THE TAB (the owner's walk of 1.5.0, #35): they stay on the goal's own screen. After
+      // S44 the tab knows the open goals alone, so a plan stays only under one of them.
+      const openPlans = goalsState.plans.filter(plan => (goalsState.closedFrom === 'terylon'
+        ? goalsState.open.some(item => item.id === plan.goal)
+        : !goalsState.closed.some(item => item.id === plan.goal)))
+      // OPEN · N AND CLOSED · M (#41, board D): the one selected filled, the other dim, as the tabs are.
+      const switchButton = (key: string, name: string, count: number, isSelected: boolean, showing: 'open' | 'closed') => (
+        <Button key={key} label={`${name}${COPY.count(count)}`} variant={isSelected ? 'primary' : undefined} dimColor={isSelected ? undefined : true} onPress={() => showGoals($, showing)}>
+          {!look.isGraphic && isSelected ? '● ' : ''}
+          {name}
+          {' · '}
+          <Text tabular>{String(count)}</Text>
+        </Button>
+      )
+      const goalSwitch = (
+        <Box flexDirection="row" gap={look.isGraphic ? 'xs' : 1} flexWrap="wrap">
+          {switchButton('goals-show-open', COPY.goalsOpen, goalsState.open.length, !isClosedShown, 'open')}
+          {switchButton('goals-show-closed', COPY.goalsClosed, goalsState.closedCount, isClosedShown, 'closed')}
+        </Box>
+      )
+      const closedRetry = (label: string) => <Button key="goals-closed-retry" label={label} onPress={() => showGoals($, 'closed')} />
+      // THE CLOSED LIST'S OWN STATES: loading and empty said quietly, a failed read with Terylon's sentence and Try again.
+      const closedLines = goalsState.closedPhase === 'loading' || goalsState.closedPhase === 'idle'
+        ? [quiet(elements, COPY.closedLoading)]
+        : goalsState.closedPhase === 'error'
+          ? [reason(goalsState.closedSentence), closedRetry(COPY.retry)]
+          : goalsState.closedPhase === 'changed'
+            ? [quiet(elements, COPY.closedChanged), closedRetry(COPY.closedReadAgain)]
+            : goalsState.closed.length === 0 ? [quiet(elements, COPY.noClosedGoals)] : null
+      const goalRows = isClosedShown ? goalsState.closed : goalsState.open
       const goalPickers = [
         'Select' in elements ? (
           <elements.Select key="goal-priority" label={COPY.priority} value={goalsState.priority} options={COPY.priorities} onSelect={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, priority: value }))} />
@@ -2844,8 +2935,10 @@ export const register: Register = on => {
           {problemCard}
           {goalsState.phase === 'loading' && quiet(elements, COPY.loading)}
           {goalsState.phase === 'error' && cardOf('goals-error', warned(COPY.loadError(COPY.tabGoals)), null, [reason(goalsState.sentence)], 'bad')}
-          {goalsState.phase === 'ok' && cardOf('goals-open', headingOf(COPY.openGoals, goalsState.open.length, 'inactive'), COPY.goalsHint, [
-            ...[...goalsState.open, ...(isClosedShown ? goalsState.closed : [])].map(item =>
+          {goalsState.phase === 'ok' && cardOf('goals-open', goalSwitch, COPY.goalsHint, [
+            ...(isClosedShown && closedLines !== null ? closedLines : []),
+            !isClosedShown && goalRows.length === 0 ? quiet(elements, COPY.noOpenGoals) : null,
+            ...(isClosedShown && closedLines !== null ? [] : goalRows).map(item =>
               rowOf({
                 key: `goal-${item.id}`,
                 // THE PRIORITY AS A CHIP (S32): P1 in warning, the others inactive.
@@ -2853,14 +2946,11 @@ export const register: Register = on => {
                 kindTone: item.priority === 'P1' ? 'warning' : 'inactive',
                 kindColumn: 3,
                 title: item.title,
-                titleTone: goalsState.closed.includes(item) ? 'subtle' : undefined,
+                titleTone: isClosedShown ? 'subtle' : undefined,
                 detail: item.questions > 0 ? COPY.goalQuestions(item.questions) : item.stories,
                 detailTone: item.questions > 0 ? 'warning' : 'subtle',
                 onPress: () => go({ screen: 'goal', goal: item.id }),
               })),
-            goalsState.closed.length > 0 ? (
-              <Button key="goals-closed" plain dimColor label={isClosedShown ? COPY.hideClosed : COPY.closedGoals(goalsState.closed.length)} onPress={() => toggle($, 'goals-closed')} />
-            ) : null,
           ])}
           {goalsState.phase === 'ok' && openPlans.length === 0 && cardOf('plans-empty', COPY.plans, null, [quiet(elements, COPY.noPlans)])}
           {openPlans.map(plan => planCard(plan))}

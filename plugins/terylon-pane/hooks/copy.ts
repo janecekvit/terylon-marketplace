@@ -257,11 +257,16 @@ export const COPY = {
   answerNote: 'An answer approves nothing, it completes the brief; a plan or a story is decided on its own card, and a merge in the console.',
 
   // Goals and plans.
-  openGoals: 'Open goals',
+  // The two buttons in place of the fold (#41, option D), like Claude Desktop's Active and Archived sessions.
+  goalsOpen: 'Open',
+  goalsClosed: 'Closed',
   goalsHint: 'priority',
   goalQuestions: (count: number) => (count === 1 ? '1 question' : `${count} questions`),
-  closedGoals: (count: number) => `${count} closed ▾`,
-  hideClosed: 'hide closed ▴',
+  noOpenGoals: 'No open goals.',
+  noClosedGoals: 'No closed goals.',
+  closedLoading: 'Loading the closed goals…',
+  closedChanged: 'The closed goals changed since they were read.',
+  closedReadAgain: 'Read them again',
   plan: (plan: number) => `Plan ${plan}`,
   planStoryDetail: (size: string, estimate: string | null, after: string | null) =>
     [size, estimate === null ? null : `~$${estimate}`, after === null ? null : `after ${after}`].filter(part => part !== null).join(' · '),

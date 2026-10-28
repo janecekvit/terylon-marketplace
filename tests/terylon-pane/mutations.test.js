@@ -625,6 +625,24 @@ const MUTATIONS = [
         find: "                {look.isGraphic ? picture(elements, planChain(chain, orderAlt)) : <Text color=\"subtle\">{planOrder(chain)}</Text>}\n",
         replace: "                {look.isGraphic ? picture(elements, planChain(chain, orderAlt)) : <Text color=\"subtle\">{planOrder(chain)}</Text>}\n                <Text color=\"subtle\" size=\"footnote\" tabular>{plan.stories.map(item => (item.estimate === null ? item.size : `${item.size} ~$${item.estimate}`)).join(' → ')}</Text>\n",
     },
+    {
+        name: "the closed goals are read on every poll of the goals",
+        file: "hooks/register.tsx",
+        find: "  const goalsAnswer = await callTerylon($, 'goals_list')\n  const plansAnswer = await callTerylon($, 'plans_list')\n",
+        replace: "  const goalsAnswer = await callTerylon($, 'goals_list')\n  await callTerylon($, 'goals_list', { closed: true })\n  const plansAnswer = await callTerylon($, 'plans_list')\n",
+    },
+    {
+        name: "closedCount is ignored",
+        file: "hooks/register.tsx",
+        find: "  const closedCount = number(goalsAnswer.value.closedCount)\n",
+        replace: "  const closedCount = null as number | null\n",
+    },
+    {
+        name: "the fallback before S44 is removed",
+        file: "hooks/register.tsx",
+        find: "      return { ...read_, closed: items.closed, closedCount: items.closed.length, closedFrom: 'list', closedPhase: 'ok', closedSentence: null }\n",
+        replace: "      return { ...read_, closed: [], closedCount: 0, closedFrom: 'list', closedPhase: 'ok', closedSentence: null }\n",
+    },
 ];
 
 // Capability, not presence: an older claude answers --version yet has no `plugin test`, and running

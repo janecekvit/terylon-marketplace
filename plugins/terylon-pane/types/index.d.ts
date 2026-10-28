@@ -205,6 +205,14 @@ export type PaneGoals = {
   targets: PaneChoice[]
   adding: 'idle' | 'sending' | 'added' | 'refused'
   addSentence: string | null
+  // OPEN AND CLOSED, TWO BUTTONS (#41): which list the tab shows, Open by default, and the closed goals' count.
+  showing: 'open' | 'closed'
+  closedCount: number
+  // Where the closed goals come from: the full list before Terylon S44, goals_list {closed: true} after it. The second
+  // is read on a press of Closed alone and kept until the next press, or until closedCount changes ('changed').
+  closedFrom: 'list' | 'terylon'
+  closedPhase: 'idle' | 'loading' | 'ok' | 'error' | 'changed'
+  closedSentence: string | null
 }
 
 export type PaneGoal = {
