@@ -55,10 +55,13 @@ import {
   consoleLink,
   dayBudget,
   doneTodayItems,
+  filesOf,
   firstLine,
   goalItems,
   header,
   hostName,
+  isListStory,
+  isRepositoryTarget,
   list,
   number,
   pausedOf,
@@ -100,7 +103,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.6.0'
+export const MOD_VERSION = '1.7.2'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -148,7 +151,7 @@ const EMPTY_SNAPSHOT: PaneSnapshot = {
 
 const QUEUE: PaneScreen = { screen: 'queue' }
 
-const EMPTY_ADD: PaneAdd = { phase: 'form', title: '', criteria: '', goal: '', after: '', size: 'M', goals: [], stories: [], sentence: null, link: null, sent: null }
+const EMPTY_ADD: PaneAdd = { phase: 'form', title: '', criteria: '', goal: '', after: '', size: 'M', files: '', goals: [], repositoryGoals: [], stories: [], sentence: null, link: null, problem: null, sent: null }
 
 const EMPTY_MEMORY: PaneMemory = { phase: 'loading', files: [], rules: [], pending: 0, proposals: [], edit: null, sentence: null, proposed: [] }
 
@@ -198,6 +201,8 @@ const SETTLE_MILLISECONDS = 300000
 // The states of a story that has not ended: what a goal's drop abandons (Terylon S35, #388).
 const OPEN_STORY_STATES: readonly string[] = ['approved', 'dispatched', 'running', 'blocked', 'pr-open', 'verifying', 'verified']
 const settled = new Map<string, { from: readonly string[]; to: string; until: number }>()
+// Where each verified story is kept, as story_get said it: `list`, or its repository's target.
+const storyTargets = new Map<number, string>()
 
 // The policy just saved, laid over what policy_get answers until policy_get answers it too (#35).
 let savedPolicy: { values: Json; until: number } | null = null
@@ -405,8 +410,12 @@ async function refresh($: EngineInterface): Promise<boolean> {
 
   lastFlight = flight.value
   // A PLAN THE OWNER JUST DECIDED leaves "Waiting for you" at once, whatever the briefing still lists (#35).
-  lastBriefing = { ...briefing.value, plansWaiting: list(briefing.value.plansWaiting).filter(plan => settledState(`plan-${number(plan.id) ?? 0}`, 'proposed', now) === 'proposed') }
   lastStories = list(stories.value.stories)
+  lastBriefing = {
+    ...briefing.value,
+    plansWaiting: list(briefing.value.plansWaiting).filter(plan => settledState(`plan-${number(plan.id) ?? 0}`, 'proposed', now) === 'proposed'),
+    storiesVerified: await withTargets($, list(briefing.value.storiesVerified), lastStories),
+  }
 
   const base = await baseUrl($)
   const offset = zoneOffset(now)
@@ -463,6 +472,36 @@ async function withHeldReasons($: EngineInterface, stories: Json[], inFlight: Re
     const answered = await callTerylon($, 'story_get', { story: id })
     const reason = answered.kind === 'ok' ? text(answered.value.blockedReason) : null
     read_.push(reason === null ? story : { ...story, blockedReason: reason })
+  }
+
+  return read_
+}
+
+// WHERE A VERIFIED STORY IS KEPT (#39): a story in Terylon's own list waits for an acceptance, never a merge. The briefing
+// or stories_list may say its target; otherwise story_get is read once per story, and what it says is kept for the session.
+async function withTargets($: EngineInterface, verified: Json[], stories: Json[]): Promise<Json[]> {
+  const read_: Json[] = []
+
+  for (const story of verified) {
+    const id = number(story.id)
+    const listed = stories.find(item => number(item.id) === id)
+    const named = text(story.target) ?? text(listed?.target)
+
+    if (named !== null || id === null) {
+      read_.push(named === null ? story : { ...story, target: named })
+      continue
+    }
+
+    if (!storyTargets.has(id)) {
+      const answered = await callTerylon($, 'story_get', { story: id })
+
+      if (answered.kind === 'ok') {
+        storyTargets.set(id, isListStory({ ...answered.value, state: 'verified' }) ? 'list' : text(answered.value.target) ?? 'repository')
+      }
+    }
+
+    const target = storyTargets.get(id)
+    read_.push(target === undefined ? story : { ...story, target })
   }
 
   return read_
@@ -622,6 +661,15 @@ async function readGoals($: EngineInterface): Promise<PaneGoals> {
 
 async function readBell($: EngineInterface): Promise<PaneBell> {
   return { ...EMPTY_BELL, ...(await read($, bell)) }
+}
+
+// The stepper's short labels: a list story's last phase is Accept, never Merge (#39).
+function shortLabels(phases: readonly { label: string }[]): readonly string[] {
+  return COPY.phaseShort.map((label, index) => (phases[index]?.label === COPY.acceptPhase ? COPY.acceptShort : label))
+}
+
+async function readAdd($: EngineInterface): Promise<PaneAdd> {
+  return { ...EMPTY_ADD, ...(await read($, add)) }
 }
 
 // A SCREEN'S LOAD IS TOTAL (the operator's walk of 1.1.1: Goals and Bell sat on "Loading…" for good): whatever
@@ -1174,22 +1222,25 @@ async function savePolicy($: EngineInterface): Promise<void> {
 
 async function openAdd($: EngineInterface, title: string): Promise<void> {
   const goalsAnswer = await callTerylon($, 'goals_list')
-  const choices = goalsAnswer.kind === 'ok'
-    ? list(goalsAnswer.value.goals)
-        .filter(item => !['done', 'closed', 'abandoned', 'dropped'].includes(String(item.state)))
-        .map(item => ({ value: String(number(item.id) ?? 0), label: `${text(item.title) ?? ''}` }))
+  const openGoals = goalsAnswer.kind === 'ok'
+    ? list(goalsAnswer.value.goals).filter(item => !['done', 'closed', 'abandoned', 'dropped'].includes(String(item.state)))
     : []
+  const choices = openGoals.map(item => ({ value: String(number(item.id) ?? 0), label: `${text(item.title) ?? ''}` }))
+  // A GOAL OVER A REPOSITORY, by the target goals_list gives (#39): its task declares the files it will change.
+  const repositoryGoals = openGoals
+    .filter(item => isRepositoryTarget(item.target))
+    .map(item => String(number(item.id) ?? 0))
   const stories = lastStories
     .filter(item => !['merged', 'abandoned'].includes(String(item.state)))
     .map(item => ({ value: String(number(item.id) ?? 0), label: `#${number(item.id) ?? 0} ${text(item.title) ?? ''}` }))
 
-  await update($, add, (): PaneAdd => ({ ...EMPTY_ADD, title, goal: choices[0]?.value ?? '', goals: choices, stories: [{ value: '', label: COPY.nothingBefore }, ...stories] }))
+  await update($, add, (): PaneAdd => ({ ...EMPTY_ADD, title, goal: choices[0]?.value ?? '', goals: choices, repositoryGoals, stories: [{ value: '', label: COPY.nothingBefore }, ...stories] }))
   await update($, view, (current: PaneView): PaneView => ({ stack: [...stackOf(current), { screen: 'add' }] }))
 }
 
 // ADD A TASK: tasks_add proposes; the plan it becomes waits for the owner in the console.
 async function sendTask($: EngineInterface): Promise<void> {
-  const form = await read($, add)
+  const form = await readAdd($)
   const goalId = Number(form.goal)
   // THE TITLE AS ONE LINE: "What to do" is a field of several rows (#35), and a title is one line wherever it is drawn.
   const title = form.title.replace(/\s*\n\s*/g, ' ').trim()
@@ -1198,7 +1249,16 @@ async function sendTask($: EngineInterface): Promise<void> {
     return
   }
 
-  await update($, add, (current: PaneAdd): PaneAdd => ({ ...current, phase: 'sending' }))
+  // THE FILES A REPOSITORY'S TASK WILL CHANGE (#39): Terylon refuses such a task without 1 to 30, so the pane checks them
+  // before it sends anything and says what is wrong under the field. A task in Terylon's own list declares none.
+  const declared = form.repositoryGoals.includes(form.goal) ? filesOf(form.files) : { files: [], problem: null }
+
+  if (declared.problem !== null) {
+    await update($, add, (current: PaneAdd): PaneAdd => ({ ...current, problem: declared.problem }))
+    return
+  }
+
+  await update($, add, (current: PaneAdd): PaneAdd => ({ ...current, phase: 'sending', problem: null }))
 
   const after = Number(form.after)
   // ONE CRITERION PER LINE where the field holds several (input-rows), by semicolons as in 1.1.2 either way; an empty
@@ -1208,7 +1268,7 @@ async function sendTask($: EngineInterface): Promise<void> {
     title,
     brief: title,
     criteria,
-    files: [],
+    files: declared.files,
     size: COPY.sizes.includes(form.size) ? form.size : 'M',
   }
 
@@ -1222,7 +1282,7 @@ async function sendTask($: EngineInterface): Promise<void> {
 
   await update($, add, (current: PaneAdd): PaneAdd => {
     if (answered.kind === 'ok' && answered.value.accepted === true) {
-      return { ...current, phase: 'added', sentence: text(answered.value.sentence), link: consoleLink(base, `plan&goal=${goalId}`), sent: { title, criteria } }
+      return { ...current, phase: 'added', sentence: text(answered.value.sentence), link: consoleLink(base, `plan&goal=${goalId}`), sent: { title, criteria, files: declared.files } }
     }
 
     if (answered.kind === 'ok' && answered.value.accepted == null) {
@@ -1525,6 +1585,7 @@ export const register: Register = on => {
     await $.command.register({ name: 'terylon-pane', description: 'Opens the Terylon pane: queue, goals, bell, memory' })
     await $.command.register({ name: 'terylon', description: 'Opens the Terylon pane (the same as /terylon-pane)' })
     await $.command.register({ name: 'terylon-memory', description: "Opens the Terylon pane on the leader's memory; an edit is confirmed in the console" })
+    storyTargets.clear()
     await showHealth($)
     $.clock.after(0, () => tick($, true))
     $.clock.every(POLL_MS, () => tick($, false))
@@ -2068,7 +2129,7 @@ export const register: Register = on => {
       const done = shownStory.phases.filter(item => item.status === 'done').length
       const nowAt = shownStory.phases.findIndex(item => item.status === 'now')
       const isStuck = shownStory.stateTone === 'warning'
-      const labels = COPY.phaseShort
+      const labels = shortLabels(shownStory.phases)
       const tooltips = look.proofs.svgTooltips
         ? shownStory.phases.map(item => COPY.phaseTooltip(item.label, item.role, item.status, item.status === 'now' ? shownStory.working?.step ?? null : null))
         : null
@@ -2377,7 +2438,8 @@ export const register: Register = on => {
 
     // THE ADD FORM: one task for the leader; the plan it becomes is approved in the console.
     if (screen.screen === 'add' && !isStale && hasInput) {
-      const form = await read($, add)
+      const form = await readAdd($)
+      const isRepositoryGoal = form.repositoryGoals.includes(form.goal)
 
       if (form.phase === 'sending') {
         return (
@@ -2397,6 +2459,7 @@ export const register: Register = on => {
             {/* WHAT WAS HANDED OVER, word for word (#35): the story the leader writes from it is the leader's. */}
             {form.sent !== null && form.sent !== undefined && <Text key="add-sent-title" color="inactive">{COPY.handedTitle(form.sent.title)}</Text>}
             {form.sent !== null && form.sent !== undefined && <Text key="add-sent-criteria" color="inactive">{COPY.handedCriteria(form.sent.criteria)}</Text>}
+            {form.sent !== null && form.sent !== undefined && (form.sent.files ?? []).length > 0 && <Text key="add-sent-files" color="inactive">{COPY.handedFiles(form.sent.files)}</Text>}
             {form.link !== null && <Link href={form.link} label={COPY.planInConsole} />}
             <Text color="subtle" size="footnote">{COPY.addedNote}</Text>
             <Button key="add-next" label={COPY.nextTask} variant="primary" onPress={() => openAdd($, '')} />
@@ -2419,7 +2482,7 @@ export const register: Register = on => {
       // THREE PICKERS (S32) over tasks_add's own fields: the goal, the story it runs after, the size.
       const pickers = [
         'Select' in elements && form.goals.length > 0 ? (
-          <elements.Select key="add-goal" label={COPY.goal} value={form.goal} options={form.goals} onSelect={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, goal: value }))} />
+          <elements.Select key="add-goal" label={COPY.goal} value={form.goal} options={form.goals} onSelect={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, goal: value, problem: null }))} />
         ) : null,
         'Select' in elements ? (
           <elements.Select key="add-after" label={COPY.afterLabel} value={form.after} options={form.stories} onSelect={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, after: value }))} />
@@ -2453,6 +2516,20 @@ export const register: Register = on => {
               onSubmit={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, criteria: value }))}
             />
           )}
+          {'Input' in elements && isRepositoryGoal && (
+            // THE FILES, ONLY FOR A GOAL OVER A REPOSITORY (#39): one path per line where Desktop has proven a multi-line
+            // field, by semicolons otherwise; a goal in Terylon's own list has no files to declare.
+            <elements.Input
+              key="add-files"
+              label={COPY.filesLabel}
+              placeholder={look.proofs.inputRows ? COPY.filesPlaceholderRows : COPY.filesPlaceholder}
+              value={form.files}
+              rows={look.proofs.inputRows ? 3 : undefined}
+              onInput={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, files: value, problem: null }))}
+              onSubmit={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, files: value, problem: null }))}
+            />
+          )}
+          {isRepositoryGoal && form.problem !== null && <Text key="add-files-problem" color="error">{form.problem}</Text>}
           {form.goals.length === 0 && <Text color="warning">{COPY.noGoal}</Text>}
           {look.isGraphic && !look.isNarrow
             ? (
@@ -2638,17 +2715,17 @@ export const register: Register = on => {
       // ITS ORDER IS ITS STORIES' after (#35): an arrow only where a story waits for another, said by their titles.
       const chain = plan.stories.map(item => ({ index: item.index, after: item.after }))
       const orderAlt = COPY.planOrderAlt(plan.stories.map(item => ({ title: item.title, after: item.after.map(place => plan.stories[place - 1]?.title ?? `#${place}`) })))
-      const sizes = plan.stories.map(item => (item.estimate === null ? item.size : `${item.size} ~$${item.estimate}`)).join(' → ')
 
       const planKey = `plan-${plan.id}`
       const card_ = cardOf(`plan-${plan.id}`, <Text size="heading" weight="semibold">{COPY.plan(plan.id)}<Text color="subtle" weight="regular">{` · ${plan.goalTitle}`}</Text></Text>, plan.stateText, [
-        // A PLAN AS A CHAIN (S32): the order and the "after" of its stories as an Svg, as 1 → 2 → 3 on the terminal.
-        plan.stories.length === 0
+        // A PLAN AS A CHAIN (S32): the order and the "after" of its stories as an Svg, as 1 → 2 → 3 on the terminal. Only
+        // the order (#39): the sizes beside it, "S ~$3 → M ~$5", read as nodes of a second chain, and a plan of one story
+        // drew "○ M" above its row. A plan of one story has no order to draw; each size is said on its story's row.
+        plan.stories.length < 2
           ? null
           : (
               <Box key={`plan-${plan.id}-chain`} flexDirection="row" gap={1} alignItems="center">
                 {look.isGraphic ? picture(elements, planChain(chain, orderAlt)) : <Text color="subtle">{planOrder(chain)}</Text>}
-                <Text color="subtle" size="footnote" tabular>{sizes}</Text>
               </Box>
             ),
         ...plan.stories.map(item =>
@@ -2900,9 +2977,12 @@ export const register: Register = on => {
 
     // THE QUEUE: waiting for you, running, queued or held, done today. Each card stays, quiet when empty.
     const waitingKind = (kind: string) =>
-      kind === 'question' ? COPY.kindQuestion : kind === 'merge' ? COPY.kindMerge : kind === 'plan' ? COPY.kindPlan : COPY.kindBlocked
+      kind === 'question' ? COPY.kindQuestion : kind === 'merge' ? COPY.kindMerge : kind === 'accept' ? COPY.kindAccept : kind === 'plan' ? COPY.kindPlan : COPY.kindBlocked
     const waitingTone = (kind: string): Tone =>
-      kind === 'question' ? 'warning' : kind === 'merge' ? 'merged' : kind === 'blocked' ? 'error' : 'inactive'
+      kind === 'question' ? 'warning' : kind === 'merge' ? 'merged' : kind === 'accept' ? 'success' : kind === 'blocked' ? 'error' : 'inactive'
+    // THE CARD'S HINT says where each waiting decision is taken: a merge in the console, an acceptance on its card (#39).
+    const hasAccept = current.waiting.some(item => item.kind === 'accept')
+    const waitingHint = !hasAccept ? COPY.waitingHint : current.waiting.some(item => item.kind === 'merge') ? COPY.waitingHintBoth : COPY.waitingHintAccept
     const waitingReveal = (kind: string) => (kind === 'question' ? COPY.answerInConsole : COPY.mergeInConsole)
     const slots = slotsGauge(current.slotsUsed, current.slots, false)
     const spend = budgetUsd === null ? null : spendBar(runningUsd, budgetUsd, 'small', COPY.gaugeSpendAlt(current.runningUsd, current.dayBudget ?? ''))
@@ -2941,14 +3021,14 @@ export const register: Register = on => {
         ], 'wait')}
         {actBusyNote('leader')}
         {actOutcome('leader', consoleLink(base, 'work'), COPY.workInConsole)}
-        {cardOf('waiting', headingOf(COPY.waiting, current.waiting.length, current.waiting.length > 0 ? 'text' : 'inactive', stale), look.isNarrow ? null : COPY.waitingHint, [
+        {cardOf('waiting', headingOf(COPY.waiting, current.waiting.length, current.waiting.length > 0 ? 'text' : 'inactive', stale), look.isNarrow ? null : waitingHint, [
           current.waiting.length === 0 ? quiet(elements, COPY.nothingWaiting) : null,
           ...current.waiting.map(item =>
             rowOf({
               key: item.key,
               kind: waitingKind(item.kind),
               kindTone: waitingTone(item.kind),
-              title: item.kind === 'merge' ? `${item.title} · ${item.detail}` : item.title,
+              title: item.kind === 'merge' || item.kind === 'accept' ? `${item.title} · ${item.detail}` : item.title,
               // ONLY MERGE LINKS OUT (S27): every other waiting row's act is on its subject's card.
               reveal: item.kind === 'merge' || item.kind === 'question' ? { href: item.console, label: waitingReveal(item.kind) } : null,
               onPress: () => toggle($, item.key),
@@ -2958,7 +3038,7 @@ export const register: Register = on => {
                   <Box flexDirection="row" gap={1} flexWrap="wrap">
                     {item.kind === 'question' && <Button key={`answer-${item.target}`} label={COPY.answer} variant="primary" onPress={() => go({ screen: 'question', question: item.target })} />}
                     {item.kind === 'question' && <Link href={item.console} label={COPY.answerInConsole} />}
-                    {(item.kind === 'merge' || item.kind === 'blocked') && <Button key={`open-story-${item.target}`} label={COPY.openStory} onPress={() => go({ screen: 'story', story: item.target })} />}
+                    {(item.kind === 'merge' || item.kind === 'accept' || item.kind === 'blocked') && <Button key={`open-story-${item.target}`} label={COPY.openStory} onPress={() => go({ screen: 'story', story: item.target })} />}
                     {item.kind === 'merge' && <Link href={item.console} label={COPY.mergeInConsole} />}
                     {item.kind === 'plan' && <Button key={`open-plan-${item.target}`} label={COPY.openPlan} onPress={() => go({ screen: 'plan', plan: item.target })} />}
                   </Box>
@@ -2980,7 +3060,7 @@ export const register: Register = on => {
               body: (
                 <Box flexDirection="column" paddingLeft={look.isGraphic ? 0 : 1}>
                   {look.isGraphic
-                    ? picture(elements, (look.isNarrow ? dots : segments)(item.phases, COPY.phaseShort, item.isStuck))
+                    ? picture(elements, (look.isNarrow ? dots : segments)(item.phases, shortLabels(item.phases), item.isStuck))
                     : phaseLine(elements, item.phases, item.isStuck, item.stageLine)}
                   {look.isGraphic && (item.stageLine ?? item.step) !== null && <Text color="inactive" size="footnote" wrap="truncate-end">{item.stageLine ?? item.step}</Text>}
                   {!look.isGraphic && item.stageLine === null && item.step !== null && <Text color="inactive" wrap="truncate-end">{item.step}</Text>}

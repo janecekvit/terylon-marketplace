@@ -66,7 +66,14 @@ export const COPY = {
   fixNoServer: ['Install the plugin terylon-os: /plugin install terylon-os@terylon', 'Check that its server is connected: claude mcp list', 'Press Try again.'],
   fixRefused: ['Sign this PC into the tailnet with your own account.', 'Press Try again.'],
   fixError: ['Open Health in the console to see why.', 'Press Try again.'],
-  fixUnreachable: (url: string) => ['Check the tailnet: tailscale status', `Check TERYLON_URL: ${url === '' ? '(not set)' : url}`, 'The pane retries every minute; Try again does it now.'],
+  // AFTER A NETWORK OUTAGE a running session does not reconnect the plugin's server by itself (Terylon S40, #402), until
+  // Terylon S42 (#404) makes /mcp stateless.
+  fixUnreachable: (url: string) => [
+    'Check the tailnet: tailscale status',
+    `Check TERYLON_URL: ${url === '' ? '(not set)' : url}`,
+    'After a network outage: /mcp → terylon → Reconnect, or restart Claude Desktop.',
+    'The pane retries every minute; Try again does it now.',
+  ],
   pausedTitle: 'The leader is paused',
   fixPaused: ['Press Resume, here or on the queue: the leader continues from its log.'],
   alertHint: (source: string, time: string) => `${source} · ${time}`,
@@ -89,6 +96,8 @@ export const COPY = {
   // The queue.
   waiting: 'Waiting for you',
   waitingHint: 'decide here · merge in the console',
+  waitingHintAccept: 'decide here · accept on its card',
+  waitingHintBoth: 'decide here · merge in the console, accept on its card',
   running: 'Running',
   queued: 'Queued',
   doneToday: 'Done today',
@@ -100,6 +109,7 @@ export const COPY = {
   stale: ' (stale)',
   kindQuestion: 'question',
   kindMerge: 'merge',
+  kindAccept: 'accept',
   kindPlan: 'plan',
   kindBlocked: 'blocked',
   kindQueued: 'queued',
@@ -129,6 +139,7 @@ export const COPY = {
   // and /mcp names no reason, so the pane says only what it can see.
   notStarted: 'not started, though a slot is free',
   heldTitle: 'Held',
+  verifiedAccept: 'verified · waiting for your acceptance',
   mergedAt: (time: string, cost: string) => `${time} · $${cost}`,
   answer: 'Answer',
   answerInConsole: 'Answer in the console ↗',
@@ -298,11 +309,12 @@ export const COPY = {
     `The leader is paused${since === null ? '' : ` since ${since}`}${reason === null ? '' : ` (${reason})`}`,
   metrics: 'Last 30 days',
   metricsHint: 'metrics',
-  // ONE STORY, ONE OPEN PR: the operator's walk of 1.1.1 read "1 stories" on the Status tab.
+  // ONE STORY, ONE PR OPENED: the operator's walk of 1.1.1 read "1 stories" on the Status tab. The number is the PRs
+  // opened over the 30 days, not the PRs open now (Terylon S40, #402).
   metricStories: (count: number, hostProof: number | null) => `${count === 1 ? 'story' : 'stories'}${hostProof === null || hostProof === 0 ? '' : ` (+${hostProof} host proof)`}`,
   metricCost: 'per story',
   metricMerged: 'merged',
-  metricOpened: (count: number) => (count === 1 ? 'open PR' : 'open PRs'),
+  metricOpened: (count: number) => (count === 1 ? 'PR opened' : 'PRs opened'),
   loadTimedOut: (seconds: number) => `Terylon did not answer within ${seconds} s. Press the tab again to retry.`,
   bellInConsole: 'Bell in the console ↗',
   bellNote: 'Mark handled is notice_handle, which decides nothing about work. Pause and Resume are on the queue and the Status tab.',
@@ -317,6 +329,13 @@ export const COPY = {
   criteriaLabel: 'Criteria (optional)',
   criteriaPlaceholder: 'Separate them with semicolons, or the leader writes them',
   criteriaPlaceholderRows: 'One per line, or the leader writes them',
+  // A task over a repository declares the files it will change (#39); Terylon refuses it without 1 to 30.
+  filesLabel: 'Files (1 to 30, one per line)',
+  filesPlaceholder: 'The paths it will change, separated by semicolons',
+  filesPlaceholderRows: 'The paths it will change, one per line',
+  filesNone: 'A task over a repository declares 1 to 30 files it will change, one per line.',
+  filesBlank: (line: number) => `Files: line ${line} is blank. Write one path per line, with no blank line between.`,
+  filesTooMany: (count: number) => `Files: ${count} paths; a task declares at most 30.`,
   size: 'Size',
   sizes: ['M', 'L', 'XL'] as readonly string[],
   goal: 'Goal',
@@ -331,6 +350,7 @@ export const COPY = {
   // differ, and this says which side changed it.
   handedTitle: (title: string) => `Title: ${title}`,
   handedCriteria: (criteria: readonly string[]) => (criteria.length === 0 ? 'Criteria: none sent; the leader writes them.' : `Criteria: ${criteria.join(' · ')}`),
+  handedFiles: (files: readonly string[]) => `Files: ${files.join(' · ')}`,
   addedNote: 'The plan it becomes waits for you under “Waiting for you”.',
   nextTask: 'Next task',
   notAdded: 'Not handed over',
@@ -473,6 +493,8 @@ export const COPY = {
   abandonApprovedNote: 'It has not started; abandoned, it never will.',
   mergeNote: (commit: string | null) => `Merge is the one gate: your passkey confirms it in the console${commit === null ? '' : `, at exactly commit ${commit}`}. The pane never merges.`,
   acceptNote: 'A list story has no merge: Accept ends it as done.',
+  acceptPhase: 'Accept — your act',
+  acceptShort: 'Accept',
   stopNote: 'Stop cancels the run; the story waits, blocked as stopped, until you unblock, return or abandon it.',
   pauseNote: 'Nothing new is admitted, issued, judged or written until you resume. Runs already going keep going.',
   // WHAT A DROP WITHDRAWS AND ABANDONS, from the goal's own data, none included (the owner's walk of 1.5.0, #35): since

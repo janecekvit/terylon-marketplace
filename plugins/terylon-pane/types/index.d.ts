@@ -4,7 +4,8 @@
 export type PaneConnection = 'connecting' | 'ok' | 'unreachable' | 'refused' | 'no-server' | 'not-allowed' | 'error'
 
 export type PaneWaitingItem = {
-  kind: 'merge' | 'plan' | 'question' | 'blocked'
+  // A verified story waits for a merge over a repository, or for an acceptance in Terylon's own list (#39).
+  kind: 'merge' | 'accept' | 'plan' | 'question' | 'blocked'
   key: string
   // The subject the row opens in the pane: a story, a plan or a question.
   target: number
@@ -152,12 +153,18 @@ export type PaneAdd = {
   goal: string
   after: string
   size: string
+  // The files a task over a repository declares, one path per line (#39).
+  files: string
   goals: PaneChoice[]
+  // The goals, by their value in `goals`, whose target is a repository: their tasks declare 1 to 30 files.
+  repositoryGoals: string[]
   stories: PaneChoice[]
   sentence: string | null
   link: string | null
+  // Why the pane did not send the task: what the Files field breaks, said under it.
+  problem: string | null
   // What tasks_add was sent, word for word, said under ✓ Handed over (#35).
-  sent: { title: string; criteria: string[] } | null
+  sent: { title: string; criteria: string[]; files: string[] } | null
 }
 
 export type PaneAnswer = {

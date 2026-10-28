@@ -25,6 +25,6 @@ allowed-tools: mcp__plugin_terylon-os_terylon__*, mcp__terylon__*
   | `story_abandon` | `{story, reason?}` | |
   | `story_accept` | `{story}` | the story is kept in Terylon's own list |
 
-- **The answer is `{accepted, sentence, commandId, subjectId}`.** `accepted: null` means the leader has not decided within 10 s: say so and do not retry. A refusal, `{refused, status?, console?}` or `accepted: false`, carries a sentence: relay it.
+- **The answer is `{accepted, sentence, commandId, subjectId}`.** `accepted: null` means the leader has not decided within 10 s: say so, and do not send the write again; `leader_answer` with the `commandId` reads the decision later. A refusal, `{refused, status?, console?}` or `accepted: false`, carries a sentence: relay it.
 - **Merge is the one gate**, and it is not taken here: `merge-gate` walks a verified story's evidence, and the owner confirms the exact commit with the passkey in the console.
 - **This is what the pane's "Shrň mi to v session" asks for**: the `terylon-pane` mod posts the request into the session, and this skill answers it.

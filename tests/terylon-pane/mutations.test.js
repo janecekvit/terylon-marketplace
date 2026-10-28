@@ -564,6 +564,67 @@ const MUTATIONS = [
         find: "const OPEN_STORY_STATES: readonly string[] = ['approved', 'dispatched', 'running', 'blocked', 'pr-open', 'verifying', 'verified']",
         replace: "const OPEN_STORY_STATES: readonly string[] = []",
     },
+    // The production retest of 1.6.0 (#39).
+    {
+        name: "a repository goal's task is sent without its files",
+        file: "hooks/register.tsx",
+        find: "    files: declared.files,\n",
+        replace: "    files: [],\n",
+    },
+    {
+        name: "the Files field is drawn for a goal in Terylon's own list",
+        file: "hooks/register.tsx",
+        find: "{'Input' in elements && isRepositoryGoal && (",
+        replace: "{'Input' in elements && (",
+    },
+    {
+        name: "a blank line among a task's files is sent",
+        file: "hooks/queue.ts",
+        find: "  if (blank >= 0) {\n",
+        replace: "  if (false) {\n",
+    },
+    {
+        name: "more than 30 files are sent",
+        file: "hooks/queue.ts",
+        find: "  if (files.length > FILES_MOST) {\n",
+        replace: "  if (false) {\n",
+    },
+    {
+        name: "a verified list story waits for a merge again",
+        file: "hooks/queue.ts",
+        find: "    if (text(story.target) === 'list') {\n",
+        replace: "    if (false) {\n",
+    },
+    {
+        name: "a verified story's target is not read from story_get",
+        file: "hooks/register.tsx",
+        find: "    if (!storyTargets.has(id)) {\n",
+        replace: "    if (false) {\n",
+    },
+    {
+        name: "a list story's last phase is Merge again",
+        file: "hooks/queue.ts",
+        find: "      label: name === 'merge' && isList ? COPY.acceptPhase : COPY.stageLabel(name),\n",
+        replace: "      label: COPY.stageLabel(name),\n",
+    },
+    {
+        name: "a plan of one story draws its chain again",
+        file: "hooks/register.tsx",
+        find: "        plan.stories.length < 2\n",
+        replace: "        plan.stories.length === 0\n",
+    },
+    {
+        name: "the unreachable fix no longer says to reconnect after a network outage",
+        file: "hooks/copy.ts",
+        find: "    'After a network outage: /mcp → terylon → Reconnect, or restart Claude Desktop.',\n",
+        replace: "",
+    },
+    {
+        name: "the sizes stand beside the plan's chain again",
+        file: "hooks/register.tsx",
+        find: "                {look.isGraphic ? picture(elements, planChain(chain, orderAlt)) : <Text color=\"subtle\">{planOrder(chain)}</Text>}\n",
+        replace: "                {look.isGraphic ? picture(elements, planChain(chain, orderAlt)) : <Text color=\"subtle\">{planOrder(chain)}</Text>}\n                <Text color=\"subtle\" size=\"footnote\" tabular>{plan.stories.map(item => (item.estimate === null ? item.size : `${item.size} ~$${item.estimate}`)).join(' → ')}</Text>\n",
+    },
 ];
 
 // Capability, not presence: an older claude answers --version yet has no `plugin test`, and running

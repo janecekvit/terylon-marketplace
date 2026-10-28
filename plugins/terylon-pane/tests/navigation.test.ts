@@ -3,9 +3,15 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { BRIEFING, GOALS, GOAL_QUESTION, PANE_PROPS, SESSION, chipOf, exact, pictures, world } from './fixtures'
+import { when } from '../hooks/queue'
+import { BRIEFING, GOALS, GOAL_QUESTION, NOTICES, PANE_PROPS, SESSION, WORLD_NOW, chipOf, exact, hostZoneOffset, pictures, world } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
+
+// A text matched literally inside a pattern: every character a pattern gives a meaning is escaped.
+function escapeRegExp(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
 
 for (const surface of ['desktop', 'terminal'] as const) {
   test(`${surface}: a running story opens whole, its goal opens from it, and ‹ walks back the same way`, async ($, on) => {
@@ -203,9 +209,10 @@ test('a waiting plan opens with its stories, each opening the story; approve and
   expect((await ui.find({ type: 'Text', text: exact('to approve · ~$14') }))?.props.color).toBe('subtle')
   expect((await ui.find({ key: 'plan-41-story-351' }))?.text).toMatch(/^\s*(?:●\s+)?2\s+Notice handle přes MCP\s+M · ~\$5 · after Health: tlačítko Check now$/)
   expect(await ui.find({ type: 'Text', text: exact('M · ~$5 · after Health: tlačítko Check now') })).toBeDefined()
-  // A PLAN'S ORDER (S32, #35): its stories' "after" as an Svg, said by their titles; the sizes and estimates in tabular digits.
+  // A PLAN'S ORDER (S32, #35): its stories' "after" as an Svg, said by their titles; each size and estimate on its story's
+  // row alone, never beside the chain (#39).
   expect((await pictures(ui)).map(item => item.alt)).toEqual(['Health: tlačítko Check now; Notice handle přes MCP after Health: tlačítko Check now'])
-  expect((await ui.find({ type: 'Text', text: exact('S ~$3 → M ~$5') }))?.props.tabular).toBe(true)
+  expect(await ui.find({ type: 'Text', text: exact('S ~$3 → M ~$5') })).toBeUndefined()
   expect((await ui.find({ type: 'Link', text: 'Edit criteria or pick stories in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=plan&plan=41')
   expect((await ui.find({ key: 'act-plan-41-approve' }))?.props.label).toBe('Approve')
   expect((await ui.find({ key: 'act-plan-41-rethink' }))?.props.label).toBe('Rethink…')
@@ -270,7 +277,12 @@ test('the bell tab reads the notices, the leader and the metrics; a notice is ha
   await ui.press({ key: 'tab-bell' })
 
   expect(await ui.find({ type: 'Text', text: exact('Needs you · 2') })).toBeDefined()
-  expect((await ui.find({ key: 'notice-117' }))?.text).toMatch(/^\s*(?:●\s+)?diun\s+A newer docker\.io\/amir20\/dozzle:latest is published\s+07:26 ▸$/)
+  // WHEN IT WAS RAISED, in the host's own zone (#39): 07:26 on a UTC runner, "11. 10." in Prague, where 22:00 UTC is the
+  // next day. The expectation is computed as the pane computes it, so it holds in every zone.
+  const raised = when(NOTICES.notices.find(notice => notice.id === 117)?.raisedAt, WORLD_NOW, hostZoneOffset(WORLD_NOW))
+  expect(raised).toBe(hostZoneOffset(WORLD_NOW) === 0 ? '07:26' : raised)
+  expect(raised).toMatch(/^(\d\d:\d\d|\d{1,2}\. \d{1,2}\.)$/)
+  expect((await ui.find({ key: 'notice-117' }))?.text).toMatch(new RegExp(`^\\s*(?:●\\s+)?diun\\s+A newer docker\\.io/amir20/dozzle:latest is published\\s+${escapeRegExp(raised)} ▸$`))
   // THE SOURCE AS A CHIP (S32): a fault of the machine in error, everything else inactive.
   expect((await chipOf(ui, 'notice-117'))?.dot).toBe('inactive')
   expect(await ui.find({ type: 'Text', text: exact('Nothing was pulled: update the pin when you choose.') })).toBeUndefined()
@@ -280,7 +292,7 @@ test('the bell tab reads the notices, the leader and the metrics; a notice is ha
   expect(await ui.find({ type: 'Text', text: exact('✓ The leader runs') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^✓ The backup ran/ })).toBeDefined()
   // FOUR NUMBERS, LARGE (S32), and no 30-day chart: metrics reports no per-day series.
-  for (const [value, label] of [['43', 'stories'], ['$1.10', 'per story'], ['0', 'merged'], ['1', 'open PR']]) {
+  for (const [value, label] of [['43', 'stories'], ['$1.10', 'per story'], ['0', 'merged'], ['1', 'PR opened']]) {
     const number = await ui.find({ type: 'Text', text: exact(value ?? '') })
     expect(number?.props.size).toBe('title')
     expect(number?.props.tabular).toBe(true)

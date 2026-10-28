@@ -22,4 +22,4 @@ allowed-tools: mcp__plugin_terylon-os_terylon__*, mcp__terylon__*
   | `plan_approve` | `{plan, stories?, edits?}` | a subset of `stories` approves only those, and the rest are dropped |
   | `plan_rethink` | `{plan, comment}` | the comment is at most 2000 characters |
 
-- **The answer is `{accepted, sentence, commandId, subjectId}`.** `accepted: null` means the leader has not decided within 10 s: say so and do not retry. A refusal, `{refused, status?, console?}` or `accepted: false`, carries a sentence: relay it.
+- **The answer is `{accepted, sentence, commandId, subjectId}`.** `accepted: null` means the leader has not decided within 10 s: say so, and do not send the write again; `leader_answer` with the `commandId` reads the decision later. A refusal, `{refused, status?, console?}` or `accepted: false`, carries a sentence: relay it.
