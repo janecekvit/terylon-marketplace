@@ -286,9 +286,12 @@ The marketplace is built with itself: its stories, builds, reviews and test-plan
 
 | Job | Runs | Needs |
 |---|---|---|
-| Unit suites | `node --test "**/*.test.js"`: every skill held to the Agent Skills specification, the forge-port contract and fixture tests, the harness's ref checks, the hook and measurement scripts, the Terylon pane's command and version checks. The pane's mutation suite skips in this job, which installs no `claude` CLI, and runs in the pane's own job instead | nothing |
+| Unit suites | `node --test "**/*.test.js"`: every skill held to the Agent Skills specification, the forge-port contract and fixture tests, the harness's ref checks, the hook and measurement scripts, the Terylon pane's command and version checks, and the tests of the pane's plan and shards. The pane's mutation and zone suites skip in this job, which installs no `claude` CLI, and run in the pane's own jobs instead | nothing |
 | End-to-end install stage | `node tests/e2e/run.js --stages install`: installs the marketplace from the commit under test as a consumer does, and checks every plugin, skill, agent, hook and MCP server loads | nothing: no login, no token, no model call |
-| terylon-pane mod | `claude plugin validate` and `claude plugin test` on `plugins/terylon-pane`, then `node --test tests/terylon-pane/mutations.test.js` and `zones.test.js`: the mod's own tests against the engine, each planted mutation turning them red, and the tests green with a time zone planted (the runner is UTC) | nothing: no login, no session, every service stubbed |
+| terylon-pane plan | `tests/terylon-pane/needs-pane-suites.js` over the paths the pull request changes: whether the two suites below run. They do when it changes the mod, its tests, the pinned Claude Code or `ci.yml`, and always on a push to `main` | nothing |
+| terylon-pane mutations (shard 1/4 to 4/4) | `node --test tests/terylon-pane/mutations.test.js` with `MUTATION_SHARD` set: each planted mutation turning the mod's tests red, a quarter of them per runner, in parallel | the plan said run |
+| terylon-pane zones | `node --test tests/terylon-pane/zones.test.js`: the mod's tests green with a time zone planted (the runner is UTC) | the plan said run |
+| terylon-pane mod (validate, test, mutations) | `claude plugin validate` and `claude plugin test` on `plugins/terylon-pane`: the mod's own tests against the engine; then the verdict over the plan, the shards and the zones: red if any failed or was cancelled, green when they passed or were skipped. The check `main` requires, on every pull request | nothing: no login, no session, every service stubbed |
 
 The two jobs that need `claude` install the same pinned Claude Code, from the lockfile in [`.github/claude-code/`](./.github/claude-code/package.json) with `npm ci`, every package checked against its integrity hash; Dependabot proposes a newer one 14 days after its release.
 

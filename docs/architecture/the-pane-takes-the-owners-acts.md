@@ -61,4 +61,4 @@ On 2026-10-21 the operator decided that merge alone carries enough risk to need 
 | `plugins/terylon-pane/tests/acts.test.ts` | every act on its press, never on render, its three outcomes, merge a link only |
 | `tests/terylon-pane/mcp-tool-table.json` | the copy of Terylon's tool table after PR 228 |
 | `tests/terylon-pane/tool-table.test.js` | `OWNER_ACTS` and `GATE_TOOLS` held to the copy, the README's rules to `PANE_TOOLS` |
-| `tests/terylon-pane/mutations.test.js` | merge among the acts, an act on render, a return without a note, merge drawn as a button |
+| `tests/terylon-pane/mutations.js` | merge among the acts, an act on render, a return without a note, merge drawn as a button |
