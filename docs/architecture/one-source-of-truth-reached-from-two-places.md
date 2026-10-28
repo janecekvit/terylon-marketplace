@@ -62,4 +62,4 @@ The diagram below is copied from #332, rev 28, section *Use case: one source of 
 | `plugins/terylon-pane/hooks/terylon.ts` | `PANE_TOOLS`, `GATE_TOOLS` — what the pane may call, and the gates it refuses by name |
 | `plugins/terylon-pane/hooks/register.tsx` | `refresh`, the `AbovePrompt` and `Pane` renders — the band and the pane drawn from the last answer |
 | `plugins/terylon-pane/types/index.d.ts` | `PaneSnapshot` — everything the pane holds, a copy of what `/mcp` answered |
-| `tests/terylon-pane/mutations.test.js` | the mutations that plant a gate in `PANE_TOOLS` and in the allow rules |
+| `tests/terylon-pane/mutations.js` | the mutations that plant a gate in `PANE_TOOLS` and in the allow rules |
