@@ -126,7 +126,7 @@ Three kinds of drawing, and each shape has one of them:
 | Shape | Drawn as | Lives in |
 |---|---|---|
 | **Structure** — components, their dependencies and boundaries, the static view | a Mermaid `flowchart` in a ` ```mermaid ` fence, in the adaptive style below | the Markdown file that owns it: `docs/architecture/README.md`, the ADR that draws it, or, for the plugin graph, the root `README.md` |
-| **A flow over time** — a resolution, a pipeline, a sequence of calls with branches | Mermaid in a ` ```mermaid ` fence: a `flowchart` takes the same opening and edge colour, a `sequenceDiagram` the default theme with no colours of its own | the article that walks the flow, usually in `docs/flows/` |
+| **A flow over time** — a resolution, a pipeline, a sequence of calls with branches | Mermaid in a ` ```mermaid ` fence: a `flowchart` takes the same opening and edge colour, a `sequenceDiagram` the default theme with translucent boxes | the article that walks the flow, usually in `docs/flows/` |
 | **A short inline sketch** — a dispatch chain in a `SKILL.md`, the dependency graph an orienting document must carry, a layout | box drawing in a bare fence, by the rules below | the file it orients |
 
 - **The block is the source and the picture.** GitHub renders a ` ```mermaid ` fence where it stands; nothing is generated, so there is no file to regenerate and no copy to go stale. To change a diagram, edit its block.
@@ -134,8 +134,17 @@ Three kinds of drawing, and each shape has one of them:
 - **ELK, not dagre — and readable on dagre.** GitHub renders both; ELK's edges are orthogonal and edges leaving a subgraph do not cross, which reads far better on a dependency graph. A renderer without ELK falls back to dagre, so every diagram is laid out to read there too: few crossings by construction, no meaning carried by position alone.
 - **Comments are `%%`, on their own line, next to the node or edge they explain.** What a source comment says about why an edge or a colour is there belongs in the block, not in prose beside it.
 - **No HTML in a label.** A line break is a Markdown string, the label in backticks inside its quotes with a real newline: ``a["`terylon-core\nthe root`"]`` (written over two source lines). No `<br/>`, no icons and no `click` links: Azure DevOps's renderer refuses them, and GitHub drops the last two.
-- **Shapes:** `(["…"])` for something outside the marketplace, `[("…")]` for a store, `[/"…"/]` for a note or a page, `[["…"]]` for "one of many". A dashed edge is `-.->`, its annotation in `|"…"|`.
+- **Shapes by kind:** a stadium `(["…"])` for something external, outside the marketplace, `[("…")]` for a store, `[/"…"/]` for a note or a page, `[["…"]]` for "one of many". A dashed edge is `-.->`, its annotation in `|"…"|`.
 - **The source stays plain text everywhere else**, so write node labels and ids a reader can follow unrendered.
+
+#### A dense picture splits in two
+
+| Picture | Drawn as |
+|---|---|
+| **The steps** | a `sequenceDiagram`: one `box` per trust boundary, each check a `Note`, an alternative an `opt` |
+| **The architecture** | a simplified `flowchart`: each box at most 2 lines, each edge labelled with its step number from the sequence |
+
+**Why Mermaid** is a measurement: the same threat-model diagram was 32.6 KB in draw.io, 7.6 KB in D2 and 7.1 KB in Mermaid, 22 % of draw.io (measured 2026-10, by the owner, on one diagram drawn in all three). The rest of the reasoning is in [`diagrams-are-mermaid-blocks.md`](../../docs/architecture/diagrams-are-mermaid-blocks.md).
 
 #### The adaptive style: one drawing for GitHub's light and dark themes
 
@@ -151,13 +160,13 @@ flowchart TD
 | Element | Style | Because |
 |---|---|---|
 | A node, through `classDef` and `:::class` | a saturated fill, a darker stroke, **white text**, from the palette below | white on a saturated fill reads on either background; a pale fill glares in dark mode |
-| A boundary, through `subgraph` and `style` | a semi-transparent fill `#RRGGBBAA` with alpha `1A` (`14` for a large area), the stroke and the title in the layer's colour: `style port fill:#B453091A,stroke:#B45309,color:#B45309` | the background shows through, so the box tints in either theme |
-| A boundary outside the trust it encloses, or outside the chain | dashed: `stroke-dasharray:3 3` | |
+| A boundary, through `subgraph` and **one `style` line per subgraph** | a semi-transparent fill `#RRGGBBAA` with alpha `1A` (`14` for a large area), the stroke and the title in the layer's colour, the stroke dashed: `style port fill:#B453091A,stroke:#B45309,color:#B45309,stroke-dasharray:3 3` | the background shows through, so the box tints in either theme; **without an explicit `color:` the title vanishes in Azure DevOps' dark preview** |
 | A boundary with no layer of its own | the neutral `#8B949E`, alpha `14` | a dark grey title vanishes on the dark background |
-| Edges | `linkStyle default stroke:#8B949E`; an edge label takes no colour | the theme colours the labels |
+| Edges | `linkStyle default stroke:#8B949E`; an edge label is short and takes no colour; a token or key flow is dotted, `-.->` | the theme colours the labels |
+| A node's category | one `classDef` per category, from the palette below | one meaning per colour |
 | A node left without a class (the owner, or a flow's ordinary step) | the theme's own colours | |
 | Text | **never set `fontFamily`** | GitHub measures text in one font and draws it in another, so a set font clips the labels |
-| A `sequenceDiagram` | the default theme, no colours of its own | |
+| A `sequenceDiagram` | the default theme; a `box` per trust boundary takes a translucent `rgba()` fill, `box rgba(37, 99, 235, 0.1) Agentic OS` | an opaque box hides the lifelines in the dark preview |
 
 One meaning per colour, across every diagram here:
 

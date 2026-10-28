@@ -82,9 +82,7 @@ function commentText(text, syntax, state)
 {
     if (syntax.htmlComments)
     {
-        const html = text.match(/<!--(.*?)(?:-->|$)/);
-
-        return html ? html[1] : null;
+        return htmlCommentText(text, state);
     }
 
     if (syntax.blockComments && state.insideBlock)
@@ -114,6 +112,31 @@ function commentText(text, syntax, state)
     }
 
     return text.slice(start.index + syntax.lineMarker.length);
+}
+
+// The text of an HTML comment on one line, followed across lines like a block comment. Found by position,
+// not by a pattern, so a comment that spans lines is read whole.
+function htmlCommentText(text, state)
+{
+    let rest = text;
+
+    if (!state.insideBlock)
+    {
+        const start = text.indexOf("<!--");
+
+        if (start === -1)
+        {
+            return null;
+        }
+
+        rest = text.slice(start + 4);
+    }
+
+    const end = rest.indexOf("-->");
+
+    state.insideBlock = end === -1;
+
+    return end === -1 ? rest : rest.slice(0, end);
 }
 
 // Where a comment starts on a line, outside any quoted string: { kind, index }, or null. A line marker counts

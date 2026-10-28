@@ -161,6 +161,23 @@ test("every flowchart in README.md and docs/ opens with its keyword and the ELK 
     }
 });
 
+// A subgraph's id, and a style line naming one with its title colour and its dashed stroke.
+const SUBGRAPH = /^\s*subgraph (\w+)/gm;
+const SUBGRAPH_STYLE = /^\s*style (\w+) [^\n]*\bcolor:#[0-9A-Fa-f]{6}\b[^\n]*\bstroke-dasharray:3 3/gm;
+
+test("every subgraph has a style that sets its title colour and a dashed stroke", () =>
+{
+    for (const { filePath, block } of documentedMermaidBlocks())
+    {
+        const styled = new Set([...block.matchAll(SUBGRAPH_STYLE)].map((match) => match[1]));
+
+        for (const [, subgraph] of block.matchAll(SUBGRAPH))
+        {
+            assert.ok(styled.has(subgraph), `${path.relative(REPOSITORY_ROOT, filePath)}: subgraph ${subgraph} has no style with an explicit color: and stroke-dasharray:3 3; its title vanishes on a dark preview`);
+        }
+    }
+});
+
 test("no D2 source or generated SVG is left in docs/architecture", () =>
 {
     const leftovers = fs.readdirSync(ARCHITECTURE_DIRECTORY).filter((fileName) => /\.(d2|svg)$/.test(fileName));

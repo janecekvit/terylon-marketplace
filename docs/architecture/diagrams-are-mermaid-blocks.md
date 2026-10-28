@@ -18,7 +18,7 @@ Two arrangements came before this one, and each broke on something the other had
 
 D2 worked, and it cost a second file per diagram, a render script, a Go toolchain in CI and a version pin, all to keep a picture in step with a source nobody read on GitHub. What D2 did better was an explicit dark theme per diagram.
 
-Mermaid with ELK gave the same orthogonal layout from a block that is its own picture: the source and what a reader sees are one text, read alike by a person and a model, and models write Mermaid more reliably than D2. The first Mermaid drawings kept D2's light pastels, with a container stroked and not filled; pale fills glared on GitHub's dark background, and the adaptive style of saturated fills with white text replaced them on 2026-10-27.
+Mermaid is also the smallest source: the same threat-model diagram measured 32.6 KB in draw.io, 7.6 KB in D2 and 7.1 KB in Mermaid (measured 2026-10, by the owner, on one diagram drawn in all three). Mermaid with ELK gave the same orthogonal layout from a block that is its own picture: the source and what a reader sees are one text, read alike by a person and a model, and models write Mermaid more reliably than D2. The first Mermaid drawings kept D2's light pastels, with a container stroked and not filled; pale fills glared on GitHub's dark background, and the adaptive style of saturated fills with white text replaced them on 2026-10-27.
 
 The front matter that asked for ELK was the next thing to break. **Azure DevOps' preview renders a Mermaid block only when it starts with the diagram keyword**, and the plugins write into consumers' Azure DevOps — pull request descriptions, threads and work items. A form that renders on one forge and not the other is a rule the writer has to remember per target.
 
@@ -26,6 +26,7 @@ The front matter that asked for ELK was the next thing to break. **Azure DevOps'
 
 | Option | What it costs | Chosen |
 |---|---|---|
+| draw.io files | an XML source of 32.6 KB for a diagram Mermaid draws in 7.1 KB, unreadable in a diff and by a model | no |
 | D2 sources and rendered SVGs | a second file per diagram, a render script, a toolchain and a pin in CI | no — superseded |
 | Mermaid with `---` front matter | nothing on GitHub; nothing drawn in Azure DevOps' preview | no — superseded |
 | Mermaid, keyword first, no layout requested | renders on both; dagre's curved edges cross on a dependency graph | no |
@@ -38,6 +39,7 @@ The front matter that asked for ELK was the next thing to break. **Azure DevOps'
 | The block starts with its keyword; no front matter | `tests/architecture-diagrams/architecture-diagrams.test.js` |
 | A flowchart's second line is `%%{init: {"layout": "elk", "flowchart": {"padding": 16}}}%%` | the same test |
 | No `theme`, `themeVariables` or `fontFamily`, no HTML in a label | the same test |
+| Every subgraph has a `style` with an explicit `color:` and a dashed stroke | the same test |
 | Every block is rendered in light, in dark and on dagre before a push, and checked on GitHub by the owner | `.claude/rules/markdown.md`, by hand — CI starts no browser |
 
 Measured 2026-10-28 with `@mermaid-js/mermaid-cli@11.4.2` and the pre-installed headless shell: all five flowcharts in `README.md` and `docs/` rendered with the directive after the keyword, with ELK's orthogonal edges, in both themes, and each read on dagre with the directive removed.

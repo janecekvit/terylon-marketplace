@@ -79,6 +79,13 @@ test("a block comment is followed across added lines, and ends where it closes",
     assert.deepEqual(flaggedLines("module.ts", lines), [11]);
 });
 
+test("an HTML comment is followed across added lines", () =>
+{
+    const lines = ["<!--", "moved in #7", "-->", "Prose with #8 is documentation, not a comment."];
+
+    assert.deepEqual(flaggedLines("README.md", lines), [11]);
+});
+
 test("an annotation names the file, the line and what was found", () =>
 {
     const text = annotation({ file: "a,b.js", line: 3, names: ["a date"] });
