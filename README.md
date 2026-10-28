@@ -3,7 +3,6 @@
 [![CI](https://github.com/janecekvit/terylon-marketplace/actions/workflows/ci.yml/badge.svg)](https://github.com/janecekvit/terylon-marketplace/actions/workflows/ci.yml)
 [![Security](https://github.com/janecekvit/terylon-marketplace/actions/workflows/security.yml/badge.svg)](https://github.com/janecekvit/terylon-marketplace/actions/workflows/security.yml)
 [![Docs](https://github.com/janecekvit/terylon-marketplace/actions/workflows/docs.yml/badge.svg)](https://github.com/janecekvit/terylon-marketplace/actions/workflows/docs.yml)
-[![Diagrams](https://github.com/janecekvit/terylon-marketplace/actions/workflows/diagrams.yml/badge.svg)](https://github.com/janecekvit/terylon-marketplace/actions/workflows/diagrams.yml)
 [![codecov](https://codecov.io/gh/janecekvit/terylon-marketplace/graph/badge.svg)](https://codecov.io/gh/janecekvit/terylon-marketplace)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/janecekvit/terylon-marketplace/badge)](https://scorecard.dev/viewer/?uri=github.com/janecekvit/terylon-marketplace)
 [![Latest release](https://img.shields.io/github/v/release/janecekvit/terylon-marketplace?sort=semver)](https://github.com/janecekvit/terylon-marketplace/releases)
@@ -46,16 +45,27 @@ You enable **two** plugins for a repository: the **role** you work in, and the *
 ## How a story travels
 
 ```mermaid
+---
+config:
+  layout: elk
+  flowchart:
+    padding: 16
+---
 flowchart LR
     subgraph develop ["develop: terylon-dev"]
         direction TB
-        brainstorm["brainstorm<br/>when the idea is still vague"]
-        planner["planner<br/>a design and a test-first plan"]
-        developer["developer<br/>one task at a time, red to green"]
+        brainstorm["`brainstorm
+when the idea is still vague`"]
+        planner["`planner
+a design and a test-first plan`"]
+        developer["`developer
+one task at a time, red to green`"]
         debugger["debugger"]
-        reviewers["security, performance, architecture,<br/>edge-case reviewers, in parallel"]
+        reviewers["`security, performance, architecture,
+edge-case reviewers, in parallel`"]
         refactorer["refactorer"]
-        codeReviewer["code-reviewer<br/>the whole branch, findings verified adversarially"]
+        codeReviewer["`code-reviewer
+the whole branch, findings verified adversarially`"]
 
         brainstorm -.-> planner
         planner --> developer
@@ -65,19 +75,107 @@ flowchart LR
         refactorer --> codeReviewer
     end
 
-    brief([brief]) --> createUserStory["create-user-story<br/>terylon-product"]
+    brief([brief]) --> createUserStory["`create-user-story
+terylon-product`"]
     createUserStory --> develop
-    develop --> createPr["create-pr<br/>terylon-forge"]
-    createPr --> reviewAndTest["review-pr / test<br/>terylon-forge, terylon-test"]
+    develop --> createPr["`create-pr
+terylon-forge`"]
+    createPr --> reviewAndTest["`review-pr / test
+terylon-forge, terylon-test`"]
+
+    linkStyle default stroke:#8B949E
 ```
 
 Each agent is a role with its own instructions, dispatched by the `leader` and reporting back. Repository-local agents your project ships take over where they fit better, through `delegate-to-repo-agents`. The full dispatch chains are in [`plugins/CLAUDE.md`](./plugins/CLAUDE.md).
 
+## Architecture
+
+```mermaid
+---
+config:
+  layout: elk
+  flowchart:
+    padding: 16
+---
+%% The marketplace's plugins and the dependencies their manifests declare.
+%% The source of truth is this block: edit it here; nothing is generated from it.
+%% Every edge between two plugins is one entry of a plugin.json#dependencies array, drawn from the
+%% plugin that declares it to the plugin it names. A dashed one is declared although the chain
+%% already reaches it. The manifests are the source of truth; when they change, redraw this.
+flowchart BT
+    %% One colour per kind, the palette of .claude/rules/markdown.md: the chain (blue), the port (amber),
+    %% adapters (green), role plugins (indigo), Terylon's own plugins (purple), notes (grey).
+    %% No theme is set, so GitHub draws the block in its light or dark theme.
+    classDef chain fill:#2563EB,stroke:#1E40AF,color:#FFFFFF
+    classDef port fill:#B45309,stroke:#92400E,color:#FFFFFF
+    classDef adapter fill:#047857,stroke:#065F46,color:#FFFFFF
+    classDef role fill:#4F46E5,stroke:#3730A3,color:#FFFFFF
+    classDef terylon fill:#7E22CE,stroke:#6B21A8,color:#FFFFFF
+    classDef note fill:#4B5563,stroke:#374151,color:#FFFFFF
+
+    core["`terylon-core
+the root: shared conventions, measurement
+no dependencies`"]:::chain
+    git["`terylon-git
++ git; no forge, no MCP server`"]:::chain
+    forge["`terylon-forge
+the forge port: the pull request workflow
+declares no adapter, on purpose`"]:::port
+
+    subgraph adapters ["Adapters: one body of forge-ops each"]
+        ado["`terylon-ado
+Azure DevOps, Microsoft's remote MCP server`"]:::adapter
+        github["`terylon-github
+GitHub, over the gh CLI; no server`"]:::adapter
+    end
+
+    subgraph roles ["Role plugins"]
+        product["`terylon-product
+user stories, Feature specs`"]:::role
+        dev["`terylon-dev
+the build pipeline`"]:::role
+        test["`terylon-test
+a test plan and acceptance criteria`"]:::role
+    end
+
+    %% Terylon's own plugins: the owner's product, not a role in the development workflow.
+    %% Dashed: outside the chain.
+    subgraph outside ["Outside the chain: Terylon itself"]
+        os["`terylon-os
+Terylon's /mcp server + one skill per prompt
+no dependencies`"]:::terylon
+        pane["`terylon-pane
+a mod: the band, the status line, the pane`"]:::terylon
+    end
+
+    consumer[/"`A consumer repository enables two keys:
+a role plugin + an adapter.
+Everything else arrives as a dependency.`"/]:::note
+
+    git --> core
+    forge --> git
+    ado --> forge
+    github --> forge
+    product --> forge
+    dev --> forge
+    test --> forge
+    dev -.->|"also direct: leader dispatches code-reviewer"| git
+    dev -.->|"also direct: measure-token-spend"| core
+    test -.->|"also direct: measure-token-spend"| core
+    pane --> os
+
+    consumer -.->|"enables one"| roles
+    consumer -.->|"enables one"| adapters
+
+    style adapters fill:#0478571A,stroke:#047857,color:#047857
+    style roles fill:#4F46E51A,stroke:#4F46E5,color:#4F46E5
+    style outside fill:#7E22CE1A,stroke:#7E22CE,color:#7E22CE,stroke-dasharray:3 3
+    linkStyle default stroke:#8B949E
+```
+
+The plugin graph is drawn here and only here, from every `plugin.json#dependencies`; an arrow points from a plugin to one it declares, and a dashed one is declared although the chain already reaches it. [`docs/architecture/README.md`](./docs/architecture/README.md) links to it rather than drawing a second copy.
+
 ## Plugins
-
-![The plugin dependency graph: terylon-git sits on the root terylon-core; terylon-forge, the forge port that declares no adapter, sits on terylon-git; the adapters terylon-ado and terylon-github and the role plugins terylon-product, terylon-dev and terylon-test sit on terylon-forge, with terylon-dev also declaring terylon-git and terylon-core directly and terylon-test also declaring terylon-core directly; outside the chain, terylon-pane sits on terylon-os, which has no dependencies](docs/architecture/plugins.svg)
-
-Drawn from [`docs/architecture/plugins.d2`](docs/architecture/plugins.d2), which follows every `plugin.json#dependencies`; an arrow points from a plugin to one it declares, and a dashed one is declared although the chain already reaches it.
 
 | Plugin | For | Skills | Agents |
 |---|---|---|---|
@@ -198,9 +296,12 @@ The marketplace is built with itself: its stories, builds, reviews and test-plan
 
 | Job | Runs | Needs |
 |---|---|---|
-| Unit suites | `node --test "**/*.test.js"`: the forge-port contract and fixture tests, the harness's ref checks, the hook and measurement scripts, the Terylon pane's command and version checks. The pane's mutation suite skips in this job, which installs no `claude` CLI, and runs in the pane's own job instead | nothing |
+| Unit suites | `node --test "**/*.test.js"`: the forge-port contract and fixture tests, the harness's ref checks, the hook and measurement scripts, the Terylon pane's command and version checks, and the tests of the pane's plan and shards. The pane's mutation and zone suites skip in this job, which installs no `claude` CLI, and run in the pane's own jobs instead | nothing |
 | End-to-end install stage | `node tests/e2e/run.js --stages install`: installs the marketplace from the commit under test as a consumer does, and checks every plugin, skill, agent, hook and MCP server loads | nothing: no login, no token, no model call |
-| terylon-pane mod | `claude plugin validate` and `claude plugin test` on `plugins/terylon-pane`, then `node --test tests/terylon-pane/mutations.test.js` and `zones.test.js`: the mod's own tests against the engine, each planted mutation turning them red, and the tests green with a time zone planted (the runner is UTC) | nothing: no login, no session, every service stubbed |
+| terylon-pane plan | `tests/terylon-pane/needs-pane-suites.js` over the paths the pull request changes: whether the two suites below run. They do when it changes the mod, its tests, the pinned Claude Code or `ci.yml`, and always on a push to `main` | nothing |
+| terylon-pane mutations (shard 1/4 to 4/4) | `node --test tests/terylon-pane/mutations.test.js` with `MUTATION_SHARD` set: each planted mutation turning the mod's tests red, a quarter of them per runner, in parallel | the plan said run |
+| terylon-pane zones | `node --test tests/terylon-pane/zones.test.js`: the mod's tests green with a time zone planted (the runner is UTC) | the plan said run |
+| terylon-pane mod (validate, test, mutations) | `claude plugin validate` and `claude plugin test` on `plugins/terylon-pane`: the mod's own tests against the engine; then the verdict over the plan, the shards and the zones: red if any failed or was cancelled, green when they passed or were skipped. The check `main` requires, on every pull request | nothing: no login, no session, every service stubbed |
 
 The two jobs that need `claude` install the same pinned Claude Code, from the lockfile in [`.github/claude-code/`](./.github/claude-code/package.json) with `npm ci`, every package checked against its integrity hash; Dependabot proposes a newer one 14 days after its release.
 

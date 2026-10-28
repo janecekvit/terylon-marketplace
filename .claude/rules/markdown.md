@@ -73,7 +73,7 @@ Declaring without prose leaves an agent holding a skill it has no reason to open
 
 - **One `# H1` per file**, at the top, naming what the file is.
 - **Do not skip heading levels.** `##` follows `#`, `###` follows `##`.
-- **Fence every code block with a language tag** — ` ```powershell `, ` ```bash `, ` ```json `, ` ```yaml `. Untagged fences lose syntax highlighting and make the intended interpreter ambiguous. **A diagram is the one exception** and takes a bare fence — see below; a Mermaid flow takes ` ```mermaid `, which is what renders it.
+- **Fence every code block with a language tag** — ` ```powershell `, ` ```bash `, ` ```json `, ` ```yaml `. Untagged fences lose syntax highlighting and make the intended interpreter ambiguous. **A diagram is the one exception** and takes a bare fence — see below; a Mermaid diagram takes ` ```mermaid `, which is what renders it.
 - **A blank line around** every heading, list, table, and fenced block. Some renderers silently merge them otherwise.
 
 ## Show structure, do not describe it
@@ -101,21 +101,68 @@ The example is the wrapping rule this file already owns, on purpose: an example 
 
 Same for flags, recipe catalogues, tool mappings, and field encodings. Key column first, answer second. Prose stays for the reasoning that the table cannot carry.
 
-### D2 for structure, Mermaid for flows, box drawing for short sketches
+### Mermaid with ELK for structure, Mermaid for flows, box drawing for short sketches
 
 Three kinds of drawing, and each shape has one of them:
 
 | Shape | Drawn as | Lives in |
 |---|---|---|
-| **Structure** — components, their dependencies and boundaries, the static view | a [D2](https://d2lang.com) source, `docs/architecture/<name>.d2`, with the rendered `<name>.svg` committed beside it and embedded as `![…](<name>.svg)` | `docs/architecture/`, indexed in its `README.md` |
-| **A flow over time** — a resolution, a pipeline, a sequence of calls with branches | Mermaid in a ` ```mermaid ` fence, a `flowchart` or a `sequenceDiagram` | the article that walks the flow, usually in `docs/flows/` |
+| **Structure** — components, their dependencies and boundaries, the static view | a Mermaid `flowchart` in a ` ```mermaid ` fence, in the adaptive style below | the Markdown file that owns it: `docs/architecture/README.md`, the ADR that draws it, or, for the plugin graph, the root `README.md` |
+| **A flow over time** — a resolution, a pipeline, a sequence of calls with branches | Mermaid in a ` ```mermaid ` fence: a `flowchart` takes the same front matter and edge colour, a `sequenceDiagram` the default theme with no colours of its own | the article that walks the flow, usually in `docs/flows/` |
 | **A short inline sketch** — a dispatch chain in a `SKILL.md`, the dependency graph an orienting document must carry, a layout | box drawing in a bare fence, by the rules below | the file it orients |
 
-- **The `.d2` is the source of truth and the `.svg` is generated.** Edit the source, run `node Scripts/render-diagrams.js`, commit both. Never edit an SVG by hand.
-- **CI holds the two together.** The Diagrams workflow renders every source with the pinned D2 and fails on an unformatted or invalid source, or on a stale or missing SVG; its `rendered-diagrams` artifact carries what it rendered.
-- **GitHub renders a ` ```mermaid ` fence inline.** The source stays plain text everywhere else, so write node labels a reader can follow unrendered.
-- **Every SVG carries a light and a dark theme.** The script renders with D2's `--theme` and `--dark-theme`, and the SVG's CSS follows the viewer's `prefers-color-scheme`, so a diagram does not glare white on GitHub's dark theme. An explicit style is not themed, so **a container takes a `stroke` and no `fill`** and a label drawn on the background (a `person`'s, an edge's) takes no `font-color`: the theme colours both, and they stay readable in either mode. A node may keep its own fill and font colour, which travel together.
-- **The plugin graph stays a box drawing in every orienting document but one.** The root `README.md` embeds the rendering of `docs/architecture/plugins.d2` instead: it is read on GitHub, where the SVG renders in both themes, and a third hand-drawn copy of the same edges there would be the one copy CI never checks. Every other orienting document keeps its box drawing, because a terminal and an agent's context window render no SVG. Both drawings are derived from `plugin.json#dependencies`.
+- **The block is the source and the picture.** GitHub renders a ` ```mermaid ` fence where it stands; nothing is generated, so there is no file to regenerate and no copy to go stale. To change a diagram, edit its block.
+- **Each diagram has exactly one block.** Another document that needs it links to the heading that holds it and never pastes a second copy. **The main diagram is the plugin graph, in the root `README.md` under *Architecture*,** because that is where a consumer lands; every other document links to `README.md#architecture`. The forge port and terylon-os with its pane are drawn once each, in `docs/architecture/README.md`.
+- **ELK, not dagre.** GitHub renders both; ELK's edges are orthogonal and edges leaving a subgraph do not cross, which reads far better on a dependency graph.
+- **Comments are `%%`, on their own line, next to the node or edge they explain.** What a source comment says about why an edge or a colour is there belongs in the block, not in prose beside it.
+- **No HTML in a label.** A line break is a Markdown string, the label in backticks inside its quotes with a real newline: ``a["`terylon-core\nthe root`"]`` (written over two source lines). No `<br/>`, no icons and no `click` links: Azure DevOps's renderer refuses them, and GitHub drops the last two.
+- **Shapes:** `(["…"])` for something outside the marketplace, `[("…")]` for a store, `[/"…"/]` for a note or a page, `[["…"]]` for "one of many". A dashed edge is `-.->`, its annotation in `|"…"|`.
+- **The source stays plain text everywhere else**, so write node labels and ids a reader can follow unrendered.
+
+#### The adaptive style: one drawing for GitHub's light and dark themes
+
+Every flowchart opens with exactly this front matter, and sets **no `theme` and no `themeVariables`**. GitHub then draws it in its light theme in light mode and its dark theme in dark mode, on a transparent background:
+
+```text
+---
+config:
+  layout: elk
+  flowchart:
+    padding: 16
+---
+flowchart TD
+```
+
+| Element | Style | Because |
+|---|---|---|
+| A node, through `classDef` and `:::class` | a saturated fill, a darker stroke, **white text**, from the palette below | white on a saturated fill reads on either background; a pale fill glares in dark mode |
+| A boundary, through `subgraph` and `style` | a semi-transparent fill `#RRGGBBAA` with alpha `1A` (`14` for a large area), the stroke and the title in the layer's colour: `style port fill:#B453091A,stroke:#B45309,color:#B45309` | the background shows through, so the box tints in either theme |
+| A boundary outside the trust it encloses, or outside the chain | dashed: `stroke-dasharray:3 3` | |
+| A boundary with no layer of its own | the neutral `#8B949E`, alpha `14` | a dark grey title vanishes on the dark background |
+| Edges | `linkStyle default stroke:#8B949E`; an edge label takes no colour | the theme colours the labels |
+| A node left without a class (the owner, or a flow's ordinary step) | the theme's own colours | |
+| Text | **never set `fontFamily`** | GitHub measures text in one font and draws it in another, so a set font clips the labels |
+| A `sequenceDiagram` | the default theme, no colours of its own | |
+
+One meaning per colour, across every diagram here:
+
+| Colour | `classDef` | Means here |
+|---|---|---|
+| indigo | `fill:#4F46E5,stroke:#3730A3,color:#FFFFFF` | the clients: the role plugins, and the callers that name a forge operation |
+| green | `fill:#047857,stroke:#065F46,color:#FFFFFF` | the entry points into a forge: the adapters |
+| blue | `fill:#2563EB,stroke:#1E40AF,color:#FFFFFF` | services: the chain every plugin sits on (`terylon-core`, `terylon-git`), and Agentic OS |
+| amber | `fill:#B45309,stroke:#92400E,color:#FFFFFF` | the runtime seam: the forge port, `terylon-forge` |
+| purple | `fill:#7E22CE,stroke:#6B21A8,color:#FFFFFF` | Terylon's own plugins: `terylon-os` and its mod `terylon-pane` |
+| grey | `fill:#4B5563,stroke:#374151,color:#FFFFFF` | outside the marketplace: servers, forges, the phone, and a note |
+| red | `fill:#B91C1C,stroke:#991B1B,color:#FFFFFF` | a stop or the one gate: where the flow refuses, or merge in the console |
+
+The first six are the owner's palette, shared with their other repositories; red is this repository's one addition, because a stop and the merge gate must not read as an ordinary step.
+
+**Check every block before pushing.** CI starts no browser for it. Render each block twice with `@mermaid-js/mermaid-cli@11.4.2` against the pre-installed headless shell, with `--no-sandbox`: once in the default theme with `-b '#ffffff'`, once with `-t dark -b '#0d1117'`. Look at both renders, see that no label is clipped and every word reads on both backgrounds, and commit only the Markdown. `node --test tests/architecture-diagrams/architecture-diagrams.test.js` fails on a flowchart without the front matter above, or with a `theme`, `themeVariables` or `fontFamily`, and holds the plugin graph's edges to `plugin.json#dependencies`.
+
+**The plugin graph stays a box drawing in every orienting document but one.** The root `README.md` draws it as the Mermaid block instead: it is read on GitHub, where the block renders in both themes, and a third hand-drawn copy of the same edges there would be one more copy to drift. Every other orienting document keeps its box drawing, because a terminal and an agent's context window render no Mermaid. Both drawings are derived from `plugin.json#dependencies`.
+
+**This reverses the D2 decision (2026-10-26, #36).** Until then structure was drawn in [D2](https://d2lang.com): a `.d2` source in `docs/architecture/`, an `.svg` rendered from it in a light and a dark theme by `Scripts/render-diagrams.js`, both committed, and a Diagrams workflow with a pinned D2 failing on a stale SVG. It worked, and it cost a second file per diagram, a render script, a Go toolchain in CI and a version pin, all to keep a picture in step with a source nobody read on GitHub. Mermaid with ELK now gives the same orthogonal layout from a block that is its own picture, so the source and what a reader sees are one text, read alike by a person and a model, and models write Mermaid more reliably than D2. What D2 still did better: an explicit dark theme per diagram; the default Mermaid theme following GitHub's is what replaces it. The first Mermaid drawings kept D2's light pastels, with a rule that **a container takes a stroke and no fill**; the adaptive style above replaced that on 2026-10-27, because pale fills glared and white-on-saturated reads on both of GitHub's backgrounds.
 
 ### ASCII diagrams for call chains and dependencies
 
@@ -170,7 +217,7 @@ Use plain ASCII (`└──`, `├──`, `──▶`, `┐`/`┘`), never Unic
 | Document | Draws |
 |---|---|
 | root `CLAUDE.md` | the whole graph |
-| root `README.md` | the whole graph, as the embedded rendering of `docs/architecture/plugins.d2` — the one exception, stated under *D2 for structure* |
+| root `README.md` | the whole graph, as the one Mermaid block that draws it — the one exception, stated under *Mermaid with ELK for structure* |
 | `plugins/CLAUDE.md` | the whole graph, plus which component lives in which plugin and every cross-plugin load |
 | each `plugins/<slug>/README.md` | the graph from **that plugin's vantage** — what it sits on, what sits on it, marked `← you are here` |
 | `docs/CLAUDE.md` | **not the plugin graph** — it orients inside the knowledge base, and draws the `docs/` tree instead. `docs/README.md` beside it is an authoring standard and draws neither |

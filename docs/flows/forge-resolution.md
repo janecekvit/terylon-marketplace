@@ -7,19 +7,29 @@ Every transport in `terylon-forge` is written against an operation catalog with 
 First hit wins. **There is no default and no guess.**
 
 ```mermaid
+---
+config:
+  layout: elk
+  flowchart:
+    padding: 16
+---
 flowchart TD
     remote(["a transport is about to do something remote"])
     explicitUrl{"Step 1. did the user pass an explicit URL?"}
     forgeVariable{"Step 2. is TERYLON_FORGE set?"}
     gitRemote{"Step 3. what host is git remote get-url origin?"}
-    stopUnresolved["Step 4. STOP: name all three sources tried, and ask<br/>never assume one: this marketplace grew up on Azure DevOps,<br/>and defaulting to it is the specific mistake"]
+    stopUnresolved["`Step 4. STOP: name all three sources tried, and ask
+never assume one: this marketplace grew up on Azure DevOps,
+and defaulting to it is the specific mistake`"]
     resolved(["a forge resolved: ado or github"])
     adapterInstalled{"Step 5. is that forge's adapter installed?"}
     proceed["address the adapter's forge-ops, plugin-qualified, and proceed"]
-    stopNoAdapter["Step 6. STOP: name the forge, name the missing plugin, say what to enable<br/>do NOT fall back to the other adapter, do NOT issue calls of your own"]
+    stopNoAdapter["`Step 6. STOP: name the forge, name the missing plugin, say what to enable
+do NOT fall back to the other adapter, do NOT issue calls of your own`"]
 
     remote --> explicitUrl
-    explicitUrl -- "dev.azure.com or visualstudio.com: ado<br/>github.com: github" --> resolved
+    explicitUrl -- "`dev.azure.com or visualstudio.com: ado
+github.com: github`" --> resolved
     explicitUrl -- "no URL" --> forgeVariable
     forgeVariable -- "its value: ado or github" --> resolved
     forgeVariable -- "unset" --> gitRemote
@@ -29,8 +39,10 @@ flowchart TD
     adapterInstalled -- "yes" --> proceed
     adapterInstalled -- "no" --> stopNoAdapter
 
-    classDef stop fill:#FEE2E2,stroke:#DC2626,color:#7F1D1D
+    %% The stop takes the palette's red, as in the forge port's drawing; every other node keeps the theme's colours.
+    classDef stop fill:#B91C1C,stroke:#991B1B,color:#FFFFFF
     class stopUnresolved,stopNoAdapter stop
+    linkStyle default stroke:#8B949E
 ```
 
 | Source | Supplies | Precedence |

@@ -14,11 +14,6 @@
 *.yml   text eol=lf
 *.yaml  text eol=lf
 
-# Diagram sources and the SVGs rendered from them. The Diagrams workflow compares a fresh render
-# with the committed SVG, so a CRLF checkout would read as stale.
-*.d2    text eol=lf
-*.svg   text eol=lf
-
 # Binaries through Git LFS. The repo is text-only today, so these rules are
 # dormant — they take effect the moment the first image or archive lands, which
 # keeps a blob out of the git history rather than discovering it afterwards.
