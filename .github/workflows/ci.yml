@@ -100,15 +100,116 @@ jobs:
           path: ${{ runner.temp }}/e2e
           if-no-files-found: ignore
 
-  # Its own job rather than steps of the install job: the two run side by side, the install job
-  # stays what a consumer does, and a red mod is named by its own check. No login, no network
-  # beyond npm: plugin test runs the mod against the engine with every service stubbed.
+  # Whether the terylon-pane mod's mutation and zone suites run (#42): about a hundred runs of plugin test, which most
+  # pull requests cannot affect. tests/terylon-pane/needs-pane-suites.js decides, from the paths the pull request
+  # changes, and the Unit suites job tests it. A push to main, or a run started by hand, always runs them.
+  pane-plan:
+    name: terylon-pane plan (which suites run)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      # The whole history, so the diff below reaches the merge base of any pull request.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      # Three dots: what the pull request changes since it left its base, not what the base gained meanwhile.
+      # The diff is written to a file first, so a failed diff fails this step rather than reading as "no change".
+      - name: Decide from the changed paths
+        id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "${EVENT_NAME}" = "pull_request" ]
+          then
+            git diff --name-only "${BASE_SHA}...${HEAD_SHA}" > "${RUNNER_TEMP}/changed.txt"
+            node tests/terylon-pane/needs-pane-suites.js --event "${EVENT_NAME}" --changed "${RUNNER_TEMP}/changed.txt"
+          else
+            node tests/terylon-pane/needs-pane-suites.js --event "${EVENT_NAME}"
+          fi
+
+  # The mutation suite in four shards, each on a runner of its own; within a shard the runs stay one after another,
+  # since acts.test.ts sometimes fails under full CPU load (#39). tests/terylon-pane/shard.test.js proves the four
+  # cover every mutation exactly once. Each shard also runs the unmutated baseline, so its reds mean something.
+  pane-mutations:
+    name: terylon-pane mutations (shard ${{ matrix.shard }}/4)
+    needs: pane-plan
+    if: needs.pane-plan.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    # About 25 runs of plugin test at roughly 25 s each; the margin is for the runner's spread.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Install Claude Code from the lockfile
+        working-directory: .github/claude-code
+        run: |
+          npm ci --no-audit --no-fund
+          node_modules/.bin/claude --version
+          echo "${GITHUB_WORKSPACE}/.github/claude-code/node_modules/.bin" >> "${GITHUB_PATH}"
+
+      # Each planted mutation must turn the mod's tests red; with claude on PATH none of them skips.
+      - name: node --test tests/terylon-pane/mutations.test.js
+        env:
+          MUTATION_SHARD: ${{ matrix.shard }}/4
+        run: node --test tests/terylon-pane/mutations.test.js
+
+  # Three runs of plugin test, about a minute: a job of its own beside the shards rather than a fifth of their time.
+  pane-zones:
+    name: terylon-pane zones
+    needs: pane-plan
+    if: needs.pane-plan.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Install Claude Code from the lockfile
+        working-directory: .github/claude-code
+        run: |
+          npm ci --no-audit --no-fund
+          node_modules/.bin/claude --version
+          echo "${GITHUB_WORKSPACE}/.github/claude-code/node_modules/.bin" >> "${GITHUB_PATH}"
+
+      # The runner is UTC, and plugin test runs in UTC on Linux whatever TZ says: each zone is planted in a copy (#39).
+      - name: node --test tests/terylon-pane/zones.test.js
+        run: node --test tests/terylon-pane/zones.test.js
+
+  # The check main's ruleset requires, by this exact name: rename it and every pull request waits on a check that never
+  # comes. It runs validate and plugin test itself, then reports for the plan, the shards and the zones: red if any of
+  # them failed or was cancelled, green when they ran green or when the plan skipped them for an untouched pane.
+  # !cancelled() rather than always(): it runs whatever its needs concluded, but not for a run superseded by a newer push.
   pane:
     name: terylon-pane mod (validate, test, mutations)
+    needs: [pane-plan, pane-mutations, pane-zones]
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    # 60 mutation runs of plugin test took about 12.5 minutes here on 2026-10-25 (#25). With 88 (#35) the job took 24 m 45 s
-    # on one run and was cancelled at 30 on the next (2026-10-26, #38): 60 leaves room for the runner's spread.
-    timeout-minutes: 60
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -132,10 +233,35 @@ jobs:
       - name: claude plugin test plugins/terylon-pane
         run: claude plugin test plugins/terylon-pane
 
-      # Each planted mutation must turn the mod's tests red; with claude on PATH none of them skips.
-      - name: node --test tests/terylon-pane/mutations.test.js
-        run: node --test tests/terylon-pane/mutations.test.js
+      # A matrix job's result is its shards' together: failure if any failed, cancelled if any was.
+      - name: The plan, the shards and the zones
+        env:
+          PLAN_RESULT: ${{ needs.pane-plan.result }}
+          RUN_SUITES: ${{ needs.pane-plan.outputs.run }}
+          MUTATIONS_RESULT: ${{ needs.pane-mutations.result }}
+          ZONES_RESULT: ${{ needs.pane-zones.result }}
+        run: |
+          echo "plan: ${PLAN_RESULT} (run=${RUN_SUITES}); mutations: ${MUTATIONS_RESULT}; zones: ${ZONES_RESULT}"
 
-      # The runner is UTC, and plugin test runs in UTC on Linux whatever TZ says: each zone is planted in a copy (#39).
-      - name: node --test tests/terylon-pane/zones.test.js
-        run: node --test tests/terylon-pane/zones.test.js
+          if [ "${PLAN_RESULT}" != "success" ]
+          then
+            echo "::error::the plan did not succeed (${PLAN_RESULT}), so nothing says whether the suites had to run"
+            exit 1
+          fi
+
+          if [ "${RUN_SUITES}" = "true" ]
+          then
+            if [ "${MUTATIONS_RESULT}" != "success" ] || [ "${ZONES_RESULT}" != "success" ]
+            then
+              echo "::error::the suites had to run: mutations ${MUTATIONS_RESULT}, zones ${ZONES_RESULT}"
+              exit 1
+            fi
+
+            echo "the mutation suite's four shards and the zone suite passed"
+          elif [ "${RUN_SUITES}" = "false" ]
+          then
+            echo "the mutation and zone suites were skipped: the pull request touches nothing they can see"
+          else
+            echo "::error::the plan gave no answer (run=${RUN_SUITES})"
+            exit 1
+          fi
