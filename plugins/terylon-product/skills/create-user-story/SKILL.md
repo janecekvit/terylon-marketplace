@@ -5,7 +5,7 @@ description: >-
   Azure DevOps or GitHub — drafts a codebase-grounded, implementation-ready story (short Summary, Description,
   Approach, precise implementation detail, acceptance-criteria checklist, out-of-scope) and creates it on the forge.
   Optional flags --auto and --dry-run.
-allowed-tools: Bash(git *), Bash(wc *), Bash(gh *), Read, Grep, Glob, Agent, mcp__ado__*
+allowed-tools: Bash(git *) Bash(wc *) Bash(gh *) Read Grep Glob Agent mcp__ado__*
 ---
 
 # Create User Story
@@ -267,71 +267,7 @@ shapes apart and neither list duplicates the other.
 
 ### Amending criteria after the work has started
 
-Criteria are the input contract, and sometimes the work teaches you the contract was wrong.
-Editing the field in place destroys the record of what was agreed; leaving it stale makes the
-story contradict its own implementation. Neither is acceptable, so amend **visibly**.
-
-**Never edit or delete a criterion in place.** Move it to a trailing `**Superseded**` group,
-struck through and **without a checkbox**, and put the replacement in whichever group states its
-outcome:
-
-```markdown
-**Transport**
-
-- [ ] the replacement criterion, stating the outcome
-
-**Superseded**
-
-- ~~the old criterion, verbatim~~ - replaced by the criterion above on 2026-07-23; reason in the comment
-```
-
-The checkbox is dropped on purpose: a withdrawn criterion is not *unsatisfied*, it is
-**withdrawn**, and a box invites someone to tick it. Do not wrap the whole line as
-`~~- [ ] …~~` either - that breaks checkbox rendering instead of striking the text.
-
-**Post a comment saying what changed and why.** The field can show that a criterion was
-withdrawn; only the comment can say what was learned that withdrew it and which criterion took
-its place. A strikethrough with no explanation is a puzzle for the next reader.
-
-**Amend, or open a follow-up story?** The two cases look alike and want opposite answers:
-
-| What happened | Do |
-|---|---|
-| an outcome the story promised **changed or turned out wrong** | amend here: strike the old, state the new |
-| **new outcomes were added** - the work grew past what the story described | leave the criteria alone and open a follow-up story |
-
-Stretching a story's criteria to cover work it explicitly excluded is how a story stops
-describing anything. A pull request whose plan items map to **no** criterion is the signal for
-the second row, not an invitation to add rows to the first.
-
-**Two mechanics from `forge-ops` bite here.** Criteria stored as HTML render `~~` literally, and on
-Azure DevOps the `update-work-item` operation silently drops tag-shaped `<…>` content - so scan the
-criteria you are round-tripping for a literal angle bracket before writing. Both are declared in
-`forge-ops`; write the criteria so they survive either forge.
-
-**This is the product owner's act, never the tester's.** The `tester` proposes rewrites for
-criteria it finds defective and applies none of them; see the criteria/test-plan convention in
-`plugins/CLAUDE.md`.
-
-`<plugin-version>` is read at runtime from `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json`. `<model>` is the model the run executes under (e.g. `opus-4.8`) — the skill knows it from itself, as no environment variable exposes it. `<effort>` comes from the `CLAUDE_EFFORT` environment variable (e.g. `xhigh`); **when `CLAUDE_EFFORT` is unset, omit the entire ` · <model> / <effort>` segment.** The substring `Generated with [Claude Code]` is the sentinel for prior-run detection — everything variable sits after that stable prefix.
-
-**Formatting rules** (the same markdown rules `forge-ops` documents — load
-`forge-ops` by name for the full text):
-
-- **Acceptance criteria use unchecked `- [ ]` only** — never `- [x]` and never static glyphs (`✓`,
-  `✅`, `🟢`, "Done"). A pre-checked box claims something was verified; on Azure DevOps it renders as
-  a static tick the reader cannot toggle, defeating the checklist. Even criteria you believe are already
-  met stay `- [ ]`.
-- **No hard-wrapping** — Azure DevOps renders every source line break verbatim, so wrapping a paragraph
-  or bullet at 72 / 80 chars produces choppy short lines; GitHub would forgive it, and the rule binds on
-  both anyway. Emit each paragraph and each bullet as one continuous line; insert a real line break only
-  between distinct paragraphs / bullets / headings.
-- **Footer** — resolve `<plugin-version>` from **this skill's own**
-  `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` `version` field, combined with this skill's own
-  name (`create-user-story`), the model, and `CLAUDE_EFFORT` as described above. Match only the
-  version-less substring `Generated with [Claude Code]` when detecting prior runs — never the full
-  footer, whose trailing `@<version> · <model> / <effort>` segment varies between runs. That substring
-  is the prior-run sentinel the duplicate guard (step 6) scans for.
+When the story already exists and work on it has started, an amendment of its criteria follows [`references/amending-criteria.md`](references/amending-criteria.md): when to amend rather than open a follow-up, the trailing `**Superseded**` group, and the comment that records what was learned. Read it before changing a single criterion of a started story.
 
 ## Chat summary format
 
@@ -378,28 +314,4 @@ For `--dry-run`: label the block "(dry-run — nothing will be created)".
 
 ## Verification
 
-1. `/create-user-story "<brief>" --parent=<known Feature> --dry-run` inside a product repo.
-   Expect: a draft matching the Output template printed to chat with **real file anchors** in `## Implementation`,
-   `- [ ]` acceptance criteria, an `## Out of scope` section, and the footer. No work item created
-   (the parent Feature's child count is unchanged); no `create-work-item` / `link-work-item-parent` call.
-2. `/create-user-story "<brief>" --parent=<known Feature>` (default) → confirm prompt.
-   On `push`: a User Story is created with a Markdown description, the parent's `planning` where the
-   forge carries it, and **linked as a child of the parent Feature** (verify the story's parent is the
-   Feature, not the reverse). The new id + URL is printed.
-3. Footer identity — the created story's footer reads `create-user-story@<terylon-product version>`,
-   resolved in this plugin's own `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json`.
-4. Duplicate guard — re-run step 2 against the same Feature with the same title. Expect: the existing
-   AI-drafted child (footer sentinel) is detected and the skill asks before creating a duplicate.
-5. Checkbox rendering — open the created story: the acceptance criteria appear as **interactive
-   checkboxes**, not plain bullets, on either forge. Re-fetch via `forge-ops` `fetch-work-item` and
-   confirm `acceptanceCriteria` comes back as the checklist that was sent, in markdown. If they render as
-   plain bullets, the item was written outside the recipe (see Common mistakes).
-6. **A forge that does not carry a key** — on GitHub, pass `--story-points=5`. Expect the draft to name
-   `planning` and `estimate` as not carried before the confirmation prompt, and the created issue to
-   carry no invented label or milestone for either.
-7. **Criteria state outcomes, not implementations.** Read every generated criterion back: none
-   names a component, a file path, a command or a flag. A criterion saying "the tester invokes
-   `measure-token-spend` and writes `docs/…/<session>-tokens.md`" is a defect even when it is
-   true on the day it is written, because the next refactor moves the call and the criterion
-   then contradicts working code. The equivalent outcome — "the run's token spend is reported
-   per tier and written to the session's monitoring file" — survives the move.
+The manual checks a maintainer runs after changing this skill are in [`references/verification.md`](references/verification.md). They are not needed to run it.

@@ -6,7 +6,7 @@ An ADR records a decision *and the reasoning that was overturned to reach it*. T
 
 ## Diagrams
 
-The structure of the marketplace, drawn as Mermaid flowcharts with the ELK layout. Each block is its own source of truth: GitHub renders it where it stands, and nothing is generated from it. To change a diagram, edit its block. Flows over time are drawn as Mermaid in the article that walks them, in [`flows/`](../flows/README.md). The rules are in `.claude/rules/markdown.md`, under *Mermaid with ELK for structure, Mermaid for flows, box drawing for short sketches*.
+The structure of the marketplace, drawn as Mermaid flowcharts with the ELK layout. Each block is its own source of truth: GitHub renders it where it stands, and nothing is generated from it. To change a diagram, edit its block. Flows over time are drawn as Mermaid in the article that walks them, in [`flows/`](../flows/README.md). The rules are in `.claude/rules/markdown.md`, under *Mermaid with ELK for structure, Mermaid for flows, box drawing for short sketches*, and why they are these is [diagrams-are-mermaid-blocks](./diagrams-are-mermaid-blocks.md).
 
 | Diagram | Draws | Drawn in |
 |---|---|---|
@@ -17,17 +17,12 @@ The structure of the marketplace, drawn as Mermaid flowcharts with the ELK layou
 ### The forge port
 
 ```mermaid
----
-config:
-  layout: elk
-  flowchart:
-    padding: 16
----
+flowchart TD
+%%{init: {"layout": "elk", "flowchart": {"padding": 16}}}%%
 %% The forge port: who names an operation, who resolves the forge, and which adapter's body runs it.
 %% The source of truth is this block: edit it here; nothing is generated from it.
 %% Why it is a port at all: port-and-adapter-split.md. The resolution step by step:
 %% ../flows/forge-resolution.md.
-flowchart TD
     %% One colour per kind, the palette of .claude/rules/markdown.md: callers (indigo), the port (amber),
     %% adapters (green), the stop (red), platforms outside the marketplace (grey).
     %% No theme is set, so GitHub draws the block in its light or dark theme.
@@ -110,17 +105,12 @@ authenticated by gh auth login`"]:::external
 ### terylon-os and the pane
 
 ```mermaid
----
-config:
-  layout: elk
-  flowchart:
-    padding: 16
----
+flowchart TD
+%%{init: {"layout": "elk", "flowchart": {"padding": 16}}}%%
 %% terylon-os and its mod terylon-pane: how a session reaches Terylon's Agentic OS, the owner's
 %% acts the pane takes on their cards, and why merge, the one gate, stays in the console.
 %% The source of truth is this block: edit it here; nothing is generated from it.
 %% Why every surface goes through the one /mcp: one-source-of-truth-reached-from-two-places.md.
-flowchart TD
     %% One colour per kind, the palette of .claude/rules/markdown.md: Terylon's own plugins (purple),
     %% Agentic OS (blue), the gate (red), the phone (grey); the owner takes the theme's.
     %% No theme is set, so GitHub draws the block in its light or dark theme.
@@ -196,6 +186,7 @@ stories_list, events_since`"| server
 | [superpowers-left-the-dependency-set](./superpowers-left-the-dependency-set.md) | why a dependency on a foreign marketplace was removed, and what replaced its six skills |
 | [one-source-of-truth-reached-from-two-places](./one-source-of-truth-reached-from-two-places.md) | why Agentic OS on the owner's host is the only source of truth, reached through one `/mcp` from the PC's pane and from the phone through Remote Control, and why the pane holds nothing; superseded in part by the next row |
 | [the-pane-takes-the-owners-acts](./the-pane-takes-the-owners-acts.md) | why the pane approves, returns, unblocks, pauses and the rest on their subject's cards since Terylon PR 228, and why merge, the one gate, stays in the console behind the passkey |
+| [diagrams-are-mermaid-blocks](./diagrams-are-mermaid-blocks.md) | why a diagram is a Mermaid block that opens with its keyword and asks for ELK by an init directive, and what D2 and front matter cost before it |
 | [every-rule-has-one-owner](./every-rule-has-one-owner.md) | why a rule is stated once and pointed at everywhere else, what the first sweep found, and why nothing but review enforces it yet |
 
 ## Writing one

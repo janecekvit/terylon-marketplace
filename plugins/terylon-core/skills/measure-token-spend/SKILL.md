@@ -5,7 +5,7 @@ description: >-
   subagents) and per agent type — measured from the session's own transcripts, not from the
   harness's notification figures. Runs after a pipeline build, or to compare a change's cost
   against a baseline. Reads local files only; no network.
-allowed-tools: Bash(node *), Read, Glob
+allowed-tools: Bash(node *) Read Glob
 ---
 
 # measure-token-spend
@@ -17,7 +17,7 @@ This skill is the single source of the measurement method. It exists to be run a
 ## Run it
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/skills/measure-token-spend/scripts/measure-token-spend.js" [--project <slug>] [--session <id>] [--dir <path>] [--out <file>]
+node "${CLAUDE_SKILL_DIR}/scripts/measure-token-spend.js" [--project <slug>] [--session <id>] [--dir <path>] [--out <file>]
 ```
 
 | Flag | Meaning | Default |

@@ -1,7 +1,7 @@
 ---
 name: review-plan
-description: "Use when a Terylon plan waits at the plan gate and the owner wants it reviewed — \"look at plan 41\", \"what is waiting to be approved\" — before approving all, some or edited stories, or sending it back."
-allowed-tools: mcp__plugin_terylon-os_terylon__*, mcp__terylon__*
+description: "Use when a Terylon plan waits at the plan gate and the owner wants it reviewed — \"look at plan 41\", \"what is waiting to be approved\" — before approving all, some or edited stories, or sending it back. Reads the plan, the policy and the memory, flags collisions and under-specified stories against the day's budget, and recommends; acts only on the owner's word."
+allowed-tools: mcp__plugin_terylon-os_terylon__* mcp__terylon__*
 ---
 
 # review-plan — a plan at the plan gate

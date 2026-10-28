@@ -4,6 +4,7 @@ paths:
   - "plugins/**/SKILL.md"
   - "plugins/**/agents/*.md"
   - "plugins/**/references/*.md"
+  - "plugins/**/assets/*"
   - "plugins/**/README.md"
   - "plugins/**/.mcp.json"
   - ".claude-plugin/marketplace.json"
@@ -27,7 +28,7 @@ A `CLAUDE.md` is read by whoever picks this repository up next — human or agen
 
 > **The `paths:` list above decides whether this rule is loaded at all**, so a directory missing from it is a directory whose edits will never prompt a docs update — silently, with nothing to complain, and visible only months later as documentation that stopped tracking reality.
 >
-> **`plugins/**/references/*.md` and `.claude/hooks/**` are the two gaps that mattered.** `plugins/CLAUDE.md` actively tells authors to move bulk *out* of `SKILL.md` into `references/`, which is to say straight out of this rule's reach; and operational knowledge comes overwhelmingly from *running* things, so a list covering only skills and manifests misses exactly the sessions with the most to record. The `agents/` and `references/` globs are non-recursive on purpose — both directories are flat by convention. Make them `**` if that stops being true.
+> **`plugins/**/references/*.md` and `.claude/hooks/**` are the two gaps that mattered**, and `plugins/**/assets/*` holds the templates moved out of the same files. `plugins/CLAUDE.md` actively tells authors to move bulk *out* of `SKILL.md` into `references/`, which is to say straight out of this rule's reach; and operational knowledge comes overwhelmingly from *running* things, so a list covering only skills and manifests misses exactly the sessions with the most to record. The `agents/`, `references/` and `assets/` globs are non-recursive on purpose — all three directories are flat, which `tests/skill-spec` holds for a skill's. Make them `**` if that stops being true.
 >
 > **`docs/**` is in the list** because `docs/CLAUDE.md` is a navigational file like any other and goes stale when a section is added or a boundary moves. The gitignored scratch under `docs/terylon/` and `docs/superpowers/` is not tracked, so it cannot trigger anything.
 >
@@ -74,7 +75,7 @@ Include failures in the **tooling around** the content, not only in the content.
 
 **A decision was reversed**
 
-Record the reversal *and its reason*, not just the new state. A rationale that reads "X is deliberate" but was really a tooling limitation dressed as a decision must be corrected explicitly — otherwise the stale rationale actively argues against fixing it, and the next person defends a constraint nobody chose.
+The `CLAUDE.md` states the **new** current state, replacing the stale sentence where it stood, and the overturned reasoning goes into an ADR under `docs/architecture/` — new, or the old one marked superseded — which the `CLAUDE.md` may link. A `CLAUDE.md` never keeps the history itself; `documentation.md` owns that rule. A rationale that reads "X is deliberate" but was really a tooling limitation dressed as a decision must be corrected explicitly — otherwise the stale rationale actively argues against fixing it, and the next person defends a constraint nobody chose.
 
 ### Redraw the dependency graphs, do not only edit the tables
 

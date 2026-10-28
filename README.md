@@ -45,13 +45,8 @@ You enable **two** plugins for a repository: the **role** you work in, and the *
 ## How a story travels
 
 ```mermaid
----
-config:
-  layout: elk
-  flowchart:
-    padding: 16
----
 flowchart LR
+%%{init: {"layout": "elk", "flowchart": {"padding": 16}}}%%
     subgraph develop ["develop: terylon-dev"]
         direction TB
         brainstorm["`brainstorm
@@ -91,18 +86,13 @@ Each agent is a role with its own instructions, dispatched by the `leader` and r
 ## Architecture
 
 ```mermaid
----
-config:
-  layout: elk
-  flowchart:
-    padding: 16
----
+flowchart BT
+%%{init: {"layout": "elk", "flowchart": {"padding": 16}}}%%
 %% The marketplace's plugins and the dependencies their manifests declare.
 %% The source of truth is this block: edit it here; nothing is generated from it.
 %% Every edge between two plugins is one entry of a plugin.json#dependencies array, drawn from the
 %% plugin that declares it to the plugin it names. A dashed one is declared although the chain
 %% already reaches it. The manifests are the source of truth; when they change, redraw this.
-flowchart BT
     %% One colour per kind, the palette of .claude/rules/markdown.md: the chain (blue), the port (amber),
     %% adapters (green), role plugins (indigo), Terylon's own plugins (purple), notes (grey).
     %% No theme is set, so GitHub draws the block in its light or dark theme.
@@ -296,7 +286,7 @@ The marketplace is built with itself: its stories, builds, reviews and test-plan
 
 | Job | Runs | Needs |
 |---|---|---|
-| Unit suites | `node --test "**/*.test.js"`: the forge-port contract and fixture tests, the harness's ref checks, the hook and measurement scripts, the Terylon pane's command and version checks. The pane's mutation suite skips in this job, which installs no `claude` CLI, and runs in the pane's own job instead | nothing |
+| Unit suites | `node --test "**/*.test.js"`: every skill held to the Agent Skills specification, the forge-port contract and fixture tests, the harness's ref checks, the hook and measurement scripts, the Terylon pane's command and version checks. The pane's mutation suite skips in this job, which installs no `claude` CLI, and runs in the pane's own job instead | nothing |
 | End-to-end install stage | `node tests/e2e/run.js --stages install`: installs the marketplace from the commit under test as a consumer does, and checks every plugin, skill, agent, hook and MCP server loads | nothing: no login, no token, no model call |
 | terylon-pane mod | `claude plugin validate` and `claude plugin test` on `plugins/terylon-pane`, then `node --test tests/terylon-pane/mutations.test.js` and `zones.test.js`: the mod's own tests against the engine, each planted mutation turning them red, and the tests green with a time zone planted (the runner is UTC) | nothing: no login, no session, every service stubbed |
 
@@ -311,6 +301,8 @@ The unit suites run with Node's built-in coverage, and the job uploads the lcov 
 - a model's run varies between two identical attempts, and a check that flakes on a pull request teaches people to re-run it rather than read it.
 
 They are run by hand before a change reaches `main`; the commands are in [`CLAUDE.md`](./CLAUDE.md), under *Testing*.
+
+[`.github/workflows/history-check.yml`](./.github/workflows/history-check.yml) warns, on every pull request, about an added code comment that names a pull request, an issue, a work item or a date; it never fails and is never required.
 
 [`.github/workflows/docs.yml`](./.github/workflows/docs.yml) checks every tracked `.md` file on the same triggers: **Markdown lint** holds it to the conventions of [`.claude/rules/markdown.md`](./.claude/rules/markdown.md) as [`.markdownlint-cli2.jsonc`](./.markdownlint-cli2.jsonc) encodes them, and **Links** runs lychee with [`lychee.toml`](./lychee.toml) over every relative link, anchor and external link.
 

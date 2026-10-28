@@ -1,7 +1,7 @@
 ---
 name: check-access
 description: "Use when the Azure DevOps tools (mcp__ado__*) are missing or answer with an authorization error, or before trusting a fresh install: reports whether the organisation, project, client and tenant variables are set and whether the remote server is registered as they say, and names exactly what is missing. Read-only — it writes nothing, calls nothing, and prints no id."
-allowed-tools: Bash(node *), Read
+allowed-tools: Bash(node *) Read
 ---
 
 # check-access — can this environment reach Azure DevOps?
@@ -13,7 +13,7 @@ Reports what the remote Azure DevOps MCP server needs, says which is missing, an
 ## Usage
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/skills/check-access/scripts/check-access.js"
+node "${CLAUDE_SKILL_DIR}/scripts/check-access.js"
 ```
 
 Exit code is `0` when everything needed is present and the registration matches, `1` otherwise.

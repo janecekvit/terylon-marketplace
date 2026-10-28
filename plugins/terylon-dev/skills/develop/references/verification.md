@@ -1,0 +1,18 @@
+# develop — verification
+
+1. **Discovery:** `terylon-dev` appears in the marketplace; `/terylon-dev:develop` is in autocomplete; the agents `leader`, `planner`, `developer`, `debugger`, `refactorer`, and the four review lenses are dispatchable.
+2. **Frontmatter:** this skill has `AskUserQuestion`; the lenses have no `Edit`/`Write`; fan-out agents list bare `Agent` in `tools`; no `permissionMode`, `hooks`, `mcpServers`, or `disable-model-invocation` anywhere.
+3. **Dry-run to Gate 1** on a small story: intake asks → `leader` dispatches `planner` → `design.md` and `plan.md` appear with real file anchors and acceptance criteria as test cases → **stop**. No code.
+4. **Reuse:** `leader` runs `run-build-loop` (no hand-rolled per-task loop), `planner` emits the plan in the `write-plan` format, `create-workspace` handles isolation, `finish-branch` handles the finish and `create-pr` opens the pull request (no hand-rolled ADO recipes).
+5. **Gates:** no code before Gate 1; commit/push/PR only with explicit consent; never an automatic merge to the default branch.
+6. **Fan-out** with two work items and `--dry-run`: two seed-specs under distinct slugs, two worktrees on two branches, both leaders dispatched in **one** round, and **two** plans — neither item silently dropped. Every question and status line names its work item.
+7. **Fan-out returns stream:** with one item's plan ready while the other is still planning, Gate 1 for the ready one is hosted immediately rather than after both finish.
+8. **`--here` with two items is refused**, not run.
+9. **Decomposition:** three prose blocks separated by `---` yield three items; one prose block containing a three-bullet list yields **one**; a mix of two URLs and one prose block yields three. The count is stated before any workspace is created. Eleven items are refused with a batching proposal; six draw a confirmation first.
+10. **Documentation route:** a change touching only `SKILL.md` / agent / rule / `README` files takes the documentation route — no `planner`, no `design.md`/`plan.md`, Gate 1 falls on the diff, and the phase-3 `code-reviewer` still runs. The route is announced. A three-document change does not produce a plan longer than the documents.
+11. **Batched resume:** a single leader return that raises several questions is answered in full and re-dispatched **once**, not re-dispatched after each answer.
+12. **Token-spend report:** at Gate 3 the run invokes `measure-token-spend` (from `terylon-core`) and writes `docs/terylon/monitoring/<session>-tokens.md` with per-tier and per-agent totals, so a follow-up run can be judged against a number.
+13. **Continuous spend events:** a run that fanned out leaves one JSON line per completed subagent in `docs/terylon/monitoring/<session>-spend.jsonl`, written by the `terylon-core` `SubagentStop` hook without any agent invoking it. A run interrupted before Gate 3 still has its events.
+14. **Gate 0 triage:** a one-sentence item with no stated outcome enters the brainstorm mode and the mode is announced; a work item carrying acceptance criteria runs the ordinary intake. `--no-brainstorm` forces the intake either way.
+15. **A brainstorm that splits:** one vague item becoming three leaves three seed-specs under distinct slugs, the new count is restated **before** any workspace is created, and each item is routed on its own — a documentation item among them keeps its own route. The count-keyed constraints bind on the **new** count: six items out of one brainstorm draw the confirmation, and `--here` is refused once a split takes the run past one item.
+16. **`--auto` on a vague item:** the brainstorm mode is skipped, the skip is stated, and the run proceeds on the seed as given rather than on invented answers.

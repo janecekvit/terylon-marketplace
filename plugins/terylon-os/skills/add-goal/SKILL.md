@@ -1,7 +1,7 @@
 ---
 name: add-goal
-description: "Use when the owner gives Terylon's leader a goal in a sentence — \"the leader should take X\", \"add a goal for Y\" — and wants the leader to plan it."
-allowed-tools: mcp__plugin_terylon-os_terylon__*, mcp__terylon__*
+description: "Use when the owner gives Terylon's leader a goal in a sentence — \"the leader should take X\", \"add a goal for Y\" — and wants the leader to plan it. Files the goal with goal_add, or a concrete ask as a task under the goal it serves, and reports the leader's answer."
+allowed-tools: mcp__plugin_terylon-os_terylon__* mcp__terylon__*
 ---
 
 # add-goal — hand the leader a goal in one sentence

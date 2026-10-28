@@ -1,6 +1,19 @@
+---
+paths:
+  - "**/*.js"
+  - "**/*.cjs"
+  - "**/*.mjs"
+  - "**/*.ts"
+  - "**/*.tsx"
+  - "**/*.ps1"
+  - "**/*.sh"
+  - ".claude/hooks/**"
+  - ".github/workflows/*.yml"
+---
+
 # Scripting conventions
 
-Applies to every script in this repo — hooks in `.claude/hooks/`, any future tooling, and ad-hoc commands run in a session. The formatting rules below are language-agnostic: they read the same in JavaScript, PowerShell, or bash, and that is the point.
+Applies to every script in this repo — hooks in `.claude/hooks/`, the tests and tooling under `tests/`, the scripts a skill ships in its `scripts/`, the `terylon-pane` mod's TypeScript, and ad-hoc commands run in a session. The formatting rules below are language-agnostic: they read the same in JavaScript, TypeScript, PowerShell, or bash, and that is the point. What a comment may say is `comments.md`'s.
 
 ## Choosing a language
 
@@ -125,6 +138,18 @@ function getCurrentBranch() {
 - **Blank line** between logical blocks — after the parameter list, between setup and work, before the return.
 - **Named constants at the top** for regular expressions and magic values, in `SCREAMING_SNAKE_CASE`, each with a comment saying what it matches and why.
 - **Break long chains** after the operator, indenting the continuation by 4 spaces.
+
+## Design
+
+Three rules for the JavaScript and the TypeScript, each because the alternative has to be undone later:
+
+| Prefer | Over | Because |
+|---|---|---|
+| **Dependency injection** — pass the collaborator that reaches infrastructure (git, the file system, the console, the clock, an MCP call) into the function or its options, with the real one as the default | a static helper that reaches it itself | a test then drives the logic without a repository, a session or a network; `main()` in `tests/no-history-in-code/no-history-in-code.js` takes its `runGit` and `write` |
+| **One frozen enum-like map** for a closed set of string constants — `Object.freeze({ ... })`, or a TypeScript union with its one map — **mapped once, at the wire**, where a value enters or leaves | the same literals spelled in several places | a renamed value then fails in one place instead of drifting in five |
+| **One shared utility**, imported — within a plugin from its `shared/`, across the tests from the suite that owns it | a copy pasted beside the caller | copies drift; `plugins/terylon-core/shared/transcript.js` is the one reader of a transcript's usage that the hook and `measure-token-spend` both call |
+
+These bind new code and the code a change touches; nothing is rewritten to them in a sweep.
 
 ## Error handling
 

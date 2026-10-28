@@ -5,7 +5,7 @@ description: >-
   item — "verify the test plan on <PR>", "check what was actually tested". Hosts the human gate
   before anything is written back, dispatches the tester agent, and reports the run's token spend.
   Several PRs or checklists fan out into concurrent testers. Optional flags --auto and --dry-run.
-allowed-tools: Read, Grep, Glob, Write, Bash(node *), Agent, AskUserQuestion
+allowed-tools: Read Grep Glob Write Bash(node *) Agent AskUserQuestion
 ---
 
 # test — entry point of the verification pipeline

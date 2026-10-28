@@ -5,7 +5,7 @@ description: >-
   request's test plan, a story's acceptance criteria, a checklist someone wrote and nobody exercised.
   Triages each item into executed / static-only / not verifiable here, exercises what it can, and
   reports evidence per item. Forge-agnostic engine: it verifies and writes nowhere.
-allowed-tools: Read, Grep, Glob, Bash, Agent, Write
+allowed-tools: Read Grep Glob Bash Agent Write
 ---
 
 # verify-test-plan
@@ -122,7 +122,7 @@ The fixture must **reproduce the condition that produced the defect**, not merel
 
 Record what the fixture was. A result that cannot be reproduced is an anecdote.
 
-**"Never touch the repository under test" is the intent; the enforceable rule is narrower.** A build writes its output, and a claim about the project building can only be checked by building it. The line that can actually be held is in `${CLAUDE_PLUGIN_ROOT}/shared/side-effects.md` and it binds every execution — the ones the executors perform *and* the ones this skill runs itself under *route: here*:
+**"Never touch the repository under test" is the intent; the enforceable rule is narrower.** A build writes its output, and a claim about the project building can only be checked by building it. The line that can actually be held is in [`references/side-effects.md`](references/side-effects.md) and it binds every execution — the ones the executors perform *and* the ones this skill runs itself under *route: here*:
 
 - **tracked files: never**, and `git status --porcelain` before and after is the proof
 - ignored build output: allowed, and **declared**

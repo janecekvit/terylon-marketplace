@@ -6,7 +6,7 @@ description: >-
   files and its CLAUDE.md, runs its build and its tests, and reports the commands, exit codes and
   executed case names. Reports what ran; it never decides what that means. Loaded by name by
   verify-test-plan; not a user command.
-allowed-tools: Read, Grep, Glob, Bash
+allowed-tools: Read Grep Glob Bash
 ---
 
 # run-build-and-tests
@@ -68,7 +68,7 @@ Skipping is the rule, not a shortcut: the test command's target commonly depends
 
 ## Side effects
 
-Emit the block from `${CLAUDE_PLUGIN_ROOT}/shared/side-effects.md` before the first command, run `git status --porcelain` before and after, and set `repoUnchanged` from the comparison. Do not restate the contract's rules here.
+Emit the block from [`references/side-effects.md`](references/side-effects.md) before the first command, run `git status --porcelain` before and after, and set `repoUnchanged` from the comparison. Do not restate the contract's rules here.
 
 ## Report
 

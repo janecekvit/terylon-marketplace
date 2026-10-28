@@ -1,11 +1,11 @@
 ---
 name: resolve-forge
 description: >-
-  Use before any forge operation to decide which hosting platform a run targets and which adapter
-  fills the port — Azure DevOps or GitHub. Resolves from an explicit URL, then TERYLON_FORGE, then
+  Use when a run is about to perform a forge operation and must first know which hosting platform it
+  targets and which adapter fills the port — Azure DevOps or GitHub. Resolves from an explicit URL, then TERYLON_FORGE, then
   the git remote's host, and stops rather than guessing. Internal mechanics library for the transport
   skills, not a user command.
-allowed-tools: Read, Grep, Glob, Bash(git *), Bash(node *)
+allowed-tools: Read Grep Glob Bash(git *) Bash(node *)
 ---
 
 # resolve-forge — which forge, and which adapter

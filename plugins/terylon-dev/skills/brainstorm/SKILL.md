@@ -6,7 +6,7 @@ description: >-
   the codebase, runs a one-question-at-a-time dialogue, writes a design document, and decomposes it
   into seed-specs that develop consumes. Also the second mode of develop's Gate 0. Optional flag
   --no-decompose.
-allowed-tools: Read, Grep, Glob, Bash(git *), Write, AskUserQuestion
+allowed-tools: Read Grep Glob Bash(git *) Write AskUserQuestion
 ---
 
 # brainstorm — from a vague idea to seed-specs

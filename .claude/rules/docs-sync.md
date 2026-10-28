@@ -71,7 +71,7 @@ Symptom first — the symptom is the search term. Include failures in the toolin
 | Where | Do |
 |---|---|
 | In an **ADR** | do not edit the decision away. Mark it superseded and write the new one, so the reasoning that was overturned stays readable |
-| In any other article | replace the stale sentence outright — `claude-md-sync.md`, *How to update* |
+| In any other article | replace the stale sentence outright — `claude-md-sync.md`, *How to update* — and keep the overturned reasoning only in an ADR; an article states the current state (`documentation.md`) |
 
 A constraint that turns out to be a tooling limitation dressed as a decision must be corrected **explicitly**, or the stale rationale keeps arguing against fixing it.
 

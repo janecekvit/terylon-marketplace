@@ -5,7 +5,7 @@ description: >-
   pull request and issue metadata, diffs, review threads and comments, eligibility, and the GitHub
   posting conventions. The GitHub body of the terylon-forge port. Internal mechanics library for
   other skills, not a user command.
-allowed-tools: Read, Grep, Glob, Bash(git *), Bash(gh *)
+allowed-tools: Read Grep Glob Bash(git *) Bash(gh *)
 ---
 
 # forge-ops — the GitHub adapter
@@ -19,7 +19,7 @@ Its sibling is `terylon-ado:forge-ops`, the same catalog against Azure DevOps. *
 The single source of truth for the recipes is:
 
 ```
-${CLAUDE_PLUGIN_ROOT}/skills/forge-ops/references/forge-ops.md
+${CLAUDE_SKILL_DIR}/references/forge-ops.md
 ```
 
 ## Why the CLI and not an MCP server

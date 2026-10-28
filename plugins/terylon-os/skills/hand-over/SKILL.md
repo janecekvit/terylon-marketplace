@@ -1,7 +1,7 @@
 ---
 name: hand-over
 description: "Use when the owner wants a story worked out and handed to Terylon's leader — \"write the spec for this\", \"turn this into a plan and give it to the leader\", \"hand this story over\" — from a rough idea through a specification and a plan to tasks_add."
-allowed-tools: mcp__plugin_terylon-os_terylon__*, mcp__terylon__*, Read, Grep, Glob
+allowed-tools: mcp__plugin_terylon-os_terylon__* mcp__terylon__* Read Grep Glob
 ---
 
 # hand-over — story to spec to plan to hand-over
