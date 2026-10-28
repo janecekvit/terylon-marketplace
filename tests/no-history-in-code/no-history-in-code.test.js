@@ -55,6 +55,8 @@ const CASES =
     ["hook.js", "    // The branch the target directory is on.", false],
     ["hook.js", "    const url = \"https://example.com/pull/9\";", false],
     ["hook.js", "    const colour = \"#123456\";", false],
+    ["hook.js", "    const fixture = \"    // since #42\";", false],
+    ["hook.js", "    const fixture = '/* 2026-10-04 */'; // the fixture", false],
     ["hook.js", "    const day = \"2026-10-04\";", false],
     ["ci.yml", "      - uses: actions/checkout@3d3c42e5 # v7.0.1", false],
     ["ci.yml", "      run: echo \"#42 2026-10-04\"", false],

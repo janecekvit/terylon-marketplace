@@ -96,12 +96,16 @@ function commentText(text, syntax, state)
         return end === -1 ? text : text.slice(0, end);
     }
 
-    const lineMarkerIndex = findLineMarker(text, syntax.lineMarker);
-    const blockStart = syntax.blockComments ? text.indexOf("/*") : -1;
+    const start = findCommentStart(text, syntax);
 
-    if (blockStart !== -1 && (lineMarkerIndex === -1 || blockStart < lineMarkerIndex))
+    if (start === null)
     {
-        const rest = text.slice(blockStart + 2);
+        return null;
+    }
+
+    if (start.kind === "block")
+    {
+        const rest = text.slice(start.index + 2);
         const end = rest.indexOf("*/");
 
         state.insideBlock = end === -1;
@@ -109,31 +113,51 @@ function commentText(text, syntax, state)
         return end === -1 ? rest : rest.slice(0, end);
     }
 
-    return lineMarkerIndex === -1 ? null : text.slice(lineMarkerIndex + syntax.lineMarker.length);
+    return text.slice(start.index + syntax.lineMarker.length);
 }
 
-// Where a line comment starts: at the start of the line or after whitespace, so that a URL's // and a
-// colour's # are not taken for one.
-function findLineMarker(text, marker)
+// Where a comment starts on a line, outside any quoted string: { kind, index }, or null. A line marker counts
+// only at the start of the line or after whitespace, so that a URL's // and a colour's # are not taken for one.
+function findCommentStart(text, syntax)
 {
-    if (marker === null)
-    {
-        return -1;
-    }
+    let quote = null;
 
-    let index = text.indexOf(marker);
-
-    while (index !== -1)
+    for (let index = 0; index < text.length; index++)
     {
-        if (index === 0 || /\s/.test(text[index - 1]))
+        const character = text[index];
+
+        if (quote !== null)
         {
-            return index;
+            if (character === "\\")
+            {
+                index++;
+            }
+            else if (character === quote)
+            {
+                quote = null;
+            }
+
+            continue;
         }
 
-        index = text.indexOf(marker, index + 1);
+        if (character === "\"" || character === "'" || character === "`")
+        {
+            quote = character;
+            continue;
+        }
+
+        if (syntax.blockComments && text.startsWith("/*", index))
+        {
+            return { kind: "block", index };
+        }
+
+        if (syntax.lineMarker !== null && text.startsWith(syntax.lineMarker, index) && (index === 0 || /\s/.test(text[index - 1])))
+        {
+            return { kind: "line", index };
+        }
     }
 
-    return -1;
+    return null;
 }
 
 // Every finding in a diff, as { file, line, names }.
