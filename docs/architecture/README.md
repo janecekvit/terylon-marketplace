@@ -10,7 +10,7 @@ The structure of the marketplace, drawn as Mermaid flowcharts with the ELK layou
 
 | Diagram | Draws | Drawn in |
 |---|---|---|
-| The plugins | every plugin and the dependencies its manifest declares, and the two keys a consumer enables | [the root `README.md`, under *Plugins*](../../README.md#plugins) — the one copy, read where a consumer lands |
+| The plugins | every plugin and the dependencies its manifest declares, and the two keys a consumer enables | [the root `README.md`, under *Architecture*](../../README.md#architecture) — the one copy, read where a consumer lands |
 | [The forge port](#the-forge-port) | the forge port: its operation catalog, `resolve-forge`, and the two adapters that implement it | here |
 | [terylon-os and the pane](#terylon-os-and-the-pane) | a session reaching Terylon's Agentic OS through `terylon-os`, the `terylon-pane` mod and the owner's acts it takes, and merge, the one gate, which stays in the console | here |
 
@@ -38,29 +38,50 @@ flowchart TD
     classDef external fill:#4B5563,stroke:#374151,color:#FFFFFF
 
     subgraph callers ["Callers: name operations, never tools"]
-        transports["terylon-forge transports<br/>create-pr, review-pr, address-pr-comments,<br/>write-pr-description, update-pr-checklist,<br/>update-work-item-checklist, pr-reviewer"]:::caller
-        product["terylon-product<br/>create-user-story, create-feature"]:::caller
-        dev["terylon-dev<br/>develop, planner"]:::caller
+        transports["`terylon-forge transports
+create-pr, review-pr, address-pr-comments,
+write-pr-description, update-pr-checklist,
+update-work-item-checklist, pr-reviewer`"]:::caller
+        product["`terylon-product
+create-user-story, create-feature`"]:::caller
+        dev["`terylon-dev
+develop, planner`"]:::caller
     end
 
-    subgraph port ["terylon-forge: the port<br/>declares terylon-git only; no adapter declared"]
-        resolve["resolve-forge<br/>explicit URL, then TERYLON_FORGE, then the git remote<br/>first hit wins; no default"]:::port
-        catalog["The operation catalog<br/>URLs: parse-pr-url, parse-item-url, resolve-repo-id<br/>pull requests: create, list, metadata, eligibility, diff,<br/>description, reviewers, auto-merge, linked items<br/>threads: list, read, post, reply, resolve<br/>work items: fetch, create, update, link, comments<br/>identity: current user, identity, preconditions"]:::port
+    subgraph port ["`terylon-forge: the port
+declares terylon-git only; no adapter declared`"]
+        resolve["`resolve-forge
+explicit URL, then TERYLON_FORGE, then the git remote
+first hit wins; no default`"]:::port
+        catalog["`The operation catalog
+URLs: parse-pr-url, parse-item-url, resolve-repo-id
+pull requests: create, list, metadata, eligibility, diff,
+description, reviewers, auto-merge, linked items
+threads: list, read, post, reply, resolve
+work items: fetch, create, update, link, comments
+identity: current user, identity, preconditions`"]:::port
     end
 
-    stop["STOP: name the forge, the missing plugin,<br/>what to enable. No fallback, no calls of its own"]:::stop
+    stop["`STOP: name the forge, the missing plugin,
+what to enable. No fallback, no calls of its own`"]:::stop
 
     subgraph ado ["terylon-ado: adapter"]
-        adoForgeOps["forge-ops<br/>the Azure DevOps body"]:::adapter
-        connect["connect<br/>registers the ado server at the user scope"]:::adapter
+        adoForgeOps["`forge-ops
+the Azure DevOps body`"]:::adapter
+        connect["`connect
+registers the ado server at the user scope`"]:::adapter
     end
 
     subgraph github ["terylon-github: adapter"]
-        githubForgeOps["forge-ops<br/>the GitHub body; no server"]:::adapter
+        githubForgeOps["`forge-ops
+the GitHub body; no server`"]:::adapter
     end
 
-    adoServer(["ado: Microsoft's remote MCP server<br/>mcp.dev.azure.com, OAuth<br/>tools mcp__ado__*"]):::external
-    gh["gh CLI<br/>authenticated by gh auth login"]:::external
+    adoServer(["`ado: Microsoft's remote MCP server
+mcp.dev.azure.com, OAuth
+tools mcp__ado__*`"]):::external
+    gh["`gh CLI
+authenticated by gh auth login`"]:::external
     azureDevOps(["Azure DevOps"]):::external
     githubCom(["GitHub"]):::external
 
@@ -112,23 +133,35 @@ flowchart TD
         subgraph os ["terylon-os plugin: no dependencies"]
             %% The variable is drawn as written: Mermaid substitutes nothing inside a label.
             server["server terylon at ${TERYLON_URL}/mcp"]:::terylon
-            skills["one skill per prompt it serves<br/>briefing, hand-over, merge-gate,<br/>add-goal, review-plan, show-story"]:::terylon
+            skills["`one skill per prompt it serves
+briefing, hand-over, merge-gate,
+add-goal, review-plan, show-story`"]:::terylon
         end
 
         subgraph pane ["terylon-pane mod: shows, asks, answers, posts, takes the owner's acts; never merges"]
-            allowList["PANE_TOOLS: reads, five writes that decide nothing,<br/>the owner's thirteen acts; never story_merge"]:::terylon
-            band["the band above the prompt<br/>what calls for the owner"]:::terylon
-            statusLine["the status line<br/>the health of Agentic OS, its worst problem"]:::terylon
-            tabs["one pane, five tabs<br/>Queue, Goals, Bell, Memory, Status<br/>opened only by the band or a command;<br/>each act on its subject's card, on a press"]:::terylon
+            allowList["`PANE_TOOLS: reads, five writes that decide nothing,
+the owner's thirteen acts; never story_merge`"]:::terylon
+            band["`the band above the prompt
+what calls for the owner`"]:::terylon
+            statusLine["`the status line
+the health of Agentic OS, its worst problem`"]:::terylon
+            tabs["`one pane, five tabs
+Queue, Goals, Bell, Memory, Status
+opened only by the band or a command;
+each act on its subject's card, on a press`"]:::terylon
         end
     end
 
-    phone["The phone, through Remote Control<br/>terylon-os on an always-on box; no mod"]:::external
+    phone["`The phone, through Remote Control
+terylon-os on an always-on box; no mod`"]:::external
 
     subgraph terylon ["Terylon's Agentic OS: the only source of truth"]
-        mcp["/mcp<br/>the caller's tailnet identity; no header, no token"]:::service
-        leader["leader, goals, plans, stories,<br/>bell, memory"]:::service
-        console["the console: the one gate<br/>merge, confirmed by the owner's passkey"]:::gate
+        mcp["`/mcp
+the caller's tailnet identity; no header, no token`"]:::service
+        leader["`leader, goals, plans, stories,
+bell, memory`"]:::service
+        console["`the console: the one gate
+merge, confirmed by the owner's passkey`"]:::gate
     end
 
     %% No class: the theme colours the owner, so it stays readable in light and dark mode alike.
@@ -136,7 +169,8 @@ flowchart TD
 
     pane -.->|"dependencies: terylon-os"| os
     server -->|"over the tailnet"| mcp
-    allowList -->|"every 30 s: briefing, work_in_flight,<br/>stories_list, events_since"| server
+    allowList -->|"`every 30 s: briefing, work_in_flight,
+stories_list, events_since`"| server
     allowList --> band
     allowList --> statusLine
     allowList --> tabs
@@ -160,7 +194,8 @@ flowchart TD
 | [port-and-adapter-split](./port-and-adapter-split.md) | why `terylon-devops` broke into a port and two adapters, and why the port declares no adapter |
 | [spend-measured-on-output-tokens](./spend-measured-on-output-tokens.md) | why a run's cost is measured from its own transcripts, weighted, rather than from the harness's figures |
 | [superpowers-left-the-dependency-set](./superpowers-left-the-dependency-set.md) | why a dependency on a foreign marketplace was removed, and what replaced its six skills |
-| [one-source-of-truth-reached-from-two-places](./one-source-of-truth-reached-from-two-places.md) | why Agentic OS on TerylonLab is the only source of truth, reached through one `/mcp` from the PC's pane and from the phone through Remote Control, and why the pane holds and decides nothing |
+| [one-source-of-truth-reached-from-two-places](./one-source-of-truth-reached-from-two-places.md) | why Agentic OS on the owner's host is the only source of truth, reached through one `/mcp` from the PC's pane and from the phone through Remote Control, and why the pane holds nothing; superseded in part by the next row |
+| [the-pane-takes-the-owners-acts](./the-pane-takes-the-owners-acts.md) | why the pane approves, returns, unblocks, pauses and the rest on their subject's cards since Terylon PR 228, and why merge, the one gate, stays in the console behind the passkey |
 | [every-rule-has-one-owner](./every-rule-has-one-owner.md) | why a rule is stated once and pointed at everywhere else, what the first sweep found, and why nothing but review enforces it yet |
 
 ## Writing one

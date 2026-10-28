@@ -2,6 +2,9 @@
 // What Terylon sends (story titles, the leader's questions, memory entries, rules) is drawn in the language it
 // came in, untranslated. The prompts the pane posts into the session are the owner's words to Claude, in Czech.
 
+// What the leader does with a new goal, as the owner is told after Add goal (S31).
+const GOAL_READ_FIRST = 'The leader reads it first: a general direction stays a goal; a concrete ask — a file, a document, one change — becomes a task under a goal.'
+
 export const COPY = {
   title: 'Terylon',
   connecting: 'connecting…',
@@ -57,12 +60,22 @@ export const COPY = {
   howToFix: 'How to fix',
   fixStep: (index: number, text: string) => `${index}. ${text}`,
   fixNotAllowed: ['Add these rules to ~/.claude/settings.json, under "permissions" → "allow":', 'Press Try again.'],
+  // THE SAME RULES, ASKED FOR BY AN ACT'S How to fix (the owner's walk of 1.5.0, #35): that card has no Try again, so
+  // its last step names the button the owner presses instead.
+  fixNotAllowedAct: ['Add these rules to ~/.claude/settings.json, under "permissions" → "allow":', 'Press the act again on its card.'],
   fixNoServer: ['Install the plugin terylon-os: /plugin install terylon-os@terylon', 'Check that its server is connected: claude mcp list', 'Press Try again.'],
   fixRefused: ['Sign this PC into the tailnet with your own account.', 'Press Try again.'],
   fixError: ['Open Health in the console to see why.', 'Press Try again.'],
-  fixUnreachable: (url: string) => ['Check the tailnet: tailscale status', `Check TERYLON_URL: ${url === '' ? '(not set)' : url}`, 'The pane retries every minute; Try again does it now.'],
+  // AFTER A NETWORK OUTAGE a running session does not reconnect the plugin's server by itself (Terylon S40, #402), until
+  // Terylon S42 (#404) makes /mcp stateless.
+  fixUnreachable: (url: string) => [
+    'Check the tailnet: tailscale status',
+    `Check TERYLON_URL: ${url === '' ? '(not set)' : url}`,
+    'After a network outage: /mcp → terylon → Reconnect, or restart Claude Desktop.',
+    'The pane retries every minute; Try again does it now.',
+  ],
   pausedTitle: 'The leader is paused',
-  fixPaused: ['Resuming is your gate, confirmed in the console.'],
+  fixPaused: ['Press Resume, here or on the queue: the leader continues from its log.'],
   alertHint: (source: string, time: string) => `${source} · ${time}`,
   fixAlert: 'What to do is in the notice; handling it is the console\'s.',
   statusDiagnostics: 'Diagnostics',
@@ -82,7 +95,9 @@ export const COPY = {
 
   // The queue.
   waiting: 'Waiting for you',
-  waitingHint: 'you decide in the console',
+  waitingHint: 'decide here · merge in the console',
+  waitingHintAccept: 'decide here · accept on its card',
+  waitingHintBoth: 'decide here · merge in the console, accept on its card',
   running: 'Running',
   queued: 'Queued',
   doneToday: 'Done today',
@@ -94,6 +109,7 @@ export const COPY = {
   stale: ' (stale)',
   kindQuestion: 'question',
   kindMerge: 'merge',
+  kindAccept: 'accept',
   kindPlan: 'plan',
   kindBlocked: 'blocked',
   kindQueued: 'queued',
@@ -119,34 +135,35 @@ export const COPY = {
   after: (stories: string) => `after ${stories}`,
   held: (reason: string) => reason,
   waitsForSlot: 'waits for a slot',
+  // AN APPROVED STORY NOT STARTED WHILE A SLOT IS FREE (the owner's walk of 1.5.0, #35): it does not wait for a slot,
+  // and /mcp names no reason, so the pane says only what it can see.
+  notStarted: 'not started, though a slot is free',
+  heldTitle: 'Held',
+  verifiedAccept: 'verified · waiting for your acceptance',
   mergedAt: (time: string, cost: string) => `${time} · $${cost}`,
   answer: 'Answer',
   answerInConsole: 'Answer in the console ↗',
   openStory: 'Open story',
   openPlan: 'Open plan',
   mergeInConsole: 'Merge in the console ↗',
-  approveInConsole: 'Approve in the console ↗',
-  rethinkInConsole: 'Rethink ↗',
-  unblockInConsole: 'Unblock in the console ↗',
   emptyTitle: 'Nothing runs and nothing waits',
   emptyHint: 'Add a task below, or write a story out with Claude in the session and hand it over whole.',
   quickLabel: 'New task for the leader',
   quickPlaceholder: 'What to do…',
   quickAdd: 'Add',
-  quickNote: 'The task becomes a plan you approve in the console. The pane approves nothing.',
+  quickNote: 'The task becomes a plan you approve on its card.',
   addOnPhone: 'Add a task…',
   addOnPhoneNote: 'The phone has no Input: “Add a task…” posts a request into the session, and you tell Claude the task.',
   addOnPhonePrompt: 'Chci přidat úkol lídrovi Terylonu. Zeptej se mě, co a po čem.',
   paused: (since: string | null, reason: string | null) =>
     `The leader is paused${since === null ? '' : ` since ${since}`}${reason === null ? '' : ` (${reason})`}. Nothing new starts; the queue below stands still.`,
-  resumeInConsole: 'Resume in the console ↗',
 
   // The states that are not a queue: each says what happened, why, and the step that fixes it.
   noServerTitle: 'The pane found no MCP server terylon',
   noServerBody: 'Install the plugin terylon-os from the Terylon Marketplace; it brings the /mcp address on the tailnet. No token: your tailnet login is the identity.',
   noServerCommand: '/plugin install terylon-os@terylon',
   retry: 'Try again',
-  unreachableTitle: 'TerylonLab does not answer',
+  unreachableTitle: 'Terylon does not answer',
   unreachableWhen: (since: string) => `since ${since} · retrying every minute`,
   unreachableBody: (time: string) => `Showing the state of ${time}. Work on the homelab goes on.`,
   unreachableFix: 'Check tailscale status and TERYLON_URL; every failure is also in claude --debug under terylon-pane:',
@@ -170,8 +187,6 @@ export const COPY = {
     `Shrň mi story #${story} z Terylonu: kde je, co stojí a co potřebuje (story_get, work_in_flight).`,
   summariseNote: '“Summarise in the session” posts a question into the chat; Claude answers it through story_get. The pane decides nothing.',
   storyInConsole: 'Story in the console ↗',
-  stopInConsole: 'Stop in the console ↗',
-  returnInConsole: 'Return with a note ↗',
   storyLoading: 'Loading the story…',
   storyError: 'The story did not load',
   storyMeta: (timed: string | null, attempt: number, branch: string | null, model: string | null) =>
@@ -180,6 +195,10 @@ export const COPY = {
   step: (step: number, steps: number, current: string | null) =>
     `Step ${step} of ${steps}${current === null ? '' : `: ${current}`}`,
   noStep: 'No step reported yet',
+  // A RUN WHOSE progress NAMES NO AGENT OR NO STAGE still draws Now working (the owner's walk of 1.5.0, #35), saying so.
+  noAgent: 'no agent reported',
+  noStage: 'no stage reported',
+  phasesNoStage: (done: number, all: number) => `${done} of ${all} · no stage reported`,
   stepOf: (step: number, steps: number) => `step ${step} of ${steps}`,
   costOf: (cost: string, budget: string | null) => (budget === null ? `$${cost}` : `$${cost} of the story's $${budget}`),
   phases: 'Phases',
@@ -235,7 +254,7 @@ export const COPY = {
   notAnswered: 'Not handed over',
   nextQuestion: 'Next question',
   questionGone: 'The question is no longer open.',
-  answerNote: 'An answer approves nothing, it completes the brief; plans, merges and stops stay in the console.',
+  answerNote: 'An answer approves nothing, it completes the brief; a plan or a story is decided on its own card, and a merge in the console.',
 
   // Goals and plans.
   openGoals: 'Open goals',
@@ -246,7 +265,11 @@ export const COPY = {
   plan: (plan: number) => `Plan ${plan}`,
   planStoryDetail: (size: string, estimate: string | null, after: string | null) =>
     [size, estimate === null ? null : `~$${estimate}`, after === null ? null : `after ${after}`].filter(part => part !== null).join(' · '),
-  planNote: 'Each story carries its criteria, declared files and estimate; you approve in the console.',
+  // A plan's order said in words, by its stories' titles: "A; B; C after A" (#35).
+  planOrderAlt: (stories: readonly { title: string; after: readonly string[] }[]) =>
+    stories.map(story => (story.after.length === 0 ? story.title : `${story.title} after ${story.after.join(' and ')}`)).join('; '),
+  planNote: 'Each story carries its criteria, declared files and estimate; the whole text is in plans_list.',
+  planInConsole: 'Plan in the console ↗',
   noPlans: 'No plan waits.',
   plans: 'Plans',
   newGoal: 'New goal',
@@ -264,6 +287,9 @@ export const COPY = {
   ownList: "Terylon's own list",
   // GOALS ARE GENERAL (Terylon #369, S31; the operator, 2026-10-22, the approved S31 canvas)
   addGoalNote: 'A goal is a general direction. A concrete ask — a file, a document, one change — becomes a task under a goal. The leader asks its questions first, then makes a plan you approve.',
+  // The leader's own answer, then how it reads a goal, unless its answer already says so (S31).
+  goalAdded: (sentence: string) =>
+    sentence.includes(GOAL_READ_FIRST) ? sentence : `${sentence.replace(/[.\s]*$/, '')}. ${GOAL_READ_FIRST}`,
   goalSending: 'Handing the goal over…',
   goalMeta: (priority: string, state: string) => `${priority} · ${state}`,
   goalStories: 'Stories',
@@ -283,15 +309,15 @@ export const COPY = {
     `The leader is paused${since === null ? '' : ` since ${since}`}${reason === null ? '' : ` (${reason})`}`,
   metrics: 'Last 30 days',
   metricsHint: 'metrics',
-  // ONE STORY, ONE OPEN PR: the operator's walk of 1.1.1 read "1 stories" on the Status tab.
+  // ONE STORY, ONE PR OPENED: the operator's walk of 1.1.1 read "1 stories" on the Status tab. The number is the PRs
+  // opened over the 30 days, not the PRs open now (Terylon S40, #402).
   metricStories: (count: number, hostProof: number | null) => `${count === 1 ? 'story' : 'stories'}${hostProof === null || hostProof === 0 ? '' : ` (+${hostProof} host proof)`}`,
   metricCost: 'per story',
   metricMerged: 'merged',
-  metricOpened: (count: number) => (count === 1 ? 'open PR' : 'open PRs'),
+  metricOpened: (count: number) => (count === 1 ? 'PR opened' : 'PRs opened'),
   loadTimedOut: (seconds: number) => `Terylon did not answer within ${seconds} s. Press the tab again to retry.`,
   bellInConsole: 'Bell in the console ↗',
-  pauseInConsole: 'Pause the leader ↗',
-  bellNote: 'Mark handled is notice_handle, which decides nothing about work. Pausing the leader is a gate: a link only.',
+  bellNote: 'Mark handled is notice_handle, which decides nothing about work. Pause and Resume are on the queue and the Status tab.',
   markHandled: 'Mark handled',
   handling: 'Marking…',
   nothingYet: 'Nothing yet.',
@@ -303,6 +329,13 @@ export const COPY = {
   criteriaLabel: 'Criteria (optional)',
   criteriaPlaceholder: 'Separate them with semicolons, or the leader writes them',
   criteriaPlaceholderRows: 'One per line, or the leader writes them',
+  // A task over a repository declares the files it will change (#39); Terylon refuses it without 1 to 30.
+  filesLabel: 'Files (1 to 30, one per line)',
+  filesPlaceholder: 'The paths it will change, separated by semicolons',
+  filesPlaceholderRows: 'The paths it will change, one per line',
+  filesNone: 'A task over a repository declares 1 to 30 files it will change, one per line.',
+  filesBlank: (line: number) => `Files: line ${line} is blank. Write one path per line, with no blank line between.`,
+  filesTooMany: (count: number) => `Files: ${count} paths; a task declares at most 30.`,
   size: 'Size',
   sizes: ['M', 'L', 'XL'] as readonly string[],
   goal: 'Goal',
@@ -313,7 +346,12 @@ export const COPY = {
   handOver: 'Hand to the leader',
   sending: 'Handing to the leader…',
   added: '✓ Handed over',
-  addedNote: 'The pane approves nothing: that is a link, not a gate button.',
+  // WHAT THE PANE HANDED OVER, word for word (the owner's walk of 1.5.0, #35): the story the leader writes from it may
+  // differ, and this says which side changed it.
+  handedTitle: (title: string) => `Title: ${title}`,
+  handedCriteria: (criteria: readonly string[]) => (criteria.length === 0 ? 'Criteria: none sent; the leader writes them.' : `Criteria: ${criteria.join(' · ')}`),
+  handedFiles: (files: readonly string[]) => `Files: ${files.join(' · ')}`,
+  addedNote: 'The plan it becomes waits for you under “Waiting for you”.',
   nextTask: 'Next task',
   notAdded: 'Not handed over',
   timeout: (command: string | null) =>
@@ -337,20 +375,165 @@ export const COPY = {
   memoryRemove: 'Remove',
   memoryAdd: 'Add entry',
   memoryText: 'New text of the entry',
-  memoryWhy: 'Why (you see it when you confirm in the console)',
+  memoryWhy: 'Why (you see it when you confirm it)',
   memoryPropose: 'Propose',
   memorySending: 'Sending the proposal…',
-  memoryProposed: 'The proposal waits for your confirmation in the console; the memory changes only after it.',
-  memoryChecking: 'The leader is still checking the proposal; see the outcome in the console.',
-  memoryConfirmInConsole: 'Confirm in the console ↗',
-  memoryNote: 'The memory changes only after you confirm in the console.',
-  memoryPendingHeading: 'Proposals waiting for confirmation',
-  memoryPending: (count: number) => `${count} ${count === 1 ? 'proposal' : 'proposals'}`,
-  memoryPendingWhere: ' waiting in the console',
+  memoryProposed: 'The proposal waits for your confirmation under Proposals waiting; the memory changes only after it.',
+  memoryChecking: 'The leader is still checking the proposal; it appears under Proposals waiting when it is ready.',
+  memoryNote: 'The memory changes only after you confirm the proposal.',
+  memoryPendingHeading: 'Proposals waiting',
+  memoryOwnerFile: 'owner',
   memoryProposedHeading: 'Proposed in this session',
   memoryProposedItem: (action: string, file: string, text: string) => `${action} · ${file} · ${text}`,
   memoryBack: 'Back to the memory',
+
+  // THE OWNER'S ACTS (S27, #27): the button, what it reads while Terylon answers, the outcome's words, and what
+  // stays the console's. Terylon's own sentence follows the outcome's words unchanged.
+  actButton: {
+    plan_approve: 'Approve',
+    plan_rethink: 'Rethink…',
+    story_return: 'Return…',
+    story_unblock: 'Unblock',
+    story_abandon: 'Abandon…',
+    story_stop: 'Stop',
+    story_accept: 'Accept',
+    leader_pause: 'Pause…',
+    leader_resume: 'Resume',
+    goal_drop: 'Drop goal…',
+    memory_confirm: 'Confirm',
+    memory_drop: 'Drop',
+    policy_save: 'Save',
+  } as Record<string, string>,
+  actSend: {
+    plan_rethink: 'Send back',
+    story_return: 'Return',
+    story_abandon: 'Abandon for good',
+    leader_pause: 'Pause the leader',
+    goal_drop: 'Drop for good',
+  } as Record<string, string>,
+  actBusy: {
+    plan_approve: 'Approving…',
+    plan_rethink: 'Sending back…',
+    story_return: 'Returning…',
+    story_unblock: 'Unblocking…',
+    story_abandon: 'Abandoning…',
+    story_stop: 'Stopping…',
+    story_accept: 'Accepting…',
+    leader_pause: 'Pausing…',
+    leader_resume: 'Resuming…',
+    goal_drop: 'Dropping…',
+    memory_confirm: 'Confirming…',
+    memory_drop: 'Dropping…',
+    policy_save: 'Saving…',
+  } as Record<string, string>,
+  actDone: {
+    plan_approve: 'Approved',
+    plan_rethink: 'Sent back with your comment',
+    story_return: 'Returned',
+    story_unblock: 'Unblocked',
+    story_abandon: 'Abandoned',
+    story_stop: 'Stopped',
+    story_accept: 'Accepted',
+    leader_pause: 'Paused',
+    leader_resume: 'Resumed',
+    goal_drop: 'Dropped',
+    memory_confirm: 'Confirmed',
+    memory_drop: 'Dropped',
+    policy_save: 'Saved',
+  } as Record<string, string>,
+  // Nothing happened, in the act's own words, when Claude Code did not let the call through.
+  actNothing: {
+    plan_approve: 'Nothing was approved.',
+    plan_rethink: 'Nothing was sent back.',
+    story_return: 'Nothing was returned.',
+    story_unblock: 'Nothing was unblocked.',
+    story_abandon: 'Nothing was abandoned.',
+    story_stop: 'Nothing was stopped.',
+    story_accept: 'Nothing was accepted.',
+    leader_pause: 'The leader was not paused.',
+    leader_resume: 'The leader was not resumed.',
+    goal_drop: 'Nothing was dropped.',
+    memory_confirm: 'Nothing was confirmed.',
+    memory_drop: 'Nothing was dropped.',
+    policy_save: 'Nothing was saved.',
+  } as Record<string, string>,
+  // What follows an act, said by the pane where Terylon's sentence does not say it.
+  actAfter: {
+    plan_approve: 'The plan leaves “Waiting for you”.',
+    plan_rethink: 'The leader proposes a new plan; it appears in “Waiting for you”.',
+    story_stop: 'The story waits, blocked as stopped. Unblock, Return or Abandon now show here.',
+    leader_pause: 'The band says so within one poll.',
+    memory_confirm: 'The leader reads it from its next run.',
+    policy_save: 'The leader reads it at its next pass.',
+  } as Record<string, string>,
+  // Terylon's own sentence, whole, after the ✓; the pane's word only when Terylon sent none.
+  actDoneLine: (done: string, sentence: string | null) => (sentence === null || sentence === '' ? `✓ ${done}.` : `✓ ${sentence}`),
+  textTooLong: (limit: number, length: number) => `At most ${limit} characters; this is ${length}.`,
+  actPending: (command: string | null) => `The leader did not answer within 10 s. It may have taken the act; Refresh shows where it stands${command === null ? '' : ` (command ${command})`}.`,
+  actRefused: (status: number | null) => (status === null ? '✗ Refused' : `✗ Refused (${status})`),
+  actNotAllowed: (tool: string) => `Claude Code refused the pane's call to ${tool}`,
+  actNotAllowedBody: (nothing: string, button: string) => `${nothing} Add the pane's rules in ~/.claude/settings.json, then press ${button.replace(/…$/, '')} again.`,
+  actFix: 'How to fix',
+  actFixNote: 'How to fix opens the Status tab with every rule the pane needs, merge never among them.',
+  actBusyNote: 'Every other button on this card waits until the leader answers.',
+  actCancel: 'Cancel',
+  actRefresh: 'Refresh',
+  openQueue: 'Open the queue',
+  approveNote: (count: number) => `Approve starts ${count === 1 ? 'its story' : count === 2 ? 'both stories' : `all ${count} stories`} as the plan orders them.`,
+  approveConsole: 'Edit criteria or pick stories in the console ↗',
+  rethinkLabel: 'What to think again about',
+  rethinkNote: 'Send back stays dim until the comment says something.',
+  returnLabel: 'What to do',
+  returnPlaceholder: 'What to do next…',
+  returnNeedsNote: 'A return carries a note saying what to do.',
+  blockedLabel: 'Note (optional for Unblock, required for Return)',
+  blockedTitle: 'Blocked',
+  whyOptional: 'Why (optional)',
+  abandonNote: 'The branch and its pull request stay; the story never runs again.',
+  abandonApprovedNote: 'It has not started; abandoned, it never will.',
+  mergeNote: (commit: string | null) => `Merge is the one gate: your passkey confirms it in the console${commit === null ? '' : `, at exactly commit ${commit}`}. The pane never merges.`,
+  acceptNote: 'A list story has no merge: Accept ends it as done.',
+  acceptPhase: 'Accept — your act',
+  acceptShort: 'Accept',
+  stopNote: 'Stop cancels the run; the story waits, blocked as stopped, until you unblock, return or abandon it.',
+  pauseNote: 'Nothing new is admitted, issued, judged or written until you resume. Runs already going keep going.',
+  // WHAT A DROP WITHDRAWS AND ABANDONS, from the goal's own data, none included (the owner's walk of 1.5.0, #35): since
+  // Terylon S35 (#388) goal_drop withdraws the goal's waiting plans and abandons every story of it that has not ended,
+  // stopping a run first. Nothing of the goal keeps running.
+  dropGoalWarning: (plans: readonly number[], stories: readonly { id: number; title: string; isRunning: boolean }[]) =>
+    [
+      'Drop it for good: the leader stops working on it.',
+      plans.length === 0
+        ? 'No plan of it waits.'
+        : `It withdraws ${plans.length === 1 ? 'plan' : 'plans'} ${andList(plans.map(String))}, which ${plans.length === 1 ? 'waits' : 'wait'} for a decision.`,
+      stories.length === 0
+        ? 'No story of it is open.'
+        : `It abandons ${andList(stories.map(story => `#${story.id} ${story.title}`))}${stories.some(story => story.isRunning) ? `, stopping the run of ${andList(stories.filter(story => story.isRunning).map(story => `#${story.id}`))} first` : ''}.`,
+    ].join(' '),
+  proposalsHeading: 'Proposals waiting',
+  proposalsHint: 'memory changes when you confirm',
+  // Who proposed it, never their login: "web:<login>" is the owner, "brain" the leader (Terylon main aaf07e8).
+  proposedBy: (by: string, story: number | null, time: string | null) =>
+    [by === 'owner' ? 'proposed by you' : 'proposed by the leader', story === null ? null : `#${story}`, time].filter(part => part !== null).join(' · '),
+  proposalWhy: (why: string) => `Why: ${why}`,
+  memoryBrowser: "Versions, roll-back and dropped proposals stay in the console's memory browser ↗",
+  policy: 'Policy',
+  policyEditing: 'editing',
+  policyVersion: (version: number | null, since: string | null) => [version === null ? null : `version ${version}`, since === null ? 'never changed' : `in force since ${since}`].filter(part => part !== null).join(' · '),
+  policyEdit: 'Edit',
+  policyAgain: 'Edit again',
+  policyChanges: (changes: readonly { label: string; from: string; to: string }[]) =>
+    changes.length === 0 ? 'No change yet.' : `${changes.length} ${changes.length === 1 ? 'change' : 'changes'}: ${changes.map(change => `${change.label} ${change.from} → ${change.to}`).join(', ')}.`,
+  policyNote: 'A refused save keeps what you typed in the form.',
+  policyMissing: 'Terylon has not sent its policy yet.',
+  policyInConsole: 'Policy in the console ↗',
+  workInConsole: 'Work in the console ↗',
 } as const
+
+// "a, b and c".
+function andList(items: readonly string[]): string {
+  return items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
+}
 
 // A story's, a goal's or a plan's state, as the pane says it.
 // The stages Terylon reports on progress.stage (#360), as the S15 canvas names them, and who works in each.

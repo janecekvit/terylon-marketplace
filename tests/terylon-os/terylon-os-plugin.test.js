@@ -20,8 +20,56 @@ const PROMPT_TO_SKILL = {
     "story": "show-story",
 };
 
-// The owner's gates: a skill may name them, never in a way that tells the model to call one unasked.
-const GATE_TOOLS = ["plan_approve", "plan_rethink", "story_merge", "story_return", "story_unblock", "story_abandon", "story_stop", "story_accept", "leader_pause", "leader_resume"];
+// The one gate Terylon's /mcp exposes (Terylon PR 228): over MCP it never applies anything, it answers pending with the
+// console's merge-sheet link, and the owner confirms the exact commit with the passkey in the console.
+const GATE = ["story_merge"];
+
+// The owner's acts: writes that are not gates and show no form, which Claude in a session calls only on the owner's word.
+const OWNER_ACTS = ["plan_approve", "plan_rethink", "story_return", "story_unblock", "story_abandon", "story_stop", "story_accept", "leader_pause", "leader_resume", "goal_drop", "memory_confirm", "memory_drop", "policy_save"];
+
+// The wording a skill naming an owner's act must carry, as Terylon's own prompts say it, so the model never takes one to be helpful.
+const OWNER_WORD_PATTERN = /only on (my|the owner's) word|appl(y|ies) at once, with no confirmation asked/i;
+
+// A form the owner is sent to: none exists any more, for the gate or for an owner's act.
+const FORM_PATTERN = /\bform\b/i;
+
+// Splits a text into sentences and clauses, so a gate named in one clause is not read into its neighbour.
+const CLAUSE_SEPARATOR = /(?<=[.;!?])\s+|\n+/;
+
+// The problems in a text that names Terylon's tools: an owner's act called a gate, a form, the gate without its passkey
+// and console, an owner's act without the owner's word. Pure, so the planted texts below can show each one caught.
+function gateProblemsIn(text)
+{
+    const problems = [];
+    const namedActs = OWNER_ACTS.filter(act => text.includes(act));
+
+    if (FORM_PATTERN.test(text))
+    {
+        problems.push("sends the owner to a form");
+    }
+
+    for (const clause of text.split(CLAUSE_SEPARATOR))
+    {
+        const actsInClause = OWNER_ACTS.filter(act => clause.includes(act));
+
+        if (actsInClause.length > 0 && /\bgates?\b/i.test(clause))
+        {
+            problems.push(`calls ${actsInClause.join(", ")} a gate`);
+        }
+    }
+
+    if (namedActs.length > 0 && !OWNER_WORD_PATTERN.test(text))
+    {
+        problems.push(`names ${namedActs.join(", ")} without saying it is called only on the owner's word`);
+    }
+
+    if (GATE.some(gate => text.includes(gate)) && !/passkey in the console/i.test(text))
+    {
+        problems.push("names story_merge without the passkey in the console");
+    }
+
+    return problems;
+}
 
 function readSkill(skillName)
 {
@@ -57,18 +105,81 @@ test("every prompt has exactly one skill, and no skill mirrors a prompt that doe
     }
 });
 
-test("a skill that names a gate says the person confirms it", () =>
+test("merge is the one gate, confirmed with the passkey in the console; every other act is the owner's, taken only on their word", () =>
 {
     for (const skill of Object.values(PROMPT_TO_SKILL))
     {
-        const text = readSkill(skill);
-        const named = GATE_TOOLS.filter(gate => text.includes(gate));
-
-        if (named.length > 0)
-        {
-            assert.match(text, /person confirms|confirm[a-z]* .*in (Terylon's|its) own form|in Terylon's form/i, `${skill} names ${named.join(", ")}`);
-        }
+        assert.deepEqual(gateProblemsIn(readSkill(skill)), [], skill);
     }
+
+    assert.deepEqual(gateProblemsIn(fs.readFileSync(path.join(PLUGIN_ROOT, "README.md"), "utf8")), [], "README.md");
+});
+
+test("the merge-gate skill still takes story_merge through the one gate", () =>
+{
+    const text = readSkill("merge-gate");
+
+    assert.ok(text.includes("story_merge"));
+    assert.match(text, /merge is the one gate/i);
+    assert.match(text, /I confirm the exact commit with my passkey in the console/);
+});
+
+test("teeth: an owner's act called a gate confirmed in Terylon's form is caught", () =>
+{
+    const planted = "Offer, never act. `story_unblock` and `story_stop` are gates the person confirms in Terylon's form.";
+    const problems = gateProblemsIn(planted);
+
+    assert.ok(problems.includes("sends the owner to a form"), problems.join("; "));
+    assert.ok(problems.some(problem => problem.startsWith("calls story_unblock, story_stop a gate")), problems.join("; "));
+    assert.ok(problems.some(problem => problem.includes("only on the owner's word")), problems.join("; "));
+});
+
+test("teeth: story_merge without the passkey in the console is caught", () =>
+{
+    assert.deepEqual(gateProblemsIn("Then call story_merge; the person confirms it."), ["names story_merge without the passkey in the console"]);
+});
+
+test("teeth: a clean text passes", () =>
+{
+    const clean = "Offer `story_unblock`, and call it only on my word; merge is the one gate. `story_merge` answers pending with a link, and I confirm with my passkey in the console.";
+
+    assert.deepEqual(gateProblemsIn(clean), []);
+});
+
+// An act Terylon has not decided within 10 s answers accepted: null; the write is not sent again, and leader_answer with
+// its commandId reads the decision later (Terylon S34's server instructions).
+const PENDING_PATTERN = /`accepted: null`/;
+const NOT_AGAIN_PATTERN = /rather than send|not send the (write|task) again/i;
+const READ_LATER_PATTERN = /`leader_answer` with (it|the `commandId`)/;
+
+function pendingProblemsIn(text)
+{
+    if (!PENDING_PATTERN.test(text))
+    {
+        return [];
+    }
+
+    return [
+        NOT_AGAIN_PATTERN.test(text) ? null : "says accepted: null without saying the write is not sent again",
+        READ_LATER_PATTERN.test(text) ? null : "says accepted: null without leader_answer and the commandId",
+    ].filter(problem => problem !== null);
+}
+
+test("every text that says accepted: null says not to send the write again, and to read the decision with leader_answer", () =>
+{
+    for (const skill of Object.values(PROMPT_TO_SKILL))
+    {
+        assert.deepEqual(pendingProblemsIn(readSkill(skill)), [], skill);
+    }
+
+    assert.deepEqual(pendingProblemsIn(fs.readFileSync(path.join(PLUGIN_ROOT, "README.md"), "utf8")), [], "README.md");
+});
+
+test("teeth: accepted: null with only \"do not retry\" is caught", () =>
+{
+    const planted = "`accepted: null` means the leader has not decided within 10 s: say so and do not retry.";
+
+    assert.deepEqual(pendingProblemsIn(planted), ["says accepted: null without saying the write is not sent again", "says accepted: null without leader_answer and the commandId"]);
 });
 
 test("the published plugin names no host, tailnet or organisation", () =>

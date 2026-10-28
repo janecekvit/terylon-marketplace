@@ -10,6 +10,7 @@ import type {
   PanePhase,
   PaneWorking,
   PanePlan,
+  PaneProposal,
   PaneQuestionItem,
   PaneQueuedItem,
   PaneRunningItem,
@@ -105,11 +106,50 @@ export function when(iso: unknown, now: number, zoneOffsetMinutes = 0): string {
   return `${local.getUTCDate()}. ${local.getUTCMonth() + 1}.`
 }
 
+// THE FILES A TASK OVER A REPOSITORY DECLARES (#39): Terylon takes 1 to 30, and refuses the task otherwise. One path per
+// line, or per semicolon where the field is one line; the field's own leading and trailing blank lines are forgiven,
+// a blank line between two paths is not.
+export const FILES_MOST = 30
+
+export function filesOf(field: string): { files: string[]; problem: string | null } {
+  const whole = field.trim()
+
+  if (whole === '') {
+    return { files: [], problem: COPY.filesNone }
+  }
+
+  const files = whole.split(/[;\n]/).map(line => line.trim())
+  const blank = files.indexOf('')
+
+  if (blank >= 0) {
+    return { files: [], problem: COPY.filesBlank(blank + 1) }
+  }
+
+  if (files.length > FILES_MOST) {
+    return { files: [], problem: COPY.filesTooMany(files.length) }
+  }
+
+  return { files, problem: null }
+}
+
+// A STORY IN TERYLON'S OWN LIST has no pull request to merge: it is accepted instead (S27). Its target says so, and a
+// verified story with no pull request is one too.
+export function isListStory(document: Json): boolean {
+  return text(document.target) === 'list' || ((document.pullRequest ?? null) === null && document.state === 'verified')
+}
+
+// A goal's target over a repository, `<forge>:<org>/<project>/<repo>`, rather than Terylon's own list.
+export function isRepositoryTarget(target: unknown): boolean {
+  const named = text(target)
+
+  return named !== null && named !== 'list'
+}
+
 export function consoleLink(base: string, query: string): string {
   return `${base}/?cockpit=${query}`
 }
 
-// "terylonlab" from https://terylonlab.tail79a80a.ts.net: the name the owner knows the machine by.
+// "alice-host" from https://alice-host.example.ts.net: the name the owner knows the machine by.
 export function hostName(base: string): string {
   const match = /^[a-z]+:\/\/([^./:]+)/i.exec(base)
 
@@ -161,6 +201,20 @@ export function waitingItems(briefing: Json, base: string): PaneWaitingItem[] {
   for (const story of list(briefing.storiesVerified)) {
     const id = number(story.id) ?? 0
     const environment = story.environment as Json | null | undefined
+
+    // A STORY IN TERYLON'S OWN LIST has no merge (#39): it waits for story_accept, on its card.
+    if (text(story.target) === 'list') {
+      items.push({
+        kind: 'accept',
+        key: `accept-${id}`,
+        target: id,
+        title: `#${id} ${text(story.title) ?? ''}`.trim(),
+        detail: COPY.verifiedAccept,
+        console: consoleLink(base, `work&story=${id}`),
+      })
+      continue
+    }
+
     items.push({
       kind: 'merge',
       key: `merge-${id}`,
@@ -250,7 +304,9 @@ export function runningItems(flight: Json, zoneOffsetMinutes = 0): PaneRunningIt
   })
 }
 
-export function queuedItems(stories: Json[], inFlight: ReadonlySet<number>): PaneQueuedItem[] {
+// A story waiting for a slot says so only while none is free: with one free and nothing before it, it has not
+// started for a reason /mcp does not name (the owner's walk of 1.5.0, #35: a brief the leader could not write).
+export function queuedItems(stories: Json[], inFlight: ReadonlySet<number>, hasFreeSlot = false): PaneQueuedItem[] {
   return stories
     .filter(story => QUEUED_STATES.has(String(story.state)) && !inFlight.has(number(story.id) ?? -1))
     .map(story => {
@@ -260,7 +316,7 @@ export function queuedItems(stories: Json[], inFlight: ReadonlySet<number>): Pan
         ? COPY.held(held)
         : afterIds.length > 0
           ? COPY.after(afterIds.map(id => `#${id}`).join(', '))
-          : COPY.waitsForSlot
+          : hasFreeSlot ? COPY.notStarted : COPY.waitsForSlot
 
       return { story: number(story.id) ?? 0, title: `#${number(story.id) ?? 0} ${text(story.title) ?? ''}`.trim(), detail, isHeld: held !== null }
     })
@@ -339,11 +395,13 @@ export function phasesOf(document: Json, stage: string | null): PanePhase[] {
     verify: verdict === null ? '—' : `${text(verdict.environment) ?? ''} · ${verdict.green === true ? '✓' : '✗'}`,
     merge: state === 'verified' ? COPY.waitsOnYou : '—',
   }
+  // THE LAST PHASE OF A LIST STORY is its acceptance, never a merge (#39).
+  const isList = isListStory(document)
 
   return [
     { label: COPY.phaseAdmitted, role: null, detail: '—', status: isOver || at >= 0 || ADMITTED_STATES.has(state) ? 'done' : 'next' },
     ...STAGES.map((name, index): PanePhase => ({
-      label: COPY.stageLabel(name),
+      label: name === 'merge' && isList ? COPY.acceptPhase : COPY.stageLabel(name),
       role: COPY.stageRole(name),
       detail: details[name],
       status: status(index),
@@ -367,25 +425,26 @@ export function tokensText(tokens: number | null): string | null {
   return count === null ? null : COPY.tokens(count)
 }
 
-// Who works in the run now, at which stage, on which step, and what it has spent: read from progress, while a run goes.
+// Who works in the run now, at which stage, on which step, and what it has spent: read from progress, WHILE A RUN GOES,
+// whatever progress names (the owner's walk of 1.5.0, #35: one running story showed Now working, the other did not).
+// An agent or a stage progress does not name is said as not reported, never worked out.
 function workingOf(progress: Json | null, state: string, spent: { usd: number; budget: number | null }, hours: string | null): PaneWorking | null {
-  const agent = (progress?.agent ?? null) as Json | null
-  const stage = text(progress?.stage)
-
-  if (agent === null || stage === null || !['running', 'dispatched'].includes(state)) {
+  if (!['running', 'dispatched'].includes(state)) {
     return null
   }
 
+  const agent = (progress?.agent ?? null) as Json | null
+  const stage = text(progress?.stage)
   const step = number(progress?.step)
   const steps = number(progress?.steps)
-  const name = text(agent.name) ?? 'main'
-  const others = (number(agent.running) ?? 0) - 1
+  const name = agent === null ? null : text(agent.name) ?? 'main'
+  const others = (number(agent?.running) ?? 0) - 1
   const cost = COPY.costOf(spent.usd.toFixed(2), spent.budget === null ? null : spent.budget.toFixed(0))
   const tokens = tokenCount(number(progress?.tokens))
 
   return {
-    agent: `${name === 'main' ? COPY.mainAgent : name}${others > 0 ? ` +${others}` : ''}`,
-    stage: COPY.stageLabel(stage),
+    agent: name === null ? COPY.noAgent : `${name === 'main' ? COPY.mainAgent : name}${others > 0 ? ` +${others}` : ''}`,
+    stage: stage === null ? COPY.noStage : COPY.stageLabel(stage),
     step: step !== null && steps !== null ? COPY.step(step, steps, text(progress?.current)) : text(progress?.current) ?? COPY.noStep,
     fraction: step !== null && steps !== null && steps > 0 ? step / steps : null,
     spend: [cost, tokensText(number(progress?.tokens)), hours === null ? null : COPY.sinceStart(hours)].filter(part => part !== null).join(' · '),
@@ -406,14 +465,56 @@ function duration(milliseconds: number): string {
   return `${Math.floor(span / 3600000)} h ${Math.floor((span % 3600000) / 60000)} min`
 }
 
+// A story's progress, field by field: work_in_flight's where it names a value, story_get's where it does not. A
+// progress whose stage is null must not hide the stage story_get reports (the owner's walk of 1.5.0, #35: a stopped
+// story fell back to "1 of 8").
+export function progressOf(inFlight: Json, document: Json): Json | null {
+  const flight = (inFlight.progress ?? null) as Json | null
+  const own = (document.progress ?? null) as Json | null
+
+  if (flight === null || own === null) {
+    return flight ?? own
+  }
+
+  return Object.fromEntries([...new Set([...Object.keys(own), ...Object.keys(flight)])].map(key => [key, flight[key] ?? own[key] ?? null]))
+}
+
+// "running → blocked": a move a story_get timeline event says in its summary.
+const MOVE = /^\s*([a-z-]+)\s*→\s*([a-z-]+)\s*$/
+
+// HOW LONG A STORY STOOD BLOCKED since it started, from the moves its timeline records: the owner's walk of 1.5.0 (#35)
+// read "running 1 h 9 min" on a story unblocked after an hour stopped. A block still open counts up to now.
+function blockedSpan(timeline: Json[], since: number, now: number): number {
+  let blockedFrom: number | null = null
+  let total = 0
+
+  for (const event of [...timeline].sort((first, second) => String(first.at ?? '').localeCompare(String(second.at ?? '')))) {
+    const move = MOVE.exec(text(event.summary) ?? '')
+    const at = Date.parse(String(event.at ?? ''))
+
+    if (move === null || Number.isNaN(at)) {
+      continue
+    }
+
+    if (move[2] === 'blocked' && blockedFrom === null) {
+      blockedFrom = Math.max(at, since)
+    } else if (move[1] === 'blocked' && blockedFrom !== null) {
+      total += Math.max(0, at - blockedFrom)
+      blockedFrom = null
+    }
+  }
+
+  return blockedFrom === null ? total : total + Math.max(0, now - blockedFrom)
+}
+
 export function storyView(id: number, document: Json, inFlight: Json, question: PaneQuestionItem | null, now: number, zoneOffsetMinutes = 0): PaneStory {
   const state = String(inFlight.state ?? document.state ?? '')
-  const progress = (inFlight.progress ?? document.progress ?? null) as Json | null
+  const progress = progressOf(inFlight, document)
   const step = number(progress?.step)
   const steps = number(progress?.steps)
   const startedAt = Date.parse(String(inFlight.startedAt ?? document.startedAt ?? ''))
   const isRunning = ['dispatched', 'running', 'pr-open', 'verifying', 'blocked'].includes(state)
-  const hours = !isRunning || Number.isNaN(startedAt) ? null : duration(now - startedAt)
+  const hours = !isRunning || Number.isNaN(startedAt) ? null : duration(now - startedAt - blockedSpan(list(document.timeline), startedAt, now))
   // A BLOCKED STORY IS NOT RUNNING (the owner's walk of 1.2.2, #87: "running 75 h 46 min" beside its blocked chip): its
   // header says how long it has been blocked, from blockedFrom, else from its last update.
   const blockedAt = Date.parse(String(inFlight.blockedFrom ?? document.blockedFrom ?? inFlight.updatedAt ?? document.updatedAt ?? ''))
@@ -474,7 +575,167 @@ export function storyView(id: number, document: Json, inFlight: Json, question: 
     goal: number(document.goal),
     isRunning,
     isVerified: state === 'verified',
+    isBlocked: state === 'blocked',
+    isList: isListStory({ ...document, state, target: document.target ?? inFlight.target }),
+    canStop: state === 'dispatched' || state === 'running',
+    // AN APPROVED STORY THAT HAS NOT STARTED can be ended (the owner's walk of 1.5.0, #35: a story the leader could not
+    // brief offered no act at all). Terylon answers whether it takes it.
+    canAbandon: state === 'approved',
+    hasStage: text(progress?.stage) !== null,
+    heldReason: state === 'approved' ? text(document.blockedReason ?? inFlight.blockedReason) : null,
+    commit: verdict === null ? (text(pullRequest?.head) ?? '').slice(0, 7) || null : (text(verdict.commit) ?? '').slice(0, 7) || null,
   }
+}
+
+// THE POLICY'S FIELDS (S27), as Terylon main aaf07e8 names them, in the order the Status tab draws them: the path in
+// policy_get's answer (the memory's bounds nest under `memory`), the label, the word a change is said with, whether it
+// is money, and how its value reads. Only the fields policy_get sends are drawn; their ranges are its `limits`.
+export type PolicyField = { key: string; label: string; change: string; isMoney?: boolean; isWhole: boolean; show: (value: number) => string; isMemory?: boolean }
+
+export const POLICY_FIELDS: readonly PolicyField[] = [
+  { key: 'slots', label: 'Slots', change: 'slots', isWhole: true, show: value => `${value} ${value === 1 ? 'story' : 'stories'}` },
+  { key: 'storyBudgetUsd', label: 'Story budget', change: 'story budget', isMoney: true, isWhole: false, show: value => `$${value}` },
+  { key: 'dayBudgetUsd', label: 'Daily budget', change: 'daily budget', isMoney: true, isWhole: false, show: value => `$${value}` },
+  { key: 'retryLimit', label: 'Red verdicts before blocked', change: 'retries', isWhole: true, show: value => `${value}` },
+  { key: 'continueLimit', label: 'Continuations', change: 'continuations', isWhole: true, show: value => `${value}` },
+  { key: 'storyHours', label: 'Story hours', change: 'story hours', isWhole: false, show: value => `${value} h` },
+  { key: 'stuckMinutes', label: 'Stuck after, minutes', change: 'stuck after', isWhole: true, show: value => `${value} min` },
+  { key: 'memory.ownerCharacters', label: 'Owner memory, chars', change: 'owner memory', isWhole: true, show: value => `${value} chars`, isMemory: true },
+  { key: 'memory.projectCharacters', label: 'Project memory, chars', change: 'project memory', isWhole: true, show: value => `${value} chars`, isMemory: true },
+  { key: 'memory.topicCharacters', label: 'Topic memory, chars', change: 'topic memory', isWhole: true, show: value => `${value} chars`, isMemory: true },
+  { key: 'memory.topicsPerProject', label: 'Topics per project', change: 'topics per project', isWhole: true, show: value => `${value}` },
+]
+
+// A value at a dotted path: "memory.ownerCharacters".
+function at(value: unknown, path: string): unknown {
+  return path.split('.').reduce<unknown>((found, part) => (found !== null && typeof found === 'object' ? (found as Json)[part] : undefined), value)
+}
+
+export function policyValue(policy: Json | null, key: string): number | null {
+  return number(at(policy, key))
+}
+
+// A field's limit as policy_get sends it under `limits`, nested as the field is: { minimum, maximum, aboveMinimum, whole }.
+export type PolicyLimit = { minimum: number; maximum: number; isAboveMinimum: boolean; isWhole: boolean }
+
+export function policyLimit(policy: Json | null, key: string): PolicyLimit | null {
+  const limit = at(policy?.limits, key)
+
+  if (limit === null || typeof limit !== 'object') {
+    return null
+  }
+
+  const entry = limit as Json
+  const minimum = typeof entry.minimum === 'number' ? entry.minimum : null
+  const maximum = typeof entry.maximum === 'number' ? entry.maximum : null
+
+  return minimum === null || maximum === null ? null : { minimum, maximum, isAboveMinimum: entry.aboveMinimum === true, isWhole: entry.whole === true }
+}
+
+function rangeOf(field: PolicyField, limit: PolicyLimit): string {
+  const unit = field.isMoney === true ? '$' : ''
+
+  return limit.isAboveMinimum ? `over ${unit}${limit.minimum}, up to ${unit}${limit.maximum}` : `${unit}${limit.minimum}–${unit}${limit.maximum}`
+}
+
+// The label a field is edited under, its range from policy_get's limits: "Slots (1–8)", "Story budget (over $0, up to $10000)".
+export function policyFieldLabel(field: PolicyField, policy: Json | null = null): string {
+  const limit = policyLimit(policy, field.key)
+
+  return limit === null ? field.label : `${field.label} (${rangeOf(field, limit)})`
+}
+
+// The fields policy_get sent, as the Status tab reads them: one row each, the three memory sizes in one row.
+export function policyRows(policy: Json | null): { label: string; value: string }[] {
+  if (policy === null) {
+    return []
+  }
+
+  const present = POLICY_FIELDS.filter(field => policyValue(policy, field.key) !== null)
+  const memory = present.filter(field => field.isMemory === true)
+  const rows: { label: string; value: string }[] = []
+
+  for (const field of present) {
+    if (field.isMemory === true) {
+      if (field === memory[0]) {
+        rows.push(memory.length === 1
+          ? { label: field.label.replace(/, chars$/, ''), value: field.show(policyValue(policy, field.key) ?? 0) }
+          : { label: `Memory: ${memory.map(item => item.label.replace(/ memory, chars$/, '').toLowerCase()).join(' · ')}`, value: `${memory.map(item => String(policyValue(policy, item.key))).join(' · ')} chars` })
+      }
+
+      continue
+    }
+
+    rows.push({ label: field.label.replace(/, minutes$/, ''), value: field.show(policyValue(policy, field.key) ?? 0) })
+  }
+
+  return rows
+}
+
+// What the form changes against policy_get's answer: the field, the value before and the value typed.
+export function policyChanges(policy: Json | null, values: Record<string, string>): { key: string; label: string; from: string; to: string; value: number | string }[] {
+  if (policy === null) {
+    return []
+  }
+
+  return POLICY_FIELDS
+    .filter(field => policyValue(policy, field.key) !== null && values[field.key] !== undefined && values[field.key]?.trim() !== String(policyValue(policy, field.key)))
+    .map(field => {
+      const typed = (values[field.key] ?? '').trim()
+      const asNumber = Number(typed)
+
+      return { key: field.key, label: field.change, from: String(policyValue(policy, field.key)), to: typed, value: typed !== '' && Number.isFinite(asNumber) ? asNumber : typed }
+    })
+}
+
+// What policy_save is sent: only what changed, the memory's bounds as a partial `memory` object (Terylon main aaf07e8).
+export function policyArguments(changes: readonly { key: string; value: number | string }[]): Json {
+  const args: Json = {}
+
+  for (const change of changes) {
+    const [head, tail] = change.key.split('.')
+
+    if (tail === undefined) {
+      args[head ?? change.key] = change.value
+    } else {
+      args[head ?? ''] = { ...((args[head ?? ''] as Json | undefined) ?? {}), [tail]: change.value }
+    }
+  }
+
+  return args
+}
+
+// WHAT IS WRONG WITH THE FORM, in the pane's own words: Terylon checks no act's arguments against a schema, so a
+// value outside its limit, or not a number of the right kind, is caught here and nothing is sent.
+export function policyProblems(policy: Json | null, values: Record<string, string>): string[] {
+  return policyChanges(policy, values).flatMap(change => {
+    const field = POLICY_FIELDS.find(item => item.key === change.key)
+
+    if (field === undefined) {
+      return []
+    }
+
+    const limit = policyLimit(policy, change.key)
+    const isWhole = limit?.isWhole ?? field.isWhole
+    const unit = field.isMoney === true ? '$' : ''
+    const name = field.label.replace(/, (chars|minutes)$/, '')
+    const value = typeof change.value === 'number' ? change.value : NaN
+    const isKind = Number.isFinite(value) && (!isWhole || Number.isInteger(value))
+    const isInLimit = limit === null || ((limit.isAboveMinimum ? value > limit.minimum : value >= limit.minimum) && value <= limit.maximum)
+
+    if (isKind && isInLimit) {
+      return []
+    }
+
+    const typed = change.to === '' ? 'an empty field' : change.to
+    const said = limit === null
+      ? `${name} is ${isWhole ? 'a whole number' : 'a number'}`
+      : limit.isAboveMinimum
+        ? `${name} is more than ${unit}${limit.minimum} and at most ${unit}${limit.maximum}`
+        : `${name} is ${isWhole ? 'a whole number' : 'a number'} from ${unit}${limit.minimum} to ${unit}${limit.maximum}`
+
+    return [`${said}; ${typed} is not.`]
+  })
 }
 
 // "(a) web na mobilu": the options a question offers in its own text, to press instead of typing.
@@ -511,12 +772,26 @@ export function goalItems(goals: Json, questions: readonly PaneQuestionItem[]): 
   return { open: items.filter(goal => OPEN_GOAL_STATES.has(goal.state)), closed: items.filter(goal => !OPEN_GOAL_STATES.has(goal.state)) }
 }
 
+// WHICH OF THE PLAN'S STORIES ONE RUNS AFTER, as their places in the plan (1-based): `after` names them by story id,
+// `runsAfter` by place (the walk's plan 144 said "after 12", a story id). A value that names neither is left out.
+function afterPlaces(story: Json, ids: readonly (number | null)[]): number[] {
+  const named = Array.isArray(story.after) ? story.after.filter((value): value is number => typeof value === 'number') : []
+  const placed = Array.isArray(story.runsAfter) ? story.runsAfter.filter((value): value is number => typeof value === 'number') : []
+  const byId = named.map(value => ids.indexOf(value) + 1).filter(place => place > 0)
+  const byPlace = placed.filter(place => Number.isInteger(place) && place >= 1 && place <= ids.length)
+
+  return [...new Set([...byId, ...byPlace])].sort((first, second) => first - second)
+}
+
 export function planItems(plans: Json, base: string): PanePlan[] {
   return list(plans.plans).map(plan => {
     const id = number(plan.id) ?? 0
     const state = String(plan.state ?? '')
     const estimate = number(plan.estimateUsd)
     const isProposed = state === 'proposed'
+    const stories = list(plan.stories)
+    const ids = stories.map(story => number(story.id))
+    const titles = stories.map(story => text(story.title) ?? '')
 
     return {
       id,
@@ -526,18 +801,18 @@ export function planItems(plans: Json, base: string): PanePlan[] {
       stateText: isProposed ? COPY.planWaiting(estimate === null ? null : estimate.toFixed(0)) : COPY.stateText(state),
       isProposed,
       comment: text(plan.comment),
-      stories: list(plan.stories).map((story, index) => {
-        const after = (Array.isArray(story.runsAfter) && story.runsAfter.length > 0 ? story.runsAfter : story.after) as unknown
-        const afterIds = Array.isArray(after) ? after.filter((value): value is number => typeof value === 'number') : []
+      stories: stories.map((story, index) => {
+        const after = afterPlaces(story, ids)
         const storyEstimate = number(story.estimateUsd)
 
         return {
           id: number(story.id) ?? 0,
           index: index + 1,
-          title: text(story.title) ?? '',
-          detail: COPY.planStoryDetail(text(story.size) ?? '?', storyEstimate === null ? null : storyEstimate.toFixed(0), afterIds.length === 0 ? null : afterIds.join(', ')),
+          title: titles[index] ?? '',
+          // "after <title>": the story it waits for by its title, never by a number (#35).
+          detail: COPY.planStoryDetail(text(story.size) ?? '?', storyEstimate === null ? null : storyEstimate.toFixed(0), after.length === 0 ? null : after.map(place => titles[place - 1] ?? `#${place}`).join(', ')),
           criteria: strings(story.criteria),
-          after: afterIds,
+          after,
           size: text(story.size) ?? '?',
           estimate: storyEstimate === null ? null : storyEstimate.toFixed(0),
         }
@@ -607,4 +882,29 @@ export function bellView(notices: Json, leader: Json | null, metrics: Json | nul
     handling: null,
     handleSentence: null,
   }
+}
+
+// THE MEMORY'S PROPOSALS (S27), as memory_get lists them on Terylon main aaf07e8: the pending ones only, each with its
+// operations (several for a consolidation), why, and who proposed it. `by` is "web:<login>" for the owner and "brain"
+// for the leader: the pane keeps only which of the two, never the login.
+export function proposalItems(memory: Json, zoneOffsetMinutes = 0): PaneProposal[] {
+  return list(memory.proposals).map(proposal => {
+    const by = text(proposal.by) ?? ''
+    const subject = /^story\/(\d+)$/.exec(text(proposal.subject) ?? '')
+    const operations = list(proposal.operations).map(operation => ({ action: text(operation.action) ?? '', file: text(operation.file) ?? '', text: text(operation.text), oldText: text(operation.oldText) }))
+    const flattened = { action: text(proposal.action) ?? '', file: text(proposal.file) ?? '', text: text(proposal.text), oldText: text(proposal.oldText) }
+
+    return {
+      id: number(proposal.id) ?? 0,
+      file: flattened.file,
+      action: flattened.action,
+      oldText: flattened.oldText,
+      text: flattened.text,
+      operations: operations.length === 0 ? [flattened] : operations,
+      why: text(proposal.why),
+      by: by.startsWith('web:') || by === 'owner' ? 'owner' : 'leader',
+      story: subject === null ? number(proposal.story) : Number(subject[1]),
+      at: clock(proposal.at, zoneOffsetMinutes),
+    }
+  })
 }

@@ -24,8 +24,12 @@ const ELK_FRONT_MATTER = /^---\nconfig:\n  layout: elk\n  flowchart:\n    paddin
 // family is measured in one font and drawn in another, which clips the labels.
 const FORBIDDEN_SETTINGS = /\b(theme|themeVariables|fontFamily)\b["']?\s*:/;
 
-// A node definition whose label starts with a plugin slug: `id["terylon-…<br/>…"]`, with or without a class.
-const PLUGIN_NODE = /^\s*(\w+)\["(terylon-[a-z]+)[<"]/gm;
+// A node definition whose label starts with a plugin slug: `id["`terylon-…` followed by its next line, or `id["terylon-…"]`,
+// with or without a class.
+const PLUGIN_NODE = /^\s*(\w+)\["`?(terylon-[a-z]+)[\n"`]/gm;
+
+// HTML inside a block: a `<br/>` or any other tag. A line break in a label is a Markdown string with a real newline.
+const HTML_IN_BLOCK = /<\/?[a-z][a-z0-9]*\b[^>]*>/i;
 
 // An edge between two nodes: `from --> to` (declared) or `from -.-> to` / `from -.->|"…"| to` (dashed).
 const EDGE = /^\s*(\w+)\s+(-->|-\.->)(?:\|"[^"]*"\|)?\s+(\w+)\s*$/gm;
@@ -55,10 +59,10 @@ function markdownFilesUnder(directory)
 function pluginGraphBlock()
 {
     const readme = fs.readFileSync(path.join(REPOSITORY_ROOT, "README.md"), "utf8");
-    const section = readme.slice(readme.indexOf("\n## Plugins\n"));
+    const section = readme.slice(readme.indexOf("\n## Architecture\n"));
     const blocks = [...section.matchAll(MERMAID_BLOCK)];
 
-    assert.ok(blocks.length > 0, "README.md's Plugins section draws no Mermaid block");
+    assert.ok(blocks.length > 0, "README.md's Architecture section draws no Mermaid block");
 
     return blocks[0][1];
 }
@@ -122,7 +126,7 @@ test("every Mermaid block in docs/architecture and the README's plugin graph is 
     }
 });
 
-test("every flowchart in README.md and docs/ opens with the ELK front matter and sets no theme, theme variables or font", () =>
+test("every flowchart in README.md and docs/ opens with the ELK front matter, sets no theme, theme variables or font, and holds no HTML", () =>
 {
     const files = [path.join(REPOSITORY_ROOT, "README.md")].concat(markdownFilesUnder(DOCS_DIRECTORY));
     const flowcharts = files
@@ -137,6 +141,7 @@ test("every flowchart in README.md and docs/ opens with the ELK front matter and
 
         assert.match(block, ELK_FRONT_MATTER, `${where}: a flowchart lacks the exact front matter:\n${block.slice(0, 200)}`);
         assert.doesNotMatch(block, FORBIDDEN_SETTINGS, `${where}: a flowchart sets a theme, theme variables or a font family`);
+        assert.doesNotMatch(block, HTML_IN_BLOCK, `${where}: a flowchart holds HTML; break a label's line with a Markdown string`);
     }
 });
 

@@ -3,9 +3,15 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { BRIEFING, GOALS, GOAL_QUESTION, PANE_PROPS, SESSION, chipOf, exact, pictures, world } from './fixtures'
+import { when } from '../hooks/queue'
+import { BRIEFING, GOALS, GOAL_QUESTION, NOTICES, PANE_PROPS, SESSION, WORLD_NOW, chipOf, exact, hostZoneOffset, pictures, world } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
+
+// A text matched literally inside a pattern: every character a pattern gives a meaning is escaped.
+function escapeRegExp(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
 
 for (const surface of ['desktop', 'terminal'] as const) {
   test(`${surface}: a running story opens whole, its goal opens from it, and ‹ walks back the same way`, async ($, on) => {
@@ -104,7 +110,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
   })
 }
 
-test('a verified story shows its environment, verdict, overrun and criteria; merge and return are links only', async ($, on) => {
+test('a verified story shows its environment, verdict, overrun and criteria; merge is a link only, return an act', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -129,9 +135,9 @@ test('a verified story shows its environment, verdict, overrun and criteria; mer
   expect((await ui.find({ type: 'Text', text: exact('commit 4be21c0') }))?.props.mono).toBe(true)
 
   expect((await ui.find({ type: 'Link', text: 'Merge in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=merge&story=327')
-  expect(await ui.find({ type: 'Link', text: 'Return with a note ↗' })).toBeDefined()
   expect((await ui.find({ type: 'Link', text: 'PR 196 ↗' }))?.props.href).toBe('https://dev.example/pr/196')
-  expect(await ui.find({ type: 'Button', text: /Merge|Return/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Button', text: /Merge/ })).toBeUndefined()
+  expect((await ui.find({ key: 'act-story-327-return' }))?.props.label).toBe('Return…')
 })
 
 test('a question is answered from the pane: a choice pressed, question_answer sent, the leader takes it', async ($, on) => {
@@ -190,7 +196,7 @@ test('a typed answer is sent as typed; a refusal is said with its reason and the
   expect(terylon.prompts[0]).toContain('question_answer')
 })
 
-test('a waiting plan opens with its stories, each opening the story; approve and rethink are links', async ($, on) => {
+test('a waiting plan opens with its stories, each opening the story; approve and rethink are its acts, editing the console\'s', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -201,13 +207,15 @@ test('a waiting plan opens with its stories, each opening the story; approve and
 
   expect(await ui.find({ type: 'Text', text: exact('Plan 41 · Agentic OS') })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: exact('to approve · ~$14') }))?.props.color).toBe('subtle')
-  expect((await ui.find({ key: 'plan-41-story-351' }))?.text).toMatch(/^\s*(?:●\s+)?2\s+Notice handle přes MCP\s+M · ~\$5 · after 1$/)
-  expect(await ui.find({ type: 'Text', text: exact('M · ~$5 · after 1') })).toBeDefined()
-  // A PLAN AS A CHAIN (S32): its order and its "after" as an Svg, the sizes and estimates in tabular digits.
-  expect((await pictures(ui)).map(item => item.alt)).toEqual(['Story 1, then 2 after 1'])
-  expect((await ui.find({ type: 'Text', text: exact('S ~$3 → M ~$5') }))?.props.tabular).toBe(true)
-  expect((await ui.find({ type: 'Link', text: 'Approve in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=plan&plan=41')
-  expect(await ui.find({ type: 'Link', text: 'Rethink ↗' })).toBeDefined()
+  expect((await ui.find({ key: 'plan-41-story-351' }))?.text).toMatch(/^\s*(?:●\s+)?2\s+Notice handle přes MCP\s+M · ~\$5 · after Health: tlačítko Check now$/)
+  expect(await ui.find({ type: 'Text', text: exact('M · ~$5 · after Health: tlačítko Check now') })).toBeDefined()
+  // A PLAN'S ORDER (S32, #35): its stories' "after" as an Svg, said by their titles; each size and estimate on its story's
+  // row alone, never beside the chain (#39).
+  expect((await pictures(ui)).map(item => item.alt)).toEqual(['Health: tlačítko Check now; Notice handle přes MCP after Health: tlačítko Check now'])
+  expect(await ui.find({ type: 'Text', text: exact('S ~$3 → M ~$5') })).toBeUndefined()
+  expect((await ui.find({ type: 'Link', text: 'Edit criteria or pick stories in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=plan&plan=41')
+  expect((await ui.find({ key: 'act-plan-41-approve' }))?.props.label).toBe('Approve')
+  expect((await ui.find({ key: 'act-plan-41-rethink' }))?.props.label).toBe('Rethink…')
 
   await ui.press({ key: 'plan-41-story-350' })
   expect((await ui.find({ key: 'back' }))?.props.label).toBe('‹ Plan 41')
@@ -239,16 +247,18 @@ test('the goals tab: open goals by priority with their questions, the closed one
   expect((await ui.find({ key: 'goal-1' }))?.text).toContain('Old')
 
   expect(await ui.find({ type: 'Text', text: exact('Plan 41 · Agentic OS') })).toBeDefined()
+  // GOALS ARE GENERAL (Terylon #369, S31): the New goal note steers a concrete ask to a task, and adding one is never refused.
+  expect(await ui.find({ type: 'Text', text: exact('A goal is a general direction. A concrete ask — a file, a document, one change — becomes a task under a goal. The leader asks its questions first, then makes a plan you approve.') })).toBeDefined()
 
   // A NEW GOAL WITH ITS PRIORITY AND TARGET (S32), picked over goal_add's own fields.
   expect((await ui.find({ key: 'goal-priority' }))?.props.value).toBe('2')
   expect((await ui.find({ key: 'goal-priority' }))?.props.options).toEqual([{ value: '1', label: '1 · most urgent' }, { value: '2', label: '2 · normal' }, { value: '3', label: '3 · later' }, { value: '4', label: '4 · someday' }])
   expect((await ui.find({ key: 'goal-target' }))?.props.options).toEqual([{ value: 'list', label: "Terylon's own list" }, { value: 'github:contoso/agentic-os', label: 'github:contoso/agentic-os' }])
-  await ui.input({ key: 'goal-draft', text: 'Excel s rozpočtem domácnosti', kind: 'change' })
+  await ui.input({ key: 'goal-draft', text: 'Household budget in Excel', kind: 'change' })
   await ui.select({ key: 'goal-priority', value: '1' })
   await ui.press({ key: 'goal-add' })
-  expect(terylon.calls.filter(call => call.tool === 'goal_add').map(call => call.args)).toEqual([{ title: 'Excel s rozpočtem domácnosti', priority: 1, target: 'list' }])
-  expect((await ui.find({ type: 'Text', text: exact('✓ Goal 12 is set: Excel s rozpočtem domácnosti') }))?.props.color).toBe('success')
+  expect(terylon.calls.filter(call => call.tool === 'goal_add').map(call => call.args)).toEqual([{ title: 'Household budget in Excel', priority: 1, target: 'list' }])
+  expect((await ui.find({ type: 'Text', text: /^✓ Goal 12 is set: Household budget in Excel\. The leader reads it first: / }))?.props.color).toBe('success')
 
   await ui.press({ key: 'goal-11' })
   expect(await ui.find({ key: 'goal-question-606' })).toBeDefined()
@@ -256,7 +266,7 @@ test('the goals tab: open goals by priority with their questions, the closed one
   expect(await ui.find({ key: 'answer-send' })).toBeDefined()
 })
 
-test('the bell tab reads the notices, the leader and the metrics; handling and pausing stay in the console', async ($, on) => {
+test('the bell tab reads the notices, the leader and the metrics; a notice is handled here, the leader paused on the queue', async ($, on) => {
   const terylon = world(on)
   terylon.answers.briefing = { ...BRIEFING, unhandledNotices: 2 }
   await $.session.start(SESSION)
@@ -267,7 +277,12 @@ test('the bell tab reads the notices, the leader and the metrics; handling and p
   await ui.press({ key: 'tab-bell' })
 
   expect(await ui.find({ type: 'Text', text: exact('Needs you · 2') })).toBeDefined()
-  expect((await ui.find({ key: 'notice-117' }))?.text).toMatch(/^\s*(?:●\s+)?diun\s+A newer docker\.io\/amir20\/dozzle:latest is published\s+07:26 ▸$/)
+  // WHEN IT WAS RAISED, in the host's own zone (#39): 07:26 on a UTC runner, "11. 10." in Prague, where 22:00 UTC is the
+  // next day. The expectation is computed as the pane computes it, so it holds in every zone.
+  const raised = when(NOTICES.notices.find(notice => notice.id === 117)?.raisedAt, WORLD_NOW, hostZoneOffset(WORLD_NOW))
+  expect(raised).toBe(hostZoneOffset(WORLD_NOW) === 0 ? '07:26' : raised)
+  expect(raised).toMatch(/^(\d\d:\d\d|\d{1,2}\. \d{1,2}\.)$/)
+  expect((await ui.find({ key: 'notice-117' }))?.text).toMatch(new RegExp(`^\\s*(?:●\\s+)?diun\\s+A newer docker\\.io/amir20/dozzle:latest is published\\s+${escapeRegExp(raised)} ▸$`))
   // THE SOURCE AS A CHIP (S32): a fault of the machine in error, everything else inactive.
   expect((await chipOf(ui, 'notice-117'))?.dot).toBe('inactive')
   expect(await ui.find({ type: 'Text', text: exact('Nothing was pulled: update the pin when you choose.') })).toBeUndefined()
@@ -277,7 +292,7 @@ test('the bell tab reads the notices, the leader and the metrics; handling and p
   expect(await ui.find({ type: 'Text', text: exact('✓ The leader runs') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^✓ The backup ran/ })).toBeDefined()
   // FOUR NUMBERS, LARGE (S32), and no 30-day chart: metrics reports no per-day series.
-  for (const [value, label] of [['43', 'stories'], ['$1.10', 'per story'], ['0', 'merged'], ['1', 'open PR']]) {
+  for (const [value, label] of [['43', 'stories'], ['$1.10', 'per story'], ['0', 'merged'], ['1', 'PR opened']]) {
     const number = await ui.find({ type: 'Text', text: exact(value ?? '') })
     expect(number?.props.size).toBe('title')
     expect(number?.props.tabular).toBe(true)
@@ -285,9 +300,11 @@ test('the bell tab reads the notices, the leader and the metrics; handling and p
   }
 
   expect(await ui.find({ type: 'Svg' })).toBeUndefined()
-  // THE LEADER'S PAUSE, A LINK, in the dashed slot S27 (#27) draws its buttons into.
-  expect((await ui.find({ key: 'leader-actions' }))?.props.borderStyle).toBe('dashed')
-  expect((await ui.find({ type: 'Link', text: 'Pause the leader ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=work')
+  // WHERE S32 LEFT THE DASHED SLOT (S27): no border, and no pause here; Pause and Resume are on the queue and Status.
+  expect((await ui.find({ key: 'leader-actions' }))?.props.borderStyle).toBeUndefined()
+  expect(await ui.find({ type: 'Link', text: 'Pause the leader ↗' })).toBeUndefined()
+  expect(await ui.find({ key: 'act-leader-pause' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: exact('Mark handled is notice_handle, which decides nothing about work. Pause and Resume are on the queue and the Status tab.') })).toBeDefined()
   expect(await ui.find({ type: 'Link', text: 'Bell in the console ↗' })).toBeDefined()
 
   for (const tool of ['notices_list', 'leader_status', 'metrics']) {

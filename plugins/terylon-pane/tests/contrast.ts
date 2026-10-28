@@ -5,7 +5,7 @@
 
 export type Theme = 'dark' | 'light'
 
-// The canvas's palette (docs/design/s32/S32-pane-redesign.html, :root and .pane.light), by the theme key each colour
+// The palette of the approved S32 canvas (attached to issue #25, :root and .pane.light), by the theme key each colour
 // stands for; `background` is the pane's own, and `userMessageBackground` the engine's own neutral grey, read from the
 // themes in Claude Code 2.1.308 (rgb(55, 55, 55) on dark, rgb(240, 240, 240) on light).
 export const PALETTE: Record<Theme, Record<string, string>> = {
@@ -79,7 +79,7 @@ export function inks(node: unknown, color = 'text', on = 'background'): Ink[] {
   const ownColor = element.type === 'Text' && typeof props.color === 'string' ? props.color : color
   const ownOn = element.type === 'Text' && typeof props.backgroundColor === 'string' ? props.backgroundColor : on
   const words = element.type === 'Text' ? children.filter((child): child is string => typeof child === 'string').join('').trim() : ''
-  const own = words === '' ? [] : [{ text: words, color: ownColor, on: ownOn, isMark: /^[●○◇✓]$/u.test(words) }]
+  const own = words === '' ? [] : [{ text: words, color: ownColor, on: ownOn, isMark: /^[●○◇✓⚠]$/u.test(words) }]
 
   return [...own, ...children.flatMap(child => inks(child, ownColor, ownOn))]
 }

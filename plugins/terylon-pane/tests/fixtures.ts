@@ -26,8 +26,24 @@ export function exact(text: string): RegExp {
   return new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)
 }
 
-// The owner's gates, spelled out here rather than imported, so a mutation of the mod's own list cannot hide one.
-export const GATES = ['plan_approve', 'plan_rethink', 'story_merge', 'story_return', 'story_unblock', 'story_abandon', 'story_stop', 'story_accept', 'leader_pause', 'leader_resume', 'goal_drop']
+// The owner's one gate since Terylon PR 228, spelled out here rather than imported, so a mutation of the mod's own
+// list cannot hide it: merge, confirmed with the person's passkey in the console.
+export const GATES = ['story_merge']
+
+// The former gates Terylon PR 228 made owner writes, which the pane takes on its subject's card (S27, #27).
+export const ACTS = ['plan_approve', 'plan_rethink', 'story_return', 'story_unblock', 'story_abandon', 'story_stop', 'story_accept', 'leader_pause', 'leader_resume', 'goal_drop', 'memory_confirm', 'memory_drop', 'policy_save']
+
+// An answer Terylon refuses, as its tools return one: an error result whose text says why, with the status.
+const REFUSAL = '__refusal'
+
+export function refusal(refused: string, status: number): Record<string, unknown> {
+  return { [REFUSAL]: true, refused, status }
+}
+
+// The leader's own refusal, as Terylon main aaf07e8 returns it: the success shape with accepted false, an error result.
+export function leaderRefusal(sentence: string): Record<string, unknown> {
+  return { [REFUSAL]: true, accepted: false, sentence, commandId: 'c0', subjectId: null }
+}
 
 export type Call = { server: string; tool: string; args: Record<string, unknown> }
 
@@ -75,12 +91,22 @@ export const STORIES = {
   ],
 }
 
+// The world's clock when a test names none: 22:00 UTC, which is already the next day from UTC+1 east.
+export const WORLD_NOW = Date.parse('2026-10-11T22:00:00Z')
+
+// The host's offset from UTC at `moment`, in minutes, read as the pane reads it (zoneOffset in hooks/register.tsx). A
+// test that computes its expectation through this holds in every time zone (#39: two tests failed in Prague time).
+// `claude plugin test` ignores TZ, so tests/terylon-pane/zones.test.js plants a zone here and in the pane alike.
+export function hostZoneOffset(moment: number): number {
+  return new Date(moment).getTimezoneOffset()
+}
+
 // A clock at 23:00 on the local day of `at`, wherever the test runs. The pane reads "today" in the host's own
 // time zone, and the world's clock at 22:00 UTC is already tomorrow from UTC+2 east: a Prague host dropped
 // the story merged at 12:20 UTC out of "done today", while a UTC runner kept it.
 export function lateOnTheLocalDayOf(at: string): number {
   const moment = Date.parse(at)
-  const offsetMilliseconds = new Date(moment).getTimezoneOffset() * 60000
+  const offsetMilliseconds = hostZoneOffset(moment) * 60000
   const localDay = new Date(moment - offsetMilliseconds).toISOString().slice(0, 10)
 
   return Date.parse(`${localDay}T23:00:00Z`) + offsetMilliseconds
@@ -150,7 +176,8 @@ export const MEMORY = {
     { file: 'owner', kind: 'owner', entries: ['Píše česky; kód anglicky.', 'Merge potvrzuje passkey.'] },
     { file: 'topic:terylon/deploy', kind: 'topic', text: 'Dlouhá poznámka.' },
   ],
-  proposals: [{ id: 5 }],
+  // One pending proposal as memory_get lists it on Terylon main aaf07e8: the leader's ("brain"), from story 333.
+  proposals: [{ id: 5, consolidates: null, operations: [{ action: 'add', file: 'owner', text: 'Merge zůstává za passkey.', oldText: null }], suggestsRule: false, action: 'add', file: 'owner', text: 'Merge zůstává za passkey.', oldText: null, why: 'Since #363.', judgement: 'story-run', by: 'brain', subject: 'story/333', at: '2026-10-11T19:14:00Z' }],
 }
 
 // One events_since page, as Terylon answers it: `last` is where to ask from next, `head` the newest sequence.
@@ -212,7 +239,7 @@ export const STORY_327 = {
 // The world beneath the plugin: the clock, the store, the environment, and Terylon at /mcp.
 // `env` adds to the environment: TERYLON_PANE_PROOFS turns on a drawing Desktop has to prove first (S32).
 export function world(on: On, options: { store?: Record<string, unknown>; now?: number; env?: Record<string, string> } = {}): World & { clock: ReturnType<typeof mock.clock> } {
-  const clock = mock.clock(on, { now: options.now ?? Date.parse('2026-10-11T22:00:00Z') })
+  const clock = mock.clock(on, { now: options.now ?? WORLD_NOW })
   mock.store(on, options.store ?? {})
   mock.env(on, { TERYLON_URL: BASE, ...(options.env ?? {}) })
   const state: World = {
@@ -303,6 +330,12 @@ export function world(on: On, options: { store?: Record<string, unknown>; now?: 
 
     const answer = state.answers[e.tool]
     const value = typeof answer === 'function' ? (answer as (args: Record<string, unknown>) => unknown)(e.args) : answer
+
+    if (value !== null && typeof value === 'object' && (value as Record<string, unknown>)[REFUSAL] === true) {
+      const { [REFUSAL]: _marker, ...refused } = value as Record<string, unknown>
+
+      return { value: { content: [{ type: 'text', text: JSON.stringify(refused) }], isError: true } } as never
+    }
 
     if (value === undefined) {
       return { value: { content: [{ type: 'text', text: JSON.stringify({ refused: `no such tool ${e.tool}`, status: 404 }) }], isError: true } } as never

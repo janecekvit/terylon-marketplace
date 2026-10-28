@@ -119,7 +119,7 @@ const MUTATIONS = [
             {
                 file: "hooks/register.tsx",
                 find: "              onPress: () => toggle($, item.key),\n",
-                replace: "              onPress: () => callTerylon($, item.kind === 'plan' ? 'plan_approve' : 'story_merge', {}),\n",
+                replace: "              onPress: () => callTerylon($, 'story_merge', {}),\n",
             },
         ],
     },
@@ -144,7 +144,7 @@ const MUTATIONS = [
     {
         name: "the Status tab is missing a fix step for not-allowed",
         file: "hooks/register.tsx",
-        find: "        steps(COPY.fixNotAllowed),\n",
+        find: "      steps(lines),\n",
         replace: "",
     },
     {
@@ -190,17 +190,75 @@ const MUTATIONS = [
         find: "    notices: (notices.kind === 'ok' ? number(notices.value.unhandled) : null) ?? number(lastBriefing.unhandledNotices) ?? previous.notices,\n",
         replace: "    notices: previous.notices,\n",
     },
+    // S27 (#27): every former gate but merge is the owner's act on its card; merge stays the one gate.
     {
-        name: "goal_drop, a gate, joins the pane's own tools",
+        name: "merge joins the owner's acts",
         file: "hooks/terylon.ts",
-        find: "  'notice_handle',\n])",
-        replace: "  'notice_handle',\n  'goal_drop',\n])",
+        find: "  'policy_save',\n]",
+        replace: "  'policy_save',\n  'story_merge',\n]",
     },
     {
-        name: "the gate list copied from McpGates.cs loses goal_drop",
+        name: "the gate list copied from McpGates.cs loses merge",
         file: "hooks/terylon.ts",
-        find: "  'leader_resume',\n  'goal_drop',\n]",
-        replace: "  'leader_resume',\n]",
+        find: "export const GATE_TOOLS: readonly string[] = ['story_merge']",
+        replace: "export const GATE_TOOLS: readonly string[] = []",
+    },
+    {
+        name: "an owner act leaves the pane's tools",
+        file: "hooks/terylon.ts",
+        find: "  'plan_approve',\n  'plan_rethink',\n",
+        replace: "  'plan_rethink',\n",
+    },
+    {
+        name: "an act is taken when its button is drawn, not when it is pressed",
+        file: "hooks/register.tsx",
+        find: "      const name = tool.replace(/^[a-z]+_/, '')\n",
+        replace: "      const name = tool.replace(/^[a-z]+_/, '')\n      if (options.isPrimary === true) { void takeAct($, key, tool, subject, '') }\n",
+    },
+    {
+        name: "a story is returned without a note",
+        file: "hooks/terylon.ts",
+        find: "export const NEEDS_TEXT: ReadonlySet<string> = new Set(['plan_rethink', 'story_return'])",
+        replace: "export const NEEDS_TEXT: ReadonlySet<string> = new Set(['plan_rethink'])",
+    },
+    {
+        name: "a verified story's merge becomes a button",
+        file: "hooks/register.tsx",
+        find: "            {shownStory.isVerified && !shownStory.isList && <Link href={consoleLink(base, `merge&story=${shownStory.story}`)} label={COPY.mergeInConsole} />}\n",
+        replace: "            {shownStory.isVerified && !shownStory.isList && <Button key=\"act-story-merge\" label=\"Merge\" onPress={() => undefined} />}\n",
+    },
+    {
+        name: "a second press sends the act again while Terylon answers",
+        edits: [
+            {
+                file: "hooks/register.tsx",
+                find: "  if (actsInFlight.has(key) || !isSendable(tool, subject, words)) {",
+                replace: "  if (!isSendable(tool, subject, words)) {",
+            },
+            {
+                file: "hooks/register.tsx",
+                find: "      const press = () => (isWaiting || state.busy !== null ? undefined : options.opens === true",
+                replace: "      const press = () => (false ? undefined : options.opens === true",
+            },
+        ],
+    },
+    {
+        name: "a refusal loses Terylon's own words",
+        file: "hooks/register.tsx",
+        find: "          <Text>{outcome.sentence ?? ''}</Text>,\n",
+        replace: "          <Text>Terylon refused.</Text>,\n",
+    },
+    {
+        name: "Claude Code's refusal of an act is said as Terylon's",
+        file: "hooks/register.tsx",
+        find: "      return { kind: 'not-allowed', tool, sentence: answered.reason, status: null }",
+        replace: "      return { kind: 'refused', tool, sentence: answered.reason, status: null }",
+    },
+    {
+        name: "the story's acts sit in a dashed slot again",
+        file: "hooks/register.tsx",
+        find: "<Box key=\"story-actions\" flexDirection=\"row\" gap={1} flexWrap=\"wrap\" alignItems=\"center\">",
+        replace: "<Box key=\"story-actions\" flexDirection=\"row\" gap={1} flexWrap=\"wrap\" alignItems=\"center\" borderStyle=\"dashed\">",
     },
     // The operator's Desktop walk of 1.1.1 (2026-10-21, #360).
     {
@@ -226,6 +284,18 @@ const MUTATIONS = [
         file: "hooks/register.tsx",
         find: "  if (isAnswerSending) {\n    return\n  }\n",
         replace: "",
+    },
+    {
+        name: "an answer sent by Enter is read from before its last keystroke again",
+        file: "hooks/register.tsx",
+        find: "onSubmit={value => sendAnswer($, value)}",
+        replace: "onSubmit={() => sendAnswer($)}",
+    },
+    {
+        name: "an added goal no longer says how the leader reads it",
+        file: "hooks/register.tsx",
+        find: ": isAccepted ? COPY.goalAdded(why(answered)) : why(answered),",
+        replace: ": why(answered),",
     },
     {
         name: "one story is said as stories again",
@@ -293,12 +363,6 @@ const MUTATIONS = [
         file: "hooks/register.tsx",
         find: "    size: COPY.sizes.includes(form.size) ? form.size : 'M',\n",
         replace: "    size: 'M',\n",
-    },
-    {
-        name: "one of S27's buttons is drawn in the story's slot",
-        file: "hooks/register.tsx",
-        find: "            <Button key=\"summarise\" label={COPY.summariseInSession}",
-        replace: "            <Button key=\"story-stop\" label=\"Stop\" onPress={() => undefined} />\n            <Button key=\"summarise\" label={COPY.summariseInSession}",
     },
     {
         name: "a row's kind and detail fall outside its one Button",
@@ -384,6 +448,182 @@ const MUTATIONS = [
         file: "hooks/queue.ts",
         find: "  const timed = state === 'blocked'",
         replace: "  const timed = state === 'never'",
+    },
+    // Since the owner's walk of 1.5.0 (#35).
+    {
+        name: "a new task's title loses its first character",
+        file: "hooks/register.tsx",
+        find: "  const title = form.title.replace(/\\s*\\n\\s*/g, ' ').trim()\n",
+        replace: "  const title = form.title.replace(/\\s*\\n\\s*/g, ' ').trim().slice(1)\n",
+    },
+    {
+        name: "an empty Criteria is sent as the goal picker's label",
+        file: "hooks/register.tsx",
+        find: "  const criteria = form.criteria.split(/[;\\n]/).map(line => line.trim()).filter(line => line !== '')\n",
+        replace: "  const criteria = form.criteria.split(/[;\\n]/).map(line => line.trim()).filter(line => line !== '')\n  criteria.push(...(criteria.length === 0 ? [form.goals.find(choice => choice.value === form.goal)?.label ?? ''] : []))\n",
+    },
+    {
+        name: "a card acted on is drawn from the read that has not caught up",
+        file: "hooks/register.tsx",
+        find: "      settle(tool, subject, now)\n",
+        replace: "",
+    },
+    {
+        name: "the policy just saved is no longer laid over a policy_get that lags",
+        file: "hooks/register.tsx",
+        find: "  return overlay(answer, savedPolicy.values)\n",
+        replace: "  return answer\n",
+    },
+    {
+        name: "a danger act is drawn with chrome again, its word grey",
+        file: "hooks/register.tsx",
+        find: "plain={isRed ? true : undefined} ",
+        replace: "",
+    },
+    {
+        name: "the rules an act needs ask for a Try again the card does not have",
+        file: "hooks/register.tsx",
+        find: "...rulesFix(COPY.fixNotAllowedAct),",
+        replace: "...rulesFix(),",
+    },
+    {
+        name: "Drop goal… says nothing when it withdraws nothing",
+        file: "hooks/copy.ts",
+        find: "        ? 'No plan of it waits.'\n",
+        replace: "        ? ''\n",
+    },
+    {
+        name: "an approved story waits for a slot while one is free",
+        file: "hooks/queue.ts",
+        find: ": hasFreeSlot ? COPY.notStarted : COPY.waitsForSlot",
+        replace: ": COPY.waitsForSlot",
+    },
+    {
+        name: "an approved story offers no act again",
+        file: "hooks/queue.ts",
+        find: "    canAbandon: state === 'approved',\n",
+        replace: "    canAbandon: false,\n",
+    },
+    {
+        name: "a closed goal's plans stay on the Goals tab",
+        file: "hooks/register.tsx",
+        find: "const openPlans = goalsState.plans.filter(plan => !goalsState.closed.some(item => item.id === plan.goal))",
+        replace: "const openPlans = goalsState.plans",
+    },
+    {
+        name: "a plan is drawn as one chain again",
+        file: "hooks/queue.ts",
+        find: "        const after = afterPlaces(story, ids)\n",
+        replace: "        const after = index === 0 ? [] : [index]\n",
+    },
+    {
+        name: "a plan's after names a story number again",
+        file: "hooks/queue.ts",
+        find: "after.map(place => titles[place - 1] ?? `#${place}`)",
+        replace: "after.map(place => String(ids[place - 1]))",
+    },
+    {
+        name: "a story opened draws the stage of the last poll",
+        file: "hooks/register.tsx",
+        find: "  await readFlight($, now)\n",
+        replace: "",
+    },
+    {
+        name: "Now working is drawn only with an agent and a stage again",
+        file: "hooks/queue.ts",
+        find: "  if (!['running', 'dispatched'].includes(state)) {\n    return null\n  }\n\n  const agent",
+        replace: "  if (!['running', 'dispatched'].includes(state) || progress?.agent == null || text(progress?.stage) === null) {\n    return null\n  }\n\n  const agent",
+    },
+    {
+        name: "a progress with no stage hides the stage story_get reports",
+        file: "hooks/queue.ts",
+        find: "  const progress = progressOf(inFlight, document)\n",
+        replace: "  const progress = (inFlight.progress ?? document.progress ?? null) as Json | null\n",
+    },
+    {
+        name: "the hour a story stood stopped is counted as running",
+        file: "hooks/queue.ts",
+        find: "duration(now - startedAt - blockedSpan(list(document.timeline), startedAt, now))",
+        replace: "duration(now - startedAt)",
+    },
+    {
+        name: "the New task's What to do is one line again",
+        file: "hooks/register.tsx",
+        find: "value={form.title} rows={look.proofs.inputRows ? 3 : undefined} ",
+        replace: "value={form.title} ",
+    },
+    {
+        name: "an approved story's held reason is not read from story_get",
+        file: "hooks/register.tsx",
+        find: "    read_.push(reason === null ? story : { ...story, blockedReason: reason })\n",
+        replace: "    read_.push(story)\n",
+    },
+    {
+        name: "Drop goal… names none of the stories it abandons",
+        file: "hooks/register.tsx",
+        find: "const OPEN_STORY_STATES: readonly string[] = ['approved', 'dispatched', 'running', 'blocked', 'pr-open', 'verifying', 'verified']",
+        replace: "const OPEN_STORY_STATES: readonly string[] = []",
+    },
+    // The production retest of 1.6.0 (#39).
+    {
+        name: "a repository goal's task is sent without its files",
+        file: "hooks/register.tsx",
+        find: "    files: declared.files,\n",
+        replace: "    files: [],\n",
+    },
+    {
+        name: "the Files field is drawn for a goal in Terylon's own list",
+        file: "hooks/register.tsx",
+        find: "{'Input' in elements && isRepositoryGoal && (",
+        replace: "{'Input' in elements && (",
+    },
+    {
+        name: "a blank line among a task's files is sent",
+        file: "hooks/queue.ts",
+        find: "  if (blank >= 0) {\n",
+        replace: "  if (false) {\n",
+    },
+    {
+        name: "more than 30 files are sent",
+        file: "hooks/queue.ts",
+        find: "  if (files.length > FILES_MOST) {\n",
+        replace: "  if (false) {\n",
+    },
+    {
+        name: "a verified list story waits for a merge again",
+        file: "hooks/queue.ts",
+        find: "    if (text(story.target) === 'list') {\n",
+        replace: "    if (false) {\n",
+    },
+    {
+        name: "a verified story's target is not read from story_get",
+        file: "hooks/register.tsx",
+        find: "    if (!storyTargets.has(id)) {\n",
+        replace: "    if (false) {\n",
+    },
+    {
+        name: "a list story's last phase is Merge again",
+        file: "hooks/queue.ts",
+        find: "      label: name === 'merge' && isList ? COPY.acceptPhase : COPY.stageLabel(name),\n",
+        replace: "      label: COPY.stageLabel(name),\n",
+    },
+    {
+        name: "a plan of one story draws its chain again",
+        file: "hooks/register.tsx",
+        find: "        plan.stories.length < 2\n",
+        replace: "        plan.stories.length === 0\n",
+    },
+    {
+        name: "the unreachable fix no longer says to reconnect after a network outage",
+        file: "hooks/copy.ts",
+        find: "    'After a network outage: /mcp → terylon → Reconnect, or restart Claude Desktop.',\n",
+        replace: "",
+    },
+    {
+        name: "the sizes stand beside the plan's chain again",
+        file: "hooks/register.tsx",
+        find: "                {look.isGraphic ? picture(elements, planChain(chain, orderAlt)) : <Text color=\"subtle\">{planOrder(chain)}</Text>}\n",
+        replace: "                {look.isGraphic ? picture(elements, planChain(chain, orderAlt)) : <Text color=\"subtle\">{planOrder(chain)}</Text>}\n                <Text color=\"subtle\" size=\"footnote\" tabular>{plan.stories.map(item => (item.estimate === null ? item.size : `${item.size} ~$${item.estimate}`)).join(' → ')}</Text>\n",
     },
 ];
 

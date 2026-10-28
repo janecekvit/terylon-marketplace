@@ -24,6 +24,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type {
+  PaneAct,
+  PaneActOutcome,
   PaneAdd,
   PanePhase,
   PaneAnswer,
@@ -32,6 +34,7 @@ import type {
   PaneGoal,
   PaneGoals,
   PaneMemory,
+  PanePolicyForm,
   PaneScreen,
   PaneSnapshot,
   PaneStory,
@@ -39,11 +42,11 @@ import type {
 } from '../types'
 
 import { COPY } from './copy'
-import { CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, NARROW_COLUMNS, STEPPER_COLUMNS, dots, meter, phaseGlyph, planChain, proofsOf, segments, slotsGauge, spendBar, splitHash, stepper } from './drawing'
+import { CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, NARROW_COLUMNS, STEPPER_COLUMNS, dots, meter, phaseGlyph, planChain, planOrder, proofsOf, segments, slotsGauge, spendBar, splitHash, stepper } from './drawing'
 import type { Picture, Proofs } from './drawing'
 import { ALERT_SOURCES, alertCount, healthLine, stateWord } from './health'
 import type { Health } from './health'
-import { MISSING_SERVER, NOT_ALLOWED, SERVER_CANDIDATES, allowRules, assertPaneTool, readResult } from './terylon'
+import { MISSING_SERVER, NEEDS_TEXT, NOT_ALLOWED, SERVER_CANDIDATES, TEXT_LIMITS, actArguments, allowRules, assertPaneTool, isSendable, readResult } from './terylon'
 import type { TerylonAnswer } from './terylon'
 import {
   alertItems,
@@ -52,14 +55,25 @@ import {
   consoleLink,
   dayBudget,
   doneTodayItems,
+  filesOf,
   firstLine,
   goalItems,
   header,
   hostName,
+  isListStory,
+  isRepositoryTarget,
   list,
   number,
   pausedOf,
   planItems,
+  policyArguments,
+  policyChanges,
+  policyFieldLabel,
+  policyProblems,
+  policyRows,
+  policyValue,
+  POLICY_FIELDS,
+  proposalItems,
   questionChoices,
   questionItems,
   queuedItems,
@@ -89,7 +103,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.2.3'
+export const MOD_VERSION = '1.7.2'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -137,9 +151,13 @@ const EMPTY_SNAPSHOT: PaneSnapshot = {
 
 const QUEUE: PaneScreen = { screen: 'queue' }
 
-const EMPTY_ADD: PaneAdd = { phase: 'form', title: '', criteria: '', goal: '', after: '', size: 'M', goals: [], stories: [], sentence: null, link: null }
+const EMPTY_ADD: PaneAdd = { phase: 'form', title: '', criteria: '', goal: '', after: '', size: 'M', files: '', goals: [], repositoryGoals: [], stories: [], sentence: null, link: null, problem: null, sent: null }
 
-const EMPTY_MEMORY: PaneMemory = { phase: 'loading', files: [], rules: [], pending: 0, edit: null, sentence: null, proposed: [] }
+const EMPTY_MEMORY: PaneMemory = { phase: 'loading', files: [], rules: [], pending: 0, proposals: [], edit: null, sentence: null, proposed: [] }
+
+const NO_ACT: PaneAct = { open: null, text: '', busy: null, outcome: null }
+
+const EMPTY_POLICY_FORM: PanePolicyForm = { isEditing: false, values: {} }
 
 // A new goal goes to Terylon's own list at priority 2 unless the owner picks otherwise: goal_add's own defaults.
 const DEFAULT_PRIORITY = '2'
@@ -161,6 +179,9 @@ const goals = atom({ plugin: 'terylon-pane', key: 'goals' } as const, EMPTY_GOAL
 const goal = atom({ plugin: 'terylon-pane', key: 'goal' } as const, null as PaneGoal | null)
 const bell = atom({ plugin: 'terylon-pane', key: 'bell' } as const, EMPTY_BELL)
 const open = atom({ plugin: 'terylon-pane', key: 'open' } as const, [] as string[])
+const acts = atom({ plugin: 'terylon-pane', key: 'acts' } as const, {} as Record<string, PaneAct>)
+const policyForm = atom({ plugin: 'terylon-pane', key: 'policyForm' } as const, EMPTY_POLICY_FORM)
+const rulesAsked = atom({ plugin: 'terylon-pane', key: 'rulesAsked' } as const, false)
 
 // What the last answers were: the module's own, lost on a reload and refilled by the next poll.
 let lastFlight: Json = {}
@@ -170,6 +191,79 @@ let policy: Json | null = null
 let lastAttemptAt = 0
 let isPolling = false
 let answeringServer: string | null = null
+
+// WHAT AN ACT JUST CHANGED, drawn at once and kept until Terylon's own answer shows the subject moved (the owner's walk
+// of 1.5.0, #35): the leader takes an act before its read models catch up, so a read right after ✓ still answered the
+// old state, and the card stayed one poll stale. Keyed by subject ("plan-41", "goal-3"); the state it was acted from,
+// and the state it reads until Terylon's answer leaves the first. Bounded, so a lost act cannot hold a card for good.
+const SETTLE_MILLISECONDS = 300000
+
+// The states of a story that has not ended: what a goal's drop abandons (Terylon S35, #388).
+const OPEN_STORY_STATES: readonly string[] = ['approved', 'dispatched', 'running', 'blocked', 'pr-open', 'verifying', 'verified']
+const settled = new Map<string, { from: readonly string[]; to: string; until: number }>()
+// Where each verified story is kept, as story_get said it: `list`, or its repository's target.
+const storyTargets = new Map<number, string>()
+
+// The policy just saved, laid over what policy_get answers until policy_get answers it too (#35).
+let savedPolicy: { values: Json; until: number } | null = null
+
+function settledState(key: string, state: string, now: number): string {
+  const entry = settled.get(key)
+
+  if (entry === undefined) {
+    return state
+  }
+
+  if (now < entry.until && entry.from.includes(state)) {
+    return entry.to
+  }
+
+  settled.delete(key)
+
+  return state
+}
+
+// The acts whose subject's state the pane draws at once, and the states each moves it from.
+function settle(tool: string, subject: number | null, now: number): void {
+  if (subject === null) {
+    return
+  }
+
+  const until = now + SETTLE_MILLISECONDS
+
+  if (tool === 'plan_approve' || tool === 'plan_rethink') {
+    settled.set(`plan-${subject}`, { from: ['proposed'], to: tool === 'plan_approve' ? 'approved' : 'rethink', until })
+  } else if (tool === 'goal_drop') {
+    settled.set(`goal-${subject}`, { from: ['open', 'active', 'planned'], to: 'dropped', until })
+  }
+}
+
+// One object's values laid over another's, a nested one (the memory's bounds) merged rather than replaced.
+function overlay(base: Json, values: Json): Json {
+  return Object.fromEntries([...new Set([...Object.keys(base), ...Object.keys(values)])].map(key => {
+    const over = values[key]
+    const under = base[key]
+
+    return [key, over !== null && typeof over === 'object' && under !== null && typeof under === 'object' ? overlay(under as Json, over as Json) : over ?? under]
+  }))
+}
+
+// Whether every value saved is what an answer now holds.
+function holds(answer: Json, values: Json): boolean {
+  return Object.entries(values).every(([key, value]) =>
+    value !== null && typeof value === 'object' ? holds((answer[key] ?? {}) as Json, value as Json) : answer[key] === value)
+}
+
+// policy_get's answer with the policy just saved laid over it, until it answers that policy itself.
+function policyAfterSave(answer: Json, now: number): Json {
+  if (savedPolicy === null || now >= savedPolicy.until || holds(answer, savedPolicy.values)) {
+    savedPolicy = null
+
+    return answer
+  }
+
+  return overlay(answer, savedPolicy.values)
+}
 
 // Calls one of the pane's tools on whichever terylon server the session has, through the allow-list.
 async function callTerylon($: EngineInterface, tool: string, args: Record<string, unknown> = {}): Promise<TerylonAnswer> {
@@ -311,18 +405,25 @@ async function refresh($: EngineInterface): Promise<boolean> {
 
   if (policy === null) {
     const answered = await callTerylon($, 'policy_get')
-    policy = answered.kind === 'ok' ? answered.value : null
+    policy = answered.kind === 'ok' ? policyAfterSave(answered.value, now) : null
   }
 
   lastFlight = flight.value
-  lastBriefing = briefing.value
+  // A PLAN THE OWNER JUST DECIDED leaves "Waiting for you" at once, whatever the briefing still lists (#35).
   lastStories = list(stories.value.stories)
+  lastBriefing = {
+    ...briefing.value,
+    plansWaiting: list(briefing.value.plansWaiting).filter(plan => settledState(`plan-${number(plan.id) ?? 0}`, 'proposed', now) === 'proposed'),
+    storiesVerified: await withTargets($, list(briefing.value.storiesVerified), lastStories),
+  }
 
   const base = await baseUrl($)
   const offset = zoneOffset(now)
   const running = runningItems(lastFlight, offset)
   const inFlight = new Set(running.map(item => item.story))
   const paused = pausedOf((lastBriefing.leader ?? null) as Json | null, lastFlight.paused === true, offset)
+  const slots = number(lastFlight.slots) ?? number(policy?.slots) ?? 0
+  const queuedStories = await withHeldReasons($, lastStories, inFlight)
 
   await update($, snapshot, (): PaneSnapshot => ({
     connection: 'ok',
@@ -332,7 +433,7 @@ async function refresh($: EngineInterface): Promise<boolean> {
     header: header(lastFlight, policy),
     runningUsd: spend(lastFlight),
     dayBudget: dayBudget(policy),
-    slots: number(lastFlight.slots) ?? number(policy?.slots) ?? 0,
+    slots,
     slotsUsed: running.length,
     paused: paused === null ? null : COPY.paused(paused.since, paused.reason),
     pausedSince: paused?.since ?? null,
@@ -343,13 +444,67 @@ async function refresh($: EngineInterface): Promise<boolean> {
     server: answeringServer,
     waiting: waitingItems(lastBriefing, base),
     running,
-    queued: queuedItems(lastStories, inFlight),
+    queued: queuedItems(queuedStories, inFlight, paused === null && running.length < slots),
     doneToday: doneTodayItems(lastStories, now, offset),
     questions: questionItems(lastBriefing),
   }))
   await showHealth($)
 
   return true
+}
+
+// WHY AN APPROVED STORY HAS NOT STARTED (the owner's walk of 1.5.0, #35): story_get carries a held story's reason as
+// `blockedReason` while its state stays approved ("after #12; #12 was abandoned, so order it again"). For an approved
+// story stories_list gives no reason and no order for, it is read there, so the row says why rather than "waits for
+// a slot". Such a story is rare; one whose read fails keeps what stories_list said.
+async function withHeldReasons($: EngineInterface, stories: Json[], inFlight: ReadonlySet<number>): Promise<Json[]> {
+  const read_: Json[] = []
+
+  for (const story of stories) {
+    const id = number(story.id)
+    const isUnexplained = story.state === 'approved' && id !== null && !inFlight.has(id) && text(story.blockedReason) === null && !(Array.isArray(story.after) && story.after.length > 0)
+
+    if (!isUnexplained) {
+      read_.push(story)
+      continue
+    }
+
+    const answered = await callTerylon($, 'story_get', { story: id })
+    const reason = answered.kind === 'ok' ? text(answered.value.blockedReason) : null
+    read_.push(reason === null ? story : { ...story, blockedReason: reason })
+  }
+
+  return read_
+}
+
+// WHERE A VERIFIED STORY IS KEPT (#39): a story in Terylon's own list waits for an acceptance, never a merge. The briefing
+// or stories_list may say its target; otherwise story_get is read once per story, and what it says is kept for the session.
+async function withTargets($: EngineInterface, verified: Json[], stories: Json[]): Promise<Json[]> {
+  const read_: Json[] = []
+
+  for (const story of verified) {
+    const id = number(story.id)
+    const listed = stories.find(item => number(item.id) === id)
+    const named = text(story.target) ?? text(listed?.target)
+
+    if (named !== null || id === null) {
+      read_.push(named === null ? story : { ...story, target: named })
+      continue
+    }
+
+    if (!storyTargets.has(id)) {
+      const answered = await callTerylon($, 'story_get', { story: id })
+
+      if (answered.kind === 'ok') {
+        storyTargets.set(id, isListStory({ ...answered.value, state: 'verified' }) ? 'list' : text(answered.value.target) ?? 'repository')
+      }
+    }
+
+    const target = storyTargets.get(id)
+    read_.push(target === undefined ? story : { ...story, target })
+  }
+
+  return read_
 }
 
 async function signalled($: EngineInterface): Promise<string[]> {
@@ -508,6 +663,15 @@ async function readBell($: EngineInterface): Promise<PaneBell> {
   return { ...EMPTY_BELL, ...(await read($, bell)) }
 }
 
+// The stepper's short labels: a list story's last phase is Accept, never Merge (#39).
+function shortLabels(phases: readonly { label: string }[]): readonly string[] {
+  return COPY.phaseShort.map((label, index) => (phases[index]?.label === COPY.acceptPhase ? COPY.acceptShort : label))
+}
+
+async function readAdd($: EngineInterface): Promise<PaneAdd> {
+  return { ...EMPTY_ADD, ...(await read($, add)) }
+}
+
 // A SCREEN'S LOAD IS TOTAL (the operator's walk of 1.1.1: Goals and Bell sat on "Loading…" for good): whatever
 // it throws, and whatever does not answer within the bound, ends as the screen's error with its reason — never
 // a "Loading…" nothing will ever replace.
@@ -549,11 +713,13 @@ function stackOf(value: PaneView): PaneScreen[] {
 // NAVIGATION: a stack of screens. A tab starts it over, a row pushes, ‹ pops back to where the owner came from.
 async function show($: EngineInterface, screen: PaneScreen, isTab: boolean): Promise<void> {
   await update($, view, (current: PaneView): PaneView => ({ stack: isTab ? [screen] : [...stackOf(current), screen] }))
+  await leaveActs($)
   await load($, screen)
 }
 
 async function back($: EngineInterface): Promise<void> {
   await update($, view, (current: PaneView): PaneView => ({ stack: stackOf(current).length > 1 ? stackOf(current).slice(0, -1) : [QUEUE] }))
+  await leaveActs($)
 
   const current = await read($, view)
   await load($, stackOf(current)[stackOf(current).length - 1] ?? QUEUE)
@@ -605,6 +771,12 @@ async function openStory($: EngineInterface, id: number): Promise<void> {
 
   const answered = await callTerylon($, 'story_get', { story: id })
   const now = await $.clock.now()
+
+  // THE ROW AND THE CARD DRAW ONE ANSWER (the owner's walk of 1.5.0, #35: the queue said "3/8 · Develop" and the card,
+  // seconds later, "2 of 8 · Plan"): work_in_flight is read again with the story, and the queue's running rows are
+  // drawn from that same answer.
+  await readFlight($, now)
+
   const inFlight = list(lastFlight.stories).find(item => number(item.id) === id) ?? {}
   const question = (await readSnapshot($)).questions.find(item => item.subject === `story/${id}`) ?? null
 
@@ -623,6 +795,29 @@ async function openStory($: EngineInterface, id: number): Promise<void> {
   }
 }
 
+// work_in_flight read again on its own: the running rows, the slots in use and the spend, from its answer. One that
+// does not answer leaves the last; the next poll says why.
+async function readFlight($: EngineInterface, now: number): Promise<void> {
+  const flight = await callTerylon($, 'work_in_flight')
+
+  if (flight.kind !== 'ok') {
+    return
+  }
+
+  lastFlight = flight.value
+
+  const running = runningItems(lastFlight, zoneOffset(now))
+
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({
+    ...EMPTY_SNAPSHOT,
+    ...current,
+    header: header(lastFlight, policy),
+    runningUsd: spend(lastFlight),
+    slotsUsed: running.length,
+    running,
+  }))
+}
+
 async function openQuestion($: EngineInterface, id: number): Promise<void> {
   await update($, answer, (): PaneAnswer | null => ({ question: id, text: '', choice: null, phase: 'form', sentence: null }))
 }
@@ -632,7 +827,8 @@ async function openQuestion($: EngineInterface, id: number): Promise<void> {
 // a double click, or Enter and the button — both read the answer as a form, so the state alone cannot tell.
 let isAnswerSending = false
 
-async function sendAnswer($: EngineInterface): Promise<void> {
+// Enter hands over the field's own value: what the owner sees is sent, whether or not its last onInput arrived first.
+async function sendAnswer($: EngineInterface, submitted?: string): Promise<void> {
   if (isAnswerSending) {
     return
   }
@@ -640,6 +836,10 @@ async function sendAnswer($: EngineInterface): Promise<void> {
   isAnswerSending = true
 
   try {
+    if (typeof submitted === 'string') {
+      await update($, answer, (current: PaneAnswer | null): PaneAnswer | null => (current === null || current.phase === 'sending' ? current : { ...current, text: submitted }))
+    }
+
     await sendAnswerOnce($)
   } finally {
     isAnswerSending = false
@@ -705,8 +905,12 @@ async function readGoalsFromTerylon($: EngineInterface): Promise<void> {
     return
   }
 
-  const items = goalItems(goalsAnswer.value, questions)
-  const plans = plansAnswer.kind === 'ok' ? planItems(plansAnswer.value, base) : []
+  // WHAT AN ACT JUST CHANGED, over what the two lists still answer (#35).
+  const now = await $.clock.now()
+  const goalsNow = { ...goalsAnswer.value, goals: list(goalsAnswer.value.goals).map(item => ({ ...item, state: settledState(`goal-${number(item.id) ?? 0}`, String(item.state ?? ''), now) })) }
+  const plansNow = plansAnswer.kind === 'ok' ? { ...plansAnswer.value, plans: list(plansAnswer.value.plans).map(item => ({ ...item, state: settledState(`plan-${number(item.id) ?? 0}`, String(item.state ?? ''), now) })) } : {}
+  const items = goalItems(goalsNow, questions)
+  const plans = plansAnswer.kind === 'ok' ? planItems(plansNow, base) : []
   const targets = targetsOf(goalsAnswer.value)
 
   await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, phase: 'ok', sentence: plansAnswer.kind === 'ok' ? null : why(plansAnswer), open: items.open, closed: items.closed, plans, targets }))
@@ -741,7 +945,9 @@ async function addGoal($: EngineInterface): Promise<void> {
   await update($, goals, (current: PaneGoals): PaneGoals => ({
     ...current,
     adding: isAccepted ? 'added' : 'refused',
-    addSentence: answered.kind === 'ok' && answered.value.accepted == null ? COPY.timeout(text(answered.value.commandId)) : why(answered),
+    addSentence: answered.kind === 'ok' && answered.value.accepted == null
+      ? COPY.timeout(text(answered.value.commandId))
+      : isAccepted ? COPY.goalAdded(why(answered)) : why(answered),
     draft: isAccepted ? '' : current.draft,
   }))
 
@@ -751,24 +957,30 @@ async function addGoal($: EngineInterface): Promise<void> {
 }
 
 async function openGoal($: EngineInterface, id: number): Promise<void> {
-  await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'loading', sentence: null, title: '', meta: '', stories: [] }))
+  await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'loading', sentence: null, title: '', meta: '', stories: [], isOpen: false, openStories: [] }))
 
   const answered = await callTerylon($, 'goal_get', { goal: id })
 
   if (answered.kind !== 'ok') {
-    await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'error', sentence: why(answered), title: '', meta: '', stories: [] }))
+    await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'error', sentence: why(answered), title: '', meta: '', stories: [], isOpen: false, openStories: [] }))
     return
   }
 
   const document = answered.value
+  const state = settledState(`goal-${id}`, String(document.state ?? ''), await $.clock.now())
 
   await update($, goal, (): PaneGoal | null => ({
     goal: id,
     phase: 'ok',
     sentence: null,
     title: text(document.title) ?? `#${id}`,
-    meta: COPY.goalMeta(`P${number(document.priority) ?? 2}`, COPY.stateText(String(document.state ?? ''))),
+    meta: COPY.goalMeta(`P${number(document.priority) ?? 2}`, COPY.stateText(state)),
     stories: list(document.storyList).map(item => ({ id: number(item.id) ?? 0, title: `#${number(item.id) ?? 0} ${text(item.title) ?? ''}`.trim(), state: COPY.stateText(String(item.state ?? '')) })),
+    isOpen: ['open', 'active'].includes(state),
+    // EVERY STORY OF IT THAT HAS NOT ENDED, which a drop abandons (Terylon S35, #388), by title; a run is stopped first.
+    openStories: list(document.storyList)
+      .filter(item => OPEN_STORY_STATES.includes(String(item.state ?? '')))
+      .map(item => ({ id: number(item.id) ?? 0, title: text(item.title) ?? '', isRunning: ['dispatched', 'running'].includes(String(item.state ?? '')) })),
   }))
 
   if ((await read($, goals)).phase !== 'ok') {
@@ -823,39 +1035,240 @@ async function handleNotice($: EngineInterface, id: number): Promise<void> {
   await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...current, notices: Math.max(0, current.notices - 1) }))
 }
 
+
+// THE OWNER'S ACTS (S27, #27): each one on its subject's card, sent only when the owner presses it.
+async function readActs($: EngineInterface): Promise<Record<string, PaneAct>> {
+  const stored = await read($, acts)
+
+  return stored !== null && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}
+}
+
+function actOf(all: Record<string, PaneAct>, key: string): PaneAct {
+  return { ...NO_ACT, ...(all[key] ?? {}) }
+}
+
+async function setAct($: EngineInterface, key: string, change: (current: PaneAct) => PaneAct): Promise<void> {
+  await update($, acts, (current: Record<string, PaneAct>): Record<string, PaneAct> => {
+    const all = current !== null && typeof current === 'object' && !Array.isArray(current) ? current : {}
+
+    return { ...all, [key]: change(actOf(all, key)) }
+  })
+}
+
+// Leaving a screen closes its fields and forgets its outcomes; an act Terylon is still answering is kept.
+async function leaveActs($: EngineInterface): Promise<void> {
+  await update($, acts, (current: Record<string, PaneAct>): Record<string, PaneAct> => {
+    const all = current !== null && typeof current === 'object' && !Array.isArray(current) ? current : {}
+
+    return Object.fromEntries(Object.entries(all).filter(([, value]) => value?.busy != null).map(([key, value]) => [key, { ...NO_ACT, busy: value.busy }]))
+  })
+  await update($, policyForm, (): PanePolicyForm => EMPTY_POLICY_FORM)
+}
+
+// An act's field: opened under its card by its button, closed by the same button or Cancel. Not while it is busy.
+async function openAct($: EngineInterface, key: string, tool: string): Promise<void> {
+  if (actsInFlight.has(key)) {
+    return
+  }
+
+  await setAct($, key, current => (current.open === tool ? { ...current, open: null, text: '' } : { ...current, open: tool, text: '', outcome: null }))
+}
+
+// ONE ACT AT A TIME PER CARD, decided before the first await: a double press, or Enter and the button, would both
+// read the card as idle.
+const actsInFlight = new Set<string>()
+
+async function takeAct($: EngineInterface, key: string, tool: string, subject: number | null, words: string, args?: Record<string, unknown>): Promise<void> {
+  if (actsInFlight.has(key) || !isSendable(tool, subject, words)) {
+    return
+  }
+
+  actsInFlight.add(key)
+
+  try {
+    await setAct($, key, current => ({ ...current, busy: tool, outcome: null }))
+
+    const sent = args ?? actArguments(tool, subject, words)
+    const answered = await callTerylon($, tool, sent)
+    const outcome = outcomeOf(tool, answered)
+
+    // ✓ IS DRAWN WITH WHAT IT CHANGED (#35): the subject's new state first, then the reads that catch up with it.
+    if (outcome.kind === 'done') {
+      const now = await $.clock.now()
+      settle(tool, subject, now)
+
+      if (tool === 'policy_save' && policy !== null) {
+        savedPolicy = { values: sent, until: now + SETTLE_MILLISECONDS }
+        policy = overlay(policy, sent)
+        await update($, policyForm, (): PanePolicyForm => EMPTY_POLICY_FORM)
+      }
+    }
+
+    await setAct($, key, current => ({ ...current, busy: null, outcome, open: outcome.kind === 'done' || outcome.kind === 'pending' ? null : current.open, text: outcome.kind === 'done' ? '' : current.text }))
+
+    if (outcome.kind === 'done') {
+      await update($, rulesAsked, (): boolean => false)
+      await afterAct($, tool, subject)
+    }
+  } finally {
+    actsInFlight.delete(key)
+  }
+}
+
+function outcomeOf(tool: string, answered: TerylonAnswer): PaneActOutcome {
+  switch (answered.kind) {
+    // EVERY OWNER ACT ANSWERS {accepted, sentence, commandId, subjectId} (Terylon main aaf07e8): true the leader took
+    // it, false the leader refused it, null no answer within 10 s. Refused before the leader, it is {refused, status?}.
+    case 'ok':
+      if (text(answered.value.refused) !== null) {
+        return { kind: 'refused', tool, sentence: text(answered.value.refused), status: number(answered.value.status) }
+      }
+
+      if (answered.value.accepted === true) {
+        return { kind: 'done', tool, sentence: text(answered.value.sentence), status: null }
+      }
+
+      if (answered.value.accepted === false) {
+        return { kind: 'refused', tool, sentence: text(answered.value.sentence), status: null }
+      }
+
+      return { kind: 'pending', tool, sentence: COPY.actPending(text(answered.value.commandId)), status: null }
+    case 'refused':
+      return { kind: 'refused', tool, sentence: answered.sentence, status: answered.status }
+    case 'not-allowed':
+      return { kind: 'not-allowed', tool, sentence: answered.reason, status: null }
+    default:
+      return { kind: 'refused', tool, sentence: why(answered), status: null }
+  }
+}
+
+// WHAT AN ACT CHANGED, read again: the queue always, then the screen the act was taken on.
+async function afterAct($: EngineInterface, tool: string, subject: number | null): Promise<void> {
+  // THE POLICY IS READ AGAIN, NEVER DROPPED FIRST (#35): with it dropped, a draw in between lost the fields' ranges and
+  // said "No change yet." on a form already saved.
+  if (tool === 'policy_save') {
+    const answered = await callTerylon($, 'policy_get')
+
+    if (answered.kind === 'ok') {
+      policy = policyAfterSave(answered.value, await $.clock.now())
+    }
+  }
+
+  await refresh($)
+
+  if (tool.startsWith('story_') && subject !== null) {
+    await openStory($, subject)
+  } else if (tool.startsWith('plan_')) {
+    await loadGoals($)
+  } else if (tool === 'goal_drop' && subject !== null) {
+    await openGoal($, subject)
+    await loadGoals($)
+  } else if (tool.startsWith('memory_')) {
+    await openMemory($)
+  }
+}
+
+// Refresh after a refusal: the outcome goes, and what Terylon says now is read again.
+async function refreshAct($: EngineInterface, key: string): Promise<void> {
+  await setAct($, key, current => ({ ...current, outcome: null }))
+  await tick($, false)
+
+  const stack = stackOf(await read($, view))
+  await load($, stack[stack.length - 1] ?? QUEUE)
+}
+
+// How to fix: the Status tab, with every rule the pane needs.
+async function howToFix($: EngineInterface): Promise<void> {
+  await update($, rulesAsked, (): boolean => true)
+  await show($, { screen: 'status' }, true)
+}
+
+// THE POLICY: Edit fills the form with what policy_get answered; Save sends only what changed.
+async function editPolicy($: EngineInterface, isAgain: boolean): Promise<void> {
+  await setAct($, 'policy', current => ({ ...current, outcome: null }))
+  await update($, policyForm, (current: PanePolicyForm): PanePolicyForm => ({
+    isEditing: true,
+    values: isAgain && current?.values !== undefined && Object.keys(current.values).length > 0
+      ? current.values
+      : Object.fromEntries(POLICY_FIELDS.filter(field => policyValue(policy, field.key) !== null).map(field => [field.key, String(policyValue(policy, field.key))])),
+  }))
+}
+
+async function savePolicy($: EngineInterface): Promise<void> {
+  const form = { ...EMPTY_POLICY_FORM, ...(await read($, policyForm)) }
+  const changes = policyChanges(policy, form.values)
+
+  if (changes.length === 0) {
+    return
+  }
+
+  // ONLY WHAT CHANGED, AND ONLY WITHIN policy_get's LIMITS: no version, no concurrency check, the last write wins
+  // (Terylon main aaf07e8), and Terylon checks no argument against a schema.
+  if (policyProblems(policy, form.values).length > 0) {
+    return
+  }
+
+  const args = policyArguments(changes)
+
+  await takeAct($, 'policy', 'policy_save', null, '', args)
+
+  // A SAVE TAKEN closed the form as it was answered; a refused one keeps what was typed, for Edit again.
+  const outcome = actOf(await readActs($), 'policy').outcome
+
+  if (outcome?.kind !== 'done') {
+    await update($, policyForm, (current: PanePolicyForm): PanePolicyForm => ({ ...current, isEditing: false }))
+  }
+}
+
 async function openAdd($: EngineInterface, title: string): Promise<void> {
   const goalsAnswer = await callTerylon($, 'goals_list')
-  const choices = goalsAnswer.kind === 'ok'
-    ? list(goalsAnswer.value.goals)
-        .filter(item => !['done', 'closed', 'abandoned', 'dropped'].includes(String(item.state)))
-        .map(item => ({ value: String(number(item.id) ?? 0), label: `${text(item.title) ?? ''}` }))
+  const openGoals = goalsAnswer.kind === 'ok'
+    ? list(goalsAnswer.value.goals).filter(item => !['done', 'closed', 'abandoned', 'dropped'].includes(String(item.state)))
     : []
+  const choices = openGoals.map(item => ({ value: String(number(item.id) ?? 0), label: `${text(item.title) ?? ''}` }))
+  // A GOAL OVER A REPOSITORY, by the target goals_list gives (#39): its task declares the files it will change.
+  const repositoryGoals = openGoals
+    .filter(item => isRepositoryTarget(item.target))
+    .map(item => String(number(item.id) ?? 0))
   const stories = lastStories
     .filter(item => !['merged', 'abandoned'].includes(String(item.state)))
     .map(item => ({ value: String(number(item.id) ?? 0), label: `#${number(item.id) ?? 0} ${text(item.title) ?? ''}` }))
 
-  await update($, add, (): PaneAdd => ({ ...EMPTY_ADD, title, goal: choices[0]?.value ?? '', goals: choices, stories: [{ value: '', label: COPY.nothingBefore }, ...stories] }))
+  await update($, add, (): PaneAdd => ({ ...EMPTY_ADD, title, goal: choices[0]?.value ?? '', goals: choices, repositoryGoals, stories: [{ value: '', label: COPY.nothingBefore }, ...stories] }))
   await update($, view, (current: PaneView): PaneView => ({ stack: [...stackOf(current), { screen: 'add' }] }))
 }
 
 // ADD A TASK: tasks_add proposes; the plan it becomes waits for the owner in the console.
 async function sendTask($: EngineInterface): Promise<void> {
-  const form = await read($, add)
+  const form = await readAdd($)
   const goalId = Number(form.goal)
+  // THE TITLE AS ONE LINE: "What to do" is a field of several rows (#35), and a title is one line wherever it is drawn.
+  const title = form.title.replace(/\s*\n\s*/g, ' ').trim()
 
-  if (form.title.trim() === '' || !Number.isInteger(goalId) || goalId < 1) {
+  if (title === '' || !Number.isInteger(goalId) || goalId < 1) {
     return
   }
 
-  await update($, add, (current: PaneAdd): PaneAdd => ({ ...current, phase: 'sending' }))
+  // THE FILES A REPOSITORY'S TASK WILL CHANGE (#39): Terylon refuses such a task without 1 to 30, so the pane checks them
+  // before it sends anything and says what is wrong under the field. A task in Terylon's own list declares none.
+  const declared = form.repositoryGoals.includes(form.goal) ? filesOf(form.files) : { files: [], problem: null }
+
+  if (declared.problem !== null) {
+    await update($, add, (current: PaneAdd): PaneAdd => ({ ...current, problem: declared.problem }))
+    return
+  }
+
+  await update($, add, (current: PaneAdd): PaneAdd => ({ ...current, phase: 'sending', problem: null }))
 
   const after = Number(form.after)
+  // ONE CRITERION PER LINE where the field holds several (input-rows), by semicolons as in 1.1.2 either way; an empty
+  // field sends none, and the leader writes them.
+  const criteria = form.criteria.split(/[;\n]/).map(line => line.trim()).filter(line => line !== '')
   const task: Json = {
-    title: form.title.trim(),
-    brief: form.title.trim(),
-    // ONE CRITERION PER LINE where the field holds several (input-rows), by semicolons as in 1.1.2 either way.
-    criteria: form.criteria.split(/[;\n]/).map(line => line.trim()).filter(line => line !== ''),
-    files: [],
+    title,
+    brief: title,
+    criteria,
+    files: declared.files,
     size: COPY.sizes.includes(form.size) ? form.size : 'M',
   }
 
@@ -869,7 +1282,7 @@ async function sendTask($: EngineInterface): Promise<void> {
 
   await update($, add, (current: PaneAdd): PaneAdd => {
     if (answered.kind === 'ok' && answered.value.accepted === true) {
-      return { ...current, phase: 'added', sentence: text(answered.value.sentence), link: consoleLink(base, `plan&goal=${goalId}`) }
+      return { ...current, phase: 'added', sentence: text(answered.value.sentence), link: consoleLink(base, `plan&goal=${goalId}`), sent: { title, criteria, files: declared.files } }
     }
 
     if (answered.kind === 'ok' && answered.value.accepted == null) {
@@ -912,7 +1325,9 @@ async function openMemory($: EngineInterface): Promise<void> {
     artefact: text(rule.artefact) ?? '',
   }))
 
-  await update($, memory, (current: PaneMemory): PaneMemory => ({ ...current, phase: 'ok', files, rules, pending: list(answered.value.proposals).length, edit: null, sentence: null }))
+  const now = await $.clock.now()
+
+  await update($, memory, (current: PaneMemory): PaneMemory => ({ ...current, phase: 'ok', files, rules, pending: list(answered.value.proposals).length, proposals: proposalItems(answered.value, zoneOffset(now)), edit: null, sentence: null }))
 }
 
 // A MEMORY EDIT IS A PROPOSAL: memory_propose, then the owner confirms it in the console's memory gate.
@@ -1170,6 +1585,7 @@ export const register: Register = on => {
     await $.command.register({ name: 'terylon-pane', description: 'Opens the Terylon pane: queue, goals, bell, memory' })
     await $.command.register({ name: 'terylon', description: 'Opens the Terylon pane (the same as /terylon-pane)' })
     await $.command.register({ name: 'terylon-memory', description: "Opens the Terylon pane on the leader's memory; an edit is confirmed in the console" })
+    storyTargets.clear()
     await showHealth($)
     $.clock.after(0, () => tick($, true))
     $.clock.every(POLL_MS, () => tick($, false))
@@ -1319,6 +1735,107 @@ export const register: Register = on => {
     const cardOf = (key: string, title: unknown, hint: unknown, children: unknown[], tone: CardTone = 'plain') => card(elements, look, key, title, hint, children, tone)
     const rowOf = (input: Row) => row(elements, look, input)
     const headingOf = (title: string, count?: number, countTone?: Tone, suffix = '') => heading(elements, title, count === undefined ? undefined : `${COPY.count(count)}${suffix}`, countTone)
+    // THE OWNER'S ACTS (S27, #27), drawn on their subject's card. A button takes its act in one press, or opens the
+    // field its act needs; while Terylon answers it reads "…ing" and the card's other buttons wait, dim, and do
+    // nothing. NOTHING HERE CALLS A TOOL: only a press does.
+    const allActs = await readActs($)
+    const actState = (key: string) => actOf(allActs, key)
+    const actButton = (key: string, tool: string, subject: number | null, options: { isPrimary?: boolean; isDanger?: boolean; opens?: boolean; isDim?: boolean; words?: string } = {}) => {
+      const state = actState(key)
+      const isOpen = options.opens === true && state.open === tool
+      const isWaiting = (state.busy !== null && state.busy !== tool) || (state.open !== null && state.open !== tool) || options.isDim === true
+      const label = state.busy === tool ? COPY.actBusy[tool] ?? tool : isOpen ? COPY.selected(COPY.actButton[tool] ?? tool) : COPY.actButton[tool] ?? tool
+      const name = tool.replace(/^[a-z]+_/, '')
+      const press = () => (isWaiting || state.busy !== null ? undefined : options.opens === true ? openAct($, key, tool) : takeAct($, key, tool, subject, options.words ?? state.text))
+
+      // A DANGER ACT IS PLAIN, ITS WORD IN error (the owner's walk of 1.5.0, #35): a Button with chrome drew its children
+      // in its own grey in Desktop 3.6556.2.0 (engine 2.1.308), while a plain one draws them in their colour, as each
+      // row's kind dot shows.
+      const isRed = options.isDanger === true && !isWaiting
+
+      return (
+        <Button key={`act-${key}-${name}`} label={label} plain={isRed ? true : undefined} variant={options.isPrimary === true && !isWaiting && state.busy === null ? 'primary' : undefined} dimColor={isWaiting ? true : undefined} onPress={press}>
+          {isRed ? <Text color="error">{label}</Text> : label}
+        </Button>
+      )
+    }
+    // THE FIELD AN ACT OPENS: what to type, then the button that sends it, dim until a needed text says something.
+    const actField = (key: string, tool: string, subject: number | null, field: { label: string; placeholder?: string; send?: string; isDanger?: boolean; hasCancel?: boolean; hasText?: boolean }) => {
+      const state = actState(key)
+      const isEmpty = state.text.trim() === ''
+      const limit = TEXT_LIMITS[tool]
+      const isLong = limit !== undefined && state.text.trim().length > limit
+      const isDim = state.busy !== null || (NEEDS_TEXT.has(tool) && isEmpty) || isLong
+      const sendLabel = state.busy === tool ? COPY.actBusy[tool] ?? tool : field.send ?? COPY.actSend[tool] ?? COPY.actButton[tool] ?? tool
+
+      return (
+        <Box key={`act-${key}-field`} flexDirection="column" gap={look.isGraphic ? 'xs' : 0}>
+          {field.hasText !== false && hasInput && 'Input' in elements && (
+            <elements.Input
+              key={`act-${key}-text`}
+              label={field.label}
+              placeholder={field.placeholder}
+              value={state.text}
+              rows={look.proofs.inputRows ? 3 : undefined}
+              onInput={value => setAct($, key, current => ({ ...current, text: value }))}
+              onSubmit={() => takeAct($, key, tool, subject, state.text)}
+            />
+          )}
+          {isLong && <Text key={`act-${key}-long`} color="error">{COPY.textTooLong(limit ?? 0, state.text.trim().length)}</Text>}
+          <Box flexDirection="row" gap={1} flexWrap="wrap">
+            <Button key={`act-${key}-send`} label={sendLabel} plain={field.isDanger === true && !isDim ? true : undefined} variant={isDim || field.isDanger === true ? undefined : 'primary'} dimColor={isDim ? true : undefined} onPress={() => (isDim ? undefined : takeAct($, key, tool, subject, state.text))}>
+              {field.isDanger === true && !isDim ? <Text color="error">{sendLabel}</Text> : sendLabel}
+            </Button>
+            {field.hasCancel !== false && <Button key={`act-${key}-cancel`} label={COPY.actCancel} dimColor onPress={() => (state.busy === null ? setAct($, key, current => ({ ...current, open: null, text: '' })) : undefined)} />}
+          </Box>
+        </Box>
+      )
+    }
+    // WHILE TERYLON ANSWERS, the card says why its other buttons wait.
+    const actBusyNote = (key: string) => (actState(key).busy === null ? null : <Text key={`act-${key}-busy`} color="subtle" size="footnote">{COPY.actBusyNote}</Text>)
+    // THE THREE OUTCOMES: Terylon's answer; its refusal word for word, with Refresh and the console; Claude Code's refusal.
+    const actOutcome = (key: string, consoleHref: string, consoleLabel: string, extra: unknown[] = []) => {
+      const outcome = actState(key).outcome
+
+      if (outcome === null) {
+        return null
+      }
+
+      if (outcome.kind === 'done' || outcome.kind === 'pending') {
+        const after = outcome.kind === 'done' ? COPY.actAfter[outcome.tool] ?? null : null
+
+        return cardOf(`act-${key}-outcome`, outcome.kind === 'done'
+          ? <Text weight="semibold" color="success">{COPY.actDoneLine(COPY.actDone[outcome.tool] ?? outcome.tool, outcome.sentence)}</Text>
+          : <Text weight="semibold">{outcome.sentence ?? ''}</Text>, null, [
+          after === null ? null : <Text color="inactive" size="footnote">{after}</Text>,
+          ...(outcome.kind === 'done' ? extra : [<Button key={`act-${key}-refresh`} label={COPY.actRefresh} variant="primary" onPress={() => refreshAct($, key)} />]),
+        ])
+      }
+
+      if (outcome.kind === 'refused') {
+        return cardOf(`act-${key}-outcome`, <Text size="heading" weight="semibold" color="error">{COPY.actRefused(outcome.status)}</Text>, null, [
+          <Text>{outcome.sentence ?? ''}</Text>,
+          <Box flexDirection="row" gap={1} flexWrap="wrap">
+            {key === 'policy'
+              ? <Button key="act-policy-again" label={COPY.policyAgain} variant="primary" onPress={() => editPolicy($, true)} />
+              : <Button key={`act-${key}-refresh`} label={COPY.actRefresh} variant="primary" onPress={() => refreshAct($, key)} />}
+            <Link href={consoleHref} label={consoleLabel} />
+          </Box>,
+        ], 'bad')
+      }
+
+      return cardOf(`act-${key}-outcome`, (
+        <Text size="heading" weight="semibold">
+          <Text color="warning">⚠</Text>
+          {' '}
+          <Text>{COPY.actNotAllowed(outcome.tool)}</Text>
+        </Text>
+      ), null, [
+        <Text color="inactive">{COPY.actNotAllowedBody(COPY.actNothing[outcome.tool] ?? '', COPY.actButton[outcome.tool] ?? outcome.tool)}</Text>,
+        <Button key={`act-${key}-fix`} label={COPY.actFix} variant="primary" onPress={() => howToFix($)} />,
+        <Text color="subtle" size="footnote">{COPY.actFixNote}</Text>,
+      ], 'wait')
+    }
 
     // A TAB is a Button with children: its name and a count chip in tabular digits; the selected one primary, its
     // digit a hotkey while the pane holds the keyboard. The terminal marks the selected one ●, as 1.1.2 did.
@@ -1356,6 +1873,7 @@ export const register: Register = on => {
               : current.connection === 'connecting' ? COPY.connecting : isStale ? COPY.disconnected(at(current.failingSince)) : COPY.connected(age ?? '')}
           </Text>
           <Button key="refresh" label={COPY.refresh} dimColor onPress={async () => { await tick($, false); await load($, screen) }} />
+          {screen.screen === 'queue' && current.connection === 'ok' && current.paused === null && actButton('leader', 'leader_pause', null, { opens: true })}
         </Box>
       </Box>
     )
@@ -1374,6 +1892,15 @@ export const register: Register = on => {
     // stroke carrying the warning. Amber text reads under 4.5:1 on light (tests/contrast.ts), so no card's text is amber.
     const warned = (title: string, tone: 'wait' | 'bad' = 'bad') => <Text size="heading" weight="semibold" color={tone === 'bad' ? 'error' : 'text'}>{title}</Text>
 
+
+    // THE ALLOW RULES' FIX, ONE DRAWING for a refused poll and an act Claude Code refused (S27): the steps, then the
+    // rules the pane needs.
+    const rulesFix = (lines: readonly string[] = COPY.fixNotAllowed) => [
+      steps(lines),
+      // THE ALLOW RULES AS CODE (S32): json, the pane's whole own list, no gate; selected and copied by hand.
+      <Code key="allow-rules" source={allowRules()} language="json" />,
+    ]
+
     // THE STATES THAT ARE NOT A QUEUE: what happened, why, and the step that fixes it.
     let problemCard: unknown = null
 
@@ -1388,9 +1915,7 @@ export const register: Register = on => {
       problemCard = cardOf('problem', warned(COPY.notAllowedTitle), COPY.notAllowedHint, [
         <Text color="inactive">{COPY.notAllowedBody}</Text>,
         reason(current.problem),
-        steps(COPY.fixNotAllowed),
-        // THE ALLOW RULES AS CODE (S32): json, the pane's whole own list, no gate; selected and copied by hand.
-        <Code key="allow-rules" source={allowRules()} language="json" />,
+        ...rulesFix(),
         retry,
       ], 'bad')
     } else if (current.connection === 'refused') {
@@ -1440,7 +1965,14 @@ export const register: Register = on => {
       const pausedCard = current.paused === null ? null : cardOf('problem-paused', warned(COPY.pausedTitle, 'wait'), current.pausedSince === null ? null : COPY.statusSince(current.pausedSince), [
         <Text color="inactive">{current.paused}</Text>,
         steps(COPY.fixPaused),
-        <Link href={consoleLink(base, 'work')} label={COPY.resumeInConsole} />,
+        <Box flexDirection="row" gap={1}>{actButton('leader', 'leader_resume', null, { isPrimary: true })}</Box>,
+        actBusyNote('leader'),
+      ], 'wait')
+      // THE RULES, ASKED FOR BY How to fix (S27): an act Claude Code refused needs the same rules as a refused poll.
+      const rulesCard = current.connection === 'not-allowed' || !(await read($, rulesAsked)) ? null : cardOf('problem-rules', warned(COPY.notAllowedTitle, 'wait'), COPY.notAllowedHint, [
+        <Text color="inactive">{COPY.notAllowedBody}</Text>,
+        // NO Try again ON THIS CARD (#35): its last step names the act's own button instead.
+        ...rulesFix(COPY.fixNotAllowedAct),
       ], 'wait')
       const alertCards = current.alertNotices.map(notice =>
         cardOf(`problem-alert-${notice.id}`, warned(notice.title), COPY.alertHint(notice.source, notice.when), [
@@ -1448,7 +1980,7 @@ export const register: Register = on => {
           <Text color="subtle">{COPY.fixAlert}</Text>,
           <Link href={notice.link === null ? consoleLink(base, 'bell') : `${base}${notice.link}`} label={COPY.bellInConsole} />,
         ], 'bad'))
-      const problems = [problemCard, pausedCard, ...alertCards].filter(item => item !== null)
+      const problems = [problemCard, rulesCard, pausedCard, ...alertCards].filter(item => item !== null)
       const slotsCard = cardOf('status-slots', COPY.statusSlots, COPY.statusSlotsHint, [
         look.isGraphic ? picture(elements, slotsGauge(current.slotsUsed, current.slots, true)) : null,
         <Text tabular>{COPY.statusSlotsLine(current.slotsUsed, current.slots)}</Text>,
@@ -1463,6 +1995,48 @@ export const register: Register = on => {
             onPress: () => go({ screen: 'story', story: item.story }),
           })),
       ])
+      // THE POLICY (S27): read as policy_get answered it, edited in place within its limits, saved with policy_save.
+      const form = { ...EMPTY_POLICY_FORM, ...(await read($, policyForm)) }
+      const rows = policyRows(policy)
+      const changes = policyChanges(policy, form.values)
+      const problems_ = policyProblems(policy, form.values)
+      const isSavable = changes.length > 0 && problems_.length === 0
+      const policyState = actState('policy')
+      const isPolicyEditing = form.isEditing && hasInput && 'Input' in elements
+      const policyCard = cardOf('status-policy', COPY.policy, (
+        <Box flexDirection="row" gap={1} alignItems="center">
+          <Text color="subtle" size="footnote" tabular>{isPolicyEditing ? COPY.policyEditing : COPY.policyVersion(number(policy?.version), policy?.changedAt === undefined || policy?.changedAt === null ? null : clock(policy.changedAt, offset))}</Text>
+          {!isPolicyEditing && hasInput && rows.length > 0 && <Button key="act-policy-edit" label={COPY.policyEdit} dimColor={policyState.busy !== null ? true : undefined} onPress={() => (policyState.busy === null ? editPolicy($, false) : undefined)} />}
+        </Box>
+      ), isPolicyEditing && 'Input' in elements
+        ? [
+            ...POLICY_FIELDS.filter(field => form.values[field.key] !== undefined).map(field => (
+              <elements.Input
+                key={`act-policy-field-${field.key}`}
+                label={policyFieldLabel(field, policy)}
+                value={form.values[field.key] ?? ''}
+                onInput={value => update($, policyForm, (state: PanePolicyForm): PanePolicyForm => ({ ...EMPTY_POLICY_FORM, ...state, values: { ...state.values, [field.key]: value } }))}
+                onSubmit={() => savePolicy($)}
+              />
+            )),
+            ...problems_.map((problem, index) => <Text key={`policy-problem-${index}`} color="error">{problem}</Text>),
+            <Text color="subtle" size="footnote" tabular>{COPY.policyChanges(changes)}</Text>,
+            <Box flexDirection="row" gap={1}>
+              <Button key="act-policy-send" label={policyState.busy === null ? COPY.actButton.policy_save ?? 'Save' : COPY.actBusy.policy_save ?? 'Saving…'} variant={!isSavable || policyState.busy !== null ? undefined : 'primary'} dimColor={!isSavable || policyState.busy !== null ? true : undefined} onPress={() => (policyState.busy === null && isSavable ? savePolicy($) : undefined)} />
+              <Button key="act-policy-cancel" label={COPY.actCancel} dimColor onPress={() => (policyState.busy === null ? update($, policyForm, (): PanePolicyForm => EMPTY_POLICY_FORM) : undefined)} />
+            </Box>,
+            actBusyNote('policy'),
+            <Text color="subtle" size="footnote">{COPY.policyNote}</Text>,
+          ]
+        : [
+            rows.length === 0 ? quiet(elements, COPY.policyMissing) : null,
+            ...rows.map((row_, index) => (
+              <Box key={`policy-row-${index}`} flexDirection="row" justifyContent="space-between" gap={1}>
+                <Text color="inactive">{row_.label}</Text>
+                <Text tabular>{row_.value}</Text>
+              </Box>
+            )),
+          ])
       const costCard = cardOf('status-cost', COPY.statusCost, null, [
         look.isGraphic && budgetUsd !== null ? picture(elements, spendBar(runningUsd, budgetUsd, 'wide', COPY.statusToday(current.runningUsd, current.dayBudget))) : null,
         <Text tabular>{COPY.statusToday(current.runningUsd, current.dayBudget)}</Text>,
@@ -1500,6 +2074,9 @@ export const register: Register = on => {
             problems.length === 0 ? quiet(elements, COPY.nothingWrong) : null,
           ])}
           {problems}
+          {actOutcome('leader', consoleLink(base, 'work'), COPY.workInConsole)}
+          {policyCard}
+          {actOutcome('policy', consoleLink(base, 'policy'), COPY.policyInConsole)}
           {cardOf('status-diagnostics', <Text size="heading" weight="semibold" color="subtle">{COPY.statusDiagnostics}</Text>, null, [
             <Text color="subtle" mono>{COPY.diagnosticsVersion(MOD_VERSION)}</Text>,
             <Text color="subtle" mono>{COPY.diagnosticsUrl(base)}</Text>,
@@ -1552,7 +2129,7 @@ export const register: Register = on => {
       const done = shownStory.phases.filter(item => item.status === 'done').length
       const nowAt = shownStory.phases.findIndex(item => item.status === 'now')
       const isStuck = shownStory.stateTone === 'warning'
-      const labels = COPY.phaseShort
+      const labels = shortLabels(shownStory.phases)
       const tooltips = look.proofs.svgTooltips
         ? shownStory.phases.map(item => COPY.phaseTooltip(item.label, item.role, item.status, item.status === 'now' ? shownStory.working?.step ?? null : null))
         : null
@@ -1563,6 +2140,8 @@ export const register: Register = on => {
         </Box>
       )
       const working = shownStory.working
+      const storyKey = `story-${shownStory.story}`
+      const storyAct = actState(storyKey)
 
       return (
         <Box flexDirection="column" gap={1}>
@@ -1587,7 +2166,7 @@ export const register: Register = on => {
               </Text>
             </Box>
           </Box>
-          {cardOf('story-phases', COPY.phases, <Text color="subtle" size="footnote" tabular>{COPY.phasesHint(nowAt >= 0 ? nowAt + 1 : done, shownStory.phases.length)}</Text>, look.isGraphic
+          {cardOf('story-phases', COPY.phases, <Text color="subtle" size="footnote" tabular>{nowAt >= 0 || shownStory.hasStage ? COPY.phasesHint(nowAt >= 0 ? nowAt + 1 : done, shownStory.phases.length) : COPY.phasesNoStage(done, shownStory.phases.length)}</Text>, look.isGraphic
             ? [
                 // THE STEPPER (S32): the Svg says no word, the labels sit under it in Text; no stage, no node is now.
                 picture(elements, stepper(shownStory.phases, labels, { isStuck, tooltips, isCompact: look.isCompact }), { isInteractive: tooltips !== null }),
@@ -1642,6 +2221,8 @@ export const register: Register = on => {
                   ])}
             </Box>
           )}
+          {/* HELD (#35): an approved story story_get says is held, with its reason, as the queue's row says it. */}
+          {shownStory.heldReason !== null && shownStory.heldReason !== undefined && cardOf('story-held', COPY.heldTitle, null, [<Text color="inactive">{shownStory.heldReason}</Text>])}
           {working === null && shownStory.step !== null && cardOf('story-progress', COPY.progress, null, [
             <Text>{shownStory.step}</Text>,
             shownStory.fraction === null ? null : <Text color="suggestion">{bar(shownStory.fraction)}</Text>,
@@ -1694,16 +2275,63 @@ export const register: Register = on => {
               <Button key="timeline-more" plain dimColor label={timelineOpen ? COPY.less : COPY.more(shownStory.timeline.length - TIMELINE_SHOWN)} onPress={() => toggle($, `timeline-${shownStory.story}`)} />
             ) : null,
           ])}
-          {/* THE SLOT S27 (#27) DRAWS THE STORY'S ACTIONS INTO, dashed; until it lands, 1.1.2's links stay in it. */}
-          <Box key="story-actions" flexDirection="row" gap={1} flexWrap="wrap" borderStyle={look.isGraphic ? 'dashed' : 'single'} borderColor="subtle" paddingX={1}>
+          {/* THE STORY'S ACTS (S27), by its state, where S32 left the dashed slot for them. Merge is only ever a link. */}
+          {shownStory.isBlocked && cardOf(`act-${storyKey}-blocked`, warned(COPY.blockedTitle, 'wait'), null, [
+            storyAct.open === 'story_abandon'
+              ? [
+                  <Box key="act-blocked-buttons" flexDirection="row" gap={1} flexWrap="wrap">
+                    {actButton(storyKey, 'story_unblock', screen.story, { isPrimary: true, isDim: true })}
+                    {actButton(storyKey, 'story_return', screen.story, { isDim: true })}
+                    {actButton(storyKey, 'story_abandon', screen.story, { isDanger: true, opens: true })}
+                  </Box>,
+                  actField(storyKey, 'story_abandon', screen.story, { label: COPY.whyOptional, isDanger: true }),
+                  <Text color="subtle" size="footnote">{COPY.abandonNote}</Text>,
+                ]
+              : [
+                  hasInput && 'Input' in elements ? (
+                    <elements.Input
+                      key={`act-${storyKey}-text`}
+                      label={COPY.blockedLabel}
+                      placeholder={COPY.returnPlaceholder}
+                      value={storyAct.text}
+                      rows={look.proofs.inputRows ? 3 : undefined}
+                      onInput={value => setAct($, storyKey, current => ({ ...current, text: value }))}
+                      onSubmit={() => takeAct($, storyKey, 'story_unblock', screen.story, storyAct.text)}
+                    />
+                  ) : null,
+                  storyAct.text.trim().length > (TEXT_LIMITS.story_return ?? 0)
+                    ? <Text key="act-blocked-long" color="error">{COPY.textTooLong(TEXT_LIMITS.story_return ?? 0, storyAct.text.trim().length)}</Text>
+                    : null,
+                  <Box key="act-blocked-buttons" flexDirection="row" gap={1} flexWrap="wrap">
+                    {actButton(storyKey, 'story_unblock', screen.story, { isPrimary: true, isDim: storyAct.text.trim().length > (TEXT_LIMITS.story_unblock ?? 0) })}
+                    {actButton(storyKey, 'story_return', screen.story, { isDim: storyAct.text.trim() === '' || storyAct.text.trim().length > (TEXT_LIMITS.story_return ?? 0) })}
+                    {actButton(storyKey, 'story_abandon', screen.story, { isDanger: true, opens: true })}
+                  </Box>,
+                ],
+            actBusyNote(storyKey),
+          ], 'wait')}
+          {actOutcome(storyKey, consoleLink(base, `work&story=${shownStory.story}`), COPY.storyInConsole)}
+          <Box key="story-actions" flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
+            {shownStory.isVerified && !shownStory.isList && <Link href={consoleLink(base, `merge&story=${shownStory.story}`)} label={COPY.mergeInConsole} />}
+            {shownStory.isVerified && shownStory.isList && actButton(storyKey, 'story_accept', screen.story, { isPrimary: true })}
+            {shownStory.isVerified && actButton(storyKey, 'story_return', screen.story, { opens: true })}
+            {shownStory.canStop && actButton(storyKey, 'story_stop', screen.story)}
+            {shownStory.canAbandon && actButton(storyKey, 'story_abandon', screen.story, { isDanger: true, opens: true })}
             <Button key="summarise" label={COPY.summariseInSession} onPress={() => postPrompt($, COPY.summarisePrompt(screen.story))} />
             {shownStory.goal !== null && <Button key="story-goal" label={COPY.goalOf(shownStory.goal)} dimColor onPress={() => go({ screen: 'goal', goal: shownStory.goal ?? 0 })} />}
-            {shownStory.isVerified && <Link href={consoleLink(base, `merge&story=${shownStory.story}`)} label={COPY.mergeInConsole} />}
-            {shownStory.isVerified && <Link href={consoleLink(base, `merge&story=${shownStory.story}`)} label={COPY.returnInConsole} />}
             {shownStory.pullRequest !== null && <Link href={shownStory.pullRequest.url} label={shownStory.pullRequest.label} />}
-            {shownStory.isRunning && <Link href={consoleLink(base, `work&story=${shownStory.story}`)} label={COPY.stopInConsole} />}
             <Link href={consoleLink(base, `work&story=${shownStory.story}`)} label={COPY.storyInConsole} />
           </Box>
+          {shownStory.isVerified && storyAct.open === 'story_return' && actField(storyKey, 'story_return', screen.story, { label: COPY.returnLabel, placeholder: COPY.returnPlaceholder })}
+          {shownStory.canAbandon && storyAct.open === 'story_abandon' && actField(storyKey, 'story_abandon', screen.story, { label: COPY.whyOptional, isDanger: true })}
+          {shownStory.canAbandon && storyAct.open === 'story_abandon' && <Text key="story-abandon-note" color="subtle" size="footnote">{COPY.abandonApprovedNote}</Text>}
+          {shownStory.isVerified && storyAct.open === 'story_return' && storyAct.text.trim() === '' && (
+            <Text key="act-return-needs" size="footnote"><Text color="warning">⚠</Text>{' '}<Text color="inactive">{COPY.returnNeedsNote}</Text></Text>
+          )}
+          {!shownStory.isBlocked && actBusyNote(storyKey)}
+          {shownStory.isVerified && !shownStory.isList && <Text key="story-merge-note" color="subtle" size="footnote">{COPY.mergeNote(shownStory.commit)}</Text>}
+          {shownStory.isVerified && shownStory.isList && <Text key="story-accept-note" color="subtle" size="footnote">{COPY.acceptNote}</Text>}
+          {shownStory.canStop && <Text key="story-stop-note" color="subtle" size="footnote">{COPY.stopNote}</Text>}
           <Text key="story-note" color="subtle" size="footnote">{COPY.summariseNote}</Text>
           {footer}
         </Box>
@@ -1786,7 +2414,7 @@ export const register: Register = on => {
               submitLabel={look.isGraphic ? '' : 'answer'}
               autoFocus
               onInput={value => update($, answer, (state: PaneAnswer | null): PaneAnswer | null => (state === null ? null : { ...state, text: value }))}
-              onSubmit={() => sendAnswer($)}
+              onSubmit={value => sendAnswer($, value)}
             />
           ) : null}
           {form.phase === 'form' ? (
@@ -1810,7 +2438,8 @@ export const register: Register = on => {
 
     // THE ADD FORM: one task for the leader; the plan it becomes is approved in the console.
     if (screen.screen === 'add' && !isStale && hasInput) {
-      const form = await read($, add)
+      const form = await readAdd($)
+      const isRepositoryGoal = form.repositoryGoals.includes(form.goal)
 
       if (form.phase === 'sending') {
         return (
@@ -1827,7 +2456,11 @@ export const register: Register = on => {
           <Box flexDirection="column" gap={1}>
             <Text weight="semibold" color="success">{COPY.added}</Text>
             <Text>{form.sentence ?? ''}</Text>
-            {form.link !== null && <Link href={form.link} label={COPY.approveInConsole} />}
+            {/* WHAT WAS HANDED OVER, word for word (#35): the story the leader writes from it is the leader's. */}
+            {form.sent !== null && form.sent !== undefined && <Text key="add-sent-title" color="inactive">{COPY.handedTitle(form.sent.title)}</Text>}
+            {form.sent !== null && form.sent !== undefined && <Text key="add-sent-criteria" color="inactive">{COPY.handedCriteria(form.sent.criteria)}</Text>}
+            {form.sent !== null && form.sent !== undefined && (form.sent.files ?? []).length > 0 && <Text key="add-sent-files" color="inactive">{COPY.handedFiles(form.sent.files)}</Text>}
+            {form.link !== null && <Link href={form.link} label={COPY.planInConsole} />}
             <Text color="subtle" size="footnote">{COPY.addedNote}</Text>
             <Button key="add-next" label={COPY.nextTask} variant="primary" onPress={() => openAdd($, '')} />
             {backButton}
@@ -1849,7 +2482,7 @@ export const register: Register = on => {
       // THREE PICKERS (S32) over tasks_add's own fields: the goal, the story it runs after, the size.
       const pickers = [
         'Select' in elements && form.goals.length > 0 ? (
-          <elements.Select key="add-goal" label={COPY.goal} value={form.goal} options={form.goals} onSelect={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, goal: value }))} />
+          <elements.Select key="add-goal" label={COPY.goal} value={form.goal} options={form.goals} onSelect={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, goal: value, problem: null }))} />
         ) : null,
         'Select' in elements ? (
           <elements.Select key="add-after" label={COPY.afterLabel} value={form.after} options={form.stories} onSelect={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, after: value }))} />
@@ -1867,7 +2500,9 @@ export const register: Register = on => {
           </Box>
           <Text size="heading" weight="semibold">{COPY.newTask}</Text>
           {'Input' in elements && (
-            <elements.Input key="add-title" label={COPY.whatToDo} value={form.title} onInput={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, title: value }))} onSubmit={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, title: value }))} />
+            // "WHAT TO DO" IN THREE ROWS where Desktop has proven a multi-line field (the owner's walk of 1.5.0, #35: one line
+            // showed only a slice of a long task); its lines are sent as one.
+            <elements.Input key="add-title" label={COPY.whatToDo} value={form.title} rows={look.proofs.inputRows ? 3 : undefined} onInput={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, title: value }))} onSubmit={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, title: value }))} />
           )}
           {'Input' in elements && (
             // CRITERIA ONE PER LINE where Desktop has proven a multi-line field (input-rows), by semicolons otherwise.
@@ -1881,6 +2516,20 @@ export const register: Register = on => {
               onSubmit={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, criteria: value }))}
             />
           )}
+          {'Input' in elements && isRepositoryGoal && (
+            // THE FILES, ONLY FOR A GOAL OVER A REPOSITORY (#39): one path per line where Desktop has proven a multi-line
+            // field, by semicolons otherwise; a goal in Terylon's own list has no files to declare.
+            <elements.Input
+              key="add-files"
+              label={COPY.filesLabel}
+              placeholder={look.proofs.inputRows ? COPY.filesPlaceholderRows : COPY.filesPlaceholder}
+              value={form.files}
+              rows={look.proofs.inputRows ? 3 : undefined}
+              onInput={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, files: value, problem: null }))}
+              onSubmit={value => update($, add, (state: PaneAdd): PaneAdd => ({ ...state, files: value, problem: null }))}
+            />
+          )}
+          {isRepositoryGoal && form.problem !== null && <Text key="add-files-problem" color="error">{form.problem}</Text>}
           {form.goals.length === 0 && <Text color="warning">{COPY.noGoal}</Text>}
           {look.isGraphic && !look.isNarrow
             ? (
@@ -1959,7 +2608,6 @@ export const register: Register = on => {
             {(state.phase === 'proposed' || state.phase === 'refused') && (
               <Box flexDirection="column">
                 <Text color={state.phase === 'refused' ? 'error' : 'success'}>{state.sentence ?? ''}</Text>
-                <Link href={memoryLink} label={COPY.memoryConfirmInConsole} />
                 <Button key="mem-back" label={COPY.memoryBack} dimColor onPress={() => openMemory($)} />
               </Box>
             )}
@@ -2013,9 +2661,45 @@ export const register: Register = on => {
                 form(file.file),
               ],
             ))}
-          {cardOf('mem-pending', COPY.memoryPendingHeading, null, state.pending > 0
-            ? [<Text><Text color="text" tabular>{COPY.memoryPending(state.pending)}</Text><Text color="inactive">{COPY.memoryPendingWhere}</Text></Text>, <Link href={memoryLink} label={COPY.memoryConfirmInConsole} />]
-            : [quiet(elements, COPY.nothingYet)], state.pending > 0 ? 'wait' : 'plain')}
+          {/* THE PROPOSALS WAITING (S27): what each changes, old text struck and new, with Confirm and Drop. */}
+          {state.proposals.length === 0
+            ? cardOf('mem-pending', COPY.memoryPendingHeading, null, [quiet(elements, COPY.nothingYet)])
+            : cardOf('mem-proposals', headingOf(COPY.proposalsHeading, state.proposals.length, 'text'), COPY.proposalsHint, state.proposals.map(proposal => {
+                const proposalKey = `proposal-${proposal.id}`
+
+                return (
+                  <Box key={`mem-proposal-${proposal.id}`} flexDirection="column" gap={look.isGraphic ? 'xs' : 0}>
+                    <Text size="footnote" color="subtle" wrap="truncate-end">
+                      <Text color="inactive">{proposal.file === 'owner' ? COPY.memoryOwnerFile : proposal.file.replace(/^(topic|project):/, '')}</Text>
+                      {' · '}
+                      <Text>{COPY.proposedBy(proposal.by, proposal.story, null)}</Text>
+                      {proposal.at === null ? null : ' · '}
+                      {proposal.at === null ? null : <Text tabular>{proposal.at}</Text>}
+                    </Text>
+                    {/* NO DIFF FIELD (Terylon main aaf07e8): a replace is its old text struck, then its new; an add +text; a remove −oldText. */}
+                    {proposal.operations.flatMap((operation, index) => [
+                      operation.oldText !== null && operation.action !== 'add'
+                        ? <Text key={`mem-proposal-${proposal.id}-old-${index}`} strikethrough color="error">{operation.action === 'remove' ? `− ${operation.oldText}` : operation.oldText}</Text>
+                        : null,
+                      operation.text !== null && operation.action !== 'remove'
+                        ? <Text key={`mem-proposal-${proposal.id}-new-${index}`} color="success">{operation.action === 'add' ? `+ ${operation.text}` : operation.text}</Text>
+                        : null,
+                    ])}
+                    {proposal.why !== null && <Text color="subtle" size="footnote">{COPY.proposalWhy(proposal.why)}</Text>}
+                    <Box flexDirection="row" gap={1}>
+                      {actButton(proposalKey, 'memory_confirm', proposal.id, { isPrimary: true })}
+                      {actButton(proposalKey, 'memory_drop', proposal.id)}
+                    </Box>
+                    {actBusyNote(proposalKey)}
+                    {actOutcome(proposalKey, memoryLink, COPY.memoryBrowser)}
+                  </Box>
+                )
+              }), 'wait')}
+          {/* WHAT BECAME OF A PROPOSAL NO LONGER LISTED: confirmed or dropped, it left memory_get's list. */}
+          {Object.keys(allActs)
+            .filter(key => key.startsWith('proposal-') && !state.proposals.some(proposal => `proposal-${proposal.id}` === key))
+            .map(key => actOutcome(key, memoryLink, COPY.memoryBrowser))}
+          {state.proposals.length > 0 && <Link key="mem-browser" href={memoryLink} label={COPY.memoryBrowser} />}
           {cardOf('mem-proposed', COPY.memoryProposedHeading, null, state.proposed.length === 0
             ? [quiet(elements, COPY.nothingYet)]
             : state.proposed.slice().reverse().map((line, position) => <Text key={`mem-proposed-${position}`} color="inactive" wrap="truncate-end">{line}</Text>))}
@@ -2028,17 +2712,20 @@ export const register: Register = on => {
 
     // ONE PLAN: its chain, its stories in order, each opening the story; approval and rethinking are the console's.
     const planCard = (plan: (typeof goalsState.plans)[number]) => {
+      // ITS ORDER IS ITS STORIES' after (#35): an arrow only where a story waits for another, said by their titles.
       const chain = plan.stories.map(item => ({ index: item.index, after: item.after }))
-      const sizes = plan.stories.map(item => (item.estimate === null ? item.size : `${item.size} ~$${item.estimate}`)).join(' → ')
+      const orderAlt = COPY.planOrderAlt(plan.stories.map(item => ({ title: item.title, after: item.after.map(place => plan.stories[place - 1]?.title ?? `#${place}`) })))
 
-      return cardOf(`plan-${plan.id}`, <Text size="heading" weight="semibold">{COPY.plan(plan.id)}<Text color="subtle" weight="regular">{` · ${plan.goalTitle}`}</Text></Text>, plan.stateText, [
-        // A PLAN AS A CHAIN (S32): the order and the "after" of its stories as an Svg, as 1 → 2 → 3 on the terminal.
-        plan.stories.length === 0
+      const planKey = `plan-${plan.id}`
+      const card_ = cardOf(`plan-${plan.id}`, <Text size="heading" weight="semibold">{COPY.plan(plan.id)}<Text color="subtle" weight="regular">{` · ${plan.goalTitle}`}</Text></Text>, plan.stateText, [
+        // A PLAN AS A CHAIN (S32): the order and the "after" of its stories as an Svg, as 1 → 2 → 3 on the terminal. Only
+        // the order (#39): the sizes beside it, "S ~$3 → M ~$5", read as nodes of a second chain, and a plan of one story
+        // drew "○ M" above its row. A plan of one story has no order to draw; each size is said on its story's row.
+        plan.stories.length < 2
           ? null
           : (
               <Box key={`plan-${plan.id}-chain`} flexDirection="row" gap={1} alignItems="center">
-                {look.isGraphic ? picture(elements, planChain(chain)) : <Text color="subtle">{plan.stories.map(item => String(item.index)).join(' → ')}</Text>}
-                <Text color="subtle" size="footnote" tabular>{sizes}</Text>
+                {look.isGraphic ? picture(elements, planChain(chain, orderAlt)) : <Text color="subtle">{planOrder(chain)}</Text>}
               </Box>
             ),
         ...plan.stories.map(item =>
@@ -2051,12 +2738,24 @@ export const register: Register = on => {
           })),
         plan.comment === null ? null : <Text color="inactive">{plan.comment}</Text>,
         <Text color="inactive" size="footnote">{COPY.planNote}</Text>,
+        // THE PLAN'S ACTS (S27): Approve in one press, Rethink… with its comment; editing criteria stays the console's.
         <Box flexDirection="row" gap={1} flexWrap="wrap">
-          {plan.isProposed && <Link href={plan.console} label={COPY.approveInConsole} />}
-          {plan.isProposed && <Link href={plan.console} label={COPY.rethinkInConsole} />}
+          {plan.isProposed && actButton(planKey, 'plan_approve', plan.id, { isPrimary: true })}
+          {plan.isProposed && actButton(planKey, 'plan_rethink', plan.id, { opens: true })}
           <Button key={`plan-${plan.id}-goal`} label={COPY.goalOf(plan.goal)} dimColor onPress={() => go({ screen: 'goal', goal: plan.goal })} />
         </Box>,
+        plan.isProposed && actState(planKey).open === 'plan_rethink' ? actField(planKey, 'plan_rethink', plan.id, { label: COPY.rethinkLabel }) : null,
+        plan.isProposed && actState(planKey).open === 'plan_rethink' ? <Text color="subtle" size="footnote">{COPY.rethinkNote}</Text> : null,
+        actBusyNote(planKey),
+        plan.isProposed ? (
+          <Text key={`plan-${plan.id}-note`} color="subtle" size="footnote">{COPY.approveNote(plan.stories.length)}</Text>
+        ) : null,
+        plan.isProposed ? <Link key={`plan-${plan.id}-console`} href={plan.console} label={COPY.approveConsole} /> : null,
       ], plan.isProposed ? 'wait' : 'plain')
+
+      return [card_, actOutcome(planKey, plan.console, COPY.planInConsole, [
+        actState(planKey).outcome?.tool === 'plan_approve' ? <Button key={`act-${planKey}-queue`} label={COPY.openQueue} variant="primary" onPress={() => show($, QUEUE, true)} /> : null,
+      ])]
     }
 
     if (screen.screen === 'plan') {
@@ -2076,6 +2775,8 @@ export const register: Register = on => {
       const shownGoal = await read($, goal)
       const questions = current.questions.filter(item => item.subject === `goal/${screen.goal}`)
       const plans = goalsState.plans.filter(item => item.goal === screen.goal)
+      const goalKey = `goal-${screen.goal}`
+      const goalAct = actState(goalKey)
 
       if (shownGoal === null || shownGoal.goal !== screen.goal || shownGoal.phase === 'loading') {
         return (
@@ -2107,6 +2808,15 @@ export const register: Register = on => {
             rowOf({ key: `goal-question-${item.id}`, kind: COPY.kindQuestion, kindTone: 'warning', title: firstLine(item.text), onPress: () => go({ screen: 'question', question: item.id }) })), 'wait')}
           {plans.map(plan =>
             rowOf({ key: `goal-plan-${plan.id}`, kind: COPY.kindPlan, title: COPY.plan(plan.id), detail: plan.stateText, detailTone: plan.isProposed ? 'warning' : 'subtle', onPress: () => go({ screen: 'plan', plan: plan.id }) }))}
+          {/* THE GOAL'S ACT (S27): Drop goal… asks once more, saying what it withdraws and what keeps running. */}
+          {shownGoal.phase === 'ok' && shownGoal.isOpen && goalAct.open !== 'goal_drop' && (
+            <Box key="goal-actions" flexDirection="row" gap={1}>{actButton(goalKey, 'goal_drop', screen.goal, { isDanger: true, opens: true })}</Box>
+          )}
+          {shownGoal.phase === 'ok' && goalAct.open === 'goal_drop' && cardOf(`act-${goalKey}-confirm`, <Text>{COPY.dropGoalWarning(plans.filter(plan => plan.isProposed || plan.state === 'rethink').map(plan => plan.id), shownGoal.openStories ?? [])}</Text>, null, [
+            actField(goalKey, 'goal_drop', screen.goal, { label: '', isDanger: true, hasText: false }),
+          ], 'wait')}
+          {actBusyNote(goalKey)}
+          {actOutcome(goalKey, consoleLink(base, `goals&goal=${screen.goal}`), COPY.goalInConsole)}
           <Link key="goal-console" href={consoleLink(base, `goals&goal=${screen.goal}`)} label={COPY.goalInConsole} />
           {footer}
         </Box>
@@ -2116,6 +2826,8 @@ export const register: Register = on => {
     // THE GOALS TAB: open goals by priority, the plans, and a new goal with its priority and target.
     if (screen.screen === 'goals') {
       const isClosedShown = shown.includes('goals-closed')
+      // A CLOSED GOAL'S PLANS LEAVE THE TAB (the owner's walk of 1.5.0, #35): they stay on the goal's own screen.
+      const openPlans = goalsState.plans.filter(plan => !goalsState.closed.some(item => item.id === plan.goal))
       const goalPickers = [
         'Select' in elements ? (
           <elements.Select key="goal-priority" label={COPY.priority} value={goalsState.priority} options={COPY.priorities} onSelect={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, priority: value }))} />
@@ -2150,8 +2862,8 @@ export const register: Register = on => {
               <Button key="goals-closed" plain dimColor label={isClosedShown ? COPY.hideClosed : COPY.closedGoals(goalsState.closed.length)} onPress={() => toggle($, 'goals-closed')} />
             ) : null,
           ])}
-          {goalsState.phase === 'ok' && goalsState.plans.length === 0 && cardOf('plans-empty', COPY.plans, null, [quiet(elements, COPY.noPlans)])}
-          {goalsState.plans.map(plan => planCard(plan))}
+          {goalsState.phase === 'ok' && openPlans.length === 0 && cardOf('plans-empty', COPY.plans, null, [quiet(elements, COPY.noPlans)])}
+          {openPlans.map(plan => planCard(plan))}
           {goalsState.sentence !== null && goalsState.phase === 'ok' && reason(goalsState.sentence)}
           {hasInput && 'Input' in elements && cardOf('goal-new', COPY.newGoal, null, [
             <elements.Input key="goal-draft" placeholder={COPY.newGoalPlaceholder} value={goalsState.draft} onInput={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, draft: value }))} onSubmit={() => addGoal($)} />,
@@ -2253,9 +2965,8 @@ export const register: Register = on => {
                   </Box>
                 ),
           ])}
-          {/* THE SLOT S27 (#27) DRAWS THE LEADER'S PAUSE AND RESUME INTO, dashed; until then, 1.1.2's links. */}
-          <Box key="leader-actions" flexDirection="row" gap={1} flexWrap="wrap" borderStyle={look.isGraphic ? 'dashed' : 'single'} borderColor="subtle" paddingX={1}>
-            <Link href={consoleLink(base, 'work')} label={COPY.pauseInConsole} />
+          {/* WHERE S32 LEFT THE DASHED SLOT: the leader's Pause and Resume are on the queue and the Status tab (S27). */}
+          <Box key="leader-actions" flexDirection="row" gap={1} flexWrap="wrap">
             <Link href={consoleLink(base, 'bell')} label={COPY.bellInConsole} />
             <Link href={consoleLink(base, 'health')} label={COPY.health} />
           </Box>
@@ -2266,11 +2977,13 @@ export const register: Register = on => {
 
     // THE QUEUE: waiting for you, running, queued or held, done today. Each card stays, quiet when empty.
     const waitingKind = (kind: string) =>
-      kind === 'question' ? COPY.kindQuestion : kind === 'merge' ? COPY.kindMerge : kind === 'plan' ? COPY.kindPlan : COPY.kindBlocked
+      kind === 'question' ? COPY.kindQuestion : kind === 'merge' ? COPY.kindMerge : kind === 'accept' ? COPY.kindAccept : kind === 'plan' ? COPY.kindPlan : COPY.kindBlocked
     const waitingTone = (kind: string): Tone =>
-      kind === 'question' ? 'warning' : kind === 'merge' ? 'merged' : kind === 'blocked' ? 'error' : 'inactive'
-    const waitingReveal = (kind: string) =>
-      kind === 'question' ? COPY.answerInConsole : kind === 'merge' ? COPY.mergeInConsole : kind === 'plan' ? COPY.approveInConsole : COPY.unblockInConsole
+      kind === 'question' ? 'warning' : kind === 'merge' ? 'merged' : kind === 'accept' ? 'success' : kind === 'blocked' ? 'error' : 'inactive'
+    // THE CARD'S HINT says where each waiting decision is taken: a merge in the console, an acceptance on its card (#39).
+    const hasAccept = current.waiting.some(item => item.kind === 'accept')
+    const waitingHint = !hasAccept ? COPY.waitingHint : current.waiting.some(item => item.kind === 'merge') ? COPY.waitingHintBoth : COPY.waitingHintAccept
+    const waitingReveal = (kind: string) => (kind === 'question' ? COPY.answerInConsole : COPY.mergeInConsole)
     const slots = slotsGauge(current.slotsUsed, current.slots, false)
     const spend = budgetUsd === null ? null : spendBar(runningUsd, budgetUsd, 'small', COPY.gaugeSpendAlt(current.runningUsd, current.dayBudget ?? ''))
 
@@ -2298,18 +3011,26 @@ export const register: Register = on => {
         {tabs}
         {context}
         {problemCard}
+        {/* THE LEADER'S ACTS (S27): Pause… with an optional reason under the header, Resume on the paused card. */}
+        {current.connection === 'ok' && current.paused === null && actState('leader').open === 'leader_pause' && cardOf('act-leader-pause-card', COPY.actButton.leader_pause?.replace('…', '') ?? '', null, [
+          actField('leader', 'leader_pause', null, { label: COPY.whyOptional }),
+          <Text color="subtle" size="footnote">{COPY.pauseNote}</Text>,
+        ])}
         {current.paused !== null && cardOf('paused', <Text size="heading" weight="semibold" color="text">{current.paused}</Text>, null, [
-          <Link href={consoleLink(base, 'work')} label={COPY.resumeInConsole} />,
+          <Box flexDirection="row" gap={1}>{actButton('leader', 'leader_resume', null, { isPrimary: true })}</Box>,
         ], 'wait')}
-        {cardOf('waiting', headingOf(COPY.waiting, current.waiting.length, current.waiting.length > 0 ? 'text' : 'inactive', stale), look.isNarrow ? null : COPY.waitingHint, [
+        {actBusyNote('leader')}
+        {actOutcome('leader', consoleLink(base, 'work'), COPY.workInConsole)}
+        {cardOf('waiting', headingOf(COPY.waiting, current.waiting.length, current.waiting.length > 0 ? 'text' : 'inactive', stale), look.isNarrow ? null : waitingHint, [
           current.waiting.length === 0 ? quiet(elements, COPY.nothingWaiting) : null,
           ...current.waiting.map(item =>
             rowOf({
               key: item.key,
               kind: waitingKind(item.kind),
               kindTone: waitingTone(item.kind),
-              title: item.kind === 'merge' ? `${item.title} · ${item.detail}` : item.title,
-              reveal: { href: item.console, label: waitingReveal(item.kind) },
+              title: item.kind === 'merge' || item.kind === 'accept' ? `${item.title} · ${item.detail}` : item.title,
+              // ONLY MERGE LINKS OUT (S27): every other waiting row's act is on its subject's card.
+              reveal: item.kind === 'merge' || item.kind === 'question' ? { href: item.console, label: waitingReveal(item.kind) } : null,
               onPress: () => toggle($, item.key),
               body: shown.includes(item.key) ? (
                 <Box flexDirection="column" paddingLeft={look.isGraphic ? 0 : KIND_WIDTH + 1}>
@@ -2317,11 +3038,9 @@ export const register: Register = on => {
                   <Box flexDirection="row" gap={1} flexWrap="wrap">
                     {item.kind === 'question' && <Button key={`answer-${item.target}`} label={COPY.answer} variant="primary" onPress={() => go({ screen: 'question', question: item.target })} />}
                     {item.kind === 'question' && <Link href={item.console} label={COPY.answerInConsole} />}
-                    {(item.kind === 'merge' || item.kind === 'blocked') && <Button key={`open-story-${item.target}`} label={COPY.openStory} onPress={() => go({ screen: 'story', story: item.target })} />}
+                    {(item.kind === 'merge' || item.kind === 'accept' || item.kind === 'blocked') && <Button key={`open-story-${item.target}`} label={COPY.openStory} onPress={() => go({ screen: 'story', story: item.target })} />}
                     {item.kind === 'merge' && <Link href={item.console} label={COPY.mergeInConsole} />}
-                    {item.kind === 'blocked' && <Link href={item.console} label={COPY.unblockInConsole} />}
                     {item.kind === 'plan' && <Button key={`open-plan-${item.target}`} label={COPY.openPlan} onPress={() => go({ screen: 'plan', plan: item.target })} />}
-                    {item.kind === 'plan' && <Link href={item.console} label={COPY.approveInConsole} />}
                   </Box>
                 </Box>
               ) : null,
@@ -2341,7 +3060,7 @@ export const register: Register = on => {
               body: (
                 <Box flexDirection="column" paddingLeft={look.isGraphic ? 0 : 1}>
                   {look.isGraphic
-                    ? picture(elements, (look.isNarrow ? dots : segments)(item.phases, COPY.phaseShort, item.isStuck))
+                    ? picture(elements, (look.isNarrow ? dots : segments)(item.phases, shortLabels(item.phases), item.isStuck))
                     : phaseLine(elements, item.phases, item.isStuck, item.stageLine)}
                   {look.isGraphic && (item.stageLine ?? item.step) !== null && <Text color="inactive" size="footnote" wrap="truncate-end">{item.stageLine ?? item.step}</Text>}
                   {!look.isGraphic && item.stageLine === null && item.step !== null && <Text color="inactive" wrap="truncate-end">{item.step}</Text>}

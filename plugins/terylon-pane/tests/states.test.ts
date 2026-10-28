@@ -5,7 +5,7 @@ import { test, expect } from 'claude-code/testing'
 
 import { PANE_TOOLS } from '../hooks/terylon'
 
-import { GATES, PANE_PROPS, SESSION, exact, world } from './fixtures'
+import { ACTS, GATES, PANE_PROPS, SESSION, exact, world } from './fixtures'
 
 const MOUNT = { plugin: 'terylon-pane', surface: 'desktop', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -35,7 +35,7 @@ test('frame G: unreachable keeps the last state, says it is stale and why, and r
   await terylon.clock.advance(30000)
 
   const ui = await $.ui.mount(MOUNT)
-  expect((await ui.find({ type: 'Text', text: exact('TerylonLab does not answer') }))?.props.color).toBe('error')
+  expect((await ui.find({ type: 'Text', text: exact('Terylon does not answer') }))?.props.color).toBe('error')
   expect(await ui.find({ type: 'Text', text: /^since \d\d:\d\d · retrying every minute$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Showing the state of \d\d:\d\d\. Work on the homelab goes on\.$/ })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: /Reason: .*fetch failed: connect ETIMEDOUT/ }))?.props.color).toBe('subtle')
@@ -103,7 +103,7 @@ test('frame I: a call Claude Code did not allow is said as that, with the rules 
   const ui = await $.ui.mount(MOUNT)
   expect((await ui.find({ type: 'Text', text: exact("Claude Code refused the pane's call") }))?.props.color).toBe('error')
   expect(await ui.find({ type: 'Text', text: exact('permissions') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /TerylonLab does not answer/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Terylon does not answer/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /Reason: .*auto mode classifier gave no verdict/ })).toBeDefined()
 
   // THE ALLOW RULES AS CODE (S32): json, to select and copy by hand, the pane's whole list and no gate.
@@ -112,11 +112,12 @@ test('frame I: a call Claude Code did not allow is said as that, with the rules 
   expect(rules?.props.startLine).toBeUndefined()
   expect(String(rules?.text)).not.toContain('```')
 
-  for (const tool of ['briefing', 'work_in_flight', 'stories_list', 'events_since', 'story_get', 'policy_get', 'goals_list', 'goal_get', 'plans_list', 'notices_list', 'leader_status', 'metrics', 'memory_get', 'tasks_add', 'goal_add', 'question_answer', 'memory_propose']) {
+  for (const tool of ['briefing', 'work_in_flight', 'stories_list', 'events_since', 'story_get', 'policy_get', 'goals_list', 'goal_get', 'plans_list', 'notices_list', 'leader_status', 'metrics', 'memory_get', 'tasks_add', 'goal_add', 'question_answer', 'memory_propose', ...ACTS]) {
     expect(String(rules?.text)).toContain(`"mcp__plugin_terylon-os_terylon__${tool}"`)
   }
 
-  expect([...PANE_TOOLS]).toHaveLength(18)
+  // Eighteen reads and writes that decide nothing, and the thirteen owner acts (S27): thirty-one, and never merge.
+  expect([...PANE_TOOLS]).toHaveLength(31)
 
   for (const gate of GATES) {
     expect(String(rules?.text)).not.toContain(gate)
