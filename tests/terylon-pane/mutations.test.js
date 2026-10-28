@@ -507,8 +507,8 @@ const MUTATIONS = [
     {
         name: "a closed goal's plans stay on the Goals tab",
         file: "hooks/register.tsx",
-        find: "const openPlans = goalsState.plans.filter(plan => !goalsState.closed.some(item => item.id === plan.goal))",
-        replace: "const openPlans = goalsState.plans",
+        find: "      const openPlans = goalsState.plans.filter(plan => (goalsState.closedFrom === 'terylon'\n        ? goalsState.open.some(item => item.id === plan.goal)\n        : !goalsState.closed.some(item => item.id === plan.goal)))\n",
+        replace: "      const openPlans = goalsState.plans\n",
     },
     {
         name: "a plan is drawn as one chain again",
@@ -642,6 +642,12 @@ const MUTATIONS = [
         file: "hooks/register.tsx",
         find: "      return { ...read_, closed: items.closed, closedCount: items.closed.length, closedFrom: 'list', closedPhase: 'ok', closedSentence: null }\n",
         replace: "      return { ...read_, closed: [], closedCount: 0, closedFrom: 'list', closedPhase: 'ok', closedSentence: null }\n",
+    },
+    {
+        name: "after S44 a plan stays on the Goals tab under a goal that is not open",
+        file: "hooks/register.tsx",
+        find: "        ? goalsState.open.some(item => item.id === plan.goal)\n",
+        replace: "        ? true\n",
     },
 ];
 

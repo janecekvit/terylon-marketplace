@@ -5,7 +5,7 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { NARROW_PANE_PROPS, PANE_PROPS, SESSION, exact, refusal, world } from './fixtures'
+import { NARROW_PANE_PROPS, PANE_PROPS, PLANS, SESSION, exact, refusal, world } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 const MOUNT = { ...PANE, surface: 'desktop' } as const
@@ -206,4 +206,19 @@ test('THE CLOSED LIST, LOADING AND FAILED: a quiet line while it loads; Terylon\
   await ui.press({ key: 'goals-closed-retry' })
   expect(await ui.find({ key: 'goal-8' })).toBeDefined()
   expect(await ui.find({ key: 'goals-closed-retry' })).toBeUndefined()
+})
+
+test('AFTER S44: a plan stays on the Goals tab only under an open goal, the closed goals unread', async ($, on) => {
+  const terylon = world(on)
+  terylon.answers.goals_list = s44(2)
+  // Plan 41 is goal 3's, which is open; plan 144 is goal 8's, which S44 counts among the closed and does not list.
+  terylon.answers.plans_list = { plans: [...PLANS.plans, { id: 144, goal: 8, goalTitle: 'TEST: earlier output', state: 'approved', estimateUsd: 4, comment: null, stories: [] }] }
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount(MOUNT)
+  await ui.press({ key: 'tab-goals' })
+  expect(await ui.find({ key: 'plan-41' })).toBeDefined()
+  expect(await ui.find({ key: 'plan-144' })).toBeUndefined()
+  expect(closedReads(terylon.calls)).toEqual([])
 })
