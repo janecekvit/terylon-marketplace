@@ -229,3 +229,28 @@ test('A PENDING SIGNAL OF A STORY DELETED WITH ITS GOAL does not post: story_get
   expect(terylon.prompts).toEqual([])
   expect(terylon.toasts).toEqual([])
 })
+
+test('GOALDELETED, BEFORE S44: an open goal\'s plan leaves the Goals tab, though plans_list still names it', async ($, on) => {
+  const terylon = world(on)
+  let moved: Record<string, unknown>[] = []
+  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), moved.filter(event => Number(event.seq) > Number(args.since)), 18100)
+  // The full list, no closedCount: a plan stays on the tab unless its goal is among the closed ones.
+  terylon.answers.goals_list = { goals: [...OPEN_GOALS, { id: 12, title: 'Household budget', priority: 2, state: 'open', stories: {} }] }
+  terylon.answers.plans_list = { plans: [...PLANS.plans, { ...PLAN_144, id: 150, goal: 12, goalTitle: 'Household budget' }] }
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'tab-goals' })
+  expect(await ui.find({ key: 'plan-150' })).toBeDefined()
+
+  // Deleted while open; both lists lag and still name it.
+  moved = [goalDeleted(18101, 12)]
+  await terylon.clock.advance(30000)
+  await terylon.clock.settle()
+  await ui.press({ key: 'refresh' })
+
+  expect(await ui.find({ key: 'goal-12' })).toBeUndefined()
+  expect(await ui.find({ key: 'plan-150' })).toBeUndefined()
+  expect(await ui.find({ key: 'plan-41' })).toBeDefined()
+})
