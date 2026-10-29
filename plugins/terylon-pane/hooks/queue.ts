@@ -395,17 +395,18 @@ export function phasesOf(document: Json, stage: string | null): PanePhase[] {
     verify: verdict === null ? '—' : `${text(verdict.environment) ?? ''} · ${verdict.green === true ? '✓' : '✗'}`,
     merge: state === 'verified' ? COPY.waitsOnYou : '—',
   }
-  // THE LAST PHASE OF A LIST STORY is its acceptance, never a merge (#39).
+  // THE LAST PHASE OF A LIST STORY is its acceptance, never a merge, and it has no pull request, so no Pull request
+  // phase either: verdict, then accept. A repository story keeps both.
   const isList = isListStory(document)
 
   return [
     { label: COPY.phaseAdmitted, role: null, detail: '—', status: isOver || at >= 0 || ADMITTED_STATES.has(state) ? 'done' : 'next' },
-    ...STAGES.map((name, index): PanePhase => ({
+    ...STAGES.flatMap((name, index): PanePhase[] => (name === 'pr' && isList ? [] : [{
       label: name === 'merge' && isList ? COPY.acceptPhase : COPY.stageLabel(name),
       role: COPY.stageRole(name),
       detail: details[name],
       status: status(index),
-    })),
+    }])),
   ]
 }
 

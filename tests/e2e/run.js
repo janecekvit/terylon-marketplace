@@ -45,6 +45,7 @@ const { installStage } = require("./lib/install.js");
 const { authorStage, githubOnlyStage } = require("./lib/scenarios.js");
 const { DEFECTS, plantDefect } = require("./lib/defects.js");
 const { resolveRef } = require("./lib/ref.js");
+const { longPathGitEnvironment } = require("./lib/long-paths.js");
 
 const REPOSITORY_ROOT = path.join(__dirname, "..", "..");
 const ALL_STAGES = ["install", "author", "github-only"];
@@ -251,6 +252,10 @@ function summarise(result)
 function main()
 {
     const options = parseArguments(process.argv.slice(2));
+
+    // Every git this process and its children start, the clone `marketplace add` makes included, may write
+    // paths past Windows' MAX_PATH. Set before any child is spawned, so each inherits it.
+    Object.assign(process.env, longPathGitEnvironment(process.env));
 
     if (options === null)
     {

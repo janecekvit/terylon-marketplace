@@ -494,8 +494,8 @@ const MUTATIONS = [
     {
         name: "a closed goal's plans stay on the Goals tab",
         file: "hooks/register.tsx",
-        find: "      const openPlans = goalsState.plans.filter(plan => (goalsState.closedFrom === 'terylon'\n        ? goalsState.open.some(item => item.id === plan.goal)\n        : !goalsState.closed.some(item => item.id === plan.goal)))\n",
-        replace: "      const openPlans = goalsState.plans\n",
+        find: "      const openPlans = tabPlans.filter(plan => (goalsState.closedFrom === 'terylon'\n        ? goalsState.open.some(item => item.id === plan.goal)\n        : !goalsState.closed.some(item => item.id === plan.goal)))\n",
+        replace: "      const openPlans = tabPlans\n",
     },
     {
         name: "a plan is drawn as one chain again",
@@ -613,6 +613,24 @@ const MUTATIONS = [
         replace: "                {look.isGraphic ? picture(elements, planChain(chain, orderAlt)) : <Text color=\"subtle\">{planOrder(chain)}</Text>}\n                <Text color=\"subtle\" size=\"footnote\" tabular>{plan.stories.map(item => (item.estimate === null ? item.size : `${item.size} ~$${item.estimate}`)).join(' → ')}</Text>\n",
     },
     {
+        name: "unreachable before the first answer says the state of ? again",
+        file: "hooks/register.tsx",
+        find: "COPY.unreachableBody(current.fetchedAt === null ? null : clock(new Date(current.fetchedAt).toISOString(), offset))",
+        replace: "COPY.unreachableBody(at(current.fetchedAt))",
+    },
+    {
+        name: "a list story's phases name the pull request again",
+        file: "hooks/queue.ts",
+        find: "(name === 'pr' && isList ? [] : [{",
+        replace: "(false ? [] : [{",
+    },
+    {
+        name: "a withdrawn plan stays on the Goals tab",
+        file: "hooks/register.tsx",
+        find: "const tabPlans = goalsState.plans.filter(plan => plan.state !== 'withdrawn')",
+        replace: "const tabPlans = goalsState.plans",
+    },
+    {
         name: "the closed goals are read on every poll of the goals",
         file: "hooks/register.tsx",
         find: "  const goalsAnswer = await callTerylon($, 'goals_list')\n  const plansAnswer = await callTerylon($, 'plans_list')\n",
@@ -639,7 +657,7 @@ const MUTATIONS = [
     {
         name: "under Closed the open goals' plans are listed again",
         file: "hooks/register.tsx",
-        find: "      const shownPlans = isClosedShown ? goalsState.plans.filter(plan => goalsState.closed.some(item => item.id === plan.goal)) : openPlans\n",
+        find: "      const shownPlans = isClosedShown ? tabPlans.filter(plan => goalsState.closed.some(item => item.id === plan.goal)) : openPlans\n",
         replace: "      const shownPlans = openPlans\n",
     },
 ];

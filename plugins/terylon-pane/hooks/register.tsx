@@ -103,7 +103,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.8.2'
+export const MOD_VERSION = '1.8.3'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -665,7 +665,7 @@ async function readBell($: EngineInterface): Promise<PaneBell> {
 
 // The stepper's short labels: a list story's last phase is Accept, never Merge (#39).
 function shortLabels(phases: readonly { label: string }[]): readonly string[] {
-  return COPY.phaseShort.map((label, index) => (phases[index]?.label === COPY.acceptPhase ? COPY.acceptShort : label))
+  return phases.map(phase => COPY.phaseShort(phase.label))
 }
 
 async function readAdd($: EngineInterface): Promise<PaneAdd> {
@@ -1998,7 +1998,7 @@ export const register: Register = on => {
       ], 'bad')
     } else if (isStale) {
       problemCard = cardOf('problem', warned(COPY.unreachableTitle), COPY.unreachableWhen(at(current.failingSince)), [
-        <Text color="inactive">{COPY.unreachableBody(at(current.fetchedAt))}</Text>,
+        <Text color="inactive">{COPY.unreachableBody(current.fetchedAt === null ? null : clock(new Date(current.fetchedAt).toISOString(), offset))}</Text>,
         reason(current.problem),
         steps(COPY.fixUnreachable(base)),
         <Text color="subtle">{COPY.unreachableFix}</Text>,
@@ -2889,13 +2889,15 @@ export const register: Register = on => {
     // THE GOALS TAB: open goals by priority, the plans, and a new goal with its priority and target.
     if (screen.screen === 'goals') {
       const isClosedShown = goalsState.showing === 'closed'
+      // A WITHDRAWN PLAN (plans_list's `state: 'withdrawn'`) LEAVES THE TAB: it waits on nothing, and stays on its goal's screen.
+      const tabPlans = goalsState.plans.filter(plan => plan.state !== 'withdrawn')
       // A CLOSED GOAL'S PLANS LEAVE THE OPEN LIST: they stay on the goal's own screen. After
       // S44 the tab knows the open goals alone, so a plan stays only under one of them.
-      const openPlans = goalsState.plans.filter(plan => (goalsState.closedFrom === 'terylon'
+      const openPlans = tabPlans.filter(plan => (goalsState.closedFrom === 'terylon'
         ? goalsState.open.some(item => item.id === plan.goal)
         : !goalsState.closed.some(item => item.id === plan.goal)))
       // UNDER CLOSED, THE CLOSED GOALS' PLANS ALONE: each button draws its own goals' plans.
-      const shownPlans = isClosedShown ? goalsState.plans.filter(plan => goalsState.closed.some(item => item.id === plan.goal)) : openPlans
+      const shownPlans = isClosedShown ? tabPlans.filter(plan => goalsState.closed.some(item => item.id === plan.goal)) : openPlans
       // OPEN · N AND CLOSED · M: the one selected filled, the other dim, as the tabs are.
       const switchButton = (key: string, name: string, count: number, isSelected: boolean, showing: 'open' | 'closed') => (
         <Button key={key} label={`${name}${COPY.count(count)}`} variant={isSelected ? 'primary' : undefined} dimColor={isSelected ? undefined : true} onPress={() => showGoals($, showing)}>

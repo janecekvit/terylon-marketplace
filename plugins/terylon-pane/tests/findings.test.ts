@@ -456,3 +456,23 @@ test('TWO WAITING PLANS OF ONE GOAL are both drawn, each with its own acts, and 
   expect(await ui.find({ key: 'goal-plan-41' })).toBeDefined()
   expect(await ui.find({ key: 'goal-plan-42' })).toBeDefined()
 })
+
+// A WITHDRAWN PLAN waits on nothing: the Goals tab folds it away, and its goal's own screen keeps it.
+const WITHDRAWN_PLAN = { id: 653, goal: 3, goalTitle: 'Agentic OS', state: 'withdrawn', estimateUsd: 4, comment: 'every story of it was abandoned', stories: [] }
+
+test('A WITHDRAWN PLAN LEAVES THE GOALS TAB and stays on its goal\'s screen; a waiting plan of the same goal stays on both', async ($, on) => {
+  const terylon = world(on)
+  terylon.answers.plans_list = { plans: [...PLANS.plans, WITHDRAWN_PLAN] }
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount(MOUNT)
+  await ui.press({ key: 'tab-goals' })
+  expect(await ui.find({ key: 'plan-41' })).toBeDefined()
+  expect(await ui.find({ key: 'plan-653' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Plan 653/ })).toBeUndefined()
+
+  await ui.press({ key: 'goal-3' })
+  expect(await ui.find({ key: 'goal-plan-41' })).toBeDefined()
+  expect((await ui.find({ key: 'goal-plan-653' }))?.text).toMatch(/withdrawn/)
+})

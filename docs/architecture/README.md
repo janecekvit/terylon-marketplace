@@ -95,10 +95,10 @@ authenticated by gh auth login`"]:::external
     githubForgeOps -->|"gh subcommands"| gh
     gh --> githubCom
 
-    style callers fill:#4F46E51A,stroke:#4F46E5,color:#4F46E5,stroke-dasharray:3 3
-    style port fill:#B453091A,stroke:#B45309,color:#B45309,stroke-dasharray:3 3
-    style ado fill:#0478571A,stroke:#047857,color:#047857,stroke-dasharray:3 3
-    style github fill:#0478571A,stroke:#047857,color:#047857,stroke-dasharray:3 3
+    style callers fill:#4F46E51A,stroke:#4F46E5,color:#6C64E9,stroke-dasharray:3 3
+    style port fill:#B453091A,stroke:#B45309,color:#C0590A,stroke-dasharray:3 3
+    style ado fill:#0478571A,stroke:#047857,color:#058762,stroke-dasharray:3 3
+    style github fill:#0478571A,stroke:#047857,color:#058762,stroke-dasharray:3 3
     linkStyle default stroke:#8B949E
 ```
 
@@ -170,10 +170,10 @@ stories_list, events_since`"| server
     person -->|"confirms every merge"| console
 
     %% The session is the large area, so its fill is the fainter 14.
-    style session fill:#8B949E14,stroke:#8B949E,color:#8B949E,stroke-dasharray:3 3
-    style os fill:#7E22CE1A,stroke:#7E22CE,color:#7E22CE,stroke-dasharray:3 3
-    style pane fill:#7E22CE1A,stroke:#7E22CE,color:#7E22CE,stroke-dasharray:3 3
-    style terylon fill:#2563EB1A,stroke:#2563EB,color:#2563EB,stroke-dasharray:3 3
+    style session fill:#8B949E14,stroke:#8B949E,color:#717B87,stroke-dasharray:3 3
+    style os fill:#7E22CE1A,stroke:#7E22CE,color:#9C4CE2,stroke-dasharray:3 3
+    style pane fill:#7E22CE1A,stroke:#7E22CE,color:#9C4CE2,stroke-dasharray:3 3
+    style terylon fill:#2563EB1A,stroke:#2563EB,color:#3770ED,stroke-dasharray:3 3
     linkStyle default stroke:#8B949E
 ```
 

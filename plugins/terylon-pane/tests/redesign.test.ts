@@ -269,7 +269,7 @@ test('the Status tab says the machine in one word, large, in its colour, its tim
 
     expect(word?.props).toMatchObject({ size: 'title', weight: 'semibold', color: 'success' })
     expect((await ui.find({ type: 'Text', text: /^\s*last answer at / }))?.props.tabular).toBe(true)
-    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.8.2') }))?.props.mono).toBe(true)
+    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.8.3') }))?.props.mono).toBe(true)
     await ui.unmount()
   }
 })
