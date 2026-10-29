@@ -494,8 +494,8 @@ const MUTATIONS = [
     {
         name: "a closed goal's plans stay on the Goals tab",
         file: "hooks/register.tsx",
-        find: "const openPlans = goalsState.plans.filter(plan => !goalsState.closed.some(item => item.id === plan.goal))",
-        replace: "const openPlans = goalsState.plans",
+        find: "      const openPlans = tabPlans.filter(plan => (goalsState.closedFrom === 'terylon'\n        ? goalsState.open.some(item => item.id === plan.goal)\n        : !goalsState.closed.some(item => item.id === plan.goal)))\n",
+        replace: "      const openPlans = tabPlans\n",
     },
     {
         name: "a plan is drawn as one chain again",
@@ -671,6 +671,54 @@ const MUTATIONS = [
         file: "hooks/register.tsx",
         find: "    $.clock.every(WATCH_MILLISECONDS, () => watchEvents($))\n",
         replace: "",
+    },
+    {
+        name: "unreachable before the first answer says the state of ? again",
+        file: "hooks/register.tsx",
+        find: "COPY.unreachableBody(current.fetchedAt === null ? null : clock(new Date(current.fetchedAt).toISOString(), offset))",
+        replace: "COPY.unreachableBody(at(current.fetchedAt))",
+    },
+    {
+        name: "a list story's phases name the pull request again",
+        file: "hooks/queue.ts",
+        find: "(name === 'pr' && isList ? [] : [{",
+        replace: "(false ? [] : [{",
+    },
+    {
+        name: "a withdrawn plan stays on the Goals tab",
+        file: "hooks/register.tsx",
+        find: "const tabPlans = goalsState.plans.filter(plan => plan.state !== 'withdrawn')",
+        replace: "const tabPlans = goalsState.plans",
+    },
+    {
+        name: "the closed goals are read on every poll of the goals",
+        file: "hooks/register.tsx",
+        find: "  const goalsAnswer = await callTerylon($, 'goals_list')\n  const plansAnswer = await callTerylon($, 'plans_list')\n",
+        replace: "  const goalsAnswer = await callTerylon($, 'goals_list')\n  await callTerylon($, 'goals_list', { closed: true })\n  const plansAnswer = await callTerylon($, 'plans_list')\n",
+    },
+    {
+        name: "closedCount is ignored",
+        file: "hooks/register.tsx",
+        find: "  const closedCount = number(goalsAnswer.value.closedCount)\n",
+        replace: "  const closedCount = null as number | null\n",
+    },
+    {
+        name: "the fallback before S44 is removed",
+        file: "hooks/register.tsx",
+        find: "      return { ...read_, closed: items.closed, closedCount: items.closed.length, closedFrom: 'list', closedPhase: 'ok', closedSentence: null }\n",
+        replace: "      return { ...read_, closed: [], closedCount: 0, closedFrom: 'list', closedPhase: 'ok', closedSentence: null }\n",
+    },
+    {
+        name: "after S44 a plan stays on the Goals tab under a goal that is not open",
+        file: "hooks/register.tsx",
+        find: "        ? goalsState.open.some(item => item.id === plan.goal)\n",
+        replace: "        ? true\n",
+    },
+    {
+        name: "under Closed the open goals' plans are listed again",
+        file: "hooks/register.tsx",
+        find: "      const shownPlans = isClosedShown ? tabPlans.filter(plan => goalsState.closed.some(item => item.id === plan.goal)) : openPlans\n",
+        replace: "      const shownPlans = openPlans\n",
     },
 ];
 

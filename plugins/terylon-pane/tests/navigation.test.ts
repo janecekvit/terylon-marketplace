@@ -235,7 +235,7 @@ test('the goals tab: open goals by priority with their questions, the closed one
   await ui.press({ key: 'tab-goals' })
 
   expect((await ui.find({ key: 'tab-goals' }))?.props.variant).toBe('primary')
-  expect(await ui.find({ type: 'Text', text: exact('Open goals · 2') })).toBeDefined()
+  expect((await ui.find({ key: 'goals-show-open' }))?.props.label).toBe('Open · 2')
   expect((await ui.find({ key: 'goal-3' }))?.text).toMatch(/^\s*(?:●\s+)?P1\s+P1 · Agentic OS\s+2 running, 2 approved$/)
   // THE PRIORITY AS A CHIP (S32): P1 in warning, the others inactive.
   expect((await chipOf(ui, 'goal-3'))?.dot).toBe('warning')
@@ -243,8 +243,9 @@ test('the goals tab: open goals by priority with their questions, the closed one
   expect((await ui.find({ type: 'Text', text: exact('1 question') }))?.props.color).toBe('warning')
   expect(await ui.find({ key: 'goal-1' })).toBeUndefined()
 
-  await ui.press({ key: 'goals-closed' })
+  await ui.press({ key: 'goals-show-closed' })
   expect((await ui.find({ key: 'goal-1' }))?.text).toContain('Old')
+  await ui.press({ key: 'goals-show-open' })
 
   expect(await ui.find({ type: 'Text', text: exact('Plan 41 · Agentic OS') })).toBeDefined()
   // GOALS ARE GENERAL (Terylon #369, S31): the New goal note steers a concrete ask to a task, and adding one is never refused.

@@ -166,7 +166,11 @@ export const COPY = {
   retry: 'Try again',
   unreachableTitle: 'Terylon does not answer',
   unreachableWhen: (since: string) => `since ${since} · retrying every minute`,
-  unreachableBody: (time: string) => `Showing the state of ${time}. Work on the homelab goes on.`,
+  // No answer yet (the pane started while Terylon was down) leaves no state to show, and says so.
+  unreachableBody: (time: string | null) =>
+    time === null
+      ? 'Nothing to show yet: Terylon has not answered since the pane started. Work on the homelab goes on.'
+      : `Showing the state of ${time}. Work on the homelab goes on.`,
   unreachableFix: 'Check tailscale status and TERYLON_URL; every failure is also in claude --debug under terylon-pane:',
   notAllowedTitle: "Claude Code refused the pane's call",
   notAllowedHint: 'permissions',
@@ -243,8 +247,9 @@ export const COPY = {
   phases: 'Phases',
   phasesHint: (done: number, all: number) => `${done} of ${all}`,
   phaseAdmitted: 'Admitted to a slot',
-  // The stepper's labels under its nodes (S32), short enough for eight columns: Admitted, then the seven stages.
-  phaseShort: ['Admitted', 'Plan', 'Develop', 'Review', 'Tests', 'Pull req.', 'Verified', 'Merge'] as readonly string[],
+  // The stepper's labels under its nodes (S32), short enough for eight columns: Admitted, then the seven stages, by
+  // the phase's own label, since a list story draws no Pull request phase.
+  phaseShort: (label: string) => PHASE_SHORT[label] ?? label,
   phaseTooltip: (label: string, role: string | null, status: string, step: string | null) =>
     [label, role, status === 'now' ? 'now' : status === 'done' ? 'done' : 'to come', step].filter(part => part !== null).join(' · '),
   storyCaption: (goal: number | null) => (goal === null ? 'STORY' : `STORY · GOAL ${goal}`),
@@ -296,11 +301,16 @@ export const COPY = {
   answerNote: 'An answer approves nothing, it completes the brief; a plan or a story is decided on its own card, and a merge in the console.',
 
   // Goals and plans.
-  openGoals: 'Open goals',
+  // The Goals tab's two buttons, like Claude Desktop's Active and Archived sessions.
+  goalsOpen: 'Open',
+  goalsClosed: 'Closed',
   goalsHint: 'priority',
   goalQuestions: (count: number) => (count === 1 ? '1 question' : `${count} questions`),
-  closedGoals: (count: number) => `${count} closed ▾`,
-  hideClosed: 'hide closed ▴',
+  noOpenGoals: 'No open goals.',
+  noClosedGoals: 'No closed goals.',
+  closedLoading: 'Loading the closed goals…',
+  closedChanged: 'The closed goals changed since they were read.',
+  closedReadAgain: 'Read them again',
   plan: (plan: number) => `Plan ${plan}`,
   planStoryDetail: (size: string, estimate: string | null, after: string | null) =>
     [size, estimate === null ? null : `~$${estimate}`, after === null ? null : `after ${after}`].filter(part => part !== null).join(' · '),
@@ -584,6 +594,18 @@ const STAGE_LABEL: Record<string, string> = {
   pr: 'Pull request',
   verify: 'Verified in its PR environment',
   merge: 'Merge — your gate',
+}
+
+const PHASE_SHORT: Record<string, string> = {
+  [COPY.phaseAdmitted]: 'Admitted',
+  [STAGE_LABEL.plan ?? '']: 'Plan',
+  [STAGE_LABEL.develop ?? '']: 'Develop',
+  [STAGE_LABEL.review ?? '']: 'Review',
+  [STAGE_LABEL.test ?? '']: 'Tests',
+  [STAGE_LABEL.pr ?? '']: 'Pull req.',
+  [STAGE_LABEL.verify ?? '']: 'Verified',
+  [STAGE_LABEL.merge ?? '']: 'Merge',
+  [COPY.acceptPhase]: COPY.acceptShort,
 }
 
 const STAGE_ROLE: Record<string, string> = {
