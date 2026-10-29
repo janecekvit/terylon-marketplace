@@ -229,21 +229,32 @@ for (const stored of ['', '   ', 42, null]) {
   })
 }
 
-test('NO BLANK EPOCH IS WRITTEN: from a server that names none, the store keeps no epoch at all', async ($, on) => {
-  // The store answered by the test, so that every write is seen.
-  const kept = new Map<string, unknown>([['lastSeq', 18100], ['lastSeenAt', Date.parse('2026-10-11T21:59:00Z')]])
-  const written: { key: string; value: unknown }[] = []
-  on('store.get', async ($_, e) => ({ value: kept.get(e.key) }) as never)
-  on('store.set', async ($_, e) => {
-    kept.set(e.key, e.value)
-    written.push({ key: e.key, value: e.value })
-    return { value: undefined } as never
-  })
-  const terylon = world(on, { store: null })
-  await $.session.start(SESSION)
-  await terylon.clock.settle()
-  await terylon.clock.advance(30000)
+for (const stored of [undefined, '']) {
+  test(`NO BLANK EPOCH IS WRITTEN${stored === '' ? ', and one an earlier version wrote is deleted' : ''}: unknown is an absent key`, async ($, on) => {
+    // The store answered by the test, so that every write and delete is seen.
+    const kept = new Map<string, unknown>([['lastSeq', 18100], ['lastSeenAt', Date.parse('2026-10-11T21:59:00Z')]])
+    if (stored !== undefined) {
+      kept.set('epoch', stored)
+    }
+    const written: { key: string; value: unknown }[] = []
+    on('store.get', async ($_, e) => ({ value: kept.get(e.key) }) as never)
+    on('store.set', async ($_, e) => {
+      kept.set(e.key, e.value)
+      written.push({ key: e.key, value: e.value })
+      return { value: undefined } as never
+    })
+    on('store.delete', async ($_, e) => {
+      kept.delete(e.key)
+      return { value: undefined } as never
+    })
+    const terylon = world(on, { store: null })
+    await $.session.start(SESSION)
+    await terylon.clock.settle()
+    await terylon.clock.advance(30000)
 
-  expect(written.some(entry => entry.key === 'lastSeq')).toBe(true)
-  expect(written.filter(entry => entry.key === 'epoch')).toEqual([])
-})
+    expect(written.some(entry => entry.key === 'lastSeq')).toBe(true)
+    expect(written.filter(entry => entry.key === 'epoch')).toEqual([])
+    expect(kept.has('epoch')).toBe(false)
+    expect(resetLines(terylon)).toEqual([])
+  })
+}

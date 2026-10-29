@@ -112,7 +112,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.11.4'
+export const MOD_VERSION = '1.11.5'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -671,6 +671,18 @@ async function keepEpoch($: EngineInterface, epoch: string | null): Promise<void
   }
 }
 
+// A BLANK EPOCH AN EARLIER VERSION WROTE is taken out of the store, so an unknown epoch is an absent key.
+async function forgetEpoch($: EngineInterface): Promise<void> {
+  keptInMemory.delete(STORE_EPOCH)
+
+  const answered = await storeCall($, () => $.store.delete(STORE_EPOCH))
+
+  if ('error' in answered) {
+    storeRefusals += 1
+    await eventsFailed($, 'store', COPY.storeWriteFailed(STORE_EPOCH, answered.error))
+  }
+}
+
 async function signalled($: EngineInterface): Promise<string[]> {
   const value = await kept($, STORE_SIGNALLED)
 
@@ -893,7 +905,12 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
   storeRefusals = 0
 
   const lastSeq = number(await kept($, STORE_LAST_SEQ))
-  const epoch = text(await kept($, STORE_EPOCH))
+  const storedEpoch = await kept($, STORE_EPOCH)
+  const epoch = text(storedEpoch)
+
+  if (storedEpoch !== undefined && storedEpoch !== null && epoch === null) {
+    await forgetEpoch($)
+  }
   const lastSeenAt = number(await kept($, STORE_LAST_SEEN_AT))
   debug($, `the last look: sequence ${lastSeq ?? 'none'}, at ${lastSeenAt ?? 'never'}`)
 

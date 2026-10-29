@@ -993,6 +993,12 @@ const MUTATIONS = [
         find: "  const epoch = text(await kept($, STORE_EPOCH))\n",
         replace: "  const epoch = String(await kept($, STORE_EPOCH) ?? '')\n",
     },
+    {
+        name: "a blank epoch an earlier version wrote is left in the store",
+        file: "hooks/register.tsx",
+        find: "    await forgetEpoch($)\n",
+        replace: "",
+    },
 ];
 
 module.exports = { MUTATIONS };
