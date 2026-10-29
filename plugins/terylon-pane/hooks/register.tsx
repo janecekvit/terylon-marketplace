@@ -81,6 +81,7 @@ import {
   spend,
   storyView,
   text,
+  verifiedIds,
   waitingItems,
 } from './queue'
 import {
@@ -103,7 +104,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.9.3'
+export const MOD_VERSION = '1.9.4'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -473,7 +474,7 @@ async function refresh($: EngineInterface): Promise<boolean> {
 
   const base = await baseUrl($)
   const offset = zoneOffset(now)
-  const running = runningItems(lastFlight, offset)
+  const running = runningItems(lastFlight, offset, verifiedIds(lastBriefing))
   const inFlight = new Set(running.map(item => item.story))
   const paused = pausedOf((lastBriefing.leader ?? null) as Json | null, lastFlight.paused === true, offset)
   const slots = number(lastFlight.slots) ?? number(policy?.slots) ?? 0
@@ -996,7 +997,7 @@ async function readFlight($: EngineInterface, now: number): Promise<void> {
 
   lastFlight = flight.value
 
-  const running = runningItems(lastFlight, zoneOffset(now))
+  const running = runningItems(lastFlight, zoneOffset(now), verifiedIds(lastBriefing))
 
   await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({
     ...EMPTY_SNAPSHOT,

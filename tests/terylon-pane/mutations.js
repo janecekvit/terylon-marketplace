@@ -744,6 +744,24 @@ const MUTATIONS = [
         find: "<Button key=\"events-retry\"",
         replace: "<Button key=\"retry\"",
     },
+    {
+        name: "an accepted list story's card says merged again",
+        file: "hooks/queue.ts",
+        find: "COPY.stateText(state === 'merged' && isAcceptedStory(",
+        replace: "COPY.stateText(false && isAcceptedStory(",
+    },
+    {
+        name: "a verified or ended story in work_in_flight is drawn under Running again",
+        file: "hooks/queue.ts",
+        find: "!NOT_RUNNING_STATES.has(String(story.state ?? '')) && ",
+        replace: "",
+    },
+    {
+        name: "a story the briefing lists as verified is drawn under Running again",
+        file: "hooks/queue.ts",
+        find: " && !waiting.has(number(story.id) ?? -1)",
+        replace: "",
+    },
 ];
 
 module.exports = { MUTATIONS };

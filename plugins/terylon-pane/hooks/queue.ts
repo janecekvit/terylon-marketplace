@@ -264,8 +264,17 @@ function stageLineOf(stage: string | null, step: number | null, steps: number | 
     .join(' · ')
 }
 
-export function runningItems(flight: Json, zoneOffsetMinutes = 0): PaneRunningItem[] {
-  return list(flight.stories).map(story => {
+// A STORY THE OWNER DECIDES ON, OR ONE THAT ENDED, IS NOT RUNNING, whatever progress work_in_flight still carries for it:
+// it is drawn under Waiting for you or Done today, never under Running beside it.
+const NOT_RUNNING_STATES: ReadonlySet<string> = new Set(['verified', 'merged', 'accepted', 'abandoned'])
+
+// The stories the briefing lists as verified and waiting for the owner, by id.
+export function verifiedIds(briefing: Json): ReadonlySet<number> {
+  return new Set(list(briefing.storiesVerified).map(story => number(story.id)).filter((id): id is number => id !== null))
+}
+
+export function runningItems(flight: Json, zoneOffsetMinutes = 0, waiting: ReadonlySet<number> = new Set()): PaneRunningItem[] {
+  return list(flight.stories).filter(story => !NOT_RUNNING_STATES.has(String(story.state ?? '')) && !waiting.has(number(story.id) ?? -1)).map(story => {
     const progress = (story.progress ?? null) as Json | null
     const step = number(progress?.step)
     const steps = number(progress?.steps)
@@ -556,7 +565,8 @@ export function storyView(id: number, document: Json, inFlight: Json, question: 
     branch: text(pullRequest?.branch),
     model: model === '' ? null : model,
     state,
-    stateText: COPY.stateText(state),
+    // A LIST STORY ENDS ACCEPTED: Terylon says merged for it too, and the card says what Done today says.
+    stateText: COPY.stateText(state === 'merged' && isAcceptedStory({ ...document, state, target: document.target ?? inFlight.target }) ? 'accepted' : state),
     stateTone: tone,
     step: step !== null && steps !== null ? COPY.step(step, steps, text(progress?.current)) : isRunning ? COPY.noStep : null,
     working: workingOf(progress, state, { usd: number(inFlight.costUsd ?? document.costUsd) ?? 0, budget }, hours),

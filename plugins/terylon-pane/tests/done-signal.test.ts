@@ -7,7 +7,7 @@
 import { test, expect } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { BRIEFING, HOUR, PANE_PROPS, SESSION, STORY_327, events, exact, lateOnTheLocalDayOf, storyMoved, world } from './fixtures'
+import { BRIEFING, FLIGHT, HOUR, PANE_PROPS, SESSION, STORY_327, events, exact, lateOnTheLocalDayOf, storyMoved, world } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 const SURFACES = ['desktop', 'terminal'] as const
@@ -340,7 +340,7 @@ test('A PART OF THE STATUS TAB THAT THROWS is one problem with its reason and st
     expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Slots') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Policy') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.3') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.4') })).toBeDefined()
     await ui.unmount()
   }
   expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith("terylon-pane: the Status tab's alerts did not draw: "))).toBe(true)
@@ -362,4 +362,61 @@ test('THE CONNECTION\'S PROBLEM AND THE DONE-SIGNAL\'S, together: each card keep
   expect(keys.filter(key => key === 'retry')).toHaveLength(1)
   expect(keys.filter(key => key === 'events-retry')).toHaveLength(1)
   expect(new Set(keys).size).toBe(keys.length)
+})
+
+test('AN ACCEPTED LIST STORY, which Terylon calls merged, reads accepted on its chip and its phases; a repository story stays merged', async ($, on) => {
+  const terylon = world(on, { now: lateOnTheLocalDayOf('2026-10-11T12:20:00Z') })
+  terylon.answers.stories_list = {
+    stories: [
+      { id: 105, title: 'TEST S32.1: reply SIGMA', state: 'merged', target: 'list', updatedAt: '2026-10-11T12:10:00Z' },
+      { id: 341, title: 'S10a cleanup', state: 'merged', costUsd: 5.6, updatedAt: '2026-10-11T12:20:00Z' },
+    ],
+  }
+  terylon.answers.story_get = (args: Record<string, unknown>) => (args.story === 105
+    ? { id: 105, goal: 29, title: 'TEST S32.1: reply SIGMA', state: 'merged', target: 'list', attempt: 1, pullRequest: null, progress: null, timeline: [] }
+    : { id: 341, goal: 3, title: 'S10a cleanup', state: 'merged', target: 'github:contoso/agentic-os', attempt: 1, pullRequest: { id: 190, url: 'https://dev.example/pr/190', branch: 'feat/cleanup' }, progress: null, timeline: [] })
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'done-105' })
+  expect(await ui.find({ type: 'Text', text: /^\W*accepted\W*$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^\W*merged\W*$/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^\d of \d · accepted$/ })).toBeDefined()
+
+  await ui.press({ key: 'back' })
+  await ui.press({ key: 'done-341' })
+  expect(await ui.find({ type: 'Text', text: /^\W*merged\W*$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^\d of \d · merged$/ })).toBeDefined()
+})
+
+test('A VERIFIED STORY THAT WORK_IN_FLIGHT STILL LISTS is not drawn under Running beside its Waiting row', async ($, on) => {
+  const terylon = world(on)
+  withListStory(terylon)
+  // AS TERYLON ANSWERED IT once the run had ended: the verified story still listed, its progress the plan's.
+  terylon.answers.work_in_flight = {
+    ...FLIGHT,
+    stories: [
+      ...FLIGHT.stories,
+      { id: 352, title: 'Weekly cost summary', state: 'verified', attempt: 1, progress: { stage: 'plan', step: null, steps: null, current: null, agent: { name: 'planner', running: 1 }, tokens: null }, costUsd: 1.8, budgetUsd: 4 },
+      { id: 327, title: 'Events since the last look', state: 'running', attempt: 1, progress: { stage: 'plan', step: null, steps: null, current: null, agent: { name: 'planner', running: 1 }, tokens: null }, costUsd: 1.1, budgetUsd: 4 },
+      { id: 341, title: 'S10a cleanup', state: 'merged', attempt: 1, progress: { stage: 'merge', step: null, steps: null, current: null, agent: null, tokens: null }, costUsd: 5.6, budgetUsd: 8 },
+    ],
+  }
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    await ui.press({ key: 'tab-queue' })
+    expect(await ui.find({ key: 'accept-352' })).toBeDefined()
+    expect(await ui.find({ key: 'merge-327' })).toBeDefined()
+    // ITS OWN STATE says verified; the other, still said running, is one the briefing lists as verified.
+    expect(await ui.find({ key: 'story-352' })).toBeUndefined()
+    expect(await ui.find({ key: 'story-327' })).toBeUndefined()
+    // AN ENDED ONE, which the briefing no longer lists, by its own state alone.
+    expect(await ui.find({ key: 'story-341' })).toBeUndefined()
+    expect(await ui.find({ key: 'story-333' })).toBeDefined()
+    await ui.unmount()
+  }
 })
