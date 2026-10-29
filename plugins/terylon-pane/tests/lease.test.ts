@@ -72,7 +72,7 @@ test('ANOTHER SESSION HOLDS THE LEASE: this one reads no events and posts nothin
   expect(terylon.prompts).toEqual([])
   expect(terylon.toasts).toEqual([])
   expect(leaseIn(kept)?.session).toBe(OTHER)
-  expect(await diagnosticsLine($, /^signaller: another \(since \d\d:\d\d\)$/)).toBe(true)
+  expect(await diagnosticsLine($, /^signaller: another \(ession-b\) since \d\d:\d\d$/)).toBe(true)
   // Not reading the events is no silence: the watchdog says nothing.
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'tab-status' })
@@ -100,7 +100,7 @@ test('A LEASE NOT RENEWED LAPSES: this session takes it over and posts what move
 
   await terylon.clock.advance(30000)
   expect(terylon.prompts).toHaveLength(1)
-  expect(await diagnosticsLine($, 'signaller: this session')).toBe(true)
+  expect(await diagnosticsLine($, 'signaller: this session (ession-a, session.id)')).toBe(true)
 })
 
 test('THE HOLDER RENEWS ITS LEASE every tick, so it never lapses while the session runs', async ($, on) => {
@@ -228,7 +228,7 @@ test('COMPARE AND SET: where another session took the same empty lease in the sa
   await terylon.clock.settle()
 
   expect(eventsCalls(terylon)).toBe(0)
-  expect(await diagnosticsLine($, /^signaller: another \(since \d\d:\d\d\)$/)).toBe(true)
+  expect(await diagnosticsLine($, /^signaller: another \(ession-b\) since \d\d:\d\d$/)).toBe(true)
 })
 
 test('EVERY SESSION BUSY: the lease is still taken with no lease to find, and the signal waits for the turn to end', async ($, on) => {
@@ -273,5 +273,25 @@ test('NO SIGNALLER FOR LONGER THAN A LEASE is a problem on the Status tab with i
   await terylon.clock.advance(30000)
   await terylon.clock.advance(10000)
   expect(await ui.find({ type: 'Text', text: exact('⚠ No session is posting the done-signal') })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: exact('signaller: this session') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^signaller: this session \(.{8}, fallback\)$/ })).toBeDefined()
+})
+
+test('TWO SESSIONS RESTORED TOGETHER, same start and same directory, with no session.id: the one that holds the lease is not taken for this one', async ($, on) => {
+  // The engine gives no session.id; another session started at this very moment in this directory holds the lease, named
+  // as 1.11.8 would name this session too.
+  const kept = new Map<string, unknown>(Object.entries({ ...SEEN, signaller: { session: `session-${WORLD_NOW}-/work`, since: WORLD_NOW, until: WORLD_NOW + 10 * 3600000, seen: true } }))
+  on('session.id', async () => ({ deny: 'no session id' }) as never)
+  on('store.get', async ($_, e) => ({ value: kept.get(e.key) }) as never)
+  on('store.set', async ($_, e) => {
+    kept.set(e.key, e.value)
+    return { value: undefined } as never
+  })
+  const terylon = world(on, { store: null })
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+  await terylon.clock.advance(30000)
+
+  expect(eventsCalls(terylon)).toBe(0)
+  expect(leaseIn(kept)?.session).toBe(`session-${WORLD_NOW}-/work`)
+  expect(terylon.logs.some(log => /^terylon-pane: events: this session's id is .{8}, from fallback$/.test(log.text))).toBe(true)
 })

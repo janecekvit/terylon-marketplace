@@ -1065,6 +1065,12 @@ const MUTATIONS = [
         find: "    isUnattended = e.isInteractive === false && (e.surface === null || e.surface === undefined)\n",
         replace: "    isUnattended = e.isInteractive !== true\n",
     },
+    {
+        name: "the fallback session id loses its nonce, so sessions restored together share it",
+        file: "hooks/register.tsx",
+        find: "    return { id: `session-${await $.clock.now()}-${cwd}-${MODULE_NONCE}`, source: 'fallback' }\n",
+        replace: "    return { id: `session-${await $.clock.now()}-${cwd}`, source: 'fallback' }\n",
+    },
 ];
 
 module.exports = { MUTATIONS };

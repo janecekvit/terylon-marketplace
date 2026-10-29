@@ -112,7 +112,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.11.9'
+export const MOD_VERSION = '1.11.10'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -183,6 +183,8 @@ const EMPTY_SNAPSHOT: PaneSnapshot = {
   signaller: 'none',
   signallerSince: null,
   signallerMissingSince: null,
+  signallerHolder: null,
+  sessionIdSource: 'fallback',
 }
 
 const QUEUE: PaneScreen = { screen: 'queue' }
@@ -557,6 +559,8 @@ async function refresh($: EngineInterface): Promise<boolean> {
     signaller: current.signaller ?? 'none',
     signallerSince: current.signallerSince ?? null,
     signallerMissingSince: current.signallerMissingSince ?? null,
+    signallerHolder: current.signallerHolder ?? null,
+    sessionIdSource: current.sessionIdSource ?? 'fallback',
     questions: questionItems(lastBriefing),
   }))
   await showHealth($)
@@ -930,15 +934,21 @@ function leaseOf(value: unknown): Lease | null {
   return typeof lease.session === 'string' && typeof lease.since === 'number' && typeof lease.until === 'number' ? { session: lease.session, since: lease.since, until: lease.until, seen: lease.seen === true } : null
 }
 
-// Who signals, and since when; for none, since when this session has seen no signaller at all.
-async function showSignaller($: EngineInterface, who: PaneSnapshot['signaller'], since: number | null): Promise<void> {
+// Who signals, its id shortened, and since when; for none, since when this session has seen no signaller at all.
+async function showSignaller($: EngineInterface, who: PaneSnapshot['signaller'], since: number | null, holder: string | null = null): Promise<void> {
   const now = await $.clock.now()
+  const short = holder === null ? null : shortId(holder)
 
   await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => {
     const at = who === 'none' ? (current.signaller === 'none' ? current.signallerSince ?? now : now) : since
 
-    return current.signaller === who && current.signallerSince === at ? current : { ...EMPTY_SNAPSHOT, ...current, signaller: who, signallerSince: at }
+    return current.signaller === who && current.signallerSince === at && current.signallerHolder === short ? current : { ...EMPTY_SNAPSHOT, ...current, signaller: who, signallerSince: at, signallerHolder: short }
   })
+}
+
+// An id as Diagnostics names it: its last eight characters, where a made one carries its nonce.
+function shortId(id: string): string {
+  return id.slice(-8)
 }
 
 // WHETHER THIS SESSION POSTS THE DONE-SIGNAL. A machine with no live lease always gets one: any attended session takes
@@ -971,7 +981,7 @@ async function isSignaller($: EngineInterface, now: number): Promise<boolean> {
   const mayTake = isMine || !isLive || isTyped || (isOwners && lease !== null && !lease.seen)
 
   if (!mayTake && lease !== null) {
-    await showSignaller($, 'another', lease.since)
+    await showSignaller($, 'another', lease.since, lease.session)
 
     return false
   }
@@ -990,7 +1000,7 @@ async function isSignaller($: EngineInterface, now: number): Promise<boolean> {
   const holder = 'error' in back ? null : leaseOf(back.value)
 
   if (holder !== null && holder.session !== sessionId) {
-    await showSignaller($, 'another', holder.since)
+    await showSignaller($, 'another', holder.since, holder.session)
 
     return false
   }
@@ -1001,19 +1011,29 @@ async function isSignaller($: EngineInterface, now: number): Promise<boolean> {
     await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, eventsAnsweredAt: null, eventsWatchedSince: now, eventsSilentSince: null }))
   }
 
-  await showSignaller($, 'this', since)
+  await showSignaller($, 'this', since, sessionId)
 
   return true
 }
 
-// This session's id for the lease; one the engine does not give is its start and its directory, which no other
-// session on the machine shares at the same millisecond.
-async function sessionIdOf($: EngineInterface, cwd: string): Promise<string> {
+// A NONCE MADE ONCE PER LOAD OF THE MODULE: sessions Desktop restores together start in one second, often in one
+// directory, so their start and directory alone would name two sessions alike.
+const MODULE_NONCE = moduleNonce()
+
+function moduleNonce(): string {
+  const random = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto
+
+  return typeof random?.randomUUID === 'function' ? random.randomUUID() : `${Date.now().toString(36)}${String(Object.keys(globalThis).length)}`
+}
+
+// This session's id for the lease, and where it came from: the engine's session.id, or made here from the start,
+// the directory and this load's nonce.
+async function sessionIdOf($: EngineInterface, cwd: string): Promise<{ id: string; source: PaneSnapshot['sessionIdSource'] }> {
   try {
-    return await $.session.id()
+    return { id: await $.session.id(), source: 'session.id' }
   } catch {
     // An engine without session.id still needs a name: it is no secret, only told apart from another session's.
-    return `session-${await $.clock.now()}-${cwd}`
+    return { id: `session-${await $.clock.now()}-${cwd}-${MODULE_NONCE}`, source: 'fallback' }
   }
 }
 
@@ -1177,6 +1197,8 @@ function snapshotOf(value: unknown): PaneSnapshot {
     signaller: kept.signaller === 'this' || kept.signaller === 'another' ? kept.signaller : 'none',
     signallerSince: time(kept.signallerSince),
     signallerMissingSince: time(kept.signallerMissingSince),
+    signallerHolder: typeof kept.signallerHolder === 'string' ? kept.signallerHolder : null,
+    sessionIdSource: kept.sessionIdSource === 'session.id' ? 'session.id' : 'fallback',
   }
 }
 
@@ -2188,7 +2210,10 @@ export const register: Register = on => {
     // An engine that names neither starts a session someone is at.
     isUnattended = e.isInteractive === false && (e.surface === null || e.surface === undefined)
     debug($, `this session starts with isInteractive ${String(e.isInteractive)}, surface ${String(e.surface)}: ${isUnattended ? 'nobody is at it' : 'someone is at it'}`)
-    sessionId = await sessionIdOf($, e.cwd)
+    const own = await sessionIdOf($, e.cwd)
+    sessionId = own.id
+    await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, sessionIdSource: own.source }))
+    debug($, `this session's id is ${shortId(own.id)}, from ${own.source}`)
     const startedAt = await $.clock.now()
     await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, eventsWatchedSince: startedAt }))
     await showHealth($)
@@ -2699,7 +2724,7 @@ export const register: Register = on => {
           COPY.diagnosticsEvents('watchedSince', typedLine(raw.eventsWatchedSince)),
           COPY.diagnosticsEvents('silentSince', typedLine(raw.eventsSilentSince)),
           COPY.diagnosticsEvents('store refusals', String(storeRefusals)),
-          COPY.diagnosticsEvents('signaller', current.signaller === 'this' ? COPY.signallerThis : current.signaller === 'another' ? COPY.signallerAnother(at(current.signallerSince)) : COPY.signallerNone),
+          COPY.diagnosticsEvents('signaller', current.signaller === 'this' ? COPY.signallerThis(current.signallerHolder ?? shortId(sessionId), current.sessionIdSource) : current.signaller === 'another' ? COPY.signallerAnother(current.signallerHolder ?? '?', at(current.signallerSince)) : COPY.signallerNone),
         ]
         note($, `terylon-pane: the Status tab's done-signal: ${eventsDiagnostics.join('; ')}`)
         const problems = [problemCard, rulesCard, isShown('events') ? eventsCard : null, isShown('events') ? signallerCard : null, pausedCard, ...(isShown('alerts') ? (Array.isArray(alertCards) ? alertCards : [alertCards]) : [])].filter(item => item !== null)
