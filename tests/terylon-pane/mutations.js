@@ -999,6 +999,18 @@ const MUTATIONS = [
         find: "    await forgetEpoch($)\n",
         replace: "",
     },
+    {
+        name: "a done-signal's key is recorded though its prompt did not enter the session",
+        file: "hooks/register.tsx",
+        find: "  if (entered !== true) {\n",
+        replace: "  if (false) {\n",
+    },
+    {
+        name: "a turn that ends while a tick runs leaves what the tick held for the next tick",
+        file: "hooks/register.tsx",
+        find: "    if (!isTurnRunning && held.length > 0) {\n      $.clock.after(0, () => flushHeld($))\n    }\n",
+        replace: "",
+    },
 ];
 
 module.exports = { MUTATIONS };

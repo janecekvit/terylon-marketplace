@@ -64,6 +64,8 @@ export type World = {
   held: (() => void)[]
   // Tools Claude Code refuses before the call leaves, each with the engine's words: one tool alone not allowed.
   denied: Map<string, string>
+  // Why a hook drops every submitted prompt, so that none enters the session, or null while prompts enter.
+  prompt: { drop: string | null }
 }
 
 export const BRIEFING = {
@@ -261,6 +263,7 @@ export function world(on: On, options: { store?: Record<string, unknown> | null;
     mode: { server: 'up' },
     hang: new Set<string>(),
     denied: new Map<string, string>(),
+    prompt: { drop: null },
     held: [],
     answers: {
       briefing: BRIEFING,
@@ -303,6 +306,10 @@ export function world(on: On, options: { store?: Record<string, unknown> | null;
     return { value: undefined } as never
   })
   on('prompt.submit', async ($, e) => {
+    if (state.prompt.drop !== null) {
+      return { drop: state.prompt.drop } as never
+    }
+
     state.prompts.push(e.text)
     return { text: e.text }
   })
@@ -366,7 +373,7 @@ export function world(on: On, options: { store?: Record<string, unknown> | null;
     return { value: { content: [{ type: 'text', text: JSON.stringify(value) }], isError: false } } as never
   }
 
-  return { ...state, clock, calls: state.calls, prompts: state.prompts, toasts: state.toasts, statuses: state.statuses, logs: state.logs, opens: state.opens, answers: state.answers, mode: state.mode, hang: state.hang, held: state.held, denied: state.denied }
+  return { ...state, clock, calls: state.calls, prompts: state.prompts, toasts: state.toasts, statuses: state.statuses, logs: state.logs, opens: state.opens, answers: state.answers, mode: state.mode, hang: state.hang, held: state.held, denied: state.denied, prompt: state.prompt }
 }
 
 export const SESSION = { cwd: '/work', surface: 'desktop', isInteractive: true } as const

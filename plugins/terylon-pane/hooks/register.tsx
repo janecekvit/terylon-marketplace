@@ -112,7 +112,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.11.5'
+export const MOD_VERSION = '1.11.6'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -828,19 +828,46 @@ async function postSignals($: EngineInterface, candidates: Candidate[]): Promise
   }
 
   const toasted = heldToasted.splice(0)
-  const signals = await settleSignals($, [...held.splice(0), ...candidates], done)
+  const read_ = [...held.splice(0), ...candidates]
+  const signals = await settleSignals($, read_, done)
 
   if (signals.length === 0) {
     return
   }
 
-  await keep($, STORE_SIGNALLED, done.slice(-SIGNALS_KEPT))
   const posted = signals.length === 1 ? { prompt: signals[0]?.prompt ?? '', toast: signals[0]?.toast ?? '' } : signalsSummary(signals)
-  debug($, `posting the done-signal ${signals.map(signal => signal.key).join(', ')}`)
-  await $.prompt.submit({ text: posted.prompt })
+  const keys = signals.map(signal => signal.key).join(', ')
+  debug($, `posting the done-signal ${keys}`)
+  const entered = await submitted($, posted.prompt)
+
+  // A KEY IS RECORDED ONLY ONCE ITS PROMPT ENTERED: one dropped or refused is held, read again and posted next time.
+  if (entered !== true) {
+    held.push(...read_)
+    debug($, `the done-signal ${keys} did not enter the session (${entered}); it is told on the next read`)
+
+    return
+  }
+
+  await keep($, STORE_SIGNALLED, done.slice(-SIGNALS_KEPT))
 
   if (signals.some(signal => !toasted.includes(signal.key))) {
     $.ui.toast(posted.toast)
+  }
+}
+
+// Whether a prompt entered the session: true, or why not, a hook's drop or the engine's refusal.
+async function submitted($: EngineInterface, text: string): Promise<true | string> {
+  try {
+    const result: unknown = await $.prompt.submit({ text })
+
+    if (result !== null && typeof result === 'object' && 'drop' in result) {
+      return `dropped: ${String((result as { drop: unknown }).drop)}`
+    }
+
+    return true
+  } catch (error) {
+    // A refused submit is said and retried, never taken for a post.
+    return `refused: ${messageOf(error)}`
   }
 }
 
@@ -897,6 +924,11 @@ async function tick($: EngineInterface, isStart: boolean): Promise<void> {
     await eventsFailed($, 'failed', messageOf(error))
   } finally {
     isPolling = false
+
+    // A TURN THAT ENDED WHILE THIS TICK RAN found it polling: what it held is posted now, not a tick later.
+    if (!isTurnRunning && held.length > 0) {
+      $.clock.after(0, () => flushHeld($))
+    }
   }
 }
 

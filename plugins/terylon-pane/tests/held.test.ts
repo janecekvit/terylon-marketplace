@@ -82,3 +82,109 @@ test("a subagent's turn holds nothing: only the main loop's turn makes a prompt 
   await terylon.clock.settle()
   expect(terylon.prompts).toHaveLength(1)
 })
+
+// The store answered by the test, so that what the pane records as told can be read beside what it posted.
+function storeOf(on: On, seed: Record<string, unknown>): Map<string, unknown> {
+  const kept = new Map<string, unknown>(Object.entries(seed))
+  on('store.get', async ($, e) => ({ value: kept.get(e.key) }) as never)
+  on('store.set', async ($, e) => {
+    kept.set(e.key, e.value)
+    return { value: undefined } as never
+  })
+  on('store.delete', async ($, e) => {
+    kept.delete(e.key)
+    return { value: undefined } as never
+  })
+
+  return kept
+}
+
+function told(kept: Map<string, unknown>): unknown[] {
+  const value = kept.get('signalled')
+
+  return Array.isArray(value) ? value : []
+}
+
+test('STORY 148: verified, then abandoned while a turn runs: at its end the abandoned line is posted, and the store records exactly what was posted', async ($, on) => {
+  turns(on)
+  const kept = storeOf(on, SEEN)
+  const terylon = world(on, { store: null })
+  let moved: Record<string, unknown>[] = []
+  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), moved.filter(event => Number(event.seq) > Number(args.since)))
+  terylon.answers.story_get = VERIFIED_146
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  await $.turn.start({ text: 'something else', turnId: 't1' })
+  moved = [{ ...storyMoved(18101, 146, 'Weekly report', 'verified'), pullRequest: 7 }]
+  await terylon.clock.advance(30000)
+  terylon.answers.story_get = ABANDONED_146
+  moved = [...moved, { ...storyMoved(18102, 146, 'Weekly report', 'abandoned', 'abandoned'), pullRequest: 7 }]
+  await terylon.clock.advance(30000)
+
+  // Held: nothing recorded as told while nothing is posted.
+  expect(terylon.prompts).toEqual([])
+  expect(told(kept)).toEqual([])
+
+  await $.turn.complete({ ...END, turnId: 't1' })
+  await terylon.clock.settle()
+  expect(terylon.prompts).toEqual(['Story #146 „Weekly report“ je opuštěná. Shrň mi proč a co z ní zůstalo.'])
+  expect(told(kept)).toEqual(['146:abandoned:18102'])
+})
+
+test('A PROMPT THAT DOES NOT ENTER THE SESSION records nothing as told: the next read posts it, once', async ($, on) => {
+  const kept = storeOf(on, SEEN)
+  const terylon = world(on, { store: null })
+  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), Number(args.since) >= 18101 ? [] : [storyMoved(18101, 327, 'Events since the last look', 'verified')])
+  terylon.prompt.drop = 'the session is closing'
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  expect(terylon.prompts).toEqual([])
+  expect(told(kept)).toEqual([])
+
+  terylon.prompt.drop = null
+  await terylon.clock.advance(30000)
+  expect(terylon.prompts).toHaveLength(1)
+  expect(terylon.prompts[0]).toStartWith('Story #327')
+  expect(told(kept)).toEqual(['327:verified:4be21c0aaaa'])
+
+  await terylon.clock.advance(30000)
+  expect(terylon.prompts).toHaveLength(1)
+})
+
+test('A TURN THAT ENDS WHILE A TICK RUNS loses nothing: what the tick held is posted as the tick ends', async ($, on) => {
+  turns(on)
+  // A store whose write of lastSeq is held while `holding`, so the turn ends after the tick held its signal.
+  const kept = new Map<string, unknown>(Object.entries(SEEN))
+  const holding = { isOn: false }
+  on('store.get', async ($_, e) => ({ value: kept.get(e.key) }) as never)
+  on('store.set', async ($_, e) => {
+    if (holding.isOn && e.key === 'lastSeq') {
+      return new Promise(() => undefined) as never
+    }
+    kept.set(e.key, e.value)
+    return { value: undefined } as never
+  })
+  const terylon = world(on, { store: null })
+  let moved: Record<string, unknown>[] = []
+  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), moved.filter(event => Number(event.seq) > Number(args.since)))
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  await $.turn.start({ text: 'something else', turnId: 't1' })
+  moved = [storyMoved(18101, 327, 'Events since the last look', 'verified')]
+  holding.isOn = true
+  await terylon.clock.advance(30000)
+  expect(terylon.toasts).toEqual(['Terylon: #327 verified, waiting for merge'])
+
+  // The turn ends while the tick still waits on the store.
+  await $.turn.complete({ ...END, turnId: 't1' })
+  await terylon.clock.advance(1)
+  expect(terylon.prompts).toEqual([])
+
+  // The store's bound lets the tick end, well before the next poll: posted as this tick ends.
+  await terylon.clock.advance(2100)
+  expect(terylon.prompts).toHaveLength(1)
+  expect(terylon.prompts[0]).toStartWith('Story #327')
+})
