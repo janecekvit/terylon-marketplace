@@ -112,7 +112,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.11.6'
+export const MOD_VERSION = '1.11.7'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -146,6 +146,10 @@ const STORE_LAST_SEQ = 'lastSeq'
 const STORE_EPOCH = 'epoch'
 const STORE_LAST_SEEN_AT = 'lastSeenAt'
 const STORE_SIGNALLED = 'signalled'
+// ONE SIGNALLER PER MACHINE: every open session runs the mod, and only the session holding this lease reads the events,
+// posts and toasts. Its holder renews it every tick; one not renewed for three ticks has lapsed.
+const STORE_SIGNALLER = 'signaller'
+const LEASE_MILLISECONDS = 3 * POLL_MS
 
 // HOW LONG ONE $.store CALL MAY TAKE before the pane goes on with what it keeps in memory: a store that never answers
 // must not hold the poll, which waits for its last tick to end.
@@ -176,6 +180,8 @@ const EMPTY_SNAPSHOT: PaneSnapshot = {
   eventsAnsweredAt: null,
   eventsWatchedSince: null,
   eventsSilentSince: null,
+  signaller: 'none',
+  signallerSince: null,
 }
 
 const QUEUE: PaneScreen = { screen: 'queue' }
@@ -219,6 +225,13 @@ let lastStories: Json[] = []
 let policy: Json | null = null
 let lastAttemptAt = 0
 let isPolling = false
+
+// THIS SESSION, as the lease names it: its id, whether a person is at its prompt, whether its band or pane was drawn,
+// and when the owner last typed in it.
+let sessionId = ''
+let isInteractiveSession = true
+let isSeen = false
+let typedAt: number | null = null
 
 // WHETHER THE MAIN LOOP'S TURN RUNS, from turn.start and turn.complete: a prompt submitted meanwhile waits for its end.
 let isTurnRunning = false
@@ -422,7 +435,8 @@ async function watchEvents($: EngineInterface): Promise<void> {
 
   await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => {
     const since = current.eventsAnsweredAt ?? current.eventsWatchedSince
-    const silentSince = since !== null && now - since > EVENTS_SILENT_MILLISECONDS ? since : null
+    // ANOTHER SESSION READS THE EVENTS while this one does not hold the lease: its silence is no problem.
+    const silentSince = current.signaller === 'this' && since !== null && now - since > EVENTS_SILENT_MILLISECONDS ? since : null
 
     return silentSince === current.eventsSilentSince ? current : { ...EMPTY_SNAPSHOT, ...current, eventsSilentSince: silentSince }
   })
@@ -537,6 +551,8 @@ async function refresh($: EngineInterface): Promise<boolean> {
     eventsAnsweredAt: current.eventsAnsweredAt ?? null,
     eventsWatchedSince: current.eventsWatchedSince ?? null,
     eventsSilentSince: current.eventsSilentSince ?? null,
+    signaller: current.signaller ?? 'none',
+    signallerSince: current.signallerSince ?? null,
     questions: questionItems(lastBriefing),
   }))
   await showHealth($)
@@ -898,6 +914,83 @@ async function markSignalled($: EngineInterface, candidates: Candidate[]): Promi
   await keep($, STORE_SIGNALLED, done.slice(-SIGNALS_KEPT))
 }
 
+type Lease = { session: string; since: number; until: number; seen: boolean }
+
+function leaseOf(value: unknown): Lease | null {
+  if (value === null || typeof value !== 'object') {
+    return null
+  }
+
+  const lease = value as Partial<Lease>
+
+  return typeof lease.session === 'string' && typeof lease.since === 'number' && typeof lease.until === 'number' ? { session: lease.session, since: lease.since, until: lease.until, seen: lease.seen === true } : null
+}
+
+async function showSignaller($: EngineInterface, who: PaneSnapshot['signaller'], since: number | null): Promise<void> {
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => (current.signaller === who && current.signallerSince === since ? current : { ...EMPTY_SNAPSHOT, ...current, signaller: who, signallerSince: since }))
+}
+
+// WHETHER THIS SESSION POSTS THE DONE-SIGNAL: it holds the lease, renewed now, or takes it. A session no person is at
+// never does; one the owner typed in takes it, and so does one drawn where the holder never was.
+async function isSignaller($: EngineInterface, now: number): Promise<boolean> {
+  if (!isInteractiveSession) {
+    await showSignaller($, 'none', null)
+
+    return false
+  }
+
+  const isOwners = isSeen || typedAt !== null
+  const answered = await storeCall($, () => $.store.get(STORE_SIGNALLER))
+
+  // A STORE THAT REFUSES keeps no lease: only a session the owner sees or types in posts.
+  if ('error' in answered) {
+    storeRefusals += 1
+    await eventsFailed($, 'store', COPY.storeReadFailed(STORE_SIGNALLER, answered.error))
+    await showSignaller($, isOwners ? 'this' : 'none', null)
+
+    return isOwners
+  }
+
+  const lease = leaseOf(answered.value)
+  const isMine = lease !== null && lease.session === sessionId
+  const isTaken = !isMine && lease !== null && lease.until > now && !(typedAt !== null && typedAt > lease.since) && !(isOwners && !lease.seen)
+
+  if (isTaken && lease !== null) {
+    await showSignaller($, 'another', lease.since)
+
+    return false
+  }
+
+  const since = isMine && lease !== null ? lease.since : now
+  const written = await storeCall($, () => $.store.set(STORE_SIGNALLER, { session: sessionId, since, until: now + LEASE_MILLISECONDS, seen: isOwners }))
+
+  if ('error' in written) {
+    await showSignaller($, isOwners ? 'this' : 'none', null)
+
+    return isOwners
+  }
+
+  if (!isMine) {
+    debug($, `this session takes the signaller lease${lease === null ? '' : ` from ${lease.session}`}`)
+    // THE WATCHDOG STARTS AGAIN with the lease: an answer this session had before it is no clock of today's.
+    await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, eventsAnsweredAt: null, eventsWatchedSince: now, eventsSilentSince: null }))
+  }
+
+  await showSignaller($, 'this', since)
+
+  return true
+}
+
+// This session's id for the lease; one the engine does not give is made here, unique enough on one machine.
+async function sessionIdOf($: EngineInterface): Promise<string> {
+  try {
+    return await $.session.id()
+  } catch {
+    // An engine without session.id still needs a name no other session takes.
+    return `session-${await $.clock.now()}-${Math.random().toString(36).slice(2)}`
+  }
+}
+
 // One tick: the queue, then what moved since the last look.
 async function tick($: EngineInterface, isStart: boolean): Promise<void> {
   if (isPolling) {
@@ -915,6 +1008,10 @@ async function tick($: EngineInterface, isStart: boolean): Promise<void> {
     }
 
     if (!(await refresh($))) {
+      return
+    }
+
+    if (!(await isSignaller($, now))) {
       return
     }
 
@@ -1051,6 +1148,8 @@ function snapshotOf(value: unknown): PaneSnapshot {
     eventsAnsweredAt: time(kept.eventsAnsweredAt),
     eventsWatchedSince: time(kept.eventsWatchedSince),
     eventsSilentSince: time(kept.eventsSilentSince),
+    signaller: kept.signaller === 'this' || kept.signaller === 'another' ? kept.signaller : 'none',
+    signallerSince: time(kept.signallerSince),
   }
 }
 
@@ -2058,6 +2157,8 @@ export const register: Register = on => {
     await $.command.register({ name: 'terylon', description: 'Opens the Terylon pane (the same as /terylon-pane)' })
     await $.command.register({ name: 'terylon-memory', description: "Opens the Terylon pane on the leader's memory; an edit is confirmed in the console" })
     storyTargets.clear()
+    isInteractiveSession = e.isInteractive
+    sessionId = await sessionIdOf($)
     const startedAt = await $.clock.now()
     await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, eventsWatchedSince: startedAt }))
     await showHealth($)
@@ -2066,6 +2167,17 @@ export const register: Register = on => {
     $.clock.every(WATCH_MILLISECONDS, () => watchEvents($))
 
     return next(e)
+  })
+
+  // THE OWNER'S OWN TYPING, at the prompt or through Remote Control, moves the signaller lease to this session.
+  on('prompt.submit', async ($, e, next) => {
+    const result = await next(e)
+
+    if (e.origin.kind === 'composer' || e.origin.kind === 'bridge') {
+      typedAt = await $.clock.now()
+    }
+
+    return result
   })
 
   on('turn.start', async ($, e, next) => {
@@ -2115,6 +2227,8 @@ export const register: Register = on => {
   // THE BAND: one row above the prompt, what calls for the owner, and the pane's entry point. The machine's health and
   // spend are the status line's, never repeated here.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    isSeen = true
+
     if (e.props.hasSurvey) {
       return next(e)
     }
@@ -2211,6 +2325,7 @@ export const register: Register = on => {
 
   // THE PANE: tabs, then the screen on top of the stack.
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    isSeen = true
     const elements = $.ui.resolve(e)
     const { Box, Text, Button, Link, Markdown, Code } = elements
     const hasInput = e.surface !== 'mobile' && 'Input' in elements
@@ -2547,6 +2662,7 @@ export const register: Register = on => {
           COPY.diagnosticsEvents('watchedSince', typedLine(raw.eventsWatchedSince)),
           COPY.diagnosticsEvents('silentSince', typedLine(raw.eventsSilentSince)),
           COPY.diagnosticsEvents('store refusals', String(storeRefusals)),
+          COPY.diagnosticsEvents('signaller', current.signaller === 'this' ? COPY.signallerThis : current.signaller === 'another' ? COPY.signallerAnother(at(current.signallerSince)) : COPY.signallerNone),
         ]
         note($, `terylon-pane: the Status tab's done-signal: ${eventsDiagnostics.join('; ')}`)
         const problems = [problemCard, rulesCard, isShown('events') ? eventsCard : null, pausedCard, ...(isShown('alerts') ? (Array.isArray(alertCards) ? alertCards : [alertCards]) : [])].filter(item => item !== null)

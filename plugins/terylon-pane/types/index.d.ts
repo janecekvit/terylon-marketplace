@@ -80,6 +80,9 @@ export type PaneSnapshot = {
   eventsWatchedSince: number | null
   // Since when events_since has not answered, once the watchdog's bound has passed: null while all is well.
   eventsSilentSince: number | null
+  // WHO POSTS THE DONE-SIGNAL on this machine: this session, another that holds the lease since when, or none.
+  signaller: 'this' | 'another' | 'none'
+  signallerSince: number | null
 }
 
 export type PaneScreen =

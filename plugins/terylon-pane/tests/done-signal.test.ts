@@ -13,6 +13,7 @@ import { BRIEFING, FLIGHT, HOUR, PANE_PROPS, PLANS, SESSION, STORY_327, events, 
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 const SURFACES = ['desktop', 'terminal'] as const
+const BAND = { plugin: 'terylon-pane', surface: 'desktop', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 3, bodyColumns: 80, scroll: { top: 0, bodyRows: 3 }, view: {} } } as never
 
 const STORE_REFUSAL = 'EACCES: permission denied, open terylon-pane.json'
 
@@ -42,6 +43,8 @@ test('A STORE THAT REFUSES does not stop the done-signal: events_since is called
   let moved: Record<string, unknown>[] = []
   terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), moved.filter(event => Number(event.seq) > Number(args.since)), 18100)
   await $.session.start(SESSION)
+  // With no lease the store can keep, the session the owner sees posts: its band is drawn.
+  await (await $.ui.mount(BAND)).unmount()
   await terylon.clock.settle()
 
   // The first look starts from the head, kept in memory: nothing of the past is told.
@@ -91,6 +94,7 @@ test('A STORE THAT NEVER ANSWERS holds no poll: the next tick reads the queue an
   on('store.set', async () => new Promise(() => undefined) as never)
   const terylon = world(on, { store: null })
   await $.session.start(SESSION)
+  await (await $.ui.mount(BAND)).unmount()
   await terylon.clock.advance(30000)
   await terylon.clock.advance(30000)
 
@@ -358,7 +362,7 @@ test('A PART OF THE STATUS TAB THAT THROWS is one problem with its reason and st
     expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Slots') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Policy') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.11.6') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.11.7') })).toBeDefined()
     await ui.unmount()
   }
   expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith("terylon-pane: the Status tab's alerts did not draw: "))).toBe(true)
@@ -449,7 +453,7 @@ test('TERYLON_PANE_STATUS=minimal draws the Status tab as plain lines alone: no 
     await ui.press({ key: 'tab-status' })
     expect(await ui.find({ type: 'Text', text: exact('Agentic OS: ok') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Problems: 0') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.11.6') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.11.7') })).toBeDefined()
     expect(await ui.findAll({ type: 'Svg' })).toEqual([])
     expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeUndefined()
     expect((await ui.findAll({ type: 'Button' })).every(button => String(button.key).startsWith('tab-'))).toBe(true)

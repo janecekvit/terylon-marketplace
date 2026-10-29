@@ -83,6 +83,9 @@ export const COPY = {
   diagnosticsUrl: (url: string) => `TERYLON_URL ${url === '' ? '(not set)' : url}`,
   diagnosticsServer: (server: string | null) => `server ${server ?? '(none has answered yet)'}`,
   diagnosticsEvents: (name: string, value: string) => `${name}: ${value}`,
+  signallerThis: 'this session',
+  signallerAnother: (since: string) => `another (since ${since})`,
+  signallerNone: 'none',
   diagnosticsDebug: 'Every failure is in claude --debug under terylon-pane:',
 
   // Tabs.

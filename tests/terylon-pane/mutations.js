@@ -1011,6 +1011,30 @@ const MUTATIONS = [
         find: "    if (!isTurnRunning && held.length > 0) {\n      $.clock.after(0, () => flushHeld($))\n    }\n",
         replace: "",
     },
+    {
+        name: "every session posts the done-signal again, whoever holds the lease",
+        file: "hooks/register.tsx",
+        find: "    if (!(await isSignaller($, now))) {\n      return\n    }\n",
+        replace: "",
+    },
+    {
+        name: "a session no person is at posts the done-signal",
+        file: "hooks/register.tsx",
+        find: "  if (!isInteractiveSession) {\n",
+        replace: "  if (false) {\n",
+    },
+    {
+        name: "the signaller lease is never renewed by its holder",
+        file: "hooks/register.tsx",
+        find: "{ session: sessionId, since, until: now + LEASE_MILLISECONDS, seen: isOwners }",
+        replace: "{ session: sessionId, since, until: isMine && lease !== null ? lease.until : now + LEASE_MILLISECONDS, seen: isOwners }",
+    },
+    {
+        name: "the owner's typing no longer moves the lease",
+        file: "hooks/register.tsx",
+        find: "    if (e.origin.kind === 'composer' || e.origin.kind === 'bridge') {\n",
+        replace: "    if (false) {\n",
+    },
 ];
 
 module.exports = { MUTATIONS };
