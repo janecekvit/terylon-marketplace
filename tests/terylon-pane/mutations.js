@@ -762,6 +762,12 @@ const MUTATIONS = [
         find: " && !waiting.has(number(story.id) ?? -1)",
         replace: "",
     },
+    {
+        name: "the Status tab no longer says in the debug log what it draws",
+        file: "hooks/register.tsx",
+        find: "        $.ui.log(`terylon-pane: the Status tab draws ",
+        replace: "        void (`terylon-pane: the Status tab draws ",
+    },
 ];
 
 module.exports = { MUTATIONS };

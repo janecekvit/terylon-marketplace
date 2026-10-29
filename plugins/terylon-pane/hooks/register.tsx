@@ -44,7 +44,7 @@ import type {
 import { COPY } from './copy'
 import { CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, NARROW_COLUMNS, STEPPER_COLUMNS, dots, meter, phaseGlyph, planChain, planOrder, proofsOf, segments, slotsGauge, spendBar, splitHash, stepper } from './drawing'
 import type { Picture, Proofs } from './drawing'
-import { ALERT_SOURCES, alertCount, healthLine, stateWord } from './health'
+import { ALERT_SOURCES, alertCount, healthLine, stateWord, statusDrawingOf } from './health'
 import type { Health } from './health'
 import { MISSING_SERVER, NEEDS_TEXT, NOT_ALLOWED, SERVER_CANDIDATES, TEXT_LIMITS, actArguments, allowRules, assertPaneTool, isSendable, readResult } from './terylon'
 import type { TerylonAnswer } from './terylon'
@@ -104,7 +104,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.9.4'
+export const MOD_VERSION = '1.9.5'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -120,6 +120,9 @@ const WATCH_MILLISECONDS = 10000
 // How many criteria and timeline rows a story shows before "další N ▾".
 const CRITERIA_SHOWN = 2
 const TIMELINE_SHOWN = 4
+
+// The Status tab's parts in the order it draws them, as its debug line names them.
+const STATUS_DRAWN = ['machine', 'gauges', 'problems', 'events', 'alerts', 'outcomes', 'policy', 'diagnostics'] as const
 
 // HOW LONG A SCREEN'S LOAD MAY TAKE before it is said as its error: under Desktop's own 10 s bound on a press
 // (`ui.press: … did not answer within 10000ms`), so the error is written while the press is still answered.
@@ -2279,7 +2282,10 @@ export const register: Register = on => {
                   <Link href={consoleLink(base, 'health')} label={COPY.health} />,
                   eventsRetry,
                 ], 'bad'))
-        const problems = [problemCard, rulesCard, eventsCard, pausedCard, ...(Array.isArray(alertCards) ? alertCards : [alertCards])].filter(item => item !== null)
+        // WHAT THE OWNER LEFT OUT to find the part Desktop does not draw (TERYLON_PANE_STATUS); unset, nothing is.
+        const drawingAsked = statusDrawingOf(await $.env.get('TERYLON_PANE_STATUS'))
+        const isShown = (name: Parameters<typeof drawingAsked.off.has>[0]) => !drawingAsked.off.has(name)
+        const problems = [problemCard, rulesCard, isShown('events') ? eventsCard : null, pausedCard, ...(isShown('alerts') ? (Array.isArray(alertCards) ? alertCards : [alertCards]) : [])].filter(item => item !== null)
         const slotsCard = await part('slots', () => cardOf('status-slots', COPY.statusSlots, COPY.statusSlotsHint, [
           look.isGraphic ? picture(elements, slotsGauge(current.slotsUsed, current.slots, true)) : null,
           <Text tabular>{COPY.statusSlotsLine(current.slotsUsed, current.slots)}</Text>,
@@ -2369,26 +2375,41 @@ export const register: Register = on => {
               ])
         })
 
+        // EVERY DRAW SAYS WHAT IT RETURNS, in claude --debug: a line here beside a blank pane is a tree the host dropped.
+        $.ui.log(`terylon-pane: the Status tab draws ${drawingAsked.isMinimal ? 'minimal' : STATUS_DRAWN.filter(isShown).join(', ')}; problems ${problems.length}${events === null ? '' : `, events ${events.kind}`}${silentSince === null ? '' : ', the watchdog'}`, { to: 'debug' })
+
+        if (drawingAsked.isMinimal) {
+          // PLAIN LINES ALONE: no card, no picture, no button but the tabs, to tell the tab's drawing from its data.
+          return (
+            <Box flexDirection="column" gap={1}>
+              {tabs}
+              <Text>{COPY.statusMinimalMachine(stateWord(healthOf(current, offset)).word)}</Text>
+              <Text>{COPY.statusMinimalProblems(problems.length, events === null ? null : events.kind)}</Text>
+              <Text>{COPY.diagnosticsVersion(MOD_VERSION)}</Text>
+            </Box>
+          )
+        }
+
         return (
           <Box flexDirection="column" gap={1}>
             {tabs}
-            {machineCard}
-            {look.isGraphic && !look.isNarrow
+            {isShown('machine') && machineCard}
+            {isShown('gauges') && (look.isGraphic && !look.isNarrow
               ? (
                   <Box key="status-gauges" flexDirection="row" gap="sm">
                     <Box flexGrow={1} flexShrink={1} minWidth={0}>{slotsCard}</Box>
                     <Box flexGrow={1} flexShrink={1} minWidth={0}>{costCard}</Box>
                   </Box>
                 )
-              : [slotsCard, costCard]}
-            {cardOf('status-problems', headingOf(COPY.statusProblems, problems.length, problems.length > 0 ? 'warning' : 'inactive'), null, [
+              : [slotsCard, costCard])}
+            {isShown('problems') && cardOf('status-problems', headingOf(COPY.statusProblems, problems.length, problems.length > 0 ? 'warning' : 'inactive'), null, [
               problems.length === 0 ? quiet(elements, COPY.nothingWrong) : null,
             ])}
-            {problems}
-            {actOutcome('leader', consoleLink(base, 'work'), COPY.workInConsole)}
-            {policyCard}
-            {actOutcome('policy', consoleLink(base, 'policy'), COPY.policyInConsole)}
-            {cardOf('status-diagnostics', <Text size="heading" weight="semibold" color="subtle">{COPY.statusDiagnostics}</Text>, null, [
+            {isShown('problems') && problems}
+            {isShown('outcomes') && actOutcome('leader', consoleLink(base, 'work'), COPY.workInConsole)}
+            {isShown('policy') && policyCard}
+            {isShown('outcomes') && actOutcome('policy', consoleLink(base, 'policy'), COPY.policyInConsole)}
+            {isShown('diagnostics') && cardOf('status-diagnostics', <Text size="heading" weight="semibold" color="subtle">{COPY.statusDiagnostics}</Text>, null, [
               <Text color="subtle" mono>{COPY.diagnosticsVersion(MOD_VERSION)}</Text>,
               <Text color="subtle" mono>{COPY.diagnosticsUrl(base)}</Text>,
               <Text color="subtle" mono>{COPY.diagnosticsServer(current.server)}</Text>,

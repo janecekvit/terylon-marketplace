@@ -226,6 +226,9 @@ export const COPY = {
     'If it stays, run claude --debug and read the line under terylon-pane: the Status tab',
     'Restart Claude Desktop.',
   ],
+  // THE STATUS TAB DRAWN MINIMAL (TERYLON_PANE_STATUS=minimal): plain lines, to bisect a tab Desktop does not draw.
+  statusMinimalMachine: (word: string) => `Agentic OS: ${word}`,
+  statusMinimalProblems: (count: number, events: string | null) => `Problems: ${count}${events === null ? '' : ` (the done-signal: ${events})`}`,
   storeTimedOut: (seconds: number) => `the store did not answer within ${seconds} s`,
   storeReadFailed: (key: string, error: string) => `reading ${key} from the store failed: ${error}`,
   storeWriteFailed: (key: string, error: string) => `writing ${key} to the store failed: ${error}`,

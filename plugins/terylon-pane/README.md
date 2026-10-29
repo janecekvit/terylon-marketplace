@@ -250,6 +250,12 @@ A rule names a tool, never its arguments: `goals_list {closed: true}`, which rea
 
 The names are separated by commas or spaces; anything else changes nothing.
 
+**`TERYLON_PANE_STATUS` draws the Status tab in parts**, to find the one Desktop does not draw. In the same `env`, `minimal` draws it as three plain lines under the tabs, and `no-` and a part's name leaves that part out: `machine`, `gauges`, `problems` (with `events` and `alerts` inside it), `outcomes`, `policy`, `diagnostics`. Restart Claude Desktop after each change. Unset, the whole tab is drawn.
+
+```json
+"env": { "TERYLON_PANE_STATUS": "no-gauges, no-policy" }
+```
+
 ## Debugging
 
 **Every failed call goes to the debug log**, in the engine's own words, with the tool and the server: start a session with `claude --debug` and look for `terylon-pane:`. The band names the state and the pane's card says why under *Reason:*, so a stale number is never the only clue.
@@ -264,6 +270,7 @@ The names are separated by commas or spaces; anything else changes nothing.
 | Status: *Claude Code refused the done-signal's call* | the queue reads, but no allow rule lets `events_since` through, so nothing is told | add `mcp__plugin_terylon-os_terylon__events_since` as the card spells it; if it is there, restart Claude Desktop |
 | Status: *The done-signal stopped* | `events_since` reached Terylon and did not answer as the owner's | read *Reason:* and Health in the console |
 | Status: *The pane cannot keep its place* | Claude Code's store for the mod refused or did not answer | check that `~/.claude` is writable, restart Claude Desktop |
+| Desktop's own *Nothing to show yet — terylon-pane has not drawn in this pane* on a tab | the host did not draw what the tab returned, though `plugin test` draws it | with `claude --debug`, the line `terylon-pane: the Status tab draws …` says the render ran and what it returned; find the part with `TERYLON_PANE_STATUS` above, starting from `minimal` |
 | Status: *The Status tab's … did not draw* | one part of the tab threw while drawing; the rest is drawn around it | read *Reason:* and the debug log's `terylon-pane: the Status tab's … did not draw:` line; press *Refresh* |
 | Status: *The done-signal hears nothing* | `events_since` has not answered for more than 90 s while the queue reads, and nothing failed that the pane saw: the call is held, or the events path stopped before it | read the debug log's `terylon-pane: events:` lines: the last look read, each `events_since` called and what it answered, each signal posted, and where it stopped |
 

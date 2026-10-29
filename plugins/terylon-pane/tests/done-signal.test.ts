@@ -340,7 +340,7 @@ test('A PART OF THE STATUS TAB THAT THROWS is one problem with its reason and st
     expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Slots') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Policy') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.4') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.5') })).toBeDefined()
     await ui.unmount()
   }
   expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith("terylon-pane: the Status tab's alerts did not draw: "))).toBe(true)
@@ -419,4 +419,40 @@ test('A VERIFIED STORY THAT WORK_IN_FLIGHT STILL LISTS is not drawn under Runnin
     expect(await ui.find({ key: 'story-333' })).toBeDefined()
     await ui.unmount()
   }
+})
+
+test('TERYLON_PANE_STATUS=minimal draws the Status tab as plain lines alone: no card, no picture, no button but the tabs', async ($, on) => {
+  const terylon = world(on, { env: { TERYLON_PANE_STATUS: 'minimal' } })
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    await ui.press({ key: 'tab-status' })
+    expect(await ui.find({ type: 'Text', text: exact('Agentic OS: ok') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('Problems: 0') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.5') })).toBeDefined()
+    expect(await ui.findAll({ type: 'Svg' })).toEqual([])
+    expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeUndefined()
+    expect((await ui.findAll({ type: 'Button' })).every(button => String(button.key).startsWith('tab-'))).toBe(true)
+    await ui.unmount()
+  }
+  expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith('terylon-pane: the Status tab draws minimal; problems 0'))).toBe(true)
+})
+
+test('TERYLON_PANE_STATUS=no-<part> leaves that part out, and every draw says in claude --debug what it returns', async ($, on) => {
+  on('store.get', async () => ({ deny: STORE_REFUSAL }) as never)
+  on('store.set', async () => ({ deny: STORE_REFUSAL }) as never)
+  const terylon = world(on, { store: null, env: { TERYLON_PANE_STATUS: 'no-events, no-gauges no-diagnostics' } })
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'tab-status' })
+  expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('Policy') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('The pane cannot keep its place') })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: exact('Cost') })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: exact('Diagnostics') })).toBeUndefined()
+  expect(terylon.logs.some(log => log.to === 'debug' && log.text === 'terylon-pane: the Status tab draws machine, problems, alerts, outcomes, policy; problems 0, events store')).toBe(true)
 })

@@ -54,6 +54,23 @@ export function clip(line: string, longest = HEALTH_LONGEST): string {
   return line.length <= longest ? line : `${line.slice(0, longest - 1).trimEnd()}…`
 }
 
+// THE STATUS TAB'S PARTS, as TERYLON_PANE_STATUS names them to bisect a tab Desktop does not draw: `no-<part>` leaves
+// that part out, `minimal` draws the tab as plain lines alone. Unset, the whole tab is drawn.
+export const STATUS_PARTS = ['machine', 'gauges', 'problems', 'events', 'alerts', 'policy', 'outcomes', 'diagnostics'] as const
+
+export type StatusPart = (typeof STATUS_PARTS)[number]
+
+export type StatusDrawing = { isMinimal: boolean; off: ReadonlySet<StatusPart> }
+
+export function statusDrawingOf(value: string | null | undefined): StatusDrawing {
+  const named = new Set((value ?? '').split(/[\s,]+/).map(name => name.trim().toLowerCase()).filter(name => name !== ''))
+
+  return {
+    isMinimal: named.has('minimal'),
+    off: new Set(STATUS_PARTS.filter(part => named.has(`no-${part}`))),
+  }
+}
+
 export type Health = {
   connection: PaneConnection
   failingSince: string | null
