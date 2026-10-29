@@ -167,9 +167,9 @@ Everything else arrives as a dependency.`"/]:::note
     consumer -.->|"enables one"| roles
     consumer -.->|"enables one"| adapters
 
-    style adapters fill:#0478571A,stroke:#047857,color:#047857
-    style roles fill:#4F46E51A,stroke:#4F46E5,color:#4F46E5
-    style outside fill:#7E22CE1A,stroke:#7E22CE,color:#7E22CE,stroke-dasharray:3 3
+    style adapters fill:#0478571A,stroke:#047857,color:#058762
+    style roles fill:#4F46E51A,stroke:#4F46E5,color:#6C64E9
+    style outside fill:#7E22CE1A,stroke:#7E22CE,color:#9C4CE2,stroke-dasharray:3 3
     linkStyle default stroke:#8B949E
 ```
 

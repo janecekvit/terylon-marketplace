@@ -165,7 +165,11 @@ export const COPY = {
   retry: 'Try again',
   unreachableTitle: 'Terylon does not answer',
   unreachableWhen: (since: string) => `since ${since} · retrying every minute`,
-  unreachableBody: (time: string) => `Showing the state of ${time}. Work on the homelab goes on.`,
+  // No answer yet (the pane started while Terylon was down) leaves no state to show, and says so (#48).
+  unreachableBody: (time: string | null) =>
+    time === null
+      ? 'Nothing to show yet: Terylon has not answered since the pane started. Work on the homelab goes on.'
+      : `Showing the state of ${time}. Work on the homelab goes on.`,
   unreachableFix: 'Check tailscale status and TERYLON_URL; every failure is also in claude --debug under terylon-pane:',
   notAllowedTitle: "Claude Code refused the pane's call",
   notAllowedHint: 'permissions',
@@ -204,8 +208,9 @@ export const COPY = {
   phases: 'Phases',
   phasesHint: (done: number, all: number) => `${done} of ${all}`,
   phaseAdmitted: 'Admitted to a slot',
-  // The stepper's labels under its nodes (S32), short enough for eight columns: Admitted, then the seven stages.
-  phaseShort: ['Admitted', 'Plan', 'Develop', 'Review', 'Tests', 'Pull req.', 'Verified', 'Merge'] as readonly string[],
+  // The stepper's labels under its nodes (S32), short enough for eight columns: Admitted, then the seven stages, by
+  // the phase's own label, since a list story draws no Pull request phase (#48).
+  phaseShort: (label: string) => PHASE_SHORT[label] ?? label,
   phaseTooltip: (label: string, role: string | null, status: string, step: string | null) =>
     [label, role, status === 'now' ? 'now' : status === 'done' ? 'done' : 'to come', step].filter(part => part !== null).join(' · '),
   storyCaption: (goal: number | null) => (goal === null ? 'STORY' : `STORY · GOAL ${goal}`),
@@ -545,6 +550,18 @@ const STAGE_LABEL: Record<string, string> = {
   pr: 'Pull request',
   verify: 'Verified in its PR environment',
   merge: 'Merge — your gate',
+}
+
+const PHASE_SHORT: Record<string, string> = {
+  [COPY.phaseAdmitted]: 'Admitted',
+  [STAGE_LABEL.plan ?? '']: 'Plan',
+  [STAGE_LABEL.develop ?? '']: 'Develop',
+  [STAGE_LABEL.review ?? '']: 'Review',
+  [STAGE_LABEL.test ?? '']: 'Tests',
+  [STAGE_LABEL.pr ?? '']: 'Pull req.',
+  [STAGE_LABEL.verify ?? '']: 'Verified',
+  [STAGE_LABEL.merge ?? '']: 'Merge',
+  [COPY.acceptPhase]: COPY.acceptShort,
 }
 
 const STAGE_ROLE: Record<string, string> = {

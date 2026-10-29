@@ -52,6 +52,19 @@ test('frame G: unreachable keeps the last state, says it is stale and why, and r
   expect(terylon.calls.length).toBeGreaterThan(before)
 })
 
+test('unreachable before the first answer says there is nothing to show yet, never a "?" for the time (#48)', async ($, on) => {
+  const terylon = world(on)
+  terylon.mode.server = 'down'
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount(MOUNT)
+  expect(await ui.find({ type: 'Text', text: exact('Terylon does not answer') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('Nothing to show yet: Terylon has not answered since the pane started. Work on the homelab goes on.') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Showing the state of/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /\?\./ })).toBeUndefined()
+})
+
 test('frame H: refused as not the owner, and Terylon returning an error, each said plainly with its reason', async ($, on) => {
   const terylon = world(on)
   terylon.mode.server = 'refused'

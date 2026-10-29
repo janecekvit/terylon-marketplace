@@ -34,6 +34,79 @@ const HTML_IN_BLOCK = /<\/?[a-z][a-z0-9]*\b[^>]*>/i;
 // An edge between two nodes: `from --> to` (declared) or `from -.-> to` / `from -.->|"…"| to` (dashed).
 const EDGE = /^\s*(\w+)\s+(-->|-\.->)(?:\|"[^"]*"\|)?\s+(\w+)\s*$/gm;
 
+// A boundary's style line: `style id fill:#RRGGBBAA,stroke:#RRGGBB,color:#RRGGBB…`. The title is drawn in its color, over its
+// semi-transparent fill, over the page.
+const SUBGRAPH_STYLE = /^\s*style (\w+) (.*)$/gm;
+
+// GitHub's two page backgrounds, light and dark: a boundary's title is drawn on both, since no flowchart sets a theme (#48).
+const PAGE_BACKGROUNDS = ["#ffffff", "#0d1117"];
+
+// The contrast a boundary's title must reach on its tinted fill over each page background. No single colour reaches 4.5:1 on
+// both (the best against that pair is about 4.3:1); the palette's title colours reach about 3.9:1, the old ones 2.6–3.5:1.
+const TITLE_CONTRAST_FLOOR = 3.75;
+
+function channelsOf(hexColour)
+{
+    const digits = hexColour.replace("#", "");
+
+    return [0, 2, 4].map((offset) => parseInt(digits.slice(offset, offset + 2), 16));
+}
+
+function relativeLuminance(channels)
+{
+    // WCAG 2's relative luminance of an sRGB colour.
+    const [red, green, blue] = channels.map((channel) =>
+    {
+        const unit = channel / 255;
+
+        return unit <= 0.03928 ? unit / 12.92 : Math.pow((unit + 0.055) / 1.055, 2.4);
+    });
+
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+function contrastRatio(firstChannels, secondChannels)
+{
+    const first = relativeLuminance(firstChannels);
+    const second = relativeLuminance(secondChannels);
+
+    return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+}
+
+function titleContrastViolations(block)
+{
+    // Every boundary whose title falls under the floor on either page background, with the ratio it reaches there.
+    const violations = [];
+
+    for (const match of block.matchAll(SUBGRAPH_STYLE))
+    {
+        const properties = Object.fromEntries(match[2].split(",").map((pair) => pair.split(":").map((part) => part.trim())));
+
+        if (!properties.color)
+        {
+            continue;
+        }
+
+        const fill = (properties.fill || "#00000000").replace("#", "");
+        const fillChannels = channelsOf(`#${fill.slice(0, 6)}`);
+        const fillAlpha = fill.length === 8 ? parseInt(fill.slice(6, 8), 16) / 255 : 1;
+
+        for (const background of PAGE_BACKGROUNDS)
+        {
+            const backgroundChannels = channelsOf(background);
+            const tinted = fillChannels.map((channel, index) => channel * fillAlpha + backgroundChannels[index] * (1 - fillAlpha));
+            const ratio = contrastRatio(channelsOf(properties.color), tinted);
+
+            if (ratio < TITLE_CONTRAST_FLOOR)
+            {
+                violations.push(`${match[1]}: ${properties.color} reaches ${ratio.toFixed(2)}:1 over ${background}`);
+            }
+        }
+    }
+
+    return violations;
+}
+
 function mermaidBlocksOf(filePath)
 {
     const content = fs.readFileSync(filePath, "utf8");
@@ -170,4 +243,30 @@ test("the README's plugin graph draws every declared dependency once, dashed exa
         .sort();
 
     assert.deepEqual(drawnEdges, expectedEdges);
+});
+
+test("every boundary's title reads on its tinted fill over both GitHub backgrounds", () =>
+{
+    const files = [path.join(REPOSITORY_ROOT, "README.md")].concat(markdownFilesUnder(DOCS_DIRECTORY));
+    const violations = files.flatMap((filePath) => mermaidBlocksOf(filePath)
+        .flatMap(titleContrastViolations)
+        .map((violation) => `${path.relative(REPOSITORY_ROOT, filePath)}: ${violation}`));
+
+    assert.deepEqual(violations, []);
+});
+
+test("the title check catches the colours that were unreadable in dark mode (#48)", () =>
+{
+    // The boundaries as they stood before #48: each title in its layer's own colour.
+    const before = [
+        "    style adapters fill:#0478571A,stroke:#047857,color:#047857",
+        "    style roles fill:#4F46E51A,stroke:#4F46E5,color:#4F46E5",
+        "    style outside fill:#7E22CE1A,stroke:#7E22CE,color:#7E22CE,stroke-dasharray:3 3",
+        "    style port fill:#B453091A,stroke:#B45309,color:#B45309",
+        "    style session fill:#8B949E14,stroke:#8B949E,color:#8B949E",
+        "    style terylon fill:#2563EB1A,stroke:#2563EB,color:#2563EB",
+    ].join("\n");
+    const violatedBoundaries = new Set(titleContrastViolations(before).map((violation) => violation.split(":")[0]));
+
+    assert.deepEqual([...violatedBoundaries].sort(), ["adapters", "outside", "port", "roles", "session", "terylon"]);
 });

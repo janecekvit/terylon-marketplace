@@ -166,6 +166,30 @@ test('A VERIFIED LIST STORY\'S CARD SAYS ACCEPT IN ITS STEPPER: the last phase i
   expect((await pictures(ui)).some(picture => /Merge/.test(picture.source) || /Merge/.test(picture.alt))).toBe(false)
 })
 
+test('A LIST STORY\'S PHASES HAVE NO PULL REQUEST: verdict, then Accept; a repository story keeps its Pull req. (#48)', async ($, on) => {
+  const terylon = world(on)
+  withListStory(terylon)
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount(MOUNT)
+  await ui.press({ key: 'accept-352' })
+  await ui.press({ key: 'open-story-352' })
+  // Its briefing names no stage, so only Admitted is drawn done; the phases are seven, the pull request not among them.
+  expect((await pictures(ui))[0]?.alt).toBe('Admitted done; Plan, Develop, Review, Tests, Verified, Accept to come')
+  expect(await ui.find({ type: 'Text', text: /Pull req/ })).toBeUndefined()
+  expect((await pictures(ui)).some(picture => /Pull request/.test(picture.source))).toBe(false)
+  expect(await ui.find({ type: 'Text', text: / of 7\b/ })).toBeDefined()
+
+  // THE REPOSITORY STORY BESIDE IT still passes through its pull request on the way to the merge.
+  await ui.unmount()
+  await $.command.run({ command: 'terylon-pane', args: '' } as never)
+  const queue = await $.ui.mount(MOUNT)
+  await queue.press({ key: 'merge-327' })
+  await queue.press({ key: 'open-story-327' })
+  expect((await pictures(queue))[0]?.alt).toMatch(/Tests, Pull req\., Verified/)
+})
+
 // A plan of one story, as the owner's screenshot showed it: "○ M" above "● 1 <title> M".
 const ONE_STORY_PLAN = {
   plans: [

@@ -612,6 +612,24 @@ const MUTATIONS = [
         find: "                {look.isGraphic ? picture(elements, planChain(chain, orderAlt)) : <Text color=\"subtle\">{planOrder(chain)}</Text>}\n",
         replace: "                {look.isGraphic ? picture(elements, planChain(chain, orderAlt)) : <Text color=\"subtle\">{planOrder(chain)}</Text>}\n                <Text color=\"subtle\" size=\"footnote\" tabular>{plan.stories.map(item => (item.estimate === null ? item.size : `${item.size} ~$${item.estimate}`)).join(' → ')}</Text>\n",
     },
+    {
+        name: "unreachable before the first answer says the state of ? again",
+        file: "hooks/register.tsx",
+        find: "COPY.unreachableBody(current.fetchedAt === null ? null : clock(new Date(current.fetchedAt).toISOString(), offset))",
+        replace: "COPY.unreachableBody(at(current.fetchedAt))",
+    },
+    {
+        name: "a list story's phases name the pull request again",
+        file: "hooks/queue.ts",
+        find: "(name === 'pr' && isList ? [] : [{",
+        replace: "(false ? [] : [{",
+    },
+    {
+        name: "a withdrawn plan stays on the Goals tab",
+        file: "hooks/register.tsx",
+        find: "plan.state !== 'withdrawn' && ",
+        replace: "",
+    },
 ];
 
 module.exports = { MUTATIONS };

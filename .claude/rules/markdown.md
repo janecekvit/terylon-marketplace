@@ -136,9 +136,9 @@ flowchart TD
 | Element | Style | Because |
 |---|---|---|
 | A node, through `classDef` and `:::class` | a saturated fill, a darker stroke, **white text**, from the palette below | white on a saturated fill reads on either background; a pale fill glares in dark mode |
-| A boundary, through `subgraph` and `style` | a semi-transparent fill `#RRGGBBAA` with alpha `1A` (`14` for a large area), the stroke and the title in the layer's colour: `style port fill:#B453091A,stroke:#B45309,color:#B45309` | the background shows through, so the box tints in either theme |
+| A boundary, through `subgraph` and `style` | a semi-transparent fill `#RRGGBBAA` with alpha `1A` (`14` for a large area) and the stroke in the layer's colour; the title in the layer's **title colour** from the palette below: `style port fill:#B453091A,stroke:#B45309,color:#C0590A` | the background shows through, so the box tints in either theme; the layer's own colour is too dark for a title on the dark background |
 | A boundary outside the trust it encloses, or outside the chain | dashed: `stroke-dasharray:3 3` | |
-| A boundary with no layer of its own | the neutral `#8B949E`, alpha `14` | a dark grey title vanishes on the dark background |
+| A boundary with no layer of its own | the neutral `#8B949E` for the fill (alpha `14`) and the stroke, the title `#717B87` | a dark grey title vanishes on the dark background, a light one on the white |
 | Edges | `linkStyle default stroke:#8B949E`; an edge label takes no colour | the theme colours the labels |
 | A node left without a class (the owner, or a flow's ordinary step) | the theme's own colours | |
 | Text | **never set `fontFamily`** | GitHub measures text in one font and draws it in another, so a set font clips the labels |
@@ -146,17 +146,19 @@ flowchart TD
 
 One meaning per colour, across every diagram here:
 
-| Colour | `classDef` | Means here |
-|---|---|---|
-| indigo | `fill:#4F46E5,stroke:#3730A3,color:#FFFFFF` | the clients: the role plugins, and the callers that name a forge operation |
-| green | `fill:#047857,stroke:#065F46,color:#FFFFFF` | the entry points into a forge: the adapters |
-| blue | `fill:#2563EB,stroke:#1E40AF,color:#FFFFFF` | services: the chain every plugin sits on (`terylon-core`, `terylon-git`), and Agentic OS |
-| amber | `fill:#B45309,stroke:#92400E,color:#FFFFFF` | the runtime seam: the forge port, `terylon-forge` |
-| purple | `fill:#7E22CE,stroke:#6B21A8,color:#FFFFFF` | Terylon's own plugins: `terylon-os` and its mod `terylon-pane` |
-| grey | `fill:#4B5563,stroke:#374151,color:#FFFFFF` | outside the marketplace: servers, forges, the phone, and a note |
-| red | `fill:#B91C1C,stroke:#991B1B,color:#FFFFFF` | a stop or the one gate: where the flow refuses, or merge in the console |
+| Colour | `classDef` | A boundary's title | Means here |
+|---|---|---|---|
+| indigo | `fill:#4F46E5,stroke:#3730A3,color:#FFFFFF` | `#6C64E9` | the clients: the role plugins, and the callers that name a forge operation |
+| green | `fill:#047857,stroke:#065F46,color:#FFFFFF` | `#058762` | the entry points into a forge: the adapters |
+| blue | `fill:#2563EB,stroke:#1E40AF,color:#FFFFFF` | `#3770ED` | services: the chain every plugin sits on (`terylon-core`, `terylon-git`), and Agentic OS |
+| amber | `fill:#B45309,stroke:#92400E,color:#FFFFFF` | `#C0590A` | the runtime seam: the forge port, `terylon-forge` |
+| purple | `fill:#7E22CE,stroke:#6B21A8,color:#FFFFFF` | `#9C4CE2` | Terylon's own plugins: `terylon-os` and its mod `terylon-pane` |
+| grey | `fill:#4B5563,stroke:#374151,color:#FFFFFF` | — | outside the marketplace: servers, forges, the phone, and a note |
+| red | `fill:#B91C1C,stroke:#991B1B,color:#FFFFFF` | — | a stop or the one gate: where the flow refuses, or merge in the console |
 
 The first six are the owner's palette, shared with their other repositories; red is this repository's one addition, because a stop and the merge gate must not read as an ordinary step.
+
+**A boundary's title is one colour drawn on two backgrounds**, the tinted fill over GitHub's white `#ffffff` and over its dark `#0d1117`, so it is a mid-tone of the layer's hue. Each title colour above is the lightness of that hue that reads best on both, about 3.9:1 on each (#48); no colour reaches 4.5:1 on both, since the best any colour can do against that pair is about 4.3:1. The layer's own colour, the one its nodes and stroke use, fell to 2.6–3.4:1 on the dark background. `tests/architecture-diagrams` computes every `style … color:` against both backgrounds and fails one under **3.75:1**.
 
 **Check every block before pushing.** CI starts no browser for it. Render each block twice with `@mermaid-js/mermaid-cli@11.4.2` against the pre-installed headless shell, with `--no-sandbox`: once in the default theme with `-b '#ffffff'`, once with `-t dark -b '#0d1117'`. Look at both renders, see that no label is clipped and every word reads on both backgrounds, and commit only the Markdown. `node --test tests/architecture-diagrams/architecture-diagrams.test.js` fails on a flowchart without the front matter above, or with a `theme`, `themeVariables` or `fontFamily`, and holds the plugin graph's edges to `plugin.json#dependencies`.
 

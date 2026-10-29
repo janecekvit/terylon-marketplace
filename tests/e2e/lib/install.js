@@ -19,6 +19,9 @@ const childProcess = require("child_process");
 const fileSystem = require("fs");
 const path = require("path");
 const { readInventory, cleanEnvironment } = require("./claude.js");
+const { WINDOWS_MAX_PATH, marketplaceCloneDirectory, longestTrackedPath, projectedClonePathLength, explainCloneFailure } = require("./long-paths.js");
+
+const REPOSITORY_ROOT = path.join(__dirname, "..", "..", "..");
 
 const MARKETPLACE_NAME = "terylon";
 
@@ -108,9 +111,22 @@ function installStage({ source, ref, workDirectory, binDirectory, mcpBase, check
 
     log(`installing ${source}#${ref} into ${configDirectory}`);
 
-    const added = run("claude", ["--settings", settingsFile, "plugin", "marketplace", "add", `${source}#${ref}`], { env: environment, cwd: projectDirectory });
+    // The deepest file the clone writes, estimated from this checkout's tracked paths: on Windows, said up front
+    // when it passes MAX_PATH, and named instead of git's message when the clone fails on it (#48).
+    const cloneDirectory = marketplaceCloneDirectory(configDirectory);
+    const trackedPath = longestTrackedPath(run("git", ["ls-files"], { cwd: REPOSITORY_ROOT }).stdout.split("\n"));
+    const projectedLength = projectedClonePathLength(cloneDirectory, trackedPath);
 
-    check("install", "the marketplace is added from the ref", added.status === 0, (added.stdout + added.stderr).trim().split("\n").slice(-2).join(" "));
+    if (process.platform === "win32" && projectedLength >= WINDOWS_MAX_PATH)
+    {
+        log(`the clone's deepest file lands at ${projectedLength} characters, past MAX_PATH; core.longpaths is set for git, and a shorter --out avoids it`);
+    }
+
+    const added = run("claude", ["--settings", settingsFile, "plugin", "marketplace", "add", `${source}#${ref}`], { env: environment, cwd: projectDirectory });
+    const addedOutput = added.stdout + added.stderr;
+    const tooLong = explainCloneFailure({ output: addedOutput, platform: process.platform, cloneDirectory, trackedPath });
+
+    check("install", "the marketplace is added from the ref", added.status === 0, tooLong || addedOutput.trim().split("\n").slice(-2).join(" "));
 
     if (added.status !== 0)
     {

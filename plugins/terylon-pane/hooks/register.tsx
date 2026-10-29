@@ -103,7 +103,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.7.2'
+export const MOD_VERSION = '1.8.0'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -665,7 +665,7 @@ async function readBell($: EngineInterface): Promise<PaneBell> {
 
 // The stepper's short labels: a list story's last phase is Accept, never Merge (#39).
 function shortLabels(phases: readonly { label: string }[]): readonly string[] {
-  return COPY.phaseShort.map((label, index) => (phases[index]?.label === COPY.acceptPhase ? COPY.acceptShort : label))
+  return phases.map(phase => COPY.phaseShort(phase.label))
 }
 
 async function readAdd($: EngineInterface): Promise<PaneAdd> {
@@ -1935,7 +1935,7 @@ export const register: Register = on => {
       ], 'bad')
     } else if (isStale) {
       problemCard = cardOf('problem', warned(COPY.unreachableTitle), COPY.unreachableWhen(at(current.failingSince)), [
-        <Text color="inactive">{COPY.unreachableBody(at(current.fetchedAt))}</Text>,
+        <Text color="inactive">{COPY.unreachableBody(current.fetchedAt === null ? null : clock(new Date(current.fetchedAt).toISOString(), offset))}</Text>,
         reason(current.problem),
         steps(COPY.fixUnreachable(base)),
         <Text color="subtle">{COPY.unreachableFix}</Text>,
@@ -2826,8 +2826,9 @@ export const register: Register = on => {
     // THE GOALS TAB: open goals by priority, the plans, and a new goal with its priority and target.
     if (screen.screen === 'goals') {
       const isClosedShown = shown.includes('goals-closed')
-      // A CLOSED GOAL'S PLANS LEAVE THE TAB (the owner's walk of 1.5.0, #35): they stay on the goal's own screen.
-      const openPlans = goalsState.plans.filter(plan => !goalsState.closed.some(item => item.id === plan.goal))
+      // A CLOSED GOAL'S PLANS LEAVE THE TAB (the owner's walk of 1.5.0, #35), AND SO DOES A WITHDRAWN PLAN, which waits
+      // on nothing (#48): plans_list says `state: 'withdrawn'`. Both stay on the goal's own screen.
+      const openPlans = goalsState.plans.filter(plan => plan.state !== 'withdrawn' && !goalsState.closed.some(item => item.id === plan.goal))
       const goalPickers = [
         'Select' in elements ? (
           <elements.Select key="goal-priority" label={COPY.priority} value={goalsState.priority} options={COPY.priorities} onSelect={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, priority: value }))} />
