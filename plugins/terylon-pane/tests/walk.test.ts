@@ -52,7 +52,7 @@ test('a goals or bell value an earlier version of the mod left behind is replace
   })
   on('state.get', async ($, e, next) => {
     const key = String((e as { key?: unknown }).key)
-    return key in stale ? ({ value: stale[key], version: 1 } as never) : next(e)
+    return key in stale ? ({ value: { value: stale[key], version: 1 } } as never) : next(e)
   })
   const terylon = world(on)
   await $.session.start(SESSION)

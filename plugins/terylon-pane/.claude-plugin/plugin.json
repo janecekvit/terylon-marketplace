@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "terylon-pane",
-  "version": "1.8.3",
+  "version": "1.9.12",
   "description": "The Terylon band, status line and pane in Claude Desktop, a mod: what waits for you above the prompt, the health of Agentic OS and today's spend in the status line, and one pane with Queue, Goals, Bell, Memory and Status tabs. It answers the leader's questions, adds tasks and goals, and takes the owner's acts on their cards; it never merges. Requires terylon-os.",
   "author": {
     "name": "Vít Janeček"

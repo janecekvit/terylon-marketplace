@@ -44,20 +44,28 @@ test('merged, accepted, abandoned, blocked and stuck are signalled; nothing else
       { seq: 18106, type: 'PlanProposed', about: 'plan', subject: 'plan/41', plan: 41 },
     ])
   terylon.answers.work_in_flight = { slots: 4, paused: false, stories: [{ id: 333, title: 'Direct dispatch', state: 'running', costUsd: 1, stuck: { since: '2026-10-11T21:00:00Z', reason: 'no output for 30 minutes' } }] }
+  // Read again before the post, the blocked story is still blocked.
+  terylon.answers.story_get = (args: Record<string, unknown>) => ({ id: args.story, goal: 3, title: 'x', state: args.story === 344 ? 'blocked' : 'running', timeline: [] })
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
-  expect(terylon.prompts.map(prompt => prompt.slice(0, 30))).toEqual([
-    'Story #341 „S10a cleanup“ je m',
-    'Story #342 „Accepted one“ je p',
-    'Story #343 „Dropped one“ je op',
-    'Story #344 „Blocked one“ je za',
-    'Story #333 „Direct dispatch“ s',
+  // FIVE SIGNALS OF ONE READ ARE ONE PROMPT, a line each in the order they moved, and one toast.
+  expect(terylon.prompts).toHaveLength(1)
+  expect(terylon.prompts[0]?.split('\n').map(line => line.slice(0, 32))).toEqual([
+    'Terylon: od posledního pohledu s',
+    '- Story #341 „S10a cleanup“ je m',
+    '- Story #342 „Accepted one“ je p',
+    '- Story #343 „Dropped one“ je op',
+    '- Story #344 „Blocked one“ je za',
+    '- Story #333 „Direct dispatch“ s',
+    '',
+    'Shrň mi to a u každé, která čeká',
   ])
-  expect(terylon.prompts[4]).toContain('no output for 30 minutes')
+  expect(terylon.prompts[0]).toContain('no output for 30 minutes')
+  expect(terylon.toasts).toEqual(['Terylon: 5 stories moved'])
 
   await terylon.clock.advance(30000)
-  expect(terylon.prompts).toHaveLength(5)
+  expect(terylon.prompts).toHaveLength(1)
 })
 
 test('the very first look starts from now and tells nothing of the past', async ($, on) => {

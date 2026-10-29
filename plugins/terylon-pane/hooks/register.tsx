@@ -44,8 +44,8 @@ import type {
 import { COPY } from './copy'
 import { CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, NARROW_COLUMNS, STEPPER_COLUMNS, dots, meter, phaseGlyph, planChain, planOrder, proofsOf, segments, slotsGauge, spendBar, splitHash, stepper } from './drawing'
 import type { Picture, Proofs } from './drawing'
-import { ALERT_SOURCES, alertCount, healthLine, stateWord } from './health'
-import type { Health } from './health'
+import { ALERT_SOURCES, REASON_WHOLE, alertCount, checkTree, healthLine, plainLine, stateWord, statusDrawingOf, storeFileOf, treeLine, typedLine } from './health'
+import type { Health, StatusPart } from './health'
 import { MISSING_SERVER, NEEDS_TEXT, NOT_ALLOWED, SERVER_CANDIDATES, TEXT_LIMITS, actArguments, allowRules, assertPaneTool, isSendable, readResult } from './terylon'
 import type { TerylonAnswer } from './terylon'
 import {
@@ -81,6 +81,7 @@ import {
   spend,
   storyView,
   text,
+  verifiedIds,
   waitingItems,
 } from './queue'
 import {
@@ -91,11 +92,14 @@ import {
   candidatesFromEvents,
   candidatesFromFlight,
   catchUpSummary,
+  coalesce,
+  settleCandidate,
   signalFor,
   signalKey,
+  signalsSummary,
   verdictOf,
 } from './signals'
-import type { Candidate, Verdict } from './signals'
+import type { Candidate, Signal, Verdict } from './signals'
 
 type Json = Record<string, unknown>
 
@@ -103,15 +107,25 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.8.3'
+export const MOD_VERSION = '1.9.12'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
 export const RETRY_MS = 60000
 
+// THE WATCHDOG: events_since unanswered for longer than three ticks while the queue reads is a problem, whatever
+// stopped it, a call never made included.
+export const EVENTS_SILENT_MILLISECONDS = 3 * POLL_MS
+
+// How often the watchdog looks: often enough that the problem is said within ten seconds of its bound.
+const WATCH_MILLISECONDS = 10000
+
 // How many criteria and timeline rows a story shows before "další N ▾".
 const CRITERIA_SHOWN = 2
 const TIMELINE_SHOWN = 4
+
+// The Status tab's parts in the order it draws them, as its debug line names them.
+const STATUS_DRAWN = ['machine', 'gauges', 'problems', 'events', 'alerts', 'outcomes', 'policy', 'diagnostics'] as const
 
 // HOW LONG A SCREEN'S LOAD MAY TAKE before it is said as its error: under Desktop's own 10 s bound on a press
 // (`ui.press: … did not answer within 10000ms`), so the error is written while the press is still answered.
@@ -125,6 +139,10 @@ const PROMPT_REPEAT_MILLISECONDS = 60000
 const STORE_LAST_SEQ = 'lastSeq'
 const STORE_LAST_SEEN_AT = 'lastSeenAt'
 const STORE_SIGNALLED = 'signalled'
+
+// HOW LONG ONE $.store CALL MAY TAKE before the pane goes on with what it keeps in memory: a store that never answers
+// must not hold the poll, which waits for its last tick to end.
+const STORE_BOUND_MILLISECONDS = 2000
 
 const EMPTY_SNAPSHOT: PaneSnapshot = {
   connection: 'connecting',
@@ -147,6 +165,10 @@ const EMPTY_SNAPSHOT: PaneSnapshot = {
   queued: [],
   doneToday: [],
   questions: [],
+  events: null,
+  eventsAnsweredAt: null,
+  eventsWatchedSince: null,
+  eventsSilentSince: null,
 }
 
 const QUEUE: PaneScreen = { screen: 'queue' }
@@ -198,11 +220,26 @@ let answeringServer: string | null = null
 // and the state it reads until Terylon's answer leaves the first. Bounded, so a lost act cannot hold a card for good.
 const SETTLE_MILLISECONDS = 300000
 
+// The states of a story that has ended: no stage is reported any more, and its phases say how it ended instead.
+const ENDED_STORY_STATES: readonly string[] = ['merged', 'accepted', 'abandoned']
+
 // The states of a story that has not ended: what a goal's drop abandons (Terylon S35, #388).
 const OPEN_STORY_STATES: readonly string[] = ['approved', 'dispatched', 'running', 'blocked', 'pr-open', 'verifying', 'verified']
 const settled = new Map<string, { from: readonly string[]; to: string; until: number }>()
 // Where each verified story is kept, as story_get said it: `list`, or its repository's target.
 const storyTargets = new Map<number, string>()
+
+// WHAT THE PANE KEEPS IN $.store, mirrored here: where a store refuses, the session still reads from its last place and
+// signals each story once, and only a return after Desktop was closed is lost.
+const keptInMemory = new Map<string, unknown>()
+// How often the store refused in this tick's read of the events: the Status tab's problem stays while it is not 0.
+let storeRefusals = 0
+
+// THE PANE'S OWN LOG, the debug lines it wrote last, drawn on the Queue tab under TERYLON_PANE_STATUS=log: a host that
+// writes no log the owner can read still shows what the pane did and saw.
+const NOTES_KEPT = 40
+const notes: string[] = []
+let notesWritten = 0
 
 // The policy just saved, laid over what policy_get answers until policy_get answers it too (#35).
 let savedPolicy: { values: Json; until: number } | null = null
@@ -235,7 +272,20 @@ function settle(tool: string, subject: number | null, now: number): void {
     settled.set(`plan-${subject}`, { from: ['proposed'], to: tool === 'plan_approve' ? 'approved' : 'rethink', until })
   } else if (tool === 'goal_drop') {
     settled.set(`goal-${subject}`, { from: ['open', 'active', 'planned'], to: 'dropped', until })
+  } else if (tool === 'story_accept') {
+    settled.set(`story-${subject}`, { from: ['verified'], to: 'accepted', until })
   }
+}
+
+// A story as Terylon answered it, or accepted where the owner just accepted it: a list story stays one.
+function settledStory(document: Json, id: number, now: number): Json {
+  if (typeof document.state !== 'string') {
+    return document
+  }
+
+  const state = settledState(`story-${id}`, document.state, now)
+
+  return state === document.state ? document : { ...document, state, target: document.target ?? 'list' }
 }
 
 // One object's values laid over another's, a nested one (the memory's bounds) merged rather than replaced.
@@ -337,9 +387,31 @@ function healthOf(current: PaneSnapshot, offset: number): Health {
   }
 }
 
-// Something the owner should look at: the connection, the leader paused, an alert.
-function hasProblem(current: PaneSnapshot): boolean {
-  return (current.connection !== 'ok' && current.connection !== 'connecting') || current.paused !== null || current.alerts > 0
+// Something the owner should look at: the connection, the leader paused, an alert. A part TERYLON_PANE_STATUS leaves
+// out lights no ⚠, so the tab never warns over a list that shows nothing.
+function hasProblem(current: PaneSnapshot, off: ReadonlySet<StatusPart> = new Set()): boolean {
+  if (off.has('problems')) {
+    return false
+  }
+
+  return (current.connection !== 'ok' && current.connection !== 'connecting') || current.paused !== null || (!off.has('alerts') && current.alerts > 0) || (!off.has('events') && (current.events !== null || isEventsSilent(current)))
+}
+
+// The watchdog's finding, said while the queue reads and no failure of events_since says why already.
+function isEventsSilent(current: PaneSnapshot): boolean {
+  return current.eventsSilentSince !== null && current.connection === 'ok' && current.events === null
+}
+
+// THE WATCHDOG, on a timer of its own: a tick held for good, or one that never reaches the call, still ends here.
+async function watchEvents($: EngineInterface): Promise<void> {
+  const now = await $.clock.now()
+
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => {
+    const since = current.eventsAnsweredAt ?? current.eventsWatchedSince
+    const silentSince = since !== null && now - since > EVENTS_SILENT_MILLISECONDS ? since : null
+
+    return silentSince === current.eventsSilentSince ? current : { ...EMPTY_SNAPSHOT, ...current, eventsSilentSince: silentSince }
+  })
 }
 
 // THE STATUS LINE: the worst of the machine's health, or its spend when all is well.
@@ -414,18 +486,18 @@ async function refresh($: EngineInterface): Promise<boolean> {
   lastBriefing = {
     ...briefing.value,
     plansWaiting: list(briefing.value.plansWaiting).filter(plan => settledState(`plan-${number(plan.id) ?? 0}`, 'proposed', now) === 'proposed'),
-    storiesVerified: await withTargets($, list(briefing.value.storiesVerified), lastStories),
+    storiesVerified: await withTargets($, list(briefing.value.storiesVerified).filter(item => settledState(`story-${number(item.id) ?? 0}`, 'verified', now) === 'verified'), lastStories),
   }
 
   const base = await baseUrl($)
   const offset = zoneOffset(now)
-  const running = runningItems(lastFlight, offset)
+  const running = runningItems(lastFlight, offset, verifiedIds(lastBriefing))
   const inFlight = new Set(running.map(item => item.story))
   const paused = pausedOf((lastBriefing.leader ?? null) as Json | null, lastFlight.paused === true, offset)
   const slots = number(lastFlight.slots) ?? number(policy?.slots) ?? 0
   const queuedStories = await withHeldReasons($, lastStories, inFlight)
 
-  await update($, snapshot, (): PaneSnapshot => ({
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({
     connection: 'ok',
     problem: null,
     fetchedAt: now,
@@ -446,6 +518,11 @@ async function refresh($: EngineInterface): Promise<boolean> {
     running,
     queued: queuedItems(queuedStories, inFlight, paused === null && running.length < slots),
     doneToday: doneTodayItems(lastStories, now, offset),
+    // THE DONE-SIGNAL'S PROBLEM IS ITS OWN: a good read of the queue says nothing of events_since or the store.
+    events: current.events ?? null,
+    eventsAnsweredAt: current.eventsAnsweredAt ?? null,
+    eventsWatchedSince: current.eventsWatchedSince ?? null,
+    eventsSilentSince: current.eventsSilentSince ?? null,
     questions: questionItems(lastBriefing),
   }))
   await showHealth($)
@@ -507,10 +584,76 @@ async function withTargets($: EngineInterface, verified: Json[], stories: Json[]
   return read_
 }
 
-async function signalled($: EngineInterface): Promise<string[]> {
-  const kept = await $.store.get(STORE_SIGNALLED)
+// A line in `claude --debug` under terylon-pane: for the events path, so a run shows where the call stops.
+// A line for claude --debug and for the pane's own log, numbered so that two reads of the log can be told apart.
+function note($: EngineInterface, line: string): void {
+  $.ui.log(line, { to: 'debug' })
+  notesWritten += 1
+  notes.push(`${notesWritten} ${line}`)
+  notes.splice(0, Math.max(0, notes.length - NOTES_KEPT))
+}
 
-  return Array.isArray(kept) ? kept.filter((key): key is string => typeof key === 'string') : []
+function debug($: EngineInterface, line: string): void {
+  note($, `terylon-pane: events: ${line}`)
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+// WHY THE DONE-SIGNAL CANNOT RUN, on the Status tab until a whole read of the events succeeds; the first failure's time.
+async function eventsFailed($: EngineInterface, kind: NonNullable<PaneSnapshot['events']>['kind'], reason: string): Promise<void> {
+  const now = await $.clock.now()
+  debug($, `stopped (${kind}): ${reason}`)
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({
+    ...EMPTY_SNAPSHOT,
+    ...current,
+    events: { kind, reason, since: current.events?.kind === kind ? current.events.since : now },
+  }))
+}
+
+// One $.store call, bounded: what it answers, or the error it rejected with, or that it did not answer.
+async function storeCall<T>($: EngineInterface, work: () => Promise<T>): Promise<{ value: T } | { error: string }> {
+  const timedOut = new Promise<{ error: string }>(resolve => {
+    $.clock.after(STORE_BOUND_MILLISECONDS, () => resolve({ error: COPY.storeTimedOut(STORE_BOUND_MILLISECONDS / 1000) }))
+  })
+  const finished = work().then(
+    (value: T): { value: T } => ({ value }),
+    (error: unknown): { error: string } => ({ error: messageOf(error) }),
+  )
+
+  return Promise.race([finished, timedOut])
+}
+
+// A value the pane keeps: the store's, else what this session kept in memory. A store that refuses is said, not thrown.
+async function kept($: EngineInterface, key: string): Promise<unknown> {
+  const answered = await storeCall($, () => $.store.get(key))
+
+  if ('error' in answered) {
+    storeRefusals += 1
+    await eventsFailed($, 'store', COPY.storeReadFailed(key, answered.error))
+
+    return keptInMemory.get(key)
+  }
+
+  return answered.value === undefined ? keptInMemory.get(key) : answered.value
+}
+
+async function keep($: EngineInterface, key: string, value: unknown): Promise<void> {
+  keptInMemory.set(key, value)
+
+  const answered = await storeCall($, () => $.store.set(key, value))
+
+  if ('error' in answered) {
+    storeRefusals += 1
+    await eventsFailed($, 'store', COPY.storeWriteFailed(key, answered.error))
+  }
+}
+
+async function signalled($: EngineInterface): Promise<string[]> {
+  const value = await kept($, STORE_SIGNALLED)
+
+  return Array.isArray(value) ? value.filter((key): key is string => typeof key === 'string') : []
 }
 
 async function verdictFor($: EngineInterface, candidate: Candidate): Promise<Verdict | null> {
@@ -523,21 +666,41 @@ async function verdictFor($: EngineInterface, candidate: Candidate): Promise<Ver
   return answered.kind === 'ok' ? verdictOf(answered.value) : null
 }
 
+// events_since answered: the watchdog's clock starts again.
+async function eventsAnswered($: EngineInterface): Promise<void> {
+  const now = await $.clock.now()
+
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, eventsAnsweredAt: now, eventsSilentSince: null }))
+}
+
+// events_since did not answer as the owner's: the same kinds as the poll's own problem.
+async function eventsRefused($: EngineInterface, answered: TerylonAnswer): Promise<void> {
+  const kind = answered.kind === 'ok' ? 'failed' : answered.kind === 'refused' ? 'refused' : answered.kind
+
+  await eventsFailed($, kind, why(answered) || COPY.noServerTitle)
+}
+
 // Reads events_since from the stored sequence, page by page, up to `most` events.
 async function readEvents($: EngineInterface, since: number, most: number): Promise<{ events: Json[]; last: number; isWhole: boolean } | null> {
   const events: Json[] = []
   let from = since
 
   for (;;) {
+    debug($, `calling events_since since ${from}`)
     const answered = await callTerylon($, 'events_since', { since: from, limit: EVENTS_PAGE })
 
     if (answered.kind !== 'ok') {
+      await eventsRefused($, answered)
+
       return null
     }
+
+    await eventsAnswered($)
 
     const page = answered.value
     events.push(...list(page.events))
     from = number(page.last) ?? from
+    debug($, `events_since answered ${list(page.events).length} events, last ${from}${page.more === true ? ', more' : ''}${page.gap === true ? ', a gap' : ''}`)
 
     if (page.gap === true || events.length > most) {
       return { events, last: number(page.head) ?? from, isWhole: false }
@@ -549,24 +712,46 @@ async function readEvents($: EngineInterface, since: number, most: number): Prom
   }
 }
 
-// THE DONE-SIGNAL: one prompt per story and verdict commit, posted when the session is idle.
+// THE DONE-SIGNAL: once per story and verdict commit. Each story's latest move alone, read again with story_get right
+// before the post, so that nothing asks for what has already happened; several are one summary, one turn.
 async function postSignals($: EngineInterface, candidates: Candidate[]): Promise<void> {
   const done = await signalled($)
+  const signals: Signal[] = []
+  const now = await $.clock.now()
 
-  for (const candidate of candidates) {
-    const verdict = await verdictFor($, candidate)
-    const key = signalKey(candidate, verdict)
+  for (const candidate of coalesce(candidates)) {
+    const answered = await callTerylon($, 'story_get', { story: candidate.story })
+    // AN ACCEPT PRESSED IN THE PANE stands over a story_get that lags, or that did not answer.
+    const story = answered.kind === 'ok'
+      ? settledStory(answered.value, candidate.story, now)
+      : settled.has(`story-${candidate.story}`) ? settledStory({ id: candidate.story, state: 'verified' }, candidate.story, now) : null
+    const settled_ = settleCandidate(candidate, story)
+
+    if (settled_ === null) {
+      debug($, `not posting ${candidate.story}:${candidate.kind}: the story is ${text(story?.state) ?? 'moved on'} now`)
+      continue
+    }
+
+    const verdict = settled_.kind === 'verified' && story !== null ? verdictOf(story) : null
+    const key = signalKey(settled_, verdict)
 
     if (done.includes(key)) {
       continue
     }
 
-    const signal = signalFor(candidate, verdict)
     done.push(key)
-    await $.store.set(STORE_SIGNALLED, done.slice(-SIGNALS_KEPT))
-    await $.prompt.submit({ text: signal.prompt })
-    $.ui.toast(signal.toast)
+    signals.push(signalFor(settled_, verdict))
   }
+
+  if (signals.length === 0) {
+    return
+  }
+
+  await keep($, STORE_SIGNALLED, done.slice(-SIGNALS_KEPT))
+  const posted = signals.length === 1 ? { prompt: signals[0]?.prompt ?? '', toast: signals[0]?.toast ?? '' } : signalsSummary(signals)
+  debug($, `posting the done-signal ${signals.map(signal => signal.key).join(', ')}`)
+  await $.prompt.submit({ text: posted.prompt })
+  $.ui.toast(posted.toast)
 }
 
 async function markSignalled($: EngineInterface, candidates: Candidate[]): Promise<void> {
@@ -576,7 +761,7 @@ async function markSignalled($: EngineInterface, candidates: Candidate[]): Promi
     done.push(signalKey(candidate, await verdictFor($, candidate)))
   }
 
-  await $.store.set(STORE_SIGNALLED, done.slice(-SIGNALS_KEPT))
+  await keep($, STORE_SIGNALLED, done.slice(-SIGNALS_KEPT))
 }
 
 // One tick: the queue, then what moved since the last look.
@@ -599,56 +784,103 @@ async function tick($: EngineInterface, isStart: boolean): Promise<void> {
       return
     }
 
-    const lastSeq = number(await $.store.get(STORE_LAST_SEQ))
-    const lastSeenAt = number(await $.store.get(STORE_LAST_SEEN_AT))
-
-    if (lastSeq === null) {
-      // The first look ever: start from now, and tell nothing of the past.
-      const head = await callTerylon($, 'events_since', { since: 0, limit: 1 })
-
-      if (head.kind === 'ok') {
-        await $.store.set(STORE_LAST_SEQ, number(head.value.head) ?? number(head.value.last) ?? 0)
-        await $.store.set(STORE_LAST_SEEN_AT, now)
-      }
-
-      return
-    }
-
-    const awayMs = lastSeenAt === null ? 0 : now - lastSeenAt
-    const isCatchUp = isStart && awayMs > CATCH_UP_AFTER_MS
-    const read_ = await readEvents($, lastSeq, CATCH_UP_MOST_EVENTS)
-
-    if (read_ === null) {
-      return
-    }
-
-    const base = await baseUrl($)
-    const candidates = [...candidatesFromEvents(read_.events), ...candidatesFromFlight(lastFlight)]
-
-    if (!read_.isWhole) {
-      // Too far behind for a whole summary: say so, link the console, tell nothing piecemeal.
-      await markSignalled($, candidates)
-      await update($, band, (): PaneBand => ({ text: `${COPY.tooFarHeading} · ${COPY.tooFarBody(String(CATCH_UP_MOST_EVENTS))}`, link: consoleLink(base, 'history'), isAlert: true }))
-    } else if (isCatchUp) {
-      // Back after a long time away: ONE summary, the gap's signals inside it.
-      const summary = catchUpSummary({ awayMs, events: read_.events, briefing: lastBriefing, flight: lastFlight, policy })
-      await markSignalled($, candidates)
-      await $.prompt.submit({ text: summary.prompt })
-      await update($, band, (): PaneBand => ({ text: summary.band, link: consoleLink(base, 'waiting'), isAlert: false }))
-    } else {
-      await postSignals($, candidates)
-    }
-
-    await $.store.set(STORE_LAST_SEQ, read_.last)
-    await $.store.set(STORE_LAST_SEEN_AT, now)
+    await readMoved($, isStart, now)
+  } catch (error) {
+    // NOTHING OF A TICK IS LOST UNSAID: a timer drops what its callback rejects with, so it is said here instead.
+    await eventsFailed($, 'failed', messageOf(error))
   } finally {
     isPolling = false
   }
 }
 
+// What moved since the last look: the done-signal, or one catch-up summary after a long time away.
+async function readMoved($: EngineInterface, isStart: boolean, now: number): Promise<void> {
+  storeRefusals = 0
+
+  const lastSeq = number(await kept($, STORE_LAST_SEQ))
+  const lastSeenAt = number(await kept($, STORE_LAST_SEEN_AT))
+  debug($, `the last look: sequence ${lastSeq ?? 'none'}, at ${lastSeenAt ?? 'never'}`)
+
+  if (lastSeq === null) {
+    // The first look ever: start from now, and tell nothing of the past.
+    debug($, 'calling events_since for the head')
+    const head = await callTerylon($, 'events_since', { since: 0, limit: 1 })
+
+    if (head.kind !== 'ok') {
+      await eventsRefused($, head)
+
+      return
+    }
+
+    await eventsAnswered($)
+
+    await keep($, STORE_LAST_SEQ, number(head.value.head) ?? number(head.value.last) ?? 0)
+    await keep($, STORE_LAST_SEEN_AT, now)
+    await eventsRead($)
+
+    return
+  }
+
+  const awayMs = lastSeenAt === null ? 0 : now - lastSeenAt
+  const isCatchUp = isStart && awayMs > CATCH_UP_AFTER_MS
+  const read_ = await readEvents($, lastSeq, CATCH_UP_MOST_EVENTS)
+
+  if (read_ === null) {
+    return
+  }
+
+  const base = await baseUrl($)
+  const candidates = [...candidatesFromEvents(read_.events), ...candidatesFromFlight(lastFlight)]
+
+  if (!read_.isWhole) {
+    // Too far behind for a whole summary: say so, link the console, tell nothing piecemeal.
+    await markSignalled($, candidates)
+    await update($, band, (): PaneBand => ({ text: `${COPY.tooFarHeading} · ${COPY.tooFarBody(String(CATCH_UP_MOST_EVENTS))}`, link: consoleLink(base, 'history'), isAlert: true }))
+  } else if (isCatchUp) {
+    // Back after a long time away: ONE summary, the gap's signals inside it.
+    const summary = catchUpSummary({ awayMs, events: read_.events, briefing: lastBriefing, flight: lastFlight, policy })
+    await markSignalled($, candidates)
+    debug($, `posting the catch-up summary of ${read_.events.length} events`)
+    await $.prompt.submit({ text: summary.prompt })
+    await update($, band, (): PaneBand => ({ text: summary.band, link: consoleLink(base, 'waiting'), isAlert: false }))
+  } else {
+    await postSignals($, candidates)
+  }
+
+  await keep($, STORE_LAST_SEQ, read_.last)
+  await keep($, STORE_LAST_SEEN_AT, now)
+  await eventsRead($)
+}
+
+// A whole read of the events, and a store that kept it: the Status tab's events problem goes.
+async function eventsRead($: EngineInterface): Promise<void> {
+  if (storeRefusals > 0) {
+    return
+  }
+
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => (current.events === null ? current : { ...EMPTY_SNAPSHOT, ...current, events: null }))
+}
+
 // A value the host kept from an earlier version of the mod, across a reload, may lack what this one draws.
 async function readSnapshot($: EngineInterface): Promise<PaneSnapshot> {
-  return { ...EMPTY_SNAPSHOT, ...(await read($, snapshot)) }
+  return snapshotOf(await read($, snapshot))
+}
+
+// THE DONE-SIGNAL'S FIELDS, READ BY THEIR TYPE: a value an earlier version kept lacks them, and one of another shape
+// must draw as none rather than throw where the Status tab formats its time.
+function snapshotOf(value: unknown): PaneSnapshot {
+  const kept = { ...EMPTY_SNAPSHOT, ...(value !== null && typeof value === 'object' ? (value as Partial<PaneSnapshot>) : {}) }
+  const time = (moment: unknown): number | null => (typeof moment === 'number' && Number.isFinite(moment) ? moment : null)
+  const events = kept.events as Partial<NonNullable<PaneSnapshot['events']>> | null | undefined
+  const isEvents = events !== null && typeof events === 'object' && typeof events.kind === 'string' && typeof events.reason === 'string' && time(events.since) !== null
+
+  return {
+    ...kept,
+    events: isEvents ? (events as NonNullable<PaneSnapshot['events']>) : null,
+    eventsAnsweredAt: time(kept.eventsAnsweredAt),
+    eventsWatchedSince: time(kept.eventsWatchedSince),
+    eventsSilentSince: time(kept.eventsSilentSince),
+  }
 }
 
 async function readMemory($: EngineInterface): Promise<PaneMemory> {
@@ -782,7 +1014,7 @@ async function openStory($: EngineInterface, id: number): Promise<void> {
   // drawn from that same answer.
   await readFlight($, now)
 
-  const inFlight = list(lastFlight.stories).find(item => number(item.id) === id) ?? {}
+  const inFlight = settledStory(list(lastFlight.stories).find(item => number(item.id) === id) ?? {}, id, now)
   const question = (await readSnapshot($)).questions.find(item => item.subject === `story/${id}`) ?? null
 
   if (answered.kind !== 'ok' && Object.keys(inFlight).length === 0) {
@@ -790,7 +1022,7 @@ async function openStory($: EngineInterface, id: number): Promise<void> {
     return
   }
 
-  const document = answered.kind === 'ok' ? answered.value : {}
+  const document = settledStory(answered.kind === 'ok' ? answered.value : {}, id, now)
   const view_ = storyView(id, document, inFlight, question, now, zoneOffset(now))
   await update($, story, (): PaneStory | null => view_)
 
@@ -811,7 +1043,7 @@ async function readFlight($: EngineInterface, now: number): Promise<void> {
 
   lastFlight = flight.value
 
-  const running = runningItems(lastFlight, zoneOffset(now))
+  const running = runningItems(lastFlight, zoneOffset(now), verifiedIds(lastBriefing))
 
   await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({
     ...EMPTY_SNAPSHOT,
@@ -1545,6 +1777,8 @@ type Row = {
   kindColumn?: number
   title: string
   titleTone?: Tone
+  // A title drawn dim, as the engine dims a Text: a closed goal's, which a colour alone left as bright as an open one's.
+  isTitleDim?: boolean
   detail?: string | null
   detailTone?: Tone
   // The console link the pointer reveals over the row's right edge (hover-reveal); without the proof it sits in the body.
@@ -1572,7 +1806,7 @@ function row(elements: Elements, look: Look, input: Row): unknown {
     )
   }
 
-  children.push(<Text color={input.titleTone} wrap="truncate-end">{input.title}</Text>)
+  children.push(<Text color={input.titleTone} dimColor={input.isTitleDim === true ? true : undefined} wrap="truncate-end">{input.title}</Text>)
 
   if (hasDetail) {
     children.push('  ', <Text size="footnote" tabular color={input.detailTone ?? 'subtle'}>{input.detail}</Text>)
@@ -1585,17 +1819,18 @@ function row(elements: Elements, look: Look, input: Row): unknown {
 
   return (
     <Box key={`row-${input.key}`} flexDirection="column" hover={isRevealed ? { backgroundColor: 'userMessageBackgroundHover' } : undefined}>
-      <Box flexDirection="row" minWidth={0} overflow="hidden">
+      <Box flexDirection="row" minWidth={0} overflow="hidden" gap={isRevealed ? 'sm' : undefined}>
         <Button key={input.key} plain onPress={input.onPress}>
           {children}
         </Button>
+        {isRevealed && input.reveal !== undefined && input.reveal !== null && (
+          // BESIDE THE PRESS, NEVER OVER IT: laid over the row's right edge, the link covered the row's own text.
+          // NO KEY ON THE REVEAL: a keyed Box is a hover scope of its own, and one drawn "none" is never under the pointer.
+          <Box flexShrink={0} display="none" hover={{ display: 'flex' }}>
+            <Link href={input.reveal.href} label={input.reveal.label} />
+          </Box>
+        )}
       </Box>
-      {isRevealed && input.reveal !== undefined && input.reveal !== null && (
-        // NO KEY ON THE REVEAL: a keyed Box is a hover scope of its own, and one drawn "none" is never under the pointer.
-        <Box position="absolute" top={0} right={0} display="none" hover={{ display: 'flex' }}>
-          <Link href={input.reveal.href} label={input.reveal.label} />
-        </Box>
-      )}
       {input.body ?? null}
     </Box>
   )
@@ -1649,9 +1884,12 @@ export const register: Register = on => {
     await $.command.register({ name: 'terylon', description: 'Opens the Terylon pane (the same as /terylon-pane)' })
     await $.command.register({ name: 'terylon-memory', description: "Opens the Terylon pane on the leader's memory; an edit is confirmed in the console" })
     storyTargets.clear()
+    const startedAt = await $.clock.now()
+    await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, eventsWatchedSince: startedAt }))
     await showHealth($)
     $.clock.after(0, () => tick($, true))
     $.clock.every(POLL_MS, () => tick($, false))
+    $.clock.every(WATCH_MILLISECONDS, () => watchEvents($))
 
     return next(e)
   })
@@ -1672,6 +1910,13 @@ export const register: Register = on => {
     await openPane($, { screen: 'memory' })
 
     return { text: "The leader's memory is open." }
+  })
+
+  // A FAULT THE HOST REPORTED for what the pane drew, said in its own log as well as the debug log.
+  on('ui.fault', ($, e, next) => {
+    note($, `terylon-pane: ui.fault: ${e.component} ${e.phase} on ${e.surface}: ${e.reason}`)
+
+    return next(e)
   })
 
   // THE BAND: one row above the prompt, what calls for the owner, and the pane's entry point. The machine's health and
@@ -1790,7 +2035,9 @@ export const register: Register = on => {
     const now = await $.clock.now()
     const base = await baseUrl($)
     const offset = zoneOffset(now)
-    const at = (moment: number | null) => (moment === null ? '?' : clock(new Date(moment).toISOString(), offset) ?? '?')
+    const at = (moment: number | null) => (typeof moment !== 'number' || !Number.isFinite(moment) ? '?' : clock(new Date(moment).toISOString(), offset) ?? '?')
+    // WHAT THE OWNER LEFT OUT to find the part Desktop does not draw (TERYLON_PANE_STATUS); unset, nothing is.
+    const drawingAsked = statusDrawingOf(await $.env.get('TERYLON_PANE_STATUS'))
     const age = current.fetchedAt === null ? null : COPY.ago(Math.max(0, Math.round((now - current.fetchedAt) / 1000)))
     const isStale = current.connection === 'unreachable'
     const stale = isStale ? COPY.stale : ''
@@ -1923,7 +2170,7 @@ export const register: Register = on => {
         {tabButton('tab-goals', '2', COPY.tabGoals, { screen: 'goals' }, tab === 'goals', null)}
         {tabButton('tab-bell', '3', COPY.tabBell(0), { screen: 'bell' }, tab === 'bell', current.notices > 0 ? { text: String(current.notices), tone: 'warning' } : null)}
         {tabButton('tab-memory', '4', COPY.tabMemory, { screen: 'memory' }, tab === 'memory', null)}
-        {tabButton('tab-status', '5', COPY.tabStatus(false), { screen: 'status' }, tab === 'status', hasProblem(current) ? { text: '⚠', tone: 'warning' } : null)}
+        {tabButton('tab-status', '5', COPY.tabStatus(false), { screen: 'status' }, tab === 'status', hasProblem(current, drawingAsked.off) ? { text: '⚠', tone: 'warning' } : null)}
       </Box>
     )
     const context = (
@@ -1943,7 +2190,9 @@ export const register: Register = on => {
     const footer = <Text key="footer" color="subtle" size="footnote" mono>{COPY.footer}</Text>
     // A FAULT OF THE MACHINE, for a bell row's chip: an alert source, or a notice the Status tab counts as an alert.
     const isMachineFault = (notice: { id: number; source: string }) => ALERT_SOURCES.includes(notice.source) || current.alertNotices.some(alert => alert.id === notice.id)
-    const reason = (problem: string | null) => (problem === null ? null : <Text color="subtle" size="footnote" wrap="truncate-end">{COPY.reason(problem)}</Text>)
+    // A REASON IS ONE CLEAN LINE, whatever it was handed: no control character, no page of text, never an object.
+    // Wrapped, not cut: a store's refusal ends in the file that is the fix.
+    const reason = (problem: unknown) => (problem === null || problem === undefined ? null : <Text color="subtle" size="footnote">{COPY.reason(plainLine(problem, REASON_WHOLE))}</Text>)
     const retry = <Button key="retry" label={COPY.retry} variant="primary" onPress={() => tick($, true)} />
     const steps = (lines: readonly string[]) => (
       <Box flexDirection="column">
@@ -1958,10 +2207,10 @@ export const register: Register = on => {
 
     // THE ALLOW RULES' FIX, ONE DRAWING for a refused poll and an act Claude Code refused (S27): the steps, then the
     // rules the pane needs.
-    const rulesFix = (lines: readonly string[] = COPY.fixNotAllowed) => [
+    const rulesFix = (lines: readonly string[] = COPY.fixNotAllowed, key = 'allow-rules') => [
       steps(lines),
       // THE ALLOW RULES AS CODE (S32): json, the pane's whole own list, no gate; selected and copied by hand.
-      <Code key="allow-rules" source={allowRules()} language="json" />,
+      <Code key={key} source={allowRules()} language="json" />,
     ]
 
     // THE STATES THAT ARE NOT A QUEUE: what happened, why, and the step that fixes it.
@@ -2022,133 +2271,240 @@ export const register: Register = on => {
 
     // THE STATUS TAB: the machine, its slots and cost, every problem with how to fix it, and where to look.
     if (screen.screen === 'status') {
-      const health = healthOf(current, offset)
-      const state = stateWord(health)
-      const bellState = await readBell($)
-      const pausedCard = current.paused === null ? null : cardOf('problem-paused', warned(COPY.pausedTitle, 'wait'), current.pausedSince === null ? null : COPY.statusSince(current.pausedSince), [
-        <Text color="inactive">{current.paused}</Text>,
-        steps(COPY.fixPaused),
-        <Box flexDirection="row" gap={1}>{actButton('leader', 'leader_resume', null, { isPrimary: true })}</Box>,
-        actBusyNote('leader'),
-      ], 'wait')
-      // THE RULES, ASKED FOR BY How to fix (S27): an act Claude Code refused needs the same rules as a refused poll.
-      const rulesCard = current.connection === 'not-allowed' || !(await read($, rulesAsked)) ? null : cardOf('problem-rules', warned(COPY.notAllowedTitle, 'wait'), COPY.notAllowedHint, [
-        <Text color="inactive">{COPY.notAllowedBody}</Text>,
-        // NO Try again ON THIS CARD (#35): its last step names the act's own button instead.
-        ...rulesFix(COPY.fixNotAllowedAct),
-      ], 'wait')
-      const alertCards = current.alertNotices.map(notice =>
-        cardOf(`problem-alert-${notice.id}`, warned(notice.title), COPY.alertHint(notice.source, notice.when), [
-          notice.body === '' ? null : <Text color="inactive">{notice.body}</Text>,
-          <Text color="subtle">{COPY.fixAlert}</Text>,
-          <Link href={notice.link === null ? consoleLink(base, 'bell') : `${base}${notice.link}`} label={COPY.bellInConsole} />,
-        ], 'bad'))
-      const problems = [problemCard, rulesCard, pausedCard, ...alertCards].filter(item => item !== null)
-      const slotsCard = cardOf('status-slots', COPY.statusSlots, COPY.statusSlotsHint, [
-        look.isGraphic ? picture(elements, slotsGauge(current.slotsUsed, current.slots, true)) : null,
-        <Text tabular>{COPY.statusSlotsLine(current.slotsUsed, current.slots)}</Text>,
-        current.running.length === 0 ? quiet(elements, COPY.nothingRunning) : null,
-        ...current.running.map(item =>
-          rowOf({
-            key: `status-story-${item.story}`,
-            kind: item.isStuck ? COPY.kindStuck : item.isVerifying ? COPY.verifying : COPY.kindRunning,
-            kindTone: item.isStuck ? 'warning' : 'subtle',
-            title: item.title,
-            detail: item.detail,
-            onPress: () => go({ screen: 'story', story: item.story }),
-          })),
-      ])
-      // THE POLICY (S27): read as policy_get answered it, edited in place within its limits, saved with policy_save.
-      const form = { ...EMPTY_POLICY_FORM, ...(await read($, policyForm)) }
-      const rows = policyRows(policy)
-      const changes = policyChanges(policy, form.values)
-      const problems_ = policyProblems(policy, form.values)
-      const isSavable = changes.length > 0 && problems_.length === 0
-      const policyState = actState('policy')
-      const isPolicyEditing = form.isEditing && hasInput && 'Input' in elements
-      const policyCard = cardOf('status-policy', COPY.policy, (
-        <Box flexDirection="row" gap={1} alignItems="center">
-          <Text color="subtle" size="footnote" tabular>{isPolicyEditing ? COPY.policyEditing : COPY.policyVersion(number(policy?.version), policy?.changedAt === undefined || policy?.changedAt === null ? null : clock(policy.changedAt, offset))}</Text>
-          {!isPolicyEditing && hasInput && rows.length > 0 && <Button key="act-policy-edit" label={COPY.policyEdit} dimColor={policyState.busy !== null ? true : undefined} onPress={() => (policyState.busy === null ? editPolicy($, false) : undefined)} />}
-        </Box>
-      ), isPolicyEditing && 'Input' in elements
-        ? [
-            ...POLICY_FIELDS.filter(field => form.values[field.key] !== undefined).map(field => (
-              <elements.Input
-                key={`act-policy-field-${field.key}`}
-                label={policyFieldLabel(field, policy)}
-                value={form.values[field.key] ?? ''}
-                onInput={value => update($, policyForm, (state: PanePolicyForm): PanePolicyForm => ({ ...EMPTY_POLICY_FORM, ...state, values: { ...state.values, [field.key]: value } }))}
-                onSubmit={() => savePolicy($)}
-              />
-            )),
-            ...problems_.map((problem, index) => <Text key={`policy-problem-${index}`} color="error">{problem}</Text>),
-            <Text color="subtle" size="footnote" tabular>{COPY.policyChanges(changes)}</Text>,
-            <Box flexDirection="row" gap={1}>
-              <Button key="act-policy-send" label={policyState.busy === null ? COPY.actButton.policy_save ?? 'Save' : COPY.actBusy.policy_save ?? 'Saving…'} variant={!isSavable || policyState.busy !== null ? undefined : 'primary'} dimColor={!isSavable || policyState.busy !== null ? true : undefined} onPress={() => (policyState.busy === null && isSavable ? savePolicy($) : undefined)} />
-              <Button key="act-policy-cancel" label={COPY.actCancel} dimColor onPress={() => (policyState.busy === null ? update($, policyForm, (): PanePolicyForm => EMPTY_POLICY_FORM) : undefined)} />
-            </Box>,
-            actBusyNote('policy'),
-            <Text color="subtle" size="footnote">{COPY.policyNote}</Text>,
-          ]
-        : [
-            rows.length === 0 ? quiet(elements, COPY.policyMissing) : null,
-            ...rows.map((row_, index) => (
-              <Box key={`policy-row-${index}`} flexDirection="row" justifyContent="space-between" gap={1}>
-                <Text color="inactive">{row_.label}</Text>
-                <Text tabular>{row_.value}</Text>
-              </Box>
-            )),
-          ])
-      const costCard = cardOf('status-cost', COPY.statusCost, null, [
-        look.isGraphic && budgetUsd !== null ? picture(elements, spendBar(runningUsd, budgetUsd, 'wide', COPY.statusToday(current.runningUsd, current.dayBudget))) : null,
-        <Text tabular>{COPY.statusToday(current.runningUsd, current.dayBudget)}</Text>,
-        bellState.metrics.length === 0 ? null : (
-          <Text tabular>
-            <Text color="subtle">{`${COPY.statusMonth} `}</Text>
-            <Text color="inactive">{bellState.metrics.map(metric => `${metric.value} ${metric.label}`).join(' · ')}</Text>
-          </Text>
-        ),
-      ])
+      // EVERY DRAW SAYS THAT IT BEGAN: a line here with no "draws" after it is a draw that never returned.
+      note($, `terylon-pane: the Status tab begins on ${e.surface} at ${e.props.bodyColumns} columns`)
 
-      return (
-        <Box flexDirection="column" gap={1}>
-          {tabs}
-          {cardOf('status-machine', <Text size="caption" color="subtle">{COPY.statusMachine.toUpperCase()}</Text>, null, [
-            <Box flexDirection="row" justifyContent="space-between" gap={1}>
-              <Box flexDirection="row" gap={1}>
-                <Text size="title" weight="semibold" color={state.tone}>{state.word}</Text>
-                {health.failingSince !== null && current.connection !== 'ok' && <Text color="subtle" tabular>{` · ${COPY.statusSince(health.failingSince)}`}</Text>}
-                {current.connection === 'ok' && current.pausedSince !== null && <Text color="subtle" tabular>{` · ${COPY.statusSince(current.pausedSince)}`}</Text>}
+      // A PART THAT THROWS IS ONE PROBLEM, NEVER A BLANK TAB: Desktop draws its own placeholder when a render fails.
+      const part = async (name: string, build: () => unknown): Promise<unknown> => {
+        try {
+          return await build()
+        } catch (error) {
+          const message = messageOf(error)
+          note($, `terylon-pane: the Status tab's ${name} did not draw: ${message}`)
+
+          return cardOf(`problem-part-${name}`, warned(COPY.statusPartFailed(name)), null, [reason(message), steps(COPY.fixStatusPart)], 'bad')
+        }
+      }
+
+      try {
+        const pausedCard = await part('paused', () => current.paused === null ? null : cardOf('problem-paused', warned(COPY.pausedTitle, 'wait'), current.pausedSince === null ? null : COPY.statusSince(current.pausedSince), [
+          <Text color="inactive">{current.paused}</Text>,
+          steps(COPY.fixPaused),
+          <Box flexDirection="row" gap={1}>{actButton('leader', 'leader_resume', null, { isPrimary: true })}</Box>,
+          actBusyNote('leader'),
+        ], 'wait'))
+        // THE RULES, ASKED FOR BY How to fix (S27): an act Claude Code refused needs the same rules as a refused poll.
+        const rulesCard = await part('rules', async () => current.connection === 'not-allowed' || !(await read($, rulesAsked)) ? null : cardOf('problem-rules', warned(COPY.notAllowedTitle, 'wait'), COPY.notAllowedHint, [
+          <Text color="inactive">{COPY.notAllowedBody}</Text>,
+          // NO Try again ON THIS CARD (#35): its last step names the act's own button instead.
+          ...rulesFix(COPY.fixNotAllowedAct),
+        ], 'wait'))
+        const alertCards = await part('alerts', () => current.alertNotices.map(notice =>
+          cardOf(`problem-alert-${notice.id}`, warned(notice.title), COPY.alertHint(notice.source, notice.when), [
+            notice.body === '' ? null : <Text color="inactive">{notice.body}</Text>,
+            <Text color="subtle">{COPY.fixAlert}</Text>,
+            <Link href={notice.link === null ? consoleLink(base, 'bell') : `${base}${notice.link}`} label={COPY.bellInConsole} />,
+          ], 'bad')))
+        // ITS OWN Try again AND RULES, KEYED APART from the connection's: two elements of one key are one too many.
+        // THE DONE-SIGNAL'S OWN PROBLEM: the queue may read well while events_since, or the store, fails on its own. DRAWN
+        // ONLY IN WHAT DESKTOP HAS DRAWN ON THIS TAB: a plain card and title, a plain Button, no red stroke or primary.
+        const events = current.events
+        const silentSince = isEventsSilent(current) ? current.eventsSilentSince : null
+        const eventsTitle = (title: string) => <Text size="heading" weight="semibold">{`⚠ ${title}`}</Text>
+        const eventsRetry = () => <Button key="events-retry" label={COPY.retry} onPress={() => tick($, true)} />
+        const eventsCard = await part('events', () => events === null
+          ? silentSince === null
+            ? null
+            : cardOf('problem-events', eventsTitle(COPY.eventsSilentTitle), COPY.statusSince(at(silentSince)), [
+                <Text color="inactive">{COPY.eventsSilentBody(Math.round((now - silentSince) / 1000), current.eventsAnsweredAt === null ? null : at(current.eventsAnsweredAt))}</Text>,
+                steps(COPY.fixEventsSilent),
+                eventsRetry(),
+              ])
+          : events.kind === 'not-allowed'
+            ? cardOf('problem-events', eventsTitle(COPY.eventsNotAllowedTitle), COPY.notAllowedHint, [
+                <Text color="inactive">{COPY.eventsNotAllowedBody}</Text>,
+                reason(events.reason),
+                ...rulesFix(COPY.fixEventsNotAllowed, 'events-allow-rules'),
+                eventsRetry(),
+              ])
+            : events.kind === 'store'
+              ? cardOf('problem-events', eventsTitle(COPY.eventsStoreTitle), COPY.statusSince(at(events.since)), [
+                  <Text color="inactive">{COPY.eventsStoreBody}</Text>,
+                  reason(events.reason),
+                  steps(COPY.fixEventsStore(storeFileOf(events.reason) ?? COPY.storeFilePattern)),
+                  eventsRetry(),
+                ])
+              : cardOf('problem-events', eventsTitle(COPY.eventsStoppedTitle), COPY.statusSince(at(events.since)), [
+                  <Text color="inactive">{COPY.eventsStoppedBody(at(events.since))}</Text>,
+                  reason(events.reason),
+                  steps(COPY.fixEventsStopped),
+                  <Link href={consoleLink(base, 'health')} label={COPY.health} />,
+                  eventsRetry(),
+                ]))
+        const isShown = (name: Parameters<typeof drawingAsked.off.has>[0]) => !drawingAsked.off.has(name)
+        // THE DONE-SIGNAL'S STATE AS PLAIN TEXT, read as kept, each value with its type: a part that does draw says what
+        // the events card would have drawn from.
+        const raw = (await read($, snapshot)) as unknown as Record<string, unknown>
+        const rawEvents = (raw.events ?? null) as Record<string, unknown> | null
+        const eventsDiagnostics = [
+          COPY.diagnosticsEvents('events', rawEvents === null || typeof rawEvents !== 'object' ? typedLine(rawEvents) : typedLine(rawEvents.kind)),
+          COPY.diagnosticsEvents('since', typedLine(rawEvents?.since)),
+          COPY.diagnosticsEvents('reason', typedLine(rawEvents?.reason, REASON_WHOLE)),
+          COPY.diagnosticsEvents('answeredAt', typedLine(raw.eventsAnsweredAt)),
+          COPY.diagnosticsEvents('watchedSince', typedLine(raw.eventsWatchedSince)),
+          COPY.diagnosticsEvents('silentSince', typedLine(raw.eventsSilentSince)),
+          COPY.diagnosticsEvents('store refusals', String(storeRefusals)),
+        ]
+        note($, `terylon-pane: the Status tab's done-signal: ${eventsDiagnostics.join('; ')}`)
+        const problems = [problemCard, rulesCard, isShown('events') ? eventsCard : null, pausedCard, ...(isShown('alerts') ? (Array.isArray(alertCards) ? alertCards : [alertCards]) : [])].filter(item => item !== null)
+        const slotsCard = await part('slots', () => cardOf('status-slots', COPY.statusSlots, COPY.statusSlotsHint, [
+          look.isGraphic ? picture(elements, slotsGauge(current.slotsUsed, current.slots, true)) : null,
+          <Text tabular>{COPY.statusSlotsLine(current.slotsUsed, current.slots)}</Text>,
+          current.running.length === 0 ? quiet(elements, COPY.nothingRunning) : null,
+          ...current.running.map(item =>
+            rowOf({
+              key: `status-story-${item.story}`,
+              kind: item.isStuck ? COPY.kindStuck : item.isVerifying ? COPY.verifying : COPY.kindRunning,
+              kindTone: item.isStuck ? 'warning' : 'subtle',
+              title: item.title,
+              detail: item.detail,
+              onPress: () => go({ screen: 'story', story: item.story }),
+            })),
+        ]))
+        // THE POLICY (S27): read as policy_get answered it, edited in place within its limits, saved with policy_save.
+        const policyCard = await part('policy', async () => {
+          const form = { ...EMPTY_POLICY_FORM, ...(await read($, policyForm)) }
+          const rows = policyRows(policy)
+          const changes = policyChanges(policy, form.values)
+          const problems_ = policyProblems(policy, form.values)
+          const isSavable = changes.length > 0 && problems_.length === 0
+          const policyState = actState('policy')
+          const isPolicyEditing = form.isEditing && hasInput && 'Input' in elements
+          return cardOf('status-policy', COPY.policy, (
+            <Box flexDirection="row" gap={1} alignItems="center">
+              <Text color="subtle" size="footnote" tabular>{isPolicyEditing ? COPY.policyEditing : COPY.policyVersion(number(policy?.version), policy?.changedAt === undefined || policy?.changedAt === null ? null : clock(policy.changedAt, offset))}</Text>
+              {!isPolicyEditing && hasInput && rows.length > 0 && <Button key="act-policy-edit" label={COPY.policyEdit} dimColor={policyState.busy !== null ? true : undefined} onPress={() => (policyState.busy === null ? editPolicy($, false) : undefined)} />}
+            </Box>
+          ), isPolicyEditing && 'Input' in elements
+            ? [
+                ...POLICY_FIELDS.filter(field => form.values[field.key] !== undefined).map(field => (
+                  <elements.Input
+                    key={`act-policy-field-${field.key}`}
+                    label={policyFieldLabel(field, policy)}
+                    value={form.values[field.key] ?? ''}
+                    onInput={value => update($, policyForm, (state: PanePolicyForm): PanePolicyForm => ({ ...EMPTY_POLICY_FORM, ...state, values: { ...state.values, [field.key]: value } }))}
+                    onSubmit={() => savePolicy($)}
+                  />
+                )),
+                ...problems_.map((problem, index) => <Text key={`policy-problem-${index}`} color="error">{problem}</Text>),
+                <Text color="subtle" size="footnote" tabular>{COPY.policyChanges(changes)}</Text>,
+                <Box flexDirection="row" gap={1}>
+                  <Button key="act-policy-send" label={policyState.busy === null ? COPY.actButton.policy_save ?? 'Save' : COPY.actBusy.policy_save ?? 'Saving…'} variant={!isSavable || policyState.busy !== null ? undefined : 'primary'} dimColor={!isSavable || policyState.busy !== null ? true : undefined} onPress={() => (policyState.busy === null && isSavable ? savePolicy($) : undefined)} />
+                  <Button key="act-policy-cancel" label={COPY.actCancel} dimColor onPress={() => (policyState.busy === null ? update($, policyForm, (): PanePolicyForm => EMPTY_POLICY_FORM) : undefined)} />
+                </Box>,
+                actBusyNote('policy'),
+                <Text color="subtle" size="footnote">{COPY.policyNote}</Text>,
+              ]
+            : [
+                rows.length === 0 ? quiet(elements, COPY.policyMissing) : null,
+                ...rows.map((row_, index) => (
+                  <Box key={`policy-row-${index}`} flexDirection="row" justifyContent="space-between" gap={1}>
+                    <Text color="inactive">{row_.label}</Text>
+                    <Text tabular>{row_.value}</Text>
+                  </Box>
+                )),
+              ])
+        })
+        const costCard = await part('cost', async () => {
+          const bellState = await readBell($)
+
+          return cardOf('status-cost', COPY.statusCost, null, [
+            look.isGraphic && budgetUsd !== null ? picture(elements, spendBar(runningUsd, budgetUsd, 'wide', COPY.statusToday(current.runningUsd, current.dayBudget))) : null,
+            <Text tabular>{COPY.statusToday(current.runningUsd, current.dayBudget)}</Text>,
+            bellState.metrics.length === 0 ? null : (
+              <Text tabular>
+                <Text color="subtle">{`${COPY.statusMonth} `}</Text>
+                <Text color="inactive">{bellState.metrics.map(metric => `${metric.value} ${metric.label}`).join(' · ')}</Text>
+              </Text>
+            ),
+          ])
+        })
+        const machineCard = await part('machine', () => {
+          const health = healthOf(current, offset)
+          const state = stateWord(health)
+
+          return cardOf('status-machine', <Text size="caption" color="subtle">{COPY.statusMachine.toUpperCase()}</Text>, null, [
+                <Box flexDirection="row" justifyContent="space-between" gap={1}>
+                  <Box flexDirection="row" gap={1}>
+                    <Text size="title" weight="semibold" color={state.tone}>{state.word}</Text>
+                    {health.failingSince !== null && current.connection !== 'ok' && <Text color="subtle" tabular>{` · ${COPY.statusSince(health.failingSince)}`}</Text>}
+                    {current.connection === 'ok' && current.pausedSince !== null && <Text color="subtle" tabular>{` · ${COPY.statusSince(current.pausedSince)}`}</Text>}
+                  </Box>
+                  <Button key="status-refresh" label={COPY.refresh} dimColor onPress={async () => { await tick($, true); await loadBell($) }} />
+                </Box>,
+                <Text color="subtle" size="footnote" tabular>{COPY.statusLastAnswer(current.fetchedAt === null ? null : at(current.fetchedAt))}</Text>,
+              ])
+        })
+
+        // PLAIN LINES ALONE: no card, no picture, no button but the tabs, to tell the tab's drawing from its data.
+        const tree = drawingAsked.isMinimal
+          ? (
+              <Box flexDirection="column" gap={1}>
+                {tabs}
+                <Text>{COPY.statusMinimalMachine(stateWord(healthOf(current, offset)).word)}</Text>
+                <Text>{COPY.statusMinimalProblems(problems.length, events === null ? null : events.kind)}</Text>
+                <Text>{COPY.diagnosticsVersion(MOD_VERSION)}</Text>
               </Box>
-              <Button key="status-refresh" label={COPY.refresh} dimColor onPress={async () => { await tick($, true); await loadBell($) }} />
-            </Box>,
-            <Text color="subtle" size="footnote" tabular>{COPY.statusLastAnswer(current.fetchedAt === null ? null : at(current.fetchedAt))}</Text>,
-          ])}
-          {look.isGraphic && !look.isNarrow
-            ? (
-                <Box key="status-gauges" flexDirection="row" gap="sm">
-                  <Box flexGrow={1} flexShrink={1} minWidth={0}>{slotsCard}</Box>
-                  <Box flexGrow={1} flexShrink={1} minWidth={0}>{costCard}</Box>
-                </Box>
-              )
-            : [slotsCard, costCard]}
-          {cardOf('status-problems', headingOf(COPY.statusProblems, problems.length, problems.length > 0 ? 'warning' : 'inactive'), null, [
-            problems.length === 0 ? quiet(elements, COPY.nothingWrong) : null,
-          ])}
-          {problems}
-          {actOutcome('leader', consoleLink(base, 'work'), COPY.workInConsole)}
-          {policyCard}
-          {actOutcome('policy', consoleLink(base, 'policy'), COPY.policyInConsole)}
-          {cardOf('status-diagnostics', <Text size="heading" weight="semibold" color="subtle">{COPY.statusDiagnostics}</Text>, null, [
-            <Text color="subtle" mono>{COPY.diagnosticsVersion(MOD_VERSION)}</Text>,
-            <Text color="subtle" mono>{COPY.diagnosticsUrl(base)}</Text>,
-            <Text color="subtle" mono>{COPY.diagnosticsServer(current.server)}</Text>,
-            <Text color="subtle" size="footnote">{COPY.diagnosticsDebug}</Text>,
-          ])}
-          {footer}
-        </Box>
-      )
+            )
+          : (
+              <Box flexDirection="column" gap={1}>
+                {tabs}
+                {isShown('machine') && machineCard}
+                {isShown('gauges') && (look.isGraphic && !look.isNarrow
+                  ? (
+                      <Box key="status-gauges" flexDirection="row" gap="sm">
+                        <Box flexGrow={1} flexShrink={1} minWidth={0}>{slotsCard}</Box>
+                        <Box flexGrow={1} flexShrink={1} minWidth={0}>{costCard}</Box>
+                      </Box>
+                    )
+                  : [slotsCard, costCard])}
+                {/* THE PROBLEMS UNDER THEIR HEADING, never an empty card above them: the card says only that nothing is wrong. */}
+                {isShown('problems') && (problems.length === 0
+                  ? cardOf('status-problems', headingOf(COPY.statusProblems, 0, 'inactive'), null, [quiet(elements, COPY.nothingWrong)])
+                  : headingOf(COPY.statusProblems, problems.length, 'warning'))}
+                {isShown('problems') && problems}
+                {isShown('outcomes') && actOutcome('leader', consoleLink(base, 'work'), COPY.workInConsole)}
+                {isShown('policy') && policyCard}
+                {isShown('outcomes') && actOutcome('policy', consoleLink(base, 'policy'), COPY.policyInConsole)}
+                {isShown('diagnostics') && cardOf('status-diagnostics', <Text size="heading" weight="semibold" color="subtle">{COPY.statusDiagnostics}</Text>, null, [
+                  <Text color="subtle" mono>{COPY.diagnosticsVersion(MOD_VERSION)}</Text>,
+                  <Text color="subtle" mono>{COPY.diagnosticsUrl(base)}</Text>,
+                  <Text color="subtle" mono>{COPY.diagnosticsServer(current.server)}</Text>,
+                  ...eventsDiagnostics.map(line => <Text color="subtle" mono>{line}</Text>),
+                  <Text color="subtle" size="footnote">{COPY.diagnosticsDebug}</Text>,
+                ])}
+                {footer}
+              </Box>
+            )
+
+        // EVERY DRAW SAYS WHAT IT RETURNS and what in it a host may refuse: a line here beside a blank pane is a tree
+        // the host dropped, and the check names what the kit lets through.
+        note($, `terylon-pane: the Status tab draws ${drawingAsked.isMinimal ? 'minimal' : STATUS_DRAWN.filter(isShown).join(', ')}; problems ${problems.length}${events === null ? '' : `, events ${events.kind}`}${silentSince === null ? '' : ', the watchdog'}; ${treeLine(checkTree(tree))}; ${Math.max(0, (await $.clock.now()) - now)} ms`)
+
+        return tree
+      } catch (error) {
+        // WHAT NO PART CAUGHT still draws the tabs and says why, so the owner can move on and read the debug log.
+        const message = messageOf(error)
+        note($, `terylon-pane: the Status tab did not draw: ${message}`)
+
+        return (
+          <Box flexDirection="column" gap={1}>
+            {tabs}
+            {cardOf('problem-part-status', warned(COPY.statusPartFailed('tab')), null, [reason(message), steps(COPY.fixStatusPart)], 'bad')}
+            {footer}
+          </Box>
+        )
+      }
     }
 
     if (problemCard !== null && !isStale) {
@@ -2229,7 +2585,7 @@ export const register: Register = on => {
               </Text>
             </Box>
           </Box>
-          {cardOf('story-phases', COPY.phases, <Text color="subtle" size="footnote" tabular>{nowAt >= 0 || shownStory.hasStage ? COPY.phasesHint(nowAt >= 0 ? nowAt + 1 : done, shownStory.phases.length) : COPY.phasesNoStage(done, shownStory.phases.length)}</Text>, look.isGraphic
+          {cardOf('story-phases', COPY.phases, <Text color="subtle" size="footnote" tabular>{ENDED_STORY_STATES.includes(shownStory.state) ? COPY.phasesEnded(done, shownStory.phases.length, shownStory.stateText) : nowAt >= 0 || shownStory.hasStage ? COPY.phasesHint(nowAt >= 0 ? nowAt + 1 : done, shownStory.phases.length) : COPY.phasesNoStage(done, shownStory.phases.length)}</Text>, look.isGraphic
             ? [
                 // THE STEPPER (S32): the Svg says no word, the labels sit under it in Text; no stage, no node is now.
                 picture(elements, stepper(shownStory.phases, labels, { isStuck, tooltips, isCompact: look.isCompact }), { isInteractive: tooltips !== null }),
@@ -2951,6 +3307,7 @@ export const register: Register = on => {
                 kindColumn: 3,
                 title: item.title,
                 titleTone: isClosedShown ? 'subtle' : undefined,
+                isTitleDim: isClosedShown,
                 detail: item.questions > 0 ? COPY.goalQuestions(item.questions) : item.stories,
                 detailTone: item.questions > 0 ? 'warning' : 'subtle',
                 onPress: () => go({ screen: 'goal', goal: item.id }),
@@ -3179,7 +3536,7 @@ export const register: Register = on => {
           ...current.doneToday.map(item =>
             rowOf({
               key: `done-${item.story}`,
-              kind: COPY.kindMerged,
+              kind: item.isAccepted === true ? COPY.kindAccepted : COPY.kindMerged,
               kindTone: 'merged',
               title: item.title,
               detail: item.detail,
@@ -3199,11 +3556,15 @@ export const register: Register = on => {
           </Box>
         )}
         {!isStale && !hasInput && (
-          <Box key="phone-add" flexDirection="column">
+          <Box key="phone-add-box" flexDirection="column">
             <Button key="phone-add" label={COPY.addOnPhone} onPress={() => postPrompt($, COPY.addOnPhonePrompt)} />
             <Text color="subtle" size="footnote">{COPY.addOnPhoneNote}</Text>
           </Box>
         )}
+        {drawingAsked.isLogShown && cardOf('pane-log', COPY.paneLogTitle, COPY.paneLogHint, [
+          notes.length === 0 ? quiet(elements, COPY.paneLogEmpty) : null,
+          ...notes.map(line => <Text color="subtle" size="footnote" mono>{line}</Text>),
+        ])}
         {footer}
       </Box>
     )

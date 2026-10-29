@@ -82,6 +82,7 @@ export const COPY = {
   diagnosticsVersion: (version: string) => `terylon-pane ${version}`,
   diagnosticsUrl: (url: string) => `TERYLON_URL ${url === '' ? '(not set)' : url}`,
   diagnosticsServer: (server: string | null) => `server ${server ?? '(none has answered yet)'}`,
+  diagnosticsEvents: (name: string, value: string) => `${name}: ${value}`,
   diagnosticsDebug: 'Every failure is in claude --debug under terylon-pane:',
 
   // Tabs.
@@ -115,6 +116,7 @@ export const COPY = {
   kindQueued: 'queued',
   kindHeld: 'held',
   kindMerged: 'merged',
+  kindAccepted: 'accepted',
   kindStory: 'story',
   kindRunning: 'running',
   kindStuck: 'stuck',
@@ -185,6 +187,58 @@ export const COPY = {
   tooFarHeading: 'Missed too much',
   tooFarBody: (count: string) => `over ${count} events since the last look; a summary would not be whole`,
 
+  // THE DONE-SIGNAL STOPPED: events_since, or the store that keeps the pane's place, failed. Each kind says its fix.
+  eventsNotAllowedTitle: "Claude Code refused the done-signal's call",
+  eventsNotAllowedBody:
+    'The queue is read, but Claude Code refused events_since, the call that tells you a story was verified, merged or blocked. Until it passes, nothing is told: no prompt, no toast, no catch-up.',
+  fixEventsNotAllowed: [
+    'Add these rules to ~/.claude/settings.json, under "permissions" → "allow"; events_since must be among them, spelled as below:',
+    'If the rule is already there, restart Claude Desktop, so the settings are read again.',
+    'Press Try again.',
+  ],
+  eventsStoppedTitle: 'The done-signal stopped',
+  eventsStoppedBody: (since: string) =>
+    `Since ${since}, events_since has not answered as the owner's. The queue is current, but a story verified, merged or blocked is not told.`,
+  fixEventsStopped: [
+    'Open Health in the console to see why.',
+    'Press Try again; every poll also tries again.',
+    'If it stays, run claude --debug and read the lines under terylon-pane: events:',
+  ],
+  eventsStoreTitle: 'The pane cannot keep its place',
+  eventsStoreBody:
+    "Claude Code's store for the pane refused, where it keeps the last event it read and the stories it told. The pane goes on from memory for this session; a story verified while Claude Desktop was closed is not told when it opens again. A store file that cannot be read, such as one cut short while Desktop was closing, is neither read nor written again until it is deleted.",
+  // Where the pane's store file is when the refusal names none: every user's own, so never a path of anyone's.
+  storeFilePattern: '~/.claude/plugins/store/terylon-pane_terylon-*.json',
+  fixEventsStore: (file: string) => [
+    `Delete the pane's store file: ${file}. It holds only where the pane last looked and the signals it told, so nothing that matters is lost.`,
+    "Restart Claude Desktop: the pane reads Terylon's newest event and goes on from there.",
+    'If the card comes back, check that your Claude Code configuration folder (~/.claude) is writable, then run claude --debug and read the lines under terylon-pane: events:',
+  ],
+  eventsSilentTitle: 'The done-signal hears nothing',
+  eventsSilentBody: (seconds: number, last: string | null) =>
+    `events_since has not answered for ${seconds} s${last === null ? ', not once this session' : `; its last answer was at ${last}`}, while the queue reads. Nothing failed that the pane could see: its events path stopped before the call.`,
+  fixEventsSilent: [
+    'Press Try again.',
+    'Restart Claude Desktop.',
+    'If it stays, run claude --debug and read the lines under terylon-pane: events: — the last one says where it stopped.',
+  ],
+  // A PART OF THE STATUS TAB THAT DID NOT DRAW: said as a problem, the rest of the tab drawn around it.
+  statusPartFailed: (part: string) => `The Status tab's ${part} did not draw`,
+  fixStatusPart: [
+    'Press Refresh, or open another tab and come back.',
+    'If it stays, run claude --debug and read the line under terylon-pane: the Status tab',
+    'Restart Claude Desktop.',
+  ],
+  // THE STATUS TAB DRAWN MINIMAL (TERYLON_PANE_STATUS=minimal): plain lines, to bisect a tab Desktop does not draw.
+  statusMinimalMachine: (word: string) => `Agentic OS: ${word}`,
+  paneLogTitle: "The pane's own log",
+  paneLogHint: 'TERYLON_PANE_STATUS=log · newest last',
+  paneLogEmpty: 'Nothing logged yet. Open the Status tab, then come back here.',
+  statusMinimalProblems: (count: number, events: string | null) => `Problems: ${count}${events === null ? '' : ` (the done-signal: ${events})`}`,
+  storeTimedOut: (seconds: number) => `the store did not answer within ${seconds} s`,
+  storeReadFailed: (key: string, error: string) => `reading ${key} from the store failed: ${error}`,
+  storeWriteFailed: (key: string, error: string) => `writing ${key} to the store failed: ${error}`,
+
   // One story.
   summariseInSession: 'Summarise in the session',
   summarisePrompt: (story: number) =>
@@ -203,6 +257,7 @@ export const COPY = {
   noAgent: 'no agent reported',
   noStage: 'no stage reported',
   phasesNoStage: (done: number, all: number) => `${done} of ${all} · no stage reported`,
+  phasesEnded: (done: number, all: number, state: string) => `${done} of ${all} · ${state}`,
   stepOf: (step: number, steps: number) => `step ${step} of ${steps}`,
   costOf: (cost: string, budget: string | null) => (budget === null ? `$${cost}` : `$${cost} of the story's $${budget}`),
   phases: 'Phases',
