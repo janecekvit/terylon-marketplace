@@ -14,7 +14,7 @@ const MUTATIONS = [
     {
         name: "the catch-up summary is removed",
         file: "hooks/register.tsx",
-        find: "      await $.prompt.submit({ text: summary.prompt })\n",
+        find: "    await $.prompt.submit({ text: summary.prompt })\n",
         replace: "",
     },
     {
@@ -611,6 +611,66 @@ const MUTATIONS = [
         file: "hooks/register.tsx",
         find: "                {look.isGraphic ? picture(elements, planChain(chain, orderAlt)) : <Text color=\"subtle\">{planOrder(chain)}</Text>}\n",
         replace: "                {look.isGraphic ? picture(elements, planChain(chain, orderAlt)) : <Text color=\"subtle\">{planOrder(chain)}</Text>}\n                <Text color=\"subtle\" size=\"footnote\" tabular>{plan.stories.map(item => (item.estimate === null ? item.size : `${item.size} ~$${item.estimate}`)).join(' → ')}</Text>\n",
+    },
+    {
+        name: "a failed events_since is hidden from the Status tab again",
+        file: "hooks/register.tsx",
+        find: "      await eventsRefused($, answered)\n",
+        replace: "",
+    },
+    {
+        name: "a good read of the queue drops the done-signal's problem again",
+        file: "hooks/register.tsx",
+        find: "    events: current.events ?? null,\n",
+        replace: "    events: null,\n",
+    },
+    {
+        name: "a store that refuses stops the done-signal again",
+        file: "hooks/register.tsx",
+        find: "    return keptInMemory.get(key)\n",
+        replace: "    throw new Error(answered.error)\n",
+    },
+    {
+        name: "the events path no longer reaches the debug log",
+        file: "hooks/register.tsx",
+        find: "  $.ui.log(`terylon-pane: events: ${line}`, { to: 'debug' })\n",
+        replace: "",
+    },
+    {
+        name: "a verified list story's done-signal waits for a merge again",
+        file: "hooks/signals.ts",
+        find: "      if (verdict?.isList === true) {\n",
+        replace: "      if (false) {\n",
+    },
+    {
+        name: "the card right after Accept is drawn verified again",
+        file: "hooks/register.tsx",
+        find: "  } else if (tool === 'story_accept') {\n    settled.set(`story-${subject}`, { from: ['verified'], to: 'accepted', until })\n",
+        replace: "",
+    },
+    {
+        name: "an accepted story is called merged in Done today again",
+        file: "hooks/register.tsx",
+        find: "item.isAccepted === true ? COPY.kindAccepted : COPY.kindMerged",
+        replace: "COPY.kindMerged",
+    },
+    {
+        name: "a row's console link is laid over its text again",
+        file: "hooks/register.tsx",
+        find: "          <Box flexShrink={0} display=\"none\" hover={{ display: 'flex' }}>\n",
+        replace: "          <Box position=\"absolute\" top={0} right={0} display=\"none\" hover={{ display: 'flex' }}>\n",
+    },
+    {
+        name: "an ended story's phases say no stage reported again",
+        file: "hooks/register.tsx",
+        find: "ENDED_STORY_STATES.includes(shownStory.state) ? ",
+        replace: "false ? ",
+    },
+    {
+        name: "the watchdog on events_since is removed",
+        file: "hooks/register.tsx",
+        find: "    $.clock.every(WATCH_MILLISECONDS, () => watchEvents($))\n",
+        replace: "",
     },
 ];
 

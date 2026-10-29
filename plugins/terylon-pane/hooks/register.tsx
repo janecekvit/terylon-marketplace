@@ -103,11 +103,18 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.7.2'
+export const MOD_VERSION = '1.9.0'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
 export const RETRY_MS = 60000
+
+// THE WATCHDOG: events_since unanswered for longer than three ticks while the queue reads is a problem, whatever
+// stopped it, a call never made included.
+export const EVENTS_SILENT_MILLISECONDS = 3 * POLL_MS
+
+// How often the watchdog looks: often enough that the problem is said within ten seconds of its bound.
+const WATCH_MILLISECONDS = 10000
 
 // How many criteria and timeline rows a story shows before "další N ▾".
 const CRITERIA_SHOWN = 2
@@ -125,6 +132,10 @@ const PROMPT_REPEAT_MILLISECONDS = 60000
 const STORE_LAST_SEQ = 'lastSeq'
 const STORE_LAST_SEEN_AT = 'lastSeenAt'
 const STORE_SIGNALLED = 'signalled'
+
+// HOW LONG ONE $.store CALL MAY TAKE before the pane goes on with what it keeps in memory: a store that never answers
+// must not hold the poll, which waits for its last tick to end.
+const STORE_BOUND_MILLISECONDS = 2000
 
 const EMPTY_SNAPSHOT: PaneSnapshot = {
   connection: 'connecting',
@@ -147,6 +158,10 @@ const EMPTY_SNAPSHOT: PaneSnapshot = {
   queued: [],
   doneToday: [],
   questions: [],
+  events: null,
+  eventsAnsweredAt: null,
+  eventsWatchedSince: null,
+  eventsSilentSince: null,
 }
 
 const QUEUE: PaneScreen = { screen: 'queue' }
@@ -198,11 +213,20 @@ let answeringServer: string | null = null
 // and the state it reads until Terylon's answer leaves the first. Bounded, so a lost act cannot hold a card for good.
 const SETTLE_MILLISECONDS = 300000
 
+// The states of a story that has ended: no stage is reported any more, and its phases say how it ended instead.
+const ENDED_STORY_STATES: readonly string[] = ['merged', 'accepted', 'abandoned']
+
 // The states of a story that has not ended: what a goal's drop abandons (Terylon S35, #388).
 const OPEN_STORY_STATES: readonly string[] = ['approved', 'dispatched', 'running', 'blocked', 'pr-open', 'verifying', 'verified']
 const settled = new Map<string, { from: readonly string[]; to: string; until: number }>()
 // Where each verified story is kept, as story_get said it: `list`, or its repository's target.
 const storyTargets = new Map<number, string>()
+
+// WHAT THE PANE KEEPS IN $.store, mirrored here: where a store refuses, the session still reads from its last place and
+// signals each story once, and only a return after Desktop was closed is lost.
+const keptInMemory = new Map<string, unknown>()
+// How often the store refused in this tick's read of the events: the Status tab's problem stays while it is not 0.
+let storeRefusals = 0
 
 // The policy just saved, laid over what policy_get answers until policy_get answers it too (#35).
 let savedPolicy: { values: Json; until: number } | null = null
@@ -235,7 +259,20 @@ function settle(tool: string, subject: number | null, now: number): void {
     settled.set(`plan-${subject}`, { from: ['proposed'], to: tool === 'plan_approve' ? 'approved' : 'rethink', until })
   } else if (tool === 'goal_drop') {
     settled.set(`goal-${subject}`, { from: ['open', 'active', 'planned'], to: 'dropped', until })
+  } else if (tool === 'story_accept') {
+    settled.set(`story-${subject}`, { from: ['verified'], to: 'accepted', until })
   }
+}
+
+// A story as Terylon answered it, or accepted where the owner just accepted it: a list story stays one.
+function settledStory(document: Json, id: number, now: number): Json {
+  if (typeof document.state !== 'string') {
+    return document
+  }
+
+  const state = settledState(`story-${id}`, document.state, now)
+
+  return state === document.state ? document : { ...document, state, target: document.target ?? 'list' }
 }
 
 // One object's values laid over another's, a nested one (the memory's bounds) merged rather than replaced.
@@ -339,7 +376,24 @@ function healthOf(current: PaneSnapshot, offset: number): Health {
 
 // Something the owner should look at: the connection, the leader paused, an alert.
 function hasProblem(current: PaneSnapshot): boolean {
-  return (current.connection !== 'ok' && current.connection !== 'connecting') || current.paused !== null || current.alerts > 0
+  return (current.connection !== 'ok' && current.connection !== 'connecting') || current.paused !== null || current.alerts > 0 || current.events !== null || isEventsSilent(current)
+}
+
+// The watchdog's finding, said while the queue reads and no failure of events_since says why already.
+function isEventsSilent(current: PaneSnapshot): boolean {
+  return current.eventsSilentSince !== null && current.connection === 'ok' && current.events === null
+}
+
+// THE WATCHDOG, on a timer of its own: a tick held for good, or one that never reaches the call, still ends here.
+async function watchEvents($: EngineInterface): Promise<void> {
+  const now = await $.clock.now()
+
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => {
+    const since = current.eventsAnsweredAt ?? current.eventsWatchedSince
+    const silentSince = since !== null && now - since > EVENTS_SILENT_MILLISECONDS ? since : null
+
+    return silentSince === current.eventsSilentSince ? current : { ...EMPTY_SNAPSHOT, ...current, eventsSilentSince: silentSince }
+  })
 }
 
 // THE STATUS LINE: the worst of the machine's health, or its spend when all is well.
@@ -414,7 +468,7 @@ async function refresh($: EngineInterface): Promise<boolean> {
   lastBriefing = {
     ...briefing.value,
     plansWaiting: list(briefing.value.plansWaiting).filter(plan => settledState(`plan-${number(plan.id) ?? 0}`, 'proposed', now) === 'proposed'),
-    storiesVerified: await withTargets($, list(briefing.value.storiesVerified), lastStories),
+    storiesVerified: await withTargets($, list(briefing.value.storiesVerified).filter(item => settledState(`story-${number(item.id) ?? 0}`, 'verified', now) === 'verified'), lastStories),
   }
 
   const base = await baseUrl($)
@@ -425,7 +479,7 @@ async function refresh($: EngineInterface): Promise<boolean> {
   const slots = number(lastFlight.slots) ?? number(policy?.slots) ?? 0
   const queuedStories = await withHeldReasons($, lastStories, inFlight)
 
-  await update($, snapshot, (): PaneSnapshot => ({
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({
     connection: 'ok',
     problem: null,
     fetchedAt: now,
@@ -446,6 +500,11 @@ async function refresh($: EngineInterface): Promise<boolean> {
     running,
     queued: queuedItems(queuedStories, inFlight, paused === null && running.length < slots),
     doneToday: doneTodayItems(lastStories, now, offset),
+    // THE DONE-SIGNAL'S PROBLEM IS ITS OWN: a good read of the queue says nothing of events_since or the store.
+    events: current.events ?? null,
+    eventsAnsweredAt: current.eventsAnsweredAt ?? null,
+    eventsWatchedSince: current.eventsWatchedSince ?? null,
+    eventsSilentSince: current.eventsSilentSince ?? null,
     questions: questionItems(lastBriefing),
   }))
   await showHealth($)
@@ -507,10 +566,68 @@ async function withTargets($: EngineInterface, verified: Json[], stories: Json[]
   return read_
 }
 
-async function signalled($: EngineInterface): Promise<string[]> {
-  const kept = await $.store.get(STORE_SIGNALLED)
+// A line in `claude --debug` under terylon-pane: for the events path, so a run shows where the call stops.
+function debug($: EngineInterface, line: string): void {
+  $.ui.log(`terylon-pane: events: ${line}`, { to: 'debug' })
+}
 
-  return Array.isArray(kept) ? kept.filter((key): key is string => typeof key === 'string') : []
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+// WHY THE DONE-SIGNAL CANNOT RUN, on the Status tab until a whole read of the events succeeds; the first failure's time.
+async function eventsFailed($: EngineInterface, kind: NonNullable<PaneSnapshot['events']>['kind'], reason: string): Promise<void> {
+  const now = await $.clock.now()
+  debug($, `stopped (${kind}): ${reason}`)
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({
+    ...EMPTY_SNAPSHOT,
+    ...current,
+    events: { kind, reason, since: current.events?.kind === kind ? current.events.since : now },
+  }))
+}
+
+// One $.store call, bounded: what it answers, or the error it rejected with, or that it did not answer.
+async function storeCall<T>($: EngineInterface, work: () => Promise<T>): Promise<{ value: T } | { error: string }> {
+  const timedOut = new Promise<{ error: string }>(resolve => {
+    $.clock.after(STORE_BOUND_MILLISECONDS, () => resolve({ error: COPY.storeTimedOut(STORE_BOUND_MILLISECONDS / 1000) }))
+  })
+  const finished = work().then(
+    (value: T): { value: T } => ({ value }),
+    (error: unknown): { error: string } => ({ error: messageOf(error) }),
+  )
+
+  return Promise.race([finished, timedOut])
+}
+
+// A value the pane keeps: the store's, else what this session kept in memory. A store that refuses is said, not thrown.
+async function kept($: EngineInterface, key: string): Promise<unknown> {
+  const answered = await storeCall($, () => $.store.get(key))
+
+  if ('error' in answered) {
+    storeRefusals += 1
+    await eventsFailed($, 'store', COPY.storeReadFailed(key, answered.error))
+
+    return keptInMemory.get(key)
+  }
+
+  return answered.value === undefined ? keptInMemory.get(key) : answered.value
+}
+
+async function keep($: EngineInterface, key: string, value: unknown): Promise<void> {
+  keptInMemory.set(key, value)
+
+  const answered = await storeCall($, () => $.store.set(key, value))
+
+  if ('error' in answered) {
+    storeRefusals += 1
+    await eventsFailed($, 'store', COPY.storeWriteFailed(key, answered.error))
+  }
+}
+
+async function signalled($: EngineInterface): Promise<string[]> {
+  const value = await kept($, STORE_SIGNALLED)
+
+  return Array.isArray(value) ? value.filter((key): key is string => typeof key === 'string') : []
 }
 
 async function verdictFor($: EngineInterface, candidate: Candidate): Promise<Verdict | null> {
@@ -523,21 +640,41 @@ async function verdictFor($: EngineInterface, candidate: Candidate): Promise<Ver
   return answered.kind === 'ok' ? verdictOf(answered.value) : null
 }
 
+// events_since answered: the watchdog's clock starts again.
+async function eventsAnswered($: EngineInterface): Promise<void> {
+  const now = await $.clock.now()
+
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, eventsAnsweredAt: now, eventsSilentSince: null }))
+}
+
+// events_since did not answer as the owner's: the same kinds as the poll's own problem.
+async function eventsRefused($: EngineInterface, answered: TerylonAnswer): Promise<void> {
+  const kind = answered.kind === 'ok' ? 'failed' : answered.kind === 'refused' ? 'refused' : answered.kind
+
+  await eventsFailed($, kind, why(answered) || COPY.noServerTitle)
+}
+
 // Reads events_since from the stored sequence, page by page, up to `most` events.
 async function readEvents($: EngineInterface, since: number, most: number): Promise<{ events: Json[]; last: number; isWhole: boolean } | null> {
   const events: Json[] = []
   let from = since
 
   for (;;) {
+    debug($, `calling events_since since ${from}`)
     const answered = await callTerylon($, 'events_since', { since: from, limit: EVENTS_PAGE })
 
     if (answered.kind !== 'ok') {
+      await eventsRefused($, answered)
+
       return null
     }
+
+    await eventsAnswered($)
 
     const page = answered.value
     events.push(...list(page.events))
     from = number(page.last) ?? from
+    debug($, `events_since answered ${list(page.events).length} events, last ${from}${page.more === true ? ', more' : ''}${page.gap === true ? ', a gap' : ''}`)
 
     if (page.gap === true || events.length > most) {
       return { events, last: number(page.head) ?? from, isWhole: false }
@@ -563,7 +700,8 @@ async function postSignals($: EngineInterface, candidates: Candidate[]): Promise
 
     const signal = signalFor(candidate, verdict)
     done.push(key)
-    await $.store.set(STORE_SIGNALLED, done.slice(-SIGNALS_KEPT))
+    await keep($, STORE_SIGNALLED, done.slice(-SIGNALS_KEPT))
+    debug($, `posting the done-signal ${key}`)
     await $.prompt.submit({ text: signal.prompt })
     $.ui.toast(signal.toast)
   }
@@ -576,7 +714,7 @@ async function markSignalled($: EngineInterface, candidates: Candidate[]): Promi
     done.push(signalKey(candidate, await verdictFor($, candidate)))
   }
 
-  await $.store.set(STORE_SIGNALLED, done.slice(-SIGNALS_KEPT))
+  await keep($, STORE_SIGNALLED, done.slice(-SIGNALS_KEPT))
 }
 
 // One tick: the queue, then what moved since the last look.
@@ -599,51 +737,81 @@ async function tick($: EngineInterface, isStart: boolean): Promise<void> {
       return
     }
 
-    const lastSeq = number(await $.store.get(STORE_LAST_SEQ))
-    const lastSeenAt = number(await $.store.get(STORE_LAST_SEEN_AT))
-
-    if (lastSeq === null) {
-      // The first look ever: start from now, and tell nothing of the past.
-      const head = await callTerylon($, 'events_since', { since: 0, limit: 1 })
-
-      if (head.kind === 'ok') {
-        await $.store.set(STORE_LAST_SEQ, number(head.value.head) ?? number(head.value.last) ?? 0)
-        await $.store.set(STORE_LAST_SEEN_AT, now)
-      }
-
-      return
-    }
-
-    const awayMs = lastSeenAt === null ? 0 : now - lastSeenAt
-    const isCatchUp = isStart && awayMs > CATCH_UP_AFTER_MS
-    const read_ = await readEvents($, lastSeq, CATCH_UP_MOST_EVENTS)
-
-    if (read_ === null) {
-      return
-    }
-
-    const base = await baseUrl($)
-    const candidates = [...candidatesFromEvents(read_.events), ...candidatesFromFlight(lastFlight)]
-
-    if (!read_.isWhole) {
-      // Too far behind for a whole summary: say so, link the console, tell nothing piecemeal.
-      await markSignalled($, candidates)
-      await update($, band, (): PaneBand => ({ text: `${COPY.tooFarHeading} · ${COPY.tooFarBody(String(CATCH_UP_MOST_EVENTS))}`, link: consoleLink(base, 'history'), isAlert: true }))
-    } else if (isCatchUp) {
-      // Back after a long time away: ONE summary, the gap's signals inside it.
-      const summary = catchUpSummary({ awayMs, events: read_.events, briefing: lastBriefing, flight: lastFlight, policy })
-      await markSignalled($, candidates)
-      await $.prompt.submit({ text: summary.prompt })
-      await update($, band, (): PaneBand => ({ text: summary.band, link: consoleLink(base, 'waiting'), isAlert: false }))
-    } else {
-      await postSignals($, candidates)
-    }
-
-    await $.store.set(STORE_LAST_SEQ, read_.last)
-    await $.store.set(STORE_LAST_SEEN_AT, now)
+    await readMoved($, isStart, now)
+  } catch (error) {
+    // NOTHING OF A TICK IS LOST UNSAID: a timer drops what its callback rejects with, so it is said here instead.
+    await eventsFailed($, 'failed', messageOf(error))
   } finally {
     isPolling = false
   }
+}
+
+// What moved since the last look: the done-signal, or one catch-up summary after a long time away.
+async function readMoved($: EngineInterface, isStart: boolean, now: number): Promise<void> {
+  storeRefusals = 0
+
+  const lastSeq = number(await kept($, STORE_LAST_SEQ))
+  const lastSeenAt = number(await kept($, STORE_LAST_SEEN_AT))
+  debug($, `the last look: sequence ${lastSeq ?? 'none'}, at ${lastSeenAt ?? 'never'}`)
+
+  if (lastSeq === null) {
+    // The first look ever: start from now, and tell nothing of the past.
+    debug($, 'calling events_since for the head')
+    const head = await callTerylon($, 'events_since', { since: 0, limit: 1 })
+
+    if (head.kind !== 'ok') {
+      await eventsRefused($, head)
+
+      return
+    }
+
+    await eventsAnswered($)
+
+    await keep($, STORE_LAST_SEQ, number(head.value.head) ?? number(head.value.last) ?? 0)
+    await keep($, STORE_LAST_SEEN_AT, now)
+    await eventsRead($)
+
+    return
+  }
+
+  const awayMs = lastSeenAt === null ? 0 : now - lastSeenAt
+  const isCatchUp = isStart && awayMs > CATCH_UP_AFTER_MS
+  const read_ = await readEvents($, lastSeq, CATCH_UP_MOST_EVENTS)
+
+  if (read_ === null) {
+    return
+  }
+
+  const base = await baseUrl($)
+  const candidates = [...candidatesFromEvents(read_.events), ...candidatesFromFlight(lastFlight)]
+
+  if (!read_.isWhole) {
+    // Too far behind for a whole summary: say so, link the console, tell nothing piecemeal.
+    await markSignalled($, candidates)
+    await update($, band, (): PaneBand => ({ text: `${COPY.tooFarHeading} · ${COPY.tooFarBody(String(CATCH_UP_MOST_EVENTS))}`, link: consoleLink(base, 'history'), isAlert: true }))
+  } else if (isCatchUp) {
+    // Back after a long time away: ONE summary, the gap's signals inside it.
+    const summary = catchUpSummary({ awayMs, events: read_.events, briefing: lastBriefing, flight: lastFlight, policy })
+    await markSignalled($, candidates)
+    debug($, `posting the catch-up summary of ${read_.events.length} events`)
+    await $.prompt.submit({ text: summary.prompt })
+    await update($, band, (): PaneBand => ({ text: summary.band, link: consoleLink(base, 'waiting'), isAlert: false }))
+  } else {
+    await postSignals($, candidates)
+  }
+
+  await keep($, STORE_LAST_SEQ, read_.last)
+  await keep($, STORE_LAST_SEEN_AT, now)
+  await eventsRead($)
+}
+
+// A whole read of the events, and a store that kept it: the Status tab's events problem goes.
+async function eventsRead($: EngineInterface): Promise<void> {
+  if (storeRefusals > 0) {
+    return
+  }
+
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => (current.events === null ? current : { ...EMPTY_SNAPSHOT, ...current, events: null }))
 }
 
 // A value the host kept from an earlier version of the mod, across a reload, may lack what this one draws.
@@ -777,7 +945,7 @@ async function openStory($: EngineInterface, id: number): Promise<void> {
   // drawn from that same answer.
   await readFlight($, now)
 
-  const inFlight = list(lastFlight.stories).find(item => number(item.id) === id) ?? {}
+  const inFlight = settledStory(list(lastFlight.stories).find(item => number(item.id) === id) ?? {}, id, now)
   const question = (await readSnapshot($)).questions.find(item => item.subject === `story/${id}`) ?? null
 
   if (answered.kind !== 'ok' && Object.keys(inFlight).length === 0) {
@@ -785,7 +953,7 @@ async function openStory($: EngineInterface, id: number): Promise<void> {
     return
   }
 
-  const document = answered.kind === 'ok' ? answered.value : {}
+  const document = settledStory(answered.kind === 'ok' ? answered.value : {}, id, now)
   const view_ = storyView(id, document, inFlight, question, now, zoneOffset(now))
   await update($, story, (): PaneStory | null => view_)
 
@@ -1522,17 +1690,18 @@ function row(elements: Elements, look: Look, input: Row): unknown {
 
   return (
     <Box key={`row-${input.key}`} flexDirection="column" hover={isRevealed ? { backgroundColor: 'userMessageBackgroundHover' } : undefined}>
-      <Box flexDirection="row" minWidth={0} overflow="hidden">
+      <Box flexDirection="row" minWidth={0} overflow="hidden" gap={isRevealed ? 'sm' : undefined}>
         <Button key={input.key} plain onPress={input.onPress}>
           {children}
         </Button>
+        {isRevealed && input.reveal !== undefined && input.reveal !== null && (
+          // BESIDE THE PRESS, NEVER OVER IT: laid over the row's right edge, the link covered the row's own text.
+          // NO KEY ON THE REVEAL: a keyed Box is a hover scope of its own, and one drawn "none" is never under the pointer.
+          <Box flexShrink={0} display="none" hover={{ display: 'flex' }}>
+            <Link href={input.reveal.href} label={input.reveal.label} />
+          </Box>
+        )}
       </Box>
-      {isRevealed && input.reveal !== undefined && input.reveal !== null && (
-        // NO KEY ON THE REVEAL: a keyed Box is a hover scope of its own, and one drawn "none" is never under the pointer.
-        <Box position="absolute" top={0} right={0} display="none" hover={{ display: 'flex' }}>
-          <Link href={input.reveal.href} label={input.reveal.label} />
-        </Box>
-      )}
       {input.body ?? null}
     </Box>
   )
@@ -1586,9 +1755,12 @@ export const register: Register = on => {
     await $.command.register({ name: 'terylon', description: 'Opens the Terylon pane (the same as /terylon-pane)' })
     await $.command.register({ name: 'terylon-memory', description: "Opens the Terylon pane on the leader's memory; an edit is confirmed in the console" })
     storyTargets.clear()
+    const startedAt = await $.clock.now()
+    await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, eventsWatchedSince: startedAt }))
     await showHealth($)
     $.clock.after(0, () => tick($, true))
     $.clock.every(POLL_MS, () => tick($, false))
+    $.clock.every(WATCH_MILLISECONDS, () => watchEvents($))
 
     return next(e)
   })
@@ -1980,7 +2152,39 @@ export const register: Register = on => {
           <Text color="subtle">{COPY.fixAlert}</Text>,
           <Link href={notice.link === null ? consoleLink(base, 'bell') : `${base}${notice.link}`} label={COPY.bellInConsole} />,
         ], 'bad'))
-      const problems = [problemCard, rulesCard, pausedCard, ...alertCards].filter(item => item !== null)
+      // THE DONE-SIGNAL'S OWN PROBLEM: the queue may read well while events_since, or the store, fails on its own.
+      const events = current.events
+      const silentSince = isEventsSilent(current) ? current.eventsSilentSince : null
+      const eventsCard = events === null
+        ? silentSince === null
+          ? null
+          : cardOf('problem-events', warned(COPY.eventsSilentTitle), COPY.statusSince(at(silentSince)), [
+              <Text color="inactive">{COPY.eventsSilentBody(Math.round((now - silentSince) / 1000), current.eventsAnsweredAt === null ? null : at(current.eventsAnsweredAt))}</Text>,
+              steps(COPY.fixEventsSilent),
+              retry,
+            ], 'bad')
+        : events.kind === 'not-allowed'
+          ? cardOf('problem-events', warned(COPY.eventsNotAllowedTitle), COPY.notAllowedHint, [
+              <Text color="inactive">{COPY.eventsNotAllowedBody}</Text>,
+              reason(events.reason),
+              ...rulesFix(COPY.fixEventsNotAllowed),
+              retry,
+            ], 'bad')
+          : events.kind === 'store'
+            ? cardOf('problem-events', warned(COPY.eventsStoreTitle), COPY.statusSince(at(events.since)), [
+                <Text color="inactive">{COPY.eventsStoreBody}</Text>,
+                reason(events.reason),
+                steps(COPY.fixEventsStore),
+                retry,
+              ], 'bad')
+            : cardOf('problem-events', warned(COPY.eventsStoppedTitle), COPY.statusSince(at(events.since)), [
+                <Text color="inactive">{COPY.eventsStoppedBody(at(events.since))}</Text>,
+                reason(events.reason),
+                steps(COPY.fixEventsStopped),
+                <Link href={consoleLink(base, 'health')} label={COPY.health} />,
+                retry,
+              ], 'bad')
+      const problems = [problemCard, rulesCard, eventsCard, pausedCard, ...alertCards].filter(item => item !== null)
       const slotsCard = cardOf('status-slots', COPY.statusSlots, COPY.statusSlotsHint, [
         look.isGraphic ? picture(elements, slotsGauge(current.slotsUsed, current.slots, true)) : null,
         <Text tabular>{COPY.statusSlotsLine(current.slotsUsed, current.slots)}</Text>,
@@ -2166,7 +2370,7 @@ export const register: Register = on => {
               </Text>
             </Box>
           </Box>
-          {cardOf('story-phases', COPY.phases, <Text color="subtle" size="footnote" tabular>{nowAt >= 0 || shownStory.hasStage ? COPY.phasesHint(nowAt >= 0 ? nowAt + 1 : done, shownStory.phases.length) : COPY.phasesNoStage(done, shownStory.phases.length)}</Text>, look.isGraphic
+          {cardOf('story-phases', COPY.phases, <Text color="subtle" size="footnote" tabular>{ENDED_STORY_STATES.includes(shownStory.state) ? COPY.phasesEnded(done, shownStory.phases.length, shownStory.stateText) : nowAt >= 0 || shownStory.hasStage ? COPY.phasesHint(nowAt >= 0 ? nowAt + 1 : done, shownStory.phases.length) : COPY.phasesNoStage(done, shownStory.phases.length)}</Text>, look.isGraphic
             ? [
                 // THE STEPPER (S32): the Svg says no word, the labels sit under it in Text; no stage, no node is now.
                 picture(elements, stepper(shownStory.phases, labels, { isStuck, tooltips, isCompact: look.isCompact }), { isInteractive: tooltips !== null }),
@@ -3085,7 +3289,7 @@ export const register: Register = on => {
           ...current.doneToday.map(item =>
             rowOf({
               key: `done-${item.story}`,
-              kind: COPY.kindMerged,
+              kind: item.isAccepted === true ? COPY.kindAccepted : COPY.kindMerged,
               kindTone: 'merged',
               title: item.title,
               detail: item.detail,

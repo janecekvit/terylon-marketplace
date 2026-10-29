@@ -10,7 +10,7 @@
 // More than CATCH_UP_MOST_EVENTS behind: no summary at all, a link to the console. Never a brief, a spec
 // or a memory text: events carry transitions only (S3), and only transitions are told.
 
-import { list, money, number, text } from './queue'
+import { isListStory, list, money, number, text } from './queue'
 
 type Json = Record<string, unknown>
 
@@ -32,8 +32,9 @@ export type Candidate = { story: number; kind: SignalKind; seq: number; title: s
 
 export type Signal = { key: string; story: number; kind: SignalKind; prompt: string; toast: string }
 
-// The verdict a verified story carries: its commit, its environment, its pull request.
-export type Verdict = { commit: string | null; environment: string | null; pullRequest: number | null }
+// The verdict a verified story carries: its commit, its environment, its pull request, and whether the story is in
+// Terylon's own list, which waits for the owner's Accept rather than a merge.
+export type Verdict = { commit: string | null; environment: string | null; pullRequest: number | null; isList: boolean }
 
 function pullRequestOf(value: unknown): number | null {
   if (typeof value === 'number') {
@@ -110,6 +111,12 @@ export function signalFor(candidate: Candidate, verdict: Verdict | null): Signal
 
   switch (candidate.kind) {
     case 'verified':
+      if (verdict?.isList === true) {
+        prompt = `${named} je ověřená${environment === null ? '' : ` v ${environment}`} a čeká na moje přijetí (Accept)${where === '' ? '' : ` (${where})`}. Shrň mi důkazy a co mám proklikat, než ji přijmu.`
+        toast = `Terylon: #${story} verified, waiting for Accept`
+        break
+      }
+
       prompt = `${named} je ověřená${environment === null ? '' : ` v ${environment}`} a čeká na merge${where === '' ? '' : ` (${where})`}. Shrň mi důkazy a co mám proklikat.`
       toast = `Terylon: #${story} verified, waiting for merge`
       break
@@ -148,6 +155,7 @@ export function verdictOf(story: Json): Verdict {
     commit: text(verdict?.commit),
     environment: text(verdict?.environment) ?? text((story.environment as Json | null)?.name),
     pullRequest: pullRequestOf(pullRequest),
+    isList: isListStory({ ...story, state: 'verified' }),
   }
 }
 

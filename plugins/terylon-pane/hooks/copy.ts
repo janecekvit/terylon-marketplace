@@ -115,6 +115,7 @@ export const COPY = {
   kindQueued: 'queued',
   kindHeld: 'held',
   kindMerged: 'merged',
+  kindAccepted: 'accepted',
   kindStory: 'story',
   kindRunning: 'running',
   kindStuck: 'stuck',
@@ -181,6 +182,43 @@ export const COPY = {
   tooFarHeading: 'Missed too much',
   tooFarBody: (count: string) => `over ${count} events since the last look; a summary would not be whole`,
 
+  // THE DONE-SIGNAL STOPPED: events_since, or the store that keeps the pane's place, failed. Each kind says its fix.
+  eventsNotAllowedTitle: "Claude Code refused the done-signal's call",
+  eventsNotAllowedBody:
+    'The queue is read, but Claude Code refused events_since, the call that tells you a story was verified, merged or blocked. Until it passes, nothing is told: no prompt, no toast, no catch-up.',
+  fixEventsNotAllowed: [
+    'Add these rules to ~/.claude/settings.json, under "permissions" → "allow"; events_since must be among them, spelled as below:',
+    'If the rule is already there, restart Claude Desktop, so the settings are read again.',
+    'Press Try again.',
+  ],
+  eventsStoppedTitle: 'The done-signal stopped',
+  eventsStoppedBody: (since: string) =>
+    `Since ${since}, events_since has not answered as the owner's. The queue is current, but a story verified, merged or blocked is not told.`,
+  fixEventsStopped: [
+    'Open Health in the console to see why.',
+    'Press Try again; every poll also tries again.',
+    'If it stays, run claude --debug and read the lines under terylon-pane: events:',
+  ],
+  eventsStoreTitle: 'The pane cannot keep its place',
+  eventsStoreBody:
+    "Claude Code's store for the pane refused, where it keeps the last event it read and the stories it told. The pane goes on from memory for this session; a story verified while Claude Desktop was closed is not told when it opens again.",
+  fixEventsStore: [
+    'Check that your Claude Code configuration folder (~/.claude) is writable.',
+    'Restart Claude Desktop.',
+    'If it stays, run claude --debug and read the lines under terylon-pane: events:',
+  ],
+  eventsSilentTitle: 'The done-signal hears nothing',
+  eventsSilentBody: (seconds: number, last: string | null) =>
+    `events_since has not answered for ${seconds} s${last === null ? ', not once this session' : `; its last answer was at ${last}`}, while the queue reads. Nothing failed that the pane could see: its events path stopped before the call.`,
+  fixEventsSilent: [
+    'Press Try again.',
+    'Restart Claude Desktop.',
+    'If it stays, run claude --debug and read the lines under terylon-pane: events: — the last one says where it stopped.',
+  ],
+  storeTimedOut: (seconds: number) => `the store did not answer within ${seconds} s`,
+  storeReadFailed: (key: string, error: string) => `reading ${key} from the store failed: ${error}`,
+  storeWriteFailed: (key: string, error: string) => `writing ${key} to the store failed: ${error}`,
+
   // One story.
   summariseInSession: 'Summarise in the session',
   summarisePrompt: (story: number) =>
@@ -199,6 +237,7 @@ export const COPY = {
   noAgent: 'no agent reported',
   noStage: 'no stage reported',
   phasesNoStage: (done: number, all: number) => `${done} of ${all} · no stage reported`,
+  phasesEnded: (done: number, all: number, state: string) => `${done} of ${all} · ${state}`,
   stepOf: (step: number, steps: number) => `step ${step} of ${steps}`,
   costOf: (cost: string, budget: string | null) => (budget === null ? `$${cost}` : `$${cost} of the story's $${budget}`),
   phases: 'Phases',

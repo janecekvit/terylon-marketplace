@@ -13,6 +13,11 @@ const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', 
 // Every colour an Svg may paint: the fixed set the light-theme board allows, and none.
 const PAINTS = new Set([...Object.values(SVG_COLOURS), 'none'])
 
+// The hover reveals a drawing holds: a Box drawn "none" until its row is under the pointer.
+async function revealsIn(ui: { findAll: (query: { type?: string }) => Promise<{ key?: unknown; props: Record<string, unknown> }[]> }) {
+  return (await ui.findAll({ type: 'Box' })).filter(box => box.props.display === 'none')
+}
+
 // Every element of a drawn tree that carries a hover, with its key.
 function hovers(node: unknown): { key: unknown; hover: unknown }[] {
   if (node === null || typeof node !== 'object') {
@@ -42,8 +47,8 @@ test('TURNED OFF, 1.1.2 DRAWS: one-line fields, no hover reveal, no tooltip', as
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
 
-  // No row lights under the pointer, and nothing is laid over a row: the console link is in its body.
-  expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.position === 'absolute')).toEqual([])
+  // No row lights under the pointer, and nothing is revealed on a row: the console link is in its body.
+  expect(await revealsIn(ui)).toEqual([])
   expect(hovers(await ui.drawn())).toEqual([])
 
   await ui.press({ key: 'story-333' })
@@ -102,7 +107,7 @@ test('ONE WAY TO SEND AN ANSWER on the desktop: the Answer button, and no submit
   }
 })
 
-test('hover-reveal, PROVEN AND ON: a waiting row lights and lays its console link over its right edge, a link and never a button', async ($, on) => {
+test('hover-reveal, PROVEN AND ON: a waiting row lights and shows its console link beside its press, a link and never a button', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -114,9 +119,11 @@ test('hover-reveal, PROVEN AND ON: a waiting row lights and lays its console lin
 
   // The reveal is not keyed: a keyed Box drawn "none" would be a hover scope the pointer can never be over.
   // ONLY MERGE AND AN ANSWER LINK OUT (S27): the plan's row reveals nothing, its acts are on its card.
-  const reveals = (await ui.findAll({ type: 'Box' })).filter(box => box.props.position === 'absolute')
+  // BESIDE THE PRESS, NEVER OVER IT: laid over the row's right edge, the link covered the question's own text.
+  const reveals = await revealsIn(ui)
   expect(reveals).toHaveLength(2)
-  expect(reveals.every(box => box.key === undefined && box.props.top === 0 && box.props.right === 0 && box.props.display === 'none')).toBe(true)
+  expect(reveals.every(box => box.key === undefined && box.props.flexShrink === 0)).toBe(true)
+  expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.position === 'absolute')).toEqual([])
   expect(hovered.filter(node => node.key === undefined).map(node => node.hover)).toEqual([{ display: 'flex' }, { display: 'flex' }])
   expect((await ui.findAll({ type: 'Link' })).map(link => link.text)).toEqual(expect.arrayContaining(['Answer in the console ↗', 'Merge in the console ↗']))
   expect((await ui.findAll({ type: 'Link' })).map(link => link.text)).not.toContain('Approve in the console ↗')
@@ -125,15 +132,15 @@ test('hover-reveal, PROVEN AND ON: a waiting row lights and lays its console lin
 
   // NO REVEAL OVER AN OPEN ROW (the owner's walk of 1.2.0): it covered the question; the body carries the link.
   await ui.press({ key: 'question-9' })
-  expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.position === 'absolute')).toHaveLength(1)
+  expect(await revealsIn(ui)).toHaveLength(1)
   expect((await ui.findAll({ type: 'Link', text: 'Answer in the console ↗' }))).toHaveLength(1)
   await ui.press({ key: 'question-9' })
-  expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.position === 'absolute')).toHaveLength(2)
+  expect(await revealsIn(ui)).toHaveLength(2)
   await ui.unmount()
 
   // THE TERMINAL HAS NO POINTER TO HOVER: the row draws as 1.1.2 there, whatever is proven.
   const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect((await terminal.findAll({ type: 'Box' })).filter(box => box.props.position === 'absolute')).toEqual([])
+  expect(await revealsIn(terminal)).toEqual([])
   expect(hovers(await terminal.drawn())).toEqual([])
 })
 
@@ -269,7 +276,7 @@ test('the Status tab says the machine in one word, large, in its colour, its tim
 
     expect(word?.props).toMatchObject({ size: 'title', weight: 'semibold', color: 'success' })
     expect((await ui.find({ type: 'Text', text: /^\s*last answer at / }))?.props.tabular).toBe(true)
-    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.7.2') }))?.props.mono).toBe(true)
+    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.0') }))?.props.mono).toBe(true)
     await ui.unmount()
   }
 })

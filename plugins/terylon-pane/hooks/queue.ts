@@ -326,7 +326,7 @@ export function doneTodayItems(stories: Json[], now: number, zoneOffsetMinutes =
   const today = new Date(now - zoneOffsetMinutes * 60000).toISOString().slice(0, 10)
 
   return stories
-    .filter(story => story.state === 'merged')
+    .filter(story => ENDED_STATES.has(String(story.state ?? '')))
     .filter(story => {
       const at = Date.parse(String(story.updatedAt ?? ''))
 
@@ -336,7 +336,13 @@ export function doneTodayItems(stories: Json[], now: number, zoneOffsetMinutes =
       story: number(story.id) ?? 0,
       title: `#${number(story.id) ?? 0} ${text(story.title) ?? ''}`.trim(),
       detail: COPY.mergedAt(clock(story.updatedAt, zoneOffsetMinutes) ?? '?', money(story.costUsd)),
+      isAccepted: isAcceptedStory(story),
     }))
+}
+
+// AN ENDED STORY OF TERYLON'S OWN LIST was accepted, never merged: its state, its outcome or its target says so.
+export function isAcceptedStory(story: Json): boolean {
+  return story.state === 'accepted' || text(story.outcome) === 'accepted' || text(story.target) === 'list'
 }
 
 export function spend(flight: Json): string {

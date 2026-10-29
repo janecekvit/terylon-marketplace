@@ -58,8 +58,12 @@ export type World = {
   opens: string[]
   answers: Record<string, Answer>
   mode: { server: 'up' | 'missing' | 'down' | 'refused' | 'error' | 'unclassified' | 'prompted' }
-  // Tools whose call never answers: what a call held in Desktop looks like to the pane.
+  // Tools whose call never answers until released: what a call held in Desktop looks like to the pane.
   hang: Set<string>
+  // The held calls' answers, each sent when the test calls it.
+  held: (() => void)[]
+  // Tools Claude Code refuses before the call leaves, each with the engine's words: one tool alone not allowed.
+  denied: Map<string, string>
 }
 
 export const BRIEFING = {
@@ -238,9 +242,14 @@ export const STORY_327 = {
 
 // The world beneath the plugin: the clock, the store, the environment, and Terylon at /mcp.
 // `env` adds to the environment: TERYLON_PANE_PROOFS turns on a drawing Desktop has to prove first (S32).
-export function world(on: On, options: { store?: Record<string, unknown>; now?: number; env?: Record<string, string> } = {}): World & { clock: ReturnType<typeof mock.clock> } {
+// `store: null` leaves the store to the test, which answers $.store itself, as a store that refuses does.
+export function world(on: On, options: { store?: Record<string, unknown> | null; now?: number; env?: Record<string, string> } = {}): World & { clock: ReturnType<typeof mock.clock> } {
   const clock = mock.clock(on, { now: options.now ?? WORLD_NOW })
-  mock.store(on, options.store ?? {})
+
+  if (options.store !== null) {
+    mock.store(on, options.store ?? {})
+  }
+
   mock.env(on, { TERYLON_URL: BASE, ...(options.env ?? {}) })
   const state: World = {
     calls: [],
@@ -251,6 +260,8 @@ export function world(on: On, options: { store?: Record<string, unknown>; now?: 
     opens: [],
     mode: { server: 'up' },
     hang: new Set<string>(),
+    denied: new Map<string, string>(),
+    held: [],
     answers: {
       briefing: BRIEFING,
       work_in_flight: FLIGHT,
@@ -298,8 +309,19 @@ export function world(on: On, options: { store?: Record<string, unknown>; now?: 
   on('mcp.call', async ($, e) => {
     state.calls.push({ server: e.server, tool: e.tool, args: e.args })
 
+    // A held call answers only when the test releases it, as a call Desktop holds and later lets go.
     if (state.hang.has(e.tool)) {
-      return new Promise(() => undefined) as never
+      return new Promise(resolve => state.held.push(() => resolve(respond(e)))) as never
+    }
+
+    return respond(e)
+  })
+
+  function respond(e: { server: string; tool: string; args: Record<string, unknown> }): never {
+    const denied = state.denied.get(e.tool)
+
+    if (denied !== undefined) {
+      return { deny: denied } as never
     }
 
     if (state.mode.server === 'missing' || (state.mode.server === 'up' && e.server !== SERVER)) {
@@ -342,9 +364,9 @@ export function world(on: On, options: { store?: Record<string, unknown>; now?: 
     }
 
     return { value: { content: [{ type: 'text', text: JSON.stringify(value) }], isError: false } } as never
-  })
+  }
 
-  return { ...state, clock, calls: state.calls, prompts: state.prompts, toasts: state.toasts, statuses: state.statuses, logs: state.logs, opens: state.opens, answers: state.answers, mode: state.mode, hang: state.hang }
+  return { ...state, clock, calls: state.calls, prompts: state.prompts, toasts: state.toasts, statuses: state.statuses, logs: state.logs, opens: state.opens, answers: state.answers, mode: state.mode, hang: state.hang, held: state.held, denied: state.denied }
 }
 
 export const SESSION = { cwd: '/work', surface: 'desktop', isInteractive: true } as const
