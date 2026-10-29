@@ -257,7 +257,7 @@ export const COPY = {
   answerNote: 'An answer approves nothing, it completes the brief; a plan or a story is decided on its own card, and a merge in the console.',
 
   // Goals and plans.
-  // The two buttons in place of the fold (#41, option D), like Claude Desktop's Active and Archived sessions.
+  // The Goals tab's two buttons, like Claude Desktop's Active and Archived sessions.
   goalsOpen: 'Open',
   goalsClosed: 'Closed',
   goalsHint: 'priority',

@@ -714,7 +714,7 @@ function stackOf(value: PaneView): PaneScreen[] {
 async function show($: EngineInterface, screen: PaneScreen, isTab: boolean): Promise<void> {
   await update($, view, (current: PaneView): PaneView => ({ stack: isTab ? [screen] : [...stackOf(current), screen] }))
 
-  // THE GOALS TAB STARTS OVER ON OPEN (#41); ‹ back to it keeps the list the owner left.
+  // THE GOALS TAB STARTS OVER ON OPEN; ‹ back to it keeps the list the owner left.
   if (isTab && screen.screen === 'goals') {
     await update($, goals, (current: PaneGoals): PaneGoals => ({ ...EMPTY_GOALS, ...current, showing: 'open' }))
   }
@@ -895,7 +895,7 @@ async function loadGoals($: EngineInterface): Promise<void> {
     target: typeof current?.target === 'string' ? current.target : OWN_LIST,
     adding: current?.adding ?? 'idle',
     addSentence: typeof current?.addSentence === 'string' ? current.addSentence : null,
-    // THE CLOSED GOALS ALREADY READ stay until the next press of Closed, or a closedCount that changed (#41).
+    // THE CLOSED GOALS ALREADY READ stay until the next press of Closed, or a closedCount that changed.
     showing: current?.showing === 'closed' ? 'closed' : 'open',
     closed: Array.isArray(current?.closed) ? current.closed : [],
     closedCount: typeof current?.closedCount === 'number' ? current.closedCount : 0,
@@ -924,7 +924,7 @@ async function readGoalsFromTerylon($: EngineInterface): Promise<void> {
   const items = goalItems(goalsNow, questions)
   const plans = plansAnswer.kind === 'ok' ? planItems(plansNow, base) : []
   const targets = targetsOf(goalsAnswer.value)
-  // TERYLON S44 (#408) answers the open goals and closedCount; today's Terylon the full list. Read per answer (#41).
+  // A Terylon with S44 answers the open goals and closedCount, one without it the full list: read per answer.
   const closedCount = number(goalsAnswer.value.closedCount)
 
   await update($, goals, (current: PaneGoals): PaneGoals => {
@@ -944,7 +944,7 @@ async function readGoalsFromTerylon($: EngineInterface): Promise<void> {
   })
 }
 
-// OPEN OR CLOSED, PRESSED (#41). After S44 a press of Closed reads the closed goals, and nothing else ever does.
+// OPEN OR CLOSED, PRESSED. With S44 a press of Closed reads the closed goals, and nothing else ever does.
 async function showGoals($: EngineInterface, showing: 'open' | 'closed'): Promise<void> {
   await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, showing }))
 
@@ -2889,14 +2889,14 @@ export const register: Register = on => {
     // THE GOALS TAB: open goals by priority, the plans, and a new goal with its priority and target.
     if (screen.screen === 'goals') {
       const isClosedShown = goalsState.showing === 'closed'
-      // A CLOSED GOAL'S PLANS LEAVE THE TAB (the owner's walk of 1.5.0, #35): they stay on the goal's own screen. After
+      // A CLOSED GOAL'S PLANS LEAVE THE OPEN LIST: they stay on the goal's own screen. After
       // S44 the tab knows the open goals alone, so a plan stays only under one of them.
       const openPlans = goalsState.plans.filter(plan => (goalsState.closedFrom === 'terylon'
         ? goalsState.open.some(item => item.id === plan.goal)
         : !goalsState.closed.some(item => item.id === plan.goal)))
-      // UNDER CLOSED, THE CLOSED GOALS' PLANS ALONE (Terylon Testing's round, #48): each button draws its own goals' plans.
+      // UNDER CLOSED, THE CLOSED GOALS' PLANS ALONE: each button draws its own goals' plans.
       const shownPlans = isClosedShown ? goalsState.plans.filter(plan => goalsState.closed.some(item => item.id === plan.goal)) : openPlans
-      // OPEN · N AND CLOSED · M (#41, board D): the one selected filled, the other dim, as the tabs are.
+      // OPEN · N AND CLOSED · M: the one selected filled, the other dim, as the tabs are.
       const switchButton = (key: string, name: string, count: number, isSelected: boolean, showing: 'open' | 'closed') => (
         <Button key={key} label={`${name}${COPY.count(count)}`} variant={isSelected ? 'primary' : undefined} dimColor={isSelected ? undefined : true} onPress={() => showGoals($, showing)}>
           {!look.isGraphic && isSelected ? '● ' : ''}

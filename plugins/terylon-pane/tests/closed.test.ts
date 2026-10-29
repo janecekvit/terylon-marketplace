@@ -1,7 +1,6 @@
-// OPEN AND CLOSED GOALS AS TWO BUTTONS (#41, option D, approved by the owner on 2026-10-28): the "N closed ▾" fold
-// became Open · N and Closed · M. With Terylon S44 goals_list answers the open goals and closedCount, and the closed
-// ones are read with goals_list {closed: true} on a press of Closed alone; without it the pane counts and filters
-// them locally from the full list, as before. Both shapes are held here.
+// OPEN AND CLOSED GOALS AS TWO BUTTONS: Open · N and Closed · M on the Goals tab. With Terylon S44 goals_list
+// answers the open goals and closedCount, and the closed ones are read with goals_list {closed: true} on a press of
+// Closed alone; without it the pane counts and filters them locally from the full list. Both shapes are held here.
 
 import { test, expect } from 'claude-code/testing'
 
@@ -223,7 +222,7 @@ test('AFTER S44: a plan stays on the Goals tab only under an open goal, the clos
   expect(closedReads(terylon.calls)).toEqual([])
 })
 
-// TERYLON TESTING'S ROUND (#48): under Closed, the plans of open goals were still listed below the closed goals.
+// EACH BUTTON DRAWS ITS OWN GOALS' PLANS: under Closed the closed goals' plans alone, under Open the open ones'.
 for (const shape of ['before S44', 'after S44'] as const) {
   test(`${shape.toUpperCase()}: Closed shows only the closed goals and their plans; Open only the open ones and theirs`, async ($, on) => {
     const terylon = world(on)
