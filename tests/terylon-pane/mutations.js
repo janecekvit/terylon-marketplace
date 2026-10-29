@@ -494,8 +494,8 @@ const MUTATIONS = [
     {
         name: "a closed goal's plans stay on the Goals tab",
         file: "hooks/register.tsx",
-        find: "const openPlans = goalsState.plans.filter(plan => !goalsState.closed.some(item => item.id === plan.goal))",
-        replace: "const openPlans = goalsState.plans",
+        find: "const openPlans = goalsState.plans.filter(plan => plan.state !== 'withdrawn' && !goalsState.closed.some(item => item.id === plan.goal))",
+        replace: "const openPlans = goalsState.plans.filter(plan => plan.state !== 'withdrawn')",
     },
     {
         name: "a plan is drawn as one chain again",
