@@ -113,8 +113,8 @@ const MUTATIONS = [
     {
         name: "a row's title is no longer cut at the card's edge",
         file: "hooks/register.tsx",
-        find: "<Text color={input.titleTone} wrap=\"truncate-end\">{input.title}</Text>",
-        replace: "<Text color={input.titleTone}>{input.title}</Text>",
+        find: "<Text color={input.titleTone} dimColor={input.isTitleDim === true ? true : undefined} wrap=\"truncate-end\">{input.title}</Text>",
+        replace: "<Text color={input.titleTone} dimColor={input.isTitleDim === true ? true : undefined}>{input.title}</Text>",
     },
     {
         name: "an empty card says nothing",
@@ -719,6 +719,12 @@ const MUTATIONS = [
         file: "hooks/register.tsx",
         find: "      const shownPlans = isClosedShown ? tabPlans.filter(plan => goalsState.closed.some(item => item.id === plan.goal)) : openPlans\n",
         replace: "      const shownPlans = openPlans\n",
+    },
+    {
+        name: "a closed goal's title is drawn as bright as an open one's again",
+        file: "hooks/register.tsx",
+        find: "                isTitleDim: isClosedShown,\n",
+        replace: "",
     },
 ];
 

@@ -103,7 +103,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.9.0'
+export const MOD_VERSION = '1.9.1'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -1713,6 +1713,8 @@ type Row = {
   kindColumn?: number
   title: string
   titleTone?: Tone
+  // A title drawn dim, as the engine dims a Text: a closed goal's, which a colour alone left as bright as an open one's.
+  isTitleDim?: boolean
   detail?: string | null
   detailTone?: Tone
   // The console link the pointer reveals over the row's right edge (hover-reveal); without the proof it sits in the body.
@@ -1740,7 +1742,7 @@ function row(elements: Elements, look: Look, input: Row): unknown {
     )
   }
 
-  children.push(<Text color={input.titleTone} wrap="truncate-end">{input.title}</Text>)
+  children.push(<Text color={input.titleTone} dimColor={input.isTitleDim === true ? true : undefined} wrap="truncate-end">{input.title}</Text>)
 
   if (hasDetail) {
     children.push('  ', <Text size="footnote" tabular color={input.detailTone ?? 'subtle'}>{input.detail}</Text>)
@@ -3155,6 +3157,7 @@ export const register: Register = on => {
                 kindColumn: 3,
                 title: item.title,
                 titleTone: isClosedShown ? 'subtle' : undefined,
+                isTitleDim: isClosedShown,
                 detail: item.questions > 0 ? COPY.goalQuestions(item.questions) : item.stories,
                 detailTone: item.questions > 0 ? 'warning' : 'subtle',
                 onPress: () => go({ screen: 'goal', goal: item.id }),
