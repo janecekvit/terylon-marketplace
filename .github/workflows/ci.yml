@@ -137,21 +137,21 @@ jobs:
             node tests/terylon-pane/needs-pane-suites.js --event "${EVENT_NAME}"
           fi
 
-  # The mutation suite in four shards, each on a runner of its own; within a shard the runs stay one after another,
-  # since acts.test.ts sometimes fails under full CPU load (#39). tests/terylon-pane/shard.test.js proves the four
+  # The mutation suite in eight shards, each on a runner of its own; within a shard the runs stay one after another,
+  # since acts.test.ts sometimes fails under full CPU load. tests/terylon-pane/shard.test.js proves the eight
   # cover every mutation exactly once. Each shard also runs the unmutated baseline, so its reds mean something.
   pane-mutations:
-    name: terylon-pane mutations (shard ${{ matrix.shard }}/4)
+    name: terylon-pane mutations (shard ${{ matrix.shard }}/8)
     needs: pane-plan
     if: needs.pane-plan.outputs.run == 'true'
     runs-on: ubuntu-latest
-    # 24 or 25 runs of plugin test: 6 to 7.5 minutes on most runners, 13.5 on one about twice as slow (2026-10-28, #45).
-    # The margin is for that spread.
+    # About 22 runs of plugin test per shard, each about half a minute; the margin is for a runner twice as slow. The
+    # measured times are in the root CLAUDE.md, under Testing.
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -171,7 +171,7 @@ jobs:
       # Each planted mutation must turn the mod's tests red; with claude on PATH none of them skips.
       - name: node --test tests/terylon-pane/mutations.test.js
         env:
-          MUTATION_SHARD: ${{ matrix.shard }}/4
+          MUTATION_SHARD: ${{ matrix.shard }}/8
         run: node --test tests/terylon-pane/mutations.test.js
 
   # Three runs of plugin test, about a minute: a job of its own beside the shards rather than a fifth of their time.
@@ -258,7 +258,7 @@ jobs:
               exit 1
             fi
 
-            echo "the mutation suite's four shards and the zone suite passed"
+            echo "the mutation suite's eight shards and the zone suite passed"
           elif [ "${RUN_SUITES}" = "false" ]
           then
             echo "the mutation and zone suites were skipped: the pull request touches nothing they can see"
