@@ -142,7 +142,7 @@ test('STALE AFTER DROP GOAL: the goal reads dropped at once, Drop goal… gone, 
 
   await toQueue($)
   await ui.press({ key: 'tab-goals' })
-  expect(await ui.find({ type: 'Text', text: exact('Open goals · 1') })).toBeDefined()
+  expect((await ui.find({ key: 'goals-show-open' }))?.props.label).toBe('Open · 1')
 })
 
 // A story blocked as stopped, as story_get answers it.
