@@ -219,6 +219,13 @@ export const COPY = {
     'Restart Claude Desktop.',
     'If it stays, run claude --debug and read the lines under terylon-pane: events: — the last one says where it stopped.',
   ],
+  // A PART OF THE STATUS TAB THAT DID NOT DRAW: said as a problem, the rest of the tab drawn around it.
+  statusPartFailed: (part: string) => `The Status tab's ${part} did not draw`,
+  fixStatusPart: [
+    'Press Refresh, or open another tab and come back.',
+    'If it stays, run claude --debug and read the line under terylon-pane: the Status tab',
+    'Restart Claude Desktop.',
+  ],
   storeTimedOut: (seconds: number) => `the store did not answer within ${seconds} s`,
   storeReadFailed: (key: string, error: string) => `reading ${key} from the store failed: ${error}`,
   storeWriteFailed: (key: string, error: string) => `writing ${key} to the store failed: ${error}`,

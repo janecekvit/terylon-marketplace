@@ -5,6 +5,7 @@
 // never called merged.
 
 import { test, expect } from 'claude-code/testing'
+import type { On } from 'claude-code'
 
 import { BRIEFING, HOUR, PANE_PROPS, SESSION, STORY_327, events, exact, lateOnTheLocalDayOf, storyMoved, world } from './fixtures'
 
@@ -74,7 +75,7 @@ test('A STORE THAT REFUSES does not stop the done-signal: events_since is called
     expect((await ui.find({ type: 'Text', text: /^Reason: (reading|writing) \w+ (from|to) the store failed: / }))?.text).toContain(STORE_REFUSAL)
     expect(await ui.find({ type: 'Text', text: exact('1. Check that your Claude Code configuration folder (~/.claude) is writable.') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('3. If it stays, run claude --debug and read the lines under terylon-pane: events:') })).toBeDefined()
-    expect(await ui.find({ key: 'retry' })).toBeDefined()
+    expect(await ui.find({ key: 'events-retry' })).toBeDefined()
     await ui.unmount()
   }
 })
@@ -282,4 +283,83 @@ test('THE WATCHDOG stays quiet while the queue itself does not read: that proble
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'tab-status' })
   expect(await ui.find({ type: 'Text', text: exact('The done-signal hears nothing') })).toBeUndefined()
+})
+
+// A value an earlier version of the mod left in $.state, served for good: the state.get answer the engine takes.
+function seedSnapshot(on: On, value: Record<string, unknown>): void {
+  on('state.get', async ($, e, next) =>
+    String((e as { key?: unknown }).key) === 'snapshot' ? ({ value: { value, version: 1 } } as never) : next(e))
+}
+
+// THE SNAPSHOT AS 1.8.3 KEPT IT: every field it drew, none of the done-signal's.
+const SNAPSHOT_1_8_3 = {
+  connection: 'ok', problem: null, fetchedAt: Date.parse('2026-10-11T21:59:00Z'), failingSince: null, header: 'running $1.00 of $20 today · 1 of 4 slots',
+  runningUsd: '1.00', dayBudget: '20', slots: 4, slotsUsed: 1, paused: null, pausedSince: null, notices: 0, alerts: 0, alertNotices: [],
+  server: 'plugin:terylon-os:terylon', waiting: [], running: [], queued: [], doneToday: [], questions: [],
+}
+
+test('THE STATUS TAB DRAWS FROM A SNAPSHOT 1.8.3 KEPT, without the done-signal\'s fields, on every surface', async ($, on) => {
+  seedSnapshot(on, SNAPSHOT_1_8_3)
+  world(on)
+  await $.session.start(SESSION)
+
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    await ui.press({ key: 'tab-status' })
+    expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('Problems · 0') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /did not draw/ })).toBeUndefined()
+    await ui.unmount()
+  }
+})
+
+test('A DONE-SIGNAL FIELD OF ANOTHER SHAPE is read as none: the Status tab draws, and says nothing failed', async ($, on) => {
+  seedSnapshot(on, { ...SNAPSHOT_1_8_3, events: { kind: 'store' }, eventsAnsweredAt: 'never', eventsWatchedSince: null, eventsSilentSince: {} })
+  world(on)
+  await $.session.start(SESSION)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'tab-status' })
+  expect(await ui.find({ type: 'Text', text: exact('Problems · 0') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /did not draw/ })).toBeUndefined()
+  expect((await ui.find({ key: 'tab-status' }))?.text).not.toContain('⚠')
+})
+
+test('A PART OF THE STATUS TAB THAT THROWS is one problem with its reason and steps; the rest of the tab draws', async ($, on) => {
+  seedSnapshot(on, { ...SNAPSHOT_1_8_3, alertNotices: [null] })
+  const terylon = world(on)
+  await $.session.start(SESSION)
+
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    await ui.press({ key: 'tab-status' })
+    expect((await ui.find({ type: 'Text', text: exact("The Status tab's alerts did not draw") }))?.props.color).toBe('error')
+    expect(await ui.find({ type: 'Text', text: /^Reason: / })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('1. Press Refresh, or open another tab and come back.') })).toBeDefined()
+    // EVERY OTHER PART IS DRAWN: the machine, the slots, the cost, the policy and the diagnostics.
+    expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('Slots') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('Policy') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.3') })).toBeDefined()
+    await ui.unmount()
+  }
+  expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith("terylon-pane: the Status tab's alerts did not draw: "))).toBe(true)
+})
+
+test('THE CONNECTION\'S PROBLEM AND THE DONE-SIGNAL\'S, together: each card keeps its own Try again, no key drawn twice', async ($, on) => {
+  on('store.get', async () => ({ deny: STORE_REFUSAL }) as never)
+  on('store.set', async () => ({ deny: STORE_REFUSAL }) as never)
+  const terylon = world(on, { store: null })
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+  terylon.mode.server = 'down'
+  await terylon.clock.advance(30000)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'tab-status' })
+  expect(await ui.find({ type: 'Text', text: exact('The pane cannot keep its place') })).toBeDefined()
+  const keys = (await ui.findAll({ type: 'Button' })).map(button => button.key).filter(key => key !== undefined)
+  expect(keys.filter(key => key === 'retry')).toHaveLength(1)
+  expect(keys.filter(key => key === 'events-retry')).toHaveLength(1)
+  expect(new Set(keys).size).toBe(keys.length)
 })

@@ -300,8 +300,8 @@ const MUTATIONS = [
     {
         name: "a gate creeps into the allow rules the Status tab draws",
         file: "hooks/register.tsx",
-        find: "<Code key=\"allow-rules\" source={allowRules()}",
-        replace: "<Code key=\"allow-rules\" source={allowRules().replace('\"\\n  ]', '\",\\n    \"mcp__plugin_terylon-os_terylon__story_merge\"\\n  ]')}",
+        find: "<Code key={key} source={allowRules()}",
+        replace: "<Code key={key} source={allowRules().replace('\"\\n  ]', '\",\\n    \"mcp__plugin_terylon-os_terylon__story_merge\"\\n  ]')}",
     },
     {
         name: "input-rows, which the owner proved, is off again",
@@ -725,6 +725,24 @@ const MUTATIONS = [
         file: "hooks/register.tsx",
         find: "                isTitleDim: isClosedShown,\n",
         replace: "",
+    },
+    {
+        name: "a done-signal field of another shape is read as it is again",
+        file: "hooks/register.tsx",
+        find: "  return snapshotOf(await read($, snapshot))\n",
+        replace: "  return { ...EMPTY_SNAPSHOT, ...(await read($, snapshot)) }\n",
+    },
+    {
+        name: "a part of the Status tab that throws takes the whole tab down again",
+        file: "hooks/register.tsx",
+        find: "          return cardOf(`problem-part-${name}`",
+        replace: "          throw error\n          return cardOf(`problem-part-${name}`",
+    },
+    {
+        name: "the done-signal's Try again shares the connection's key again",
+        file: "hooks/register.tsx",
+        find: "<Button key=\"events-retry\"",
+        replace: "<Button key=\"retry\"",
     },
 ];
 

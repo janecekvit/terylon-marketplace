@@ -103,7 +103,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.9.2'
+export const MOD_VERSION = '1.9.3'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -816,7 +816,24 @@ async function eventsRead($: EngineInterface): Promise<void> {
 
 // A value the host kept from an earlier version of the mod, across a reload, may lack what this one draws.
 async function readSnapshot($: EngineInterface): Promise<PaneSnapshot> {
-  return { ...EMPTY_SNAPSHOT, ...(await read($, snapshot)) }
+  return snapshotOf(await read($, snapshot))
+}
+
+// THE DONE-SIGNAL'S FIELDS, READ BY THEIR TYPE: a value an earlier version kept lacks them, and one of another shape
+// must draw as none rather than throw where the Status tab formats its time.
+function snapshotOf(value: unknown): PaneSnapshot {
+  const kept = { ...EMPTY_SNAPSHOT, ...(value !== null && typeof value === 'object' ? (value as Partial<PaneSnapshot>) : {}) }
+  const time = (moment: unknown): number | null => (typeof moment === 'number' && Number.isFinite(moment) ? moment : null)
+  const events = kept.events as Partial<NonNullable<PaneSnapshot['events']>> | null | undefined
+  const isEvents = events !== null && typeof events === 'object' && typeof events.kind === 'string' && typeof events.reason === 'string' && time(events.since) !== null
+
+  return {
+    ...kept,
+    events: isEvents ? (events as NonNullable<PaneSnapshot['events']>) : null,
+    eventsAnsweredAt: time(kept.eventsAnsweredAt),
+    eventsWatchedSince: time(kept.eventsWatchedSince),
+    eventsSilentSince: time(kept.eventsSilentSince),
+  }
 }
 
 async function readMemory($: EngineInterface): Promise<PaneMemory> {
@@ -2132,10 +2149,10 @@ export const register: Register = on => {
 
     // THE ALLOW RULES' FIX, ONE DRAWING for a refused poll and an act Claude Code refused (S27): the steps, then the
     // rules the pane needs.
-    const rulesFix = (lines: readonly string[] = COPY.fixNotAllowed) => [
+    const rulesFix = (lines: readonly string[] = COPY.fixNotAllowed, key = 'allow-rules') => [
       steps(lines),
       // THE ALLOW RULES AS CODE (S32): json, the pane's whole own list, no gate; selected and copied by hand.
-      <Code key="allow-rules" source={allowRules()} language="json" />,
+      <Code key={key} source={allowRules()} language="json" />,
     ]
 
     // THE STATES THAT ARE NOT A QUEUE: what happened, why, and the step that fixes it.
@@ -2196,165 +2213,202 @@ export const register: Register = on => {
 
     // THE STATUS TAB: the machine, its slots and cost, every problem with how to fix it, and where to look.
     if (screen.screen === 'status') {
-      const health = healthOf(current, offset)
-      const state = stateWord(health)
-      const bellState = await readBell($)
-      const pausedCard = current.paused === null ? null : cardOf('problem-paused', warned(COPY.pausedTitle, 'wait'), current.pausedSince === null ? null : COPY.statusSince(current.pausedSince), [
-        <Text color="inactive">{current.paused}</Text>,
-        steps(COPY.fixPaused),
-        <Box flexDirection="row" gap={1}>{actButton('leader', 'leader_resume', null, { isPrimary: true })}</Box>,
-        actBusyNote('leader'),
-      ], 'wait')
-      // THE RULES, ASKED FOR BY How to fix (S27): an act Claude Code refused needs the same rules as a refused poll.
-      const rulesCard = current.connection === 'not-allowed' || !(await read($, rulesAsked)) ? null : cardOf('problem-rules', warned(COPY.notAllowedTitle, 'wait'), COPY.notAllowedHint, [
-        <Text color="inactive">{COPY.notAllowedBody}</Text>,
-        // NO Try again ON THIS CARD (#35): its last step names the act's own button instead.
-        ...rulesFix(COPY.fixNotAllowedAct),
-      ], 'wait')
-      const alertCards = current.alertNotices.map(notice =>
-        cardOf(`problem-alert-${notice.id}`, warned(notice.title), COPY.alertHint(notice.source, notice.when), [
-          notice.body === '' ? null : <Text color="inactive">{notice.body}</Text>,
-          <Text color="subtle">{COPY.fixAlert}</Text>,
-          <Link href={notice.link === null ? consoleLink(base, 'bell') : `${base}${notice.link}`} label={COPY.bellInConsole} />,
-        ], 'bad'))
-      // THE DONE-SIGNAL'S OWN PROBLEM: the queue may read well while events_since, or the store, fails on its own.
-      const events = current.events
-      const silentSince = isEventsSilent(current) ? current.eventsSilentSince : null
-      const eventsCard = events === null
-        ? silentSince === null
-          ? null
-          : cardOf('problem-events', warned(COPY.eventsSilentTitle), COPY.statusSince(at(silentSince)), [
-              <Text color="inactive">{COPY.eventsSilentBody(Math.round((now - silentSince) / 1000), current.eventsAnsweredAt === null ? null : at(current.eventsAnsweredAt))}</Text>,
-              steps(COPY.fixEventsSilent),
-              retry,
-            ], 'bad')
-        : events.kind === 'not-allowed'
-          ? cardOf('problem-events', warned(COPY.eventsNotAllowedTitle), COPY.notAllowedHint, [
-              <Text color="inactive">{COPY.eventsNotAllowedBody}</Text>,
-              reason(events.reason),
-              ...rulesFix(COPY.fixEventsNotAllowed),
-              retry,
-            ], 'bad')
-          : events.kind === 'store'
-            ? cardOf('problem-events', warned(COPY.eventsStoreTitle), COPY.statusSince(at(events.since)), [
-                <Text color="inactive">{COPY.eventsStoreBody}</Text>,
-                reason(events.reason),
-                steps(COPY.fixEventsStore),
-                retry,
-              ], 'bad')
-            : cardOf('problem-events', warned(COPY.eventsStoppedTitle), COPY.statusSince(at(events.since)), [
-                <Text color="inactive">{COPY.eventsStoppedBody(at(events.since))}</Text>,
-                reason(events.reason),
-                steps(COPY.fixEventsStopped),
-                <Link href={consoleLink(base, 'health')} label={COPY.health} />,
-                retry,
-              ], 'bad')
-      const problems = [problemCard, rulesCard, eventsCard, pausedCard, ...alertCards].filter(item => item !== null)
-      const slotsCard = cardOf('status-slots', COPY.statusSlots, COPY.statusSlotsHint, [
-        look.isGraphic ? picture(elements, slotsGauge(current.slotsUsed, current.slots, true)) : null,
-        <Text tabular>{COPY.statusSlotsLine(current.slotsUsed, current.slots)}</Text>,
-        current.running.length === 0 ? quiet(elements, COPY.nothingRunning) : null,
-        ...current.running.map(item =>
-          rowOf({
-            key: `status-story-${item.story}`,
-            kind: item.isStuck ? COPY.kindStuck : item.isVerifying ? COPY.verifying : COPY.kindRunning,
-            kindTone: item.isStuck ? 'warning' : 'subtle',
-            title: item.title,
-            detail: item.detail,
-            onPress: () => go({ screen: 'story', story: item.story }),
-          })),
-      ])
-      // THE POLICY (S27): read as policy_get answered it, edited in place within its limits, saved with policy_save.
-      const form = { ...EMPTY_POLICY_FORM, ...(await read($, policyForm)) }
-      const rows = policyRows(policy)
-      const changes = policyChanges(policy, form.values)
-      const problems_ = policyProblems(policy, form.values)
-      const isSavable = changes.length > 0 && problems_.length === 0
-      const policyState = actState('policy')
-      const isPolicyEditing = form.isEditing && hasInput && 'Input' in elements
-      const policyCard = cardOf('status-policy', COPY.policy, (
-        <Box flexDirection="row" gap={1} alignItems="center">
-          <Text color="subtle" size="footnote" tabular>{isPolicyEditing ? COPY.policyEditing : COPY.policyVersion(number(policy?.version), policy?.changedAt === undefined || policy?.changedAt === null ? null : clock(policy.changedAt, offset))}</Text>
-          {!isPolicyEditing && hasInput && rows.length > 0 && <Button key="act-policy-edit" label={COPY.policyEdit} dimColor={policyState.busy !== null ? true : undefined} onPress={() => (policyState.busy === null ? editPolicy($, false) : undefined)} />}
-        </Box>
-      ), isPolicyEditing && 'Input' in elements
-        ? [
-            ...POLICY_FIELDS.filter(field => form.values[field.key] !== undefined).map(field => (
-              <elements.Input
-                key={`act-policy-field-${field.key}`}
-                label={policyFieldLabel(field, policy)}
-                value={form.values[field.key] ?? ''}
-                onInput={value => update($, policyForm, (state: PanePolicyForm): PanePolicyForm => ({ ...EMPTY_POLICY_FORM, ...state, values: { ...state.values, [field.key]: value } }))}
-                onSubmit={() => savePolicy($)}
-              />
-            )),
-            ...problems_.map((problem, index) => <Text key={`policy-problem-${index}`} color="error">{problem}</Text>),
-            <Text color="subtle" size="footnote" tabular>{COPY.policyChanges(changes)}</Text>,
-            <Box flexDirection="row" gap={1}>
-              <Button key="act-policy-send" label={policyState.busy === null ? COPY.actButton.policy_save ?? 'Save' : COPY.actBusy.policy_save ?? 'Saving…'} variant={!isSavable || policyState.busy !== null ? undefined : 'primary'} dimColor={!isSavable || policyState.busy !== null ? true : undefined} onPress={() => (policyState.busy === null && isSavable ? savePolicy($) : undefined)} />
-              <Button key="act-policy-cancel" label={COPY.actCancel} dimColor onPress={() => (policyState.busy === null ? update($, policyForm, (): PanePolicyForm => EMPTY_POLICY_FORM) : undefined)} />
-            </Box>,
-            actBusyNote('policy'),
-            <Text color="subtle" size="footnote">{COPY.policyNote}</Text>,
-          ]
-        : [
-            rows.length === 0 ? quiet(elements, COPY.policyMissing) : null,
-            ...rows.map((row_, index) => (
-              <Box key={`policy-row-${index}`} flexDirection="row" justifyContent="space-between" gap={1}>
-                <Text color="inactive">{row_.label}</Text>
-                <Text tabular>{row_.value}</Text>
-              </Box>
-            )),
-          ])
-      const costCard = cardOf('status-cost', COPY.statusCost, null, [
-        look.isGraphic && budgetUsd !== null ? picture(elements, spendBar(runningUsd, budgetUsd, 'wide', COPY.statusToday(current.runningUsd, current.dayBudget))) : null,
-        <Text tabular>{COPY.statusToday(current.runningUsd, current.dayBudget)}</Text>,
-        bellState.metrics.length === 0 ? null : (
-          <Text tabular>
-            <Text color="subtle">{`${COPY.statusMonth} `}</Text>
-            <Text color="inactive">{bellState.metrics.map(metric => `${metric.value} ${metric.label}`).join(' · ')}</Text>
-          </Text>
-        ),
-      ])
+      // A PART THAT THROWS IS ONE PROBLEM, NEVER A BLANK TAB: Desktop draws its own placeholder when a render fails.
+      const part = async (name: string, build: () => unknown): Promise<unknown> => {
+        try {
+          return await build()
+        } catch (error) {
+          const message = messageOf(error)
+          $.ui.log(`terylon-pane: the Status tab's ${name} did not draw: ${message}`, { to: 'debug' })
 
-      return (
-        <Box flexDirection="column" gap={1}>
-          {tabs}
-          {cardOf('status-machine', <Text size="caption" color="subtle">{COPY.statusMachine.toUpperCase()}</Text>, null, [
-            <Box flexDirection="row" justifyContent="space-between" gap={1}>
-              <Box flexDirection="row" gap={1}>
-                <Text size="title" weight="semibold" color={state.tone}>{state.word}</Text>
-                {health.failingSince !== null && current.connection !== 'ok' && <Text color="subtle" tabular>{` · ${COPY.statusSince(health.failingSince)}`}</Text>}
-                {current.connection === 'ok' && current.pausedSince !== null && <Text color="subtle" tabular>{` · ${COPY.statusSince(current.pausedSince)}`}</Text>}
-              </Box>
-              <Button key="status-refresh" label={COPY.refresh} dimColor onPress={async () => { await tick($, true); await loadBell($) }} />
-            </Box>,
-            <Text color="subtle" size="footnote" tabular>{COPY.statusLastAnswer(current.fetchedAt === null ? null : at(current.fetchedAt))}</Text>,
-          ])}
-          {look.isGraphic && !look.isNarrow
-            ? (
-                <Box key="status-gauges" flexDirection="row" gap="sm">
-                  <Box flexGrow={1} flexShrink={1} minWidth={0}>{slotsCard}</Box>
-                  <Box flexGrow={1} flexShrink={1} minWidth={0}>{costCard}</Box>
-                </Box>
-              )
-            : [slotsCard, costCard]}
-          {cardOf('status-problems', headingOf(COPY.statusProblems, problems.length, problems.length > 0 ? 'warning' : 'inactive'), null, [
-            problems.length === 0 ? quiet(elements, COPY.nothingWrong) : null,
-          ])}
-          {problems}
-          {actOutcome('leader', consoleLink(base, 'work'), COPY.workInConsole)}
-          {policyCard}
-          {actOutcome('policy', consoleLink(base, 'policy'), COPY.policyInConsole)}
-          {cardOf('status-diagnostics', <Text size="heading" weight="semibold" color="subtle">{COPY.statusDiagnostics}</Text>, null, [
-            <Text color="subtle" mono>{COPY.diagnosticsVersion(MOD_VERSION)}</Text>,
-            <Text color="subtle" mono>{COPY.diagnosticsUrl(base)}</Text>,
-            <Text color="subtle" mono>{COPY.diagnosticsServer(current.server)}</Text>,
-            <Text color="subtle" size="footnote">{COPY.diagnosticsDebug}</Text>,
-          ])}
-          {footer}
-        </Box>
-      )
+          return cardOf(`problem-part-${name}`, warned(COPY.statusPartFailed(name)), null, [reason(message), steps(COPY.fixStatusPart)], 'bad')
+        }
+      }
+
+      try {
+        const pausedCard = await part('paused', () => current.paused === null ? null : cardOf('problem-paused', warned(COPY.pausedTitle, 'wait'), current.pausedSince === null ? null : COPY.statusSince(current.pausedSince), [
+          <Text color="inactive">{current.paused}</Text>,
+          steps(COPY.fixPaused),
+          <Box flexDirection="row" gap={1}>{actButton('leader', 'leader_resume', null, { isPrimary: true })}</Box>,
+          actBusyNote('leader'),
+        ], 'wait'))
+        // THE RULES, ASKED FOR BY How to fix (S27): an act Claude Code refused needs the same rules as a refused poll.
+        const rulesCard = await part('rules', async () => current.connection === 'not-allowed' || !(await read($, rulesAsked)) ? null : cardOf('problem-rules', warned(COPY.notAllowedTitle, 'wait'), COPY.notAllowedHint, [
+          <Text color="inactive">{COPY.notAllowedBody}</Text>,
+          // NO Try again ON THIS CARD (#35): its last step names the act's own button instead.
+          ...rulesFix(COPY.fixNotAllowedAct),
+        ], 'wait'))
+        const alertCards = await part('alerts', () => current.alertNotices.map(notice =>
+          cardOf(`problem-alert-${notice.id}`, warned(notice.title), COPY.alertHint(notice.source, notice.when), [
+            notice.body === '' ? null : <Text color="inactive">{notice.body}</Text>,
+            <Text color="subtle">{COPY.fixAlert}</Text>,
+            <Link href={notice.link === null ? consoleLink(base, 'bell') : `${base}${notice.link}`} label={COPY.bellInConsole} />,
+          ], 'bad')))
+        // ITS OWN Try again AND RULES, KEYED APART from the connection's: two elements of one key are one too many.
+        const eventsRetry = <Button key="events-retry" label={COPY.retry} variant="primary" onPress={() => tick($, true)} />
+        // THE DONE-SIGNAL'S OWN PROBLEM: the queue may read well while events_since, or the store, fails on its own.
+        const events = current.events
+        const silentSince = isEventsSilent(current) ? current.eventsSilentSince : null
+        const eventsCard = await part('events', () => events === null
+          ? silentSince === null
+            ? null
+            : cardOf('problem-events', warned(COPY.eventsSilentTitle), COPY.statusSince(at(silentSince)), [
+                <Text color="inactive">{COPY.eventsSilentBody(Math.round((now - silentSince) / 1000), current.eventsAnsweredAt === null ? null : at(current.eventsAnsweredAt))}</Text>,
+                steps(COPY.fixEventsSilent),
+                eventsRetry,
+              ], 'bad')
+          : events.kind === 'not-allowed'
+            ? cardOf('problem-events', warned(COPY.eventsNotAllowedTitle), COPY.notAllowedHint, [
+                <Text color="inactive">{COPY.eventsNotAllowedBody}</Text>,
+                reason(events.reason),
+                ...rulesFix(COPY.fixEventsNotAllowed, 'events-allow-rules'),
+                eventsRetry,
+              ], 'bad')
+            : events.kind === 'store'
+              ? cardOf('problem-events', warned(COPY.eventsStoreTitle), COPY.statusSince(at(events.since)), [
+                  <Text color="inactive">{COPY.eventsStoreBody}</Text>,
+                  reason(events.reason),
+                  steps(COPY.fixEventsStore),
+                  eventsRetry,
+                ], 'bad')
+              : cardOf('problem-events', warned(COPY.eventsStoppedTitle), COPY.statusSince(at(events.since)), [
+                  <Text color="inactive">{COPY.eventsStoppedBody(at(events.since))}</Text>,
+                  reason(events.reason),
+                  steps(COPY.fixEventsStopped),
+                  <Link href={consoleLink(base, 'health')} label={COPY.health} />,
+                  eventsRetry,
+                ], 'bad'))
+        const problems = [problemCard, rulesCard, eventsCard, pausedCard, ...(Array.isArray(alertCards) ? alertCards : [alertCards])].filter(item => item !== null)
+        const slotsCard = await part('slots', () => cardOf('status-slots', COPY.statusSlots, COPY.statusSlotsHint, [
+          look.isGraphic ? picture(elements, slotsGauge(current.slotsUsed, current.slots, true)) : null,
+          <Text tabular>{COPY.statusSlotsLine(current.slotsUsed, current.slots)}</Text>,
+          current.running.length === 0 ? quiet(elements, COPY.nothingRunning) : null,
+          ...current.running.map(item =>
+            rowOf({
+              key: `status-story-${item.story}`,
+              kind: item.isStuck ? COPY.kindStuck : item.isVerifying ? COPY.verifying : COPY.kindRunning,
+              kindTone: item.isStuck ? 'warning' : 'subtle',
+              title: item.title,
+              detail: item.detail,
+              onPress: () => go({ screen: 'story', story: item.story }),
+            })),
+        ]))
+        // THE POLICY (S27): read as policy_get answered it, edited in place within its limits, saved with policy_save.
+        const policyCard = await part('policy', async () => {
+          const form = { ...EMPTY_POLICY_FORM, ...(await read($, policyForm)) }
+          const rows = policyRows(policy)
+          const changes = policyChanges(policy, form.values)
+          const problems_ = policyProblems(policy, form.values)
+          const isSavable = changes.length > 0 && problems_.length === 0
+          const policyState = actState('policy')
+          const isPolicyEditing = form.isEditing && hasInput && 'Input' in elements
+          return cardOf('status-policy', COPY.policy, (
+            <Box flexDirection="row" gap={1} alignItems="center">
+              <Text color="subtle" size="footnote" tabular>{isPolicyEditing ? COPY.policyEditing : COPY.policyVersion(number(policy?.version), policy?.changedAt === undefined || policy?.changedAt === null ? null : clock(policy.changedAt, offset))}</Text>
+              {!isPolicyEditing && hasInput && rows.length > 0 && <Button key="act-policy-edit" label={COPY.policyEdit} dimColor={policyState.busy !== null ? true : undefined} onPress={() => (policyState.busy === null ? editPolicy($, false) : undefined)} />}
+            </Box>
+          ), isPolicyEditing && 'Input' in elements
+            ? [
+                ...POLICY_FIELDS.filter(field => form.values[field.key] !== undefined).map(field => (
+                  <elements.Input
+                    key={`act-policy-field-${field.key}`}
+                    label={policyFieldLabel(field, policy)}
+                    value={form.values[field.key] ?? ''}
+                    onInput={value => update($, policyForm, (state: PanePolicyForm): PanePolicyForm => ({ ...EMPTY_POLICY_FORM, ...state, values: { ...state.values, [field.key]: value } }))}
+                    onSubmit={() => savePolicy($)}
+                  />
+                )),
+                ...problems_.map((problem, index) => <Text key={`policy-problem-${index}`} color="error">{problem}</Text>),
+                <Text color="subtle" size="footnote" tabular>{COPY.policyChanges(changes)}</Text>,
+                <Box flexDirection="row" gap={1}>
+                  <Button key="act-policy-send" label={policyState.busy === null ? COPY.actButton.policy_save ?? 'Save' : COPY.actBusy.policy_save ?? 'Saving…'} variant={!isSavable || policyState.busy !== null ? undefined : 'primary'} dimColor={!isSavable || policyState.busy !== null ? true : undefined} onPress={() => (policyState.busy === null && isSavable ? savePolicy($) : undefined)} />
+                  <Button key="act-policy-cancel" label={COPY.actCancel} dimColor onPress={() => (policyState.busy === null ? update($, policyForm, (): PanePolicyForm => EMPTY_POLICY_FORM) : undefined)} />
+                </Box>,
+                actBusyNote('policy'),
+                <Text color="subtle" size="footnote">{COPY.policyNote}</Text>,
+              ]
+            : [
+                rows.length === 0 ? quiet(elements, COPY.policyMissing) : null,
+                ...rows.map((row_, index) => (
+                  <Box key={`policy-row-${index}`} flexDirection="row" justifyContent="space-between" gap={1}>
+                    <Text color="inactive">{row_.label}</Text>
+                    <Text tabular>{row_.value}</Text>
+                  </Box>
+                )),
+              ])
+        })
+        const costCard = await part('cost', async () => {
+          const bellState = await readBell($)
+
+          return cardOf('status-cost', COPY.statusCost, null, [
+            look.isGraphic && budgetUsd !== null ? picture(elements, spendBar(runningUsd, budgetUsd, 'wide', COPY.statusToday(current.runningUsd, current.dayBudget))) : null,
+            <Text tabular>{COPY.statusToday(current.runningUsd, current.dayBudget)}</Text>,
+            bellState.metrics.length === 0 ? null : (
+              <Text tabular>
+                <Text color="subtle">{`${COPY.statusMonth} `}</Text>
+                <Text color="inactive">{bellState.metrics.map(metric => `${metric.value} ${metric.label}`).join(' · ')}</Text>
+              </Text>
+            ),
+          ])
+        })
+        const machineCard = await part('machine', () => {
+          const health = healthOf(current, offset)
+          const state = stateWord(health)
+
+          return cardOf('status-machine', <Text size="caption" color="subtle">{COPY.statusMachine.toUpperCase()}</Text>, null, [
+                <Box flexDirection="row" justifyContent="space-between" gap={1}>
+                  <Box flexDirection="row" gap={1}>
+                    <Text size="title" weight="semibold" color={state.tone}>{state.word}</Text>
+                    {health.failingSince !== null && current.connection !== 'ok' && <Text color="subtle" tabular>{` · ${COPY.statusSince(health.failingSince)}`}</Text>}
+                    {current.connection === 'ok' && current.pausedSince !== null && <Text color="subtle" tabular>{` · ${COPY.statusSince(current.pausedSince)}`}</Text>}
+                  </Box>
+                  <Button key="status-refresh" label={COPY.refresh} dimColor onPress={async () => { await tick($, true); await loadBell($) }} />
+                </Box>,
+                <Text color="subtle" size="footnote" tabular>{COPY.statusLastAnswer(current.fetchedAt === null ? null : at(current.fetchedAt))}</Text>,
+              ])
+        })
+
+        return (
+          <Box flexDirection="column" gap={1}>
+            {tabs}
+            {machineCard}
+            {look.isGraphic && !look.isNarrow
+              ? (
+                  <Box key="status-gauges" flexDirection="row" gap="sm">
+                    <Box flexGrow={1} flexShrink={1} minWidth={0}>{slotsCard}</Box>
+                    <Box flexGrow={1} flexShrink={1} minWidth={0}>{costCard}</Box>
+                  </Box>
+                )
+              : [slotsCard, costCard]}
+            {cardOf('status-problems', headingOf(COPY.statusProblems, problems.length, problems.length > 0 ? 'warning' : 'inactive'), null, [
+              problems.length === 0 ? quiet(elements, COPY.nothingWrong) : null,
+            ])}
+            {problems}
+            {actOutcome('leader', consoleLink(base, 'work'), COPY.workInConsole)}
+            {policyCard}
+            {actOutcome('policy', consoleLink(base, 'policy'), COPY.policyInConsole)}
+            {cardOf('status-diagnostics', <Text size="heading" weight="semibold" color="subtle">{COPY.statusDiagnostics}</Text>, null, [
+              <Text color="subtle" mono>{COPY.diagnosticsVersion(MOD_VERSION)}</Text>,
+              <Text color="subtle" mono>{COPY.diagnosticsUrl(base)}</Text>,
+              <Text color="subtle" mono>{COPY.diagnosticsServer(current.server)}</Text>,
+              <Text color="subtle" size="footnote">{COPY.diagnosticsDebug}</Text>,
+            ])}
+            {footer}
+          </Box>
+        )
+      } catch (error) {
+        // WHAT NO PART CAUGHT still draws the tabs and says why, so the owner can move on and read the debug log.
+        const message = messageOf(error)
+        $.ui.log(`terylon-pane: the Status tab did not draw: ${message}`, { to: 'debug' })
+
+        return (
+          <Box flexDirection="column" gap={1}>
+            {tabs}
+            {cardOf('problem-part-status', warned(COPY.statusPartFailed('tab')), null, [reason(message), steps(COPY.fixStatusPart)], 'bad')}
+            {footer}
+          </Box>
+        )
+      }
     }
 
     if (problemCard !== null && !isStale) {
