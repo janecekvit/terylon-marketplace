@@ -7,6 +7,8 @@
 import { test, expect } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { checkTree, treeLine } from '../hooks/health'
+
 import { BRIEFING, FLIGHT, HOUR, PANE_PROPS, SESSION, STORY_327, events, exact, lateOnTheLocalDayOf, storyMoved, world } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
@@ -340,7 +342,7 @@ test('A PART OF THE STATUS TAB THAT THROWS is one problem with its reason and st
     expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Slots') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Policy') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.5') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.6') })).toBeDefined()
     await ui.unmount()
   }
   expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith("terylon-pane: the Status tab's alerts did not draw: "))).toBe(true)
@@ -431,7 +433,7 @@ test('TERYLON_PANE_STATUS=minimal draws the Status tab as plain lines alone: no 
     await ui.press({ key: 'tab-status' })
     expect(await ui.find({ type: 'Text', text: exact('Agentic OS: ok') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Problems: 0') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.5') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.6') })).toBeDefined()
     expect(await ui.findAll({ type: 'Svg' })).toEqual([])
     expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeUndefined()
     expect((await ui.findAll({ type: 'Button' })).every(button => String(button.key).startsWith('tab-'))).toBe(true)
@@ -454,5 +456,42 @@ test('TERYLON_PANE_STATUS=no-<part> leaves that part out, and every draw says in
   expect(await ui.find({ type: 'Text', text: exact('The pane cannot keep its place') })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: exact('Cost') })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: exact('Diagnostics') })).toBeUndefined()
-  expect(terylon.logs.some(log => log.to === 'debug' && log.text === 'terylon-pane: the Status tab draws machine, problems, alerts, outcomes, policy; problems 0, events store')).toBe(true)
+  expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith('terylon-pane: the Status tab draws machine, problems, alerts, outcomes, policy; problems 0, events store; '))).toBe(true)
+})
+
+test("TERYLON_PANE_STATUS=log draws the pane's own log on the Queue tab: where the Status tab began, what it drew and what it holds", async ($, on) => {
+  const terylon = world(on, { env: { TERYLON_PANE_STATUS: 'log' } })
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: exact("The pane's own log") })).toBeDefined()
+  await ui.press({ key: 'tab-status' })
+  await ui.press({ key: 'tab-queue' })
+  expect(await ui.find({ type: 'Text', text: /^\d+ terylon-pane: the Status tab begins on desktop at \d+ columns$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^\d+ terylon-pane: the Status tab draws machine, .*; \d+ elements, \d+ characters, nothing odd; \d+ ms$/ })).toBeDefined()
+  expect(terylon.logs.some(log => log.to === 'debug' && /^terylon-pane: the Status tab draws .*nothing odd; \d+ ms$/.test(log.text))).toBe(true)
+})
+
+test("the pane's own log is not drawn unless TERYLON_PANE_STATUS asks for it", async ($, on) => {
+  const terylon = world(on)
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'tab-status' })
+  await ui.press({ key: 'tab-queue' })
+  expect(await ui.find({ type: 'Text', text: exact("The pane's own log") })).toBeUndefined()
+})
+
+test('the tree check names a key used twice, a prop with no finite value and a control character, and passes a clean tree', () => {
+  const clean = { type: 'Box', props: { key: 'a', gap: 1 }, children: [{ type: 'Text', children: ['hi'] }, { type: 'Button', props: { key: 'b', label: 'x' } }] }
+  expect(checkTree(clean)).toEqual({ elements: 3, characters: 2, duplicateKeys: [], oddProps: [] })
+  expect(treeLine(checkTree(clean))).toBe('3 elements, 2 characters, nothing odd')
+
+  const odd = { type: 'Box', props: { key: 'retry' }, children: [[{ type: 'Button', props: { key: 'retry', label: 'x' } }], { type: 'Box', props: { width: Number.NaN, label: undefined } }, { type: 'Text', children: ['a\u0007b'] }] }
+  const check = checkTree(odd)
+  expect(check.duplicateKeys).toEqual(['retry×2'])
+  expect(check.oddProps).toEqual(['Box.width=NaN', 'Box.label=undefined', 'text: a control character'])
+  expect(treeLine(check)).toBe('4 elements, 3 characters; keys used twice: retry×2; odd props: Box.width=NaN, Box.label=undefined, text: a control character')
 })

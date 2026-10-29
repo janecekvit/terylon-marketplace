@@ -633,7 +633,7 @@ const MUTATIONS = [
     {
         name: "the events path no longer reaches the debug log",
         file: "hooks/register.tsx",
-        find: "  $.ui.log(`terylon-pane: events: ${line}`, { to: 'debug' })\n",
+        find: "  note($, `terylon-pane: events: ${line}`)\n",
         replace: "",
     },
     {
@@ -765,8 +765,26 @@ const MUTATIONS = [
     {
         name: "the Status tab no longer says in the debug log what it draws",
         file: "hooks/register.tsx",
-        find: "        $.ui.log(`terylon-pane: the Status tab draws ",
+        find: "        note($, `terylon-pane: the Status tab draws ",
         replace: "        void (`terylon-pane: the Status tab draws ",
+    },
+    {
+        name: "the pane's own log is no longer drawn on the Queue tab",
+        file: "hooks/register.tsx",
+        find: ".isLogShown && cardOf('pane-log'",
+        replace: ".isLogShown && false && cardOf('pane-log'",
+    },
+    {
+        name: "the tree check no longer finds a key used twice",
+        file: "hooks/health.ts",
+        find: ".filter(([, count]) => count > 1)",
+        replace: ".filter(([, count]) => count > 2)",
+    },
+    {
+        name: "the Status tab no longer says in its log that a draw began",
+        file: "hooks/register.tsx",
+        find: "      note($, `terylon-pane: the Status tab begins on ",
+        replace: "      void (`terylon-pane: the Status tab begins on ",
     },
 ];
 

@@ -44,7 +44,7 @@ import type {
 import { COPY } from './copy'
 import { CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, NARROW_COLUMNS, STEPPER_COLUMNS, dots, meter, phaseGlyph, planChain, planOrder, proofsOf, segments, slotsGauge, spendBar, splitHash, stepper } from './drawing'
 import type { Picture, Proofs } from './drawing'
-import { ALERT_SOURCES, alertCount, healthLine, stateWord, statusDrawingOf } from './health'
+import { ALERT_SOURCES, alertCount, checkTree, healthLine, stateWord, statusDrawingOf, treeLine } from './health'
 import type { Health } from './health'
 import { MISSING_SERVER, NEEDS_TEXT, NOT_ALLOWED, SERVER_CANDIDATES, TEXT_LIMITS, actArguments, allowRules, assertPaneTool, isSendable, readResult } from './terylon'
 import type { TerylonAnswer } from './terylon'
@@ -104,7 +104,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.9.5'
+export const MOD_VERSION = '1.9.6'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -231,6 +231,12 @@ const storyTargets = new Map<number, string>()
 const keptInMemory = new Map<string, unknown>()
 // How often the store refused in this tick's read of the events: the Status tab's problem stays while it is not 0.
 let storeRefusals = 0
+
+// THE PANE'S OWN LOG, the debug lines it wrote last, drawn on the Queue tab under TERYLON_PANE_STATUS=log: a host that
+// writes no log the owner can read still shows what the pane did and saw.
+const NOTES_KEPT = 40
+const notes: string[] = []
+let notesWritten = 0
 
 // The policy just saved, laid over what policy_get answers until policy_get answers it too (#35).
 let savedPolicy: { values: Json; until: number } | null = null
@@ -571,8 +577,16 @@ async function withTargets($: EngineInterface, verified: Json[], stories: Json[]
 }
 
 // A line in `claude --debug` under terylon-pane: for the events path, so a run shows where the call stops.
+// A line for claude --debug and for the pane's own log, numbered so that two reads of the log can be told apart.
+function note($: EngineInterface, line: string): void {
+  $.ui.log(line, { to: 'debug' })
+  notesWritten += 1
+  notes.push(`${notesWritten} ${line}`)
+  notes.splice(0, Math.max(0, notes.length - NOTES_KEPT))
+}
+
 function debug($: EngineInterface, line: string): void {
-  $.ui.log(`terylon-pane: events: ${line}`, { to: 'debug' })
+  note($, `terylon-pane: events: ${line}`)
 }
 
 function messageOf(error: unknown): string {
@@ -1869,6 +1883,13 @@ export const register: Register = on => {
     return { text: "The leader's memory is open." }
   })
 
+  // A FAULT THE HOST REPORTED for what the pane drew, said in its own log as well as the debug log.
+  on('ui.fault', ($, e, next) => {
+    note($, `terylon-pane: ui.fault: ${e.component} ${e.phase} on ${e.surface}: ${e.reason}`)
+
+    return next(e)
+  })
+
   // THE BAND: one row above the prompt, what calls for the owner, and the pane's entry point. The machine's health and
   // spend are the status line's, never repeated here.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -2217,13 +2238,16 @@ export const register: Register = on => {
 
     // THE STATUS TAB: the machine, its slots and cost, every problem with how to fix it, and where to look.
     if (screen.screen === 'status') {
+      // EVERY DRAW SAYS THAT IT BEGAN: a line here with no "draws" after it is a draw that never returned.
+      note($, `terylon-pane: the Status tab begins on ${e.surface} at ${e.props.bodyColumns} columns`)
+
       // A PART THAT THROWS IS ONE PROBLEM, NEVER A BLANK TAB: Desktop draws its own placeholder when a render fails.
       const part = async (name: string, build: () => unknown): Promise<unknown> => {
         try {
           return await build()
         } catch (error) {
           const message = messageOf(error)
-          $.ui.log(`terylon-pane: the Status tab's ${name} did not draw: ${message}`, { to: 'debug' })
+          note($, `terylon-pane: the Status tab's ${name} did not draw: ${message}`)
 
           return cardOf(`problem-part-${name}`, warned(COPY.statusPartFailed(name)), null, [reason(message), steps(COPY.fixStatusPart)], 'bad')
         }
@@ -2375,53 +2399,54 @@ export const register: Register = on => {
               ])
         })
 
-        // EVERY DRAW SAYS WHAT IT RETURNS, in claude --debug: a line here beside a blank pane is a tree the host dropped.
-        $.ui.log(`terylon-pane: the Status tab draws ${drawingAsked.isMinimal ? 'minimal' : STATUS_DRAWN.filter(isShown).join(', ')}; problems ${problems.length}${events === null ? '' : `, events ${events.kind}`}${silentSince === null ? '' : ', the watchdog'}`, { to: 'debug' })
+        // PLAIN LINES ALONE: no card, no picture, no button but the tabs, to tell the tab's drawing from its data.
+        const tree = drawingAsked.isMinimal
+          ? (
+              <Box flexDirection="column" gap={1}>
+                {tabs}
+                <Text>{COPY.statusMinimalMachine(stateWord(healthOf(current, offset)).word)}</Text>
+                <Text>{COPY.statusMinimalProblems(problems.length, events === null ? null : events.kind)}</Text>
+                <Text>{COPY.diagnosticsVersion(MOD_VERSION)}</Text>
+              </Box>
+            )
+          : (
+              <Box flexDirection="column" gap={1}>
+                {tabs}
+                {isShown('machine') && machineCard}
+                {isShown('gauges') && (look.isGraphic && !look.isNarrow
+                  ? (
+                      <Box key="status-gauges" flexDirection="row" gap="sm">
+                        <Box flexGrow={1} flexShrink={1} minWidth={0}>{slotsCard}</Box>
+                        <Box flexGrow={1} flexShrink={1} minWidth={0}>{costCard}</Box>
+                      </Box>
+                    )
+                  : [slotsCard, costCard])}
+                {isShown('problems') && cardOf('status-problems', headingOf(COPY.statusProblems, problems.length, problems.length > 0 ? 'warning' : 'inactive'), null, [
+                  problems.length === 0 ? quiet(elements, COPY.nothingWrong) : null,
+                ])}
+                {isShown('problems') && problems}
+                {isShown('outcomes') && actOutcome('leader', consoleLink(base, 'work'), COPY.workInConsole)}
+                {isShown('policy') && policyCard}
+                {isShown('outcomes') && actOutcome('policy', consoleLink(base, 'policy'), COPY.policyInConsole)}
+                {isShown('diagnostics') && cardOf('status-diagnostics', <Text size="heading" weight="semibold" color="subtle">{COPY.statusDiagnostics}</Text>, null, [
+                  <Text color="subtle" mono>{COPY.diagnosticsVersion(MOD_VERSION)}</Text>,
+                  <Text color="subtle" mono>{COPY.diagnosticsUrl(base)}</Text>,
+                  <Text color="subtle" mono>{COPY.diagnosticsServer(current.server)}</Text>,
+                  <Text color="subtle" size="footnote">{COPY.diagnosticsDebug}</Text>,
+                ])}
+                {footer}
+              </Box>
+            )
 
-        if (drawingAsked.isMinimal) {
-          // PLAIN LINES ALONE: no card, no picture, no button but the tabs, to tell the tab's drawing from its data.
-          return (
-            <Box flexDirection="column" gap={1}>
-              {tabs}
-              <Text>{COPY.statusMinimalMachine(stateWord(healthOf(current, offset)).word)}</Text>
-              <Text>{COPY.statusMinimalProblems(problems.length, events === null ? null : events.kind)}</Text>
-              <Text>{COPY.diagnosticsVersion(MOD_VERSION)}</Text>
-            </Box>
-          )
-        }
+        // EVERY DRAW SAYS WHAT IT RETURNS and what in it a host may refuse: a line here beside a blank pane is a tree
+        // the host dropped, and the check names what the kit lets through.
+        note($, `terylon-pane: the Status tab draws ${drawingAsked.isMinimal ? 'minimal' : STATUS_DRAWN.filter(isShown).join(', ')}; problems ${problems.length}${events === null ? '' : `, events ${events.kind}`}${silentSince === null ? '' : ', the watchdog'}; ${treeLine(checkTree(tree))}; ${Math.max(0, (await $.clock.now()) - now)} ms`)
 
-        return (
-          <Box flexDirection="column" gap={1}>
-            {tabs}
-            {isShown('machine') && machineCard}
-            {isShown('gauges') && (look.isGraphic && !look.isNarrow
-              ? (
-                  <Box key="status-gauges" flexDirection="row" gap="sm">
-                    <Box flexGrow={1} flexShrink={1} minWidth={0}>{slotsCard}</Box>
-                    <Box flexGrow={1} flexShrink={1} minWidth={0}>{costCard}</Box>
-                  </Box>
-                )
-              : [slotsCard, costCard])}
-            {isShown('problems') && cardOf('status-problems', headingOf(COPY.statusProblems, problems.length, problems.length > 0 ? 'warning' : 'inactive'), null, [
-              problems.length === 0 ? quiet(elements, COPY.nothingWrong) : null,
-            ])}
-            {isShown('problems') && problems}
-            {isShown('outcomes') && actOutcome('leader', consoleLink(base, 'work'), COPY.workInConsole)}
-            {isShown('policy') && policyCard}
-            {isShown('outcomes') && actOutcome('policy', consoleLink(base, 'policy'), COPY.policyInConsole)}
-            {isShown('diagnostics') && cardOf('status-diagnostics', <Text size="heading" weight="semibold" color="subtle">{COPY.statusDiagnostics}</Text>, null, [
-              <Text color="subtle" mono>{COPY.diagnosticsVersion(MOD_VERSION)}</Text>,
-              <Text color="subtle" mono>{COPY.diagnosticsUrl(base)}</Text>,
-              <Text color="subtle" mono>{COPY.diagnosticsServer(current.server)}</Text>,
-              <Text color="subtle" size="footnote">{COPY.diagnosticsDebug}</Text>,
-            ])}
-            {footer}
-          </Box>
-        )
+        return tree
       } catch (error) {
         // WHAT NO PART CAUGHT still draws the tabs and says why, so the owner can move on and read the debug log.
         const message = messageOf(error)
-        $.ui.log(`terylon-pane: the Status tab did not draw: ${message}`, { to: 'debug' })
+        note($, `terylon-pane: the Status tab did not draw: ${message}`)
 
         return (
           <Box flexDirection="column" gap={1}>
@@ -3482,11 +3507,15 @@ export const register: Register = on => {
           </Box>
         )}
         {!isStale && !hasInput && (
-          <Box key="phone-add" flexDirection="column">
+          <Box key="phone-add-box" flexDirection="column">
             <Button key="phone-add" label={COPY.addOnPhone} onPress={() => postPrompt($, COPY.addOnPhonePrompt)} />
             <Text color="subtle" size="footnote">{COPY.addOnPhoneNote}</Text>
           </Box>
         )}
+        {statusDrawingOf(await $.env.get('TERYLON_PANE_STATUS')).isLogShown && cardOf('pane-log', COPY.paneLogTitle, COPY.paneLogHint, [
+          notes.length === 0 ? quiet(elements, COPY.paneLogEmpty) : null,
+          ...notes.map(line => <Text color="subtle" size="footnote" mono>{line}</Text>),
+        ])}
         {footer}
       </Box>
     )

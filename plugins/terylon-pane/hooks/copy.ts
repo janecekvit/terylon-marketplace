@@ -228,6 +228,9 @@ export const COPY = {
   ],
   // THE STATUS TAB DRAWN MINIMAL (TERYLON_PANE_STATUS=minimal): plain lines, to bisect a tab Desktop does not draw.
   statusMinimalMachine: (word: string) => `Agentic OS: ${word}`,
+  paneLogTitle: "The pane's own log",
+  paneLogHint: 'TERYLON_PANE_STATUS=log · newest last',
+  paneLogEmpty: 'Nothing logged yet. Open the Status tab, then come back here.',
   statusMinimalProblems: (count: number, events: string | null) => `Problems: ${count}${events === null ? '' : ` (the done-signal: ${events})`}`,
   storeTimedOut: (seconds: number) => `the store did not answer within ${seconds} s`,
   storeReadFailed: (key: string, error: string) => `reading ${key} from the store failed: ${error}`,
