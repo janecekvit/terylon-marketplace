@@ -879,8 +879,8 @@ const MUTATIONS = [
     {
         name: "the summary says green runs accept themselves whatever autoAccept says",
         file: "hooks/queue.ts",
-        find: "approved.autoAccept === true ? COPY.repeatingAcceptsItself : COPY.repeatingWaitsForYou",
-        replace: "COPY.repeatingAcceptsItself",
+        find: "    terms.autoAccept === true ? COPY.repeatingAcceptsItself : COPY.repeatingWaitsForYou,\n",
+        replace: "    COPY.repeatingAcceptsItself,\n",
     },
     {
         name: "the summary no longer says a repeating task is paused",
@@ -923,6 +923,27 @@ const MUTATIONS = [
         file: "hooks/register.tsx",
         find: "      const taskVersion = plan.taskVersion ?? null\n",
         replace: "      const taskVersion = null as { version: string | null } | null\n",
+    },
+    {
+        name: "an older run's state is folded back into its day's Button",
+        edits: [
+            {
+                file: "hooks/register.tsx",
+                find: "            <Text key={`repeating-older-${index}-state`} color={olderTone(run)}>{look.isNarrow ? ` · ${run.state}` : run.state}</Text>\n",
+                replace: "",
+            },
+            {
+                file: "hooks/register.tsx",
+                find: "label={run.day} plain onPress={() => go({ screen: 'story', story: run.story ?? 0 })} />}",
+                replace: "label={`${run.day}  ${run.state}`} plain onPress={() => go({ screen: 'story', story: run.story ?? 0 })} />}",
+            },
+        ],
+    },
+    {
+        name: "a repeating task's settled version plans are listed below its card again",
+        file: "hooks/register.tsx",
+        find: "          {plans.filter(plan => !settledVersions.includes(plan)).map(plan =>\n",
+        replace: "          {plans.map(plan =>\n",
     },
 ];
 

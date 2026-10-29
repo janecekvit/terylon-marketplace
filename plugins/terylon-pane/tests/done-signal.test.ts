@@ -358,7 +358,7 @@ test('A PART OF THE STATUS TAB THAT THROWS is one problem with its reason and st
     expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Slots') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Policy') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.10.5') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.10.6') })).toBeDefined()
     await ui.unmount()
   }
   expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith("terylon-pane: the Status tab's alerts did not draw: "))).toBe(true)
@@ -449,7 +449,7 @@ test('TERYLON_PANE_STATUS=minimal draws the Status tab as plain lines alone: no 
     await ui.press({ key: 'tab-status' })
     expect(await ui.find({ type: 'Text', text: exact('Agentic OS: ok') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Problems: 0') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.10.5') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.10.6') })).toBeDefined()
     expect(await ui.findAll({ type: 'Svg' })).toEqual([])
     expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeUndefined()
     expect((await ui.findAll({ type: 'Button' })).every(button => String(button.key).startsWith('tab-'))).toBe(true)

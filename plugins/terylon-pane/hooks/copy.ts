@@ -135,6 +135,10 @@ export const COPY = {
   taskVersion: (version: string | null, task: string) => (version === null ? `a new version of ${task}` : `version ${version} of ${task}`),
   taskVersionTitle: (plan: number, version: string | null, task: string) => `Plan ${plan} · ${version === null ? `a new version of ${task}` : `version ${version} of ${task}`}`,
   approveVersionNote: (version: string | null) => `Approve: each later task_run uses ${version === null ? 'this version' : `version ${version}`}.`,
+  versionWaiting: (terms: string | null) => (terms === null ? 'to approve' : `to approve · ${terms}`),
+  // The task's settled versions, on its card: "Versions: 1 (plan 2536), 2 (plan 2573)".
+  repeatingVersions: (versions: readonly { version: string | null; plan: number; isWithdrawn: boolean }[]) =>
+    `Versions: ${versions.map(item => `${item.version === null ? '' : `${item.version} `}${item.isWithdrawn ? 'withdrawn ' : ''}(plan ${item.plan})`).join(', ')}`,
   blocked: (reason: string) => `blocked: ${reason}`,
   verifying: 'verifying',
   stuckSince: (time: string) => `stuck since ${time}`,

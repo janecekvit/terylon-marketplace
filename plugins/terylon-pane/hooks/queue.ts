@@ -16,6 +16,7 @@ import type {
   PaneRepeating,
   PaneRepeatingRun,
   PaneRunningItem,
+  PaneTaskVersion,
   PaneStory,
   PaneWaitingItem,
 } from '../types'
@@ -248,8 +249,8 @@ export function waitingItems(briefing: Json, base: string): PaneWaitingItem[] {
       target: id,
       title: taskVersion === null
         ? COPY.planTitle(id, text(plan.goalTitle) ?? '', number(plan.stories) ?? 0)
-        : COPY.taskVersionTitle(id, taskVersion.version, text(plan.goalTitle) ?? ''),
-      detail: COPY.planWaiting(estimate === null ? null : estimate.toFixed(0)),
+        : COPY.taskVersionTitle(id, taskVersion.version, taskVersion.title ?? text(plan.goalTitle) ?? ''),
+      detail: taskVersion === null ? COPY.planWaiting(estimate === null ? null : estimate.toFixed(0)) : COPY.versionWaiting(taskVersion.terms),
       console: consoleLink(base, `plan&plan=${id}`),
     })
   }
@@ -866,6 +867,16 @@ function fileName(value: unknown): string | null {
   return value !== null && typeof value === 'object' ? text((value as Json).name) : text(value)
 }
 
+// A version's terms: its budget per run, and whether a green run accepts itself.
+function termsOf(terms: Json): string[] {
+  const budget = number(terms.runBudgetUsd)
+
+  return [
+    ...(budget === null ? [] : [COPY.repeatingBudget(money(budget))]),
+    terms.autoAccept === true ? COPY.repeatingAcceptsItself : COPY.repeatingWaitsForYou,
+  ]
+}
+
 // A REPEATING TASK'S GOAL (Terylon S43), from goal_get's `repeating`: null when the goal is not one. Every field is
 // read tolerantly: a missing or odd-typed one draws less, never throws.
 export function repeatingOf(goal: Json, base: string, now: number, zone: Zone = 0): PaneRepeating | null {
@@ -879,13 +890,11 @@ export function repeatingOf(goal: Json, base: string, now: number, zone: Zone = 
   const approved = document.approved !== null && typeof document.approved === 'object' ? (document.approved as Json) : null
   const waiting = document.waiting !== null && typeof document.waiting === 'object' ? (document.waiting as Json) : null
   const version = approved === null ? null : versionOf(approved.version)
-  const budget = approved === null ? null : number(approved.runBudgetUsd)
   const waitingVersion = waiting === null ? null : versionOf(waiting.version)
   const id = number(goal.id)
   const summary = [
     approved === null ? COPY.repeatingNotApproved : COPY.repeatingApproved(version ?? '?'),
-    budget === null ? null : COPY.repeatingBudget(money(budget)),
-    approved === null ? null : approved.autoAccept === true ? COPY.repeatingAcceptsItself : COPY.repeatingWaitsForYou,
+    ...(approved === null ? [] : termsOf(approved)),
     text(document.paused) === null && document.paused !== true ? null : COPY.repeatingPaused,
     waitingVersion === null ? null : COPY.repeatingWaiting(waitingVersion),
   ]
@@ -909,9 +918,10 @@ export function repeatingOf(goal: Json, base: string, now: number, zone: Zone = 
 }
 
 // A REPEATING TASK'S VERSION PLAN (Terylon S43): approving it approves the version each later task_run uses, and it
-// carries no stories. It says so with `repeating`, or by having no stories while it waits or runs: no other plan has
-// none then, though a withdrawn one or one sent back may list none. Its version where Terylon names one.
-export function taskVersionOf(plan: Json): { version: string | null } | null {
+// carries no stories. plans_list says so with a `repeating` object; a plan with no stories while it waits is one too
+// (no other plan has none then, though a withdrawn one or one sent back may list none). Its version, the task's title
+// and its terms where `repeating` carries them.
+export function taskVersionOf(plan: Json): PaneTaskVersion | null {
   const repeating = plan.repeating !== null && typeof plan.repeating === 'object' && !Array.isArray(plan.repeating) ? (plan.repeating as Json) : null
   const stories = Array.isArray(plan.stories) ? plan.stories.length : number(plan.stories)
   const isSetAside = ['withdrawn', 'rethink'].includes(String(plan.state ?? ''))
@@ -920,7 +930,11 @@ export function taskVersionOf(plan: Json): { version: string | null } | null {
     return null
   }
 
-  return { version: versionOf(repeating?.version ?? plan.version) }
+  return {
+    version: versionOf(repeating?.version ?? plan.version),
+    title: repeating === null ? null : text(repeating.title),
+    terms: repeating === null ? null : termsOf(repeating).join(' · '),
+  }
 }
 
 export function planItems(plans: Json, base: string): PanePlan[] {
