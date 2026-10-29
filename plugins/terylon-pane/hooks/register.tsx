@@ -33,6 +33,8 @@ import type {
   PaneBell,
   PaneGoal,
   PaneGoals,
+  PaneRepeating,
+  PaneRepeatingRun,
   PaneMemory,
   PanePolicyForm,
   PaneScreen,
@@ -77,6 +79,7 @@ import {
   questionChoices,
   questionItems,
   queuedItems,
+  repeatingOf,
   runningItems,
   spend,
   storyView,
@@ -103,7 +106,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.8.3'
+export const MOD_VERSION = '1.10.0'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -1020,17 +1023,19 @@ async function addGoal($: EngineInterface): Promise<void> {
 }
 
 async function openGoal($: EngineInterface, id: number): Promise<void> {
-  await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'loading', sentence: null, title: '', meta: '', stories: [], isOpen: false, openStories: [] }))
+  await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'loading', sentence: null, title: '', meta: '', stories: [], isOpen: false, openStories: [], repeating: null }))
 
   const answered = await callTerylon($, 'goal_get', { goal: id })
 
   if (answered.kind !== 'ok') {
-    await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'error', sentence: why(answered), title: '', meta: '', stories: [], isOpen: false, openStories: [] }))
+    await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'error', sentence: why(answered), title: '', meta: '', stories: [], isOpen: false, openStories: [], repeating: null }))
     return
   }
 
   const document = answered.value
-  const state = settledState(`goal-${id}`, String(document.state ?? ''), await $.clock.now())
+  const now = await $.clock.now()
+  const state = settledState(`goal-${id}`, String(document.state ?? ''), now)
+  const repeating = repeatingOf({ ...document, id }, await baseUrl($), now, zoneOffset(now))
 
   await update($, goal, (): PaneGoal | null => ({
     goal: id,
@@ -1044,6 +1049,7 @@ async function openGoal($: EngineInterface, id: number): Promise<void> {
     openStories: list(document.storyList)
       .filter(item => OPEN_STORY_STATES.includes(String(item.state ?? '')))
       .map(item => ({ id: number(item.id) ?? 0, title: text(item.title) ?? '', isRunning: ['dispatched', 'running'].includes(String(item.state ?? '')) })),
+    repeating,
   }))
 
   if ((await read($, goals)).phase !== 'ok') {
@@ -2821,6 +2827,41 @@ export const register: Register = on => {
       ])]
     }
 
+    // A REPEATING TASK'S CARD (Terylon S43), in place of the goal's stories: the summary, the newest run in a box of its
+    // own with the link to its story, the older runs as rows, the foot and the task's sheet in the console. Every
+    // child is keyed and every word a string: Desktop drops the whole tab when it cannot draw one card.
+    const repeatingCard = (repeating: PaneRepeating) => {
+      const [newest, ...older] = repeating.runs
+      // ONE KEY PER RUN: two runs of one story would otherwise draw two children of one key.
+      const runKey = (run: PaneRepeatingRun, index: number) => (repeating.runs.findIndex(item => item.story === run.story) === index ? `repeating-run-${run.story}` : `repeating-run-${run.story}-${index}`)
+
+      return cardOf('goal-repeating', repeating.title, <Text color="success" size="footnote" mono>{COPY.repeating}</Text>, [
+        <Text key="repeating-summary" color="subtle" size="footnote">{repeating.summary}</Text>,
+        newest === undefined
+          ? <Box key="repeating-none" flexDirection="column">{quiet(elements, COPY.repeatingNoRun)}</Box>
+          : (
+              <Box key="repeating-newest" flexDirection="column" borderStyle="round" borderColor="subtle" paddingX={look.isGraphic ? 'sm' : 1} gap={look.isGraphic ? 'xs' : 0}>
+                <Box flexDirection="row" justifyContent="space-between" gap={1}>
+                  <Text tabular>{newest.day}</Text>
+                  <Text color={newest.tone}>{newest.state}</Text>
+                </Box>
+                {newest.line === '' ? null : <Text color="subtle" size="footnote">{newest.line}</Text>}
+                {newest.story === null ? null : <Button key={runKey(newest, 0)} label={COPY.openRun} plain onPress={() => go({ screen: 'story', story: newest.story ?? 0 })} />}
+              </Box>
+            ),
+        ...older.map((run, index) => (run.story === null
+          ? (
+              <Box key={`repeating-older-${index}`} flexDirection="row" justifyContent="space-between" gap={1}>
+                <Text color="subtle" tabular>{run.day}</Text>
+                <Text color={run.tone}>{run.state}</Text>
+              </Box>
+            )
+          : rowOf({ key: runKey(run, index + 1), kind: null, title: look.isNarrow ? `${run.day} · ${run.state}` : run.day, detail: run.state, detailTone: run.tone, onPress: () => go({ screen: 'story', story: run.story ?? 0 }) }))),
+        <Text key="repeating-foot" color="subtle" size="footnote">{COPY.repeatingFoot}</Text>,
+        <Link key="repeating-console" href={repeating.console} label={COPY.repeatingInConsole} />,
+      ])
+    }
+
     if (screen.screen === 'plan') {
       const plan = goalsState.plans.find(item => item.id === screen.plan) ?? null
 
@@ -2840,6 +2881,8 @@ export const register: Register = on => {
       const plans = goalsState.plans.filter(item => item.goal === screen.goal)
       const goalKey = `goal-${screen.goal}`
       const goalAct = actState(goalKey)
+      // A value an older version stored has no `repeating`: it is an ordinary goal until goal_get is read again.
+      const repeating = shownGoal?.repeating ?? null
 
       if (shownGoal === null || shownGoal.goal !== screen.goal || shownGoal.phase === 'loading') {
         return (
@@ -2862,7 +2905,8 @@ export const register: Register = on => {
                   <Text color="subtle" size="footnote">{shownGoal.meta}</Text>
                 </Box>
               )}
-          {shownGoal.phase === 'ok' && cardOf('goal-stories', COPY.goalStories, <Text color="subtle" size="footnote" tabular>{String(shownGoal.stories.length)}</Text>, [
+          {shownGoal.phase === 'ok' && repeating !== null && repeatingCard(repeating)}
+          {shownGoal.phase === 'ok' && repeating === null && cardOf('goal-stories', COPY.goalStories, <Text color="subtle" size="footnote" tabular>{String(shownGoal.stories.length)}</Text>, [
             shownGoal.stories.length === 0 ? quiet(elements, COPY.noGoalStories) : null,
             ...shownGoal.stories.map(item =>
               rowOf({ key: `goal-story-${item.id}`, kind: COPY.kindStory, title: item.title, detail: item.state, onPress: () => go({ screen: 'story', story: item.id }) })),

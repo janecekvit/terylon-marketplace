@@ -13,6 +13,8 @@ import type {
   PaneProposal,
   PaneQuestionItem,
   PaneQueuedItem,
+  PaneRepeating,
+  PaneRepeatingRun,
   PaneRunningItem,
   PaneStory,
   PaneWaitingItem,
@@ -782,6 +784,97 @@ function afterPlaces(story: Json, ids: readonly (number | null)[]): number[] {
   const byPlace = placed.filter(place => Number.isInteger(place) && place >= 1 && place <= ids.length)
 
   return [...new Set([...byId, ...byPlace])].sort((first, second) => first - second)
+}
+
+// "Today 05:00" on the local day of `now`, "27 Oct 05:00" on another, in the host's own time zone; "?" for a time
+// that cannot be read, so nothing undefined or NaN reaches the drawing.
+export function runDay(iso: unknown, now: number, zoneOffsetMinutes = 0): string {
+  const at = Date.parse(String(iso ?? ''))
+
+  if (!Number.isFinite(at) || !Number.isFinite(now) || !Number.isFinite(zoneOffsetMinutes)) {
+    return '?'
+  }
+
+  const local = new Date(at - zoneOffsetMinutes * 60000)
+  const today = new Date(now - zoneOffsetMinutes * 60000)
+  const time = `${String(local.getUTCHours()).padStart(2, '0')}:${String(local.getUTCMinutes()).padStart(2, '0')}`
+
+  if (local.toISOString().slice(0, 10) === today.toISOString().slice(0, 10)) {
+    return COPY.runToday(time)
+  }
+
+  return `${local.getUTCDate()} ${COPY.months[local.getUTCMonth()] ?? '?'} ${time}`
+}
+
+// A run's state in words and its tone. A state the pane does not know is drawn as running: Terylon may add one.
+function runStateOf(state: unknown): { state: string; tone: PaneRepeatingRun['tone'] } {
+  switch (state) {
+    case 'merged':
+    case 'accepted':
+      return { state: COPY.runAccepted, tone: 'success' }
+    case 'verified':
+      return { state: COPY.runGreenWaits, tone: 'warning' }
+    case 'blocked':
+      return { state: COPY.runRedWaits, tone: 'warning' }
+    case 'abandoned':
+      return { state: COPY.runAbandoned, tone: 'subtle' }
+    default:
+      return { state: COPY.runRunning, tone: 'subtle' }
+  }
+}
+
+// A version as Terylon numbers it, or names it.
+function versionOf(value: unknown): string | null {
+  const numbered = number(value)
+
+  return numbered !== null ? String(numbered) : text(value)
+}
+
+// A file a run made: `{name}` as Terylon sends it, or a bare name.
+function fileName(value: unknown): string | null {
+  return value !== null && typeof value === 'object' ? text((value as Json).name) : text(value)
+}
+
+// A REPEATING TASK'S GOAL (Terylon S43), from goal_get's `repeating`: null when the goal is not one. Every field is
+// read tolerantly: a missing or odd-typed one draws less, never throws.
+export function repeatingOf(goal: Json, base: string, now: number, zoneOffsetMinutes = 0): PaneRepeating | null {
+  const repeating = goal.repeating
+
+  if (repeating === null || typeof repeating !== 'object' || Array.isArray(repeating)) {
+    return null
+  }
+
+  const document = repeating as Json
+  const approved = document.approved !== null && typeof document.approved === 'object' ? (document.approved as Json) : null
+  const waiting = document.waiting !== null && typeof document.waiting === 'object' ? (document.waiting as Json) : null
+  const version = approved === null ? null : versionOf(approved.version)
+  const budget = approved === null ? null : number(approved.runBudgetUsd)
+  const waitingVersion = waiting === null ? null : versionOf(waiting.version)
+  const id = number(goal.id)
+  const summary = [
+    approved === null ? COPY.repeatingNotApproved : COPY.repeatingApproved(version ?? '?'),
+    budget === null ? null : COPY.repeatingBudget(money(budget)),
+    approved === null ? null : approved.autoAccept === true ? COPY.repeatingAcceptsItself : COPY.repeatingWaitsForYou,
+    text(document.paused) === null && document.paused !== true ? null : COPY.repeatingPaused,
+    waitingVersion === null ? null : COPY.repeatingWaiting(waitingVersion),
+  ]
+
+  return {
+    title: (approved === null ? null : text(approved.title)) ?? text(goal.title) ?? (id === null ? '' : `#${id}`),
+    summary: summary.filter((part): part is string => part !== null).join(' · '),
+    runs: list(document.runs).map(run => {
+      const cost = number(run.costUsd)
+      const files = Array.isArray(run.files) ? run.files.map(fileName).filter((name): name is string => name !== null) : []
+
+      return {
+        story: number(run.story),
+        day: runDay(run.startedAt, now, zoneOffsetMinutes),
+        ...runStateOf(run.state),
+        line: [...files, ...(cost === null ? [] : [`$${money(cost)}`])].join(' · '),
+      }
+    }),
+    console: consoleLink(base, `waiting&task=${id ?? 0}`),
+  }
 }
 
 export function planItems(plans: Json, base: string): PanePlan[] {

@@ -660,6 +660,36 @@ const MUTATIONS = [
         find: "      const shownPlans = isClosedShown ? tabPlans.filter(plan => goalsState.closed.some(item => item.id === plan.goal)) : openPlans\n",
         replace: "      const shownPlans = openPlans\n",
     },
+    {
+        name: "the repeating card no longer replaces the stories card",
+        file: "hooks/register.tsx",
+        find: "repeating === null && cardOf('goal-stories'",
+        replace: "cardOf('goal-stories'",
+    },
+    {
+        name: "the summary says green runs accept themselves whatever autoAccept says",
+        file: "hooks/queue.ts",
+        find: "approved.autoAccept === true ? COPY.repeatingAcceptsItself : COPY.repeatingWaitsForYou",
+        replace: "COPY.repeatingAcceptsItself",
+    },
+    {
+        name: "the summary no longer says a repeating task is paused",
+        file: "hooks/queue.ts",
+        find: "    text(document.paused) === null && document.paused !== true ? null : COPY.repeatingPaused,\n",
+        replace: "",
+    },
+    {
+        name: "a run's unknown state is drawn as it came, not as running",
+        file: "hooks/queue.ts",
+        find: "    default:\n      return { state: COPY.runRunning, tone: 'subtle' }\n",
+        replace: "    default:\n      return { state: String(state), tone: 'subtle' }\n",
+    },
+    {
+        name: "the newest run's link opens nothing",
+        file: "hooks/register.tsx",
+        find: "onPress={() => go({ screen: 'story', story: newest.story ?? 0 })}",
+        replace: "onPress={() => undefined}",
+    },
 ];
 
 module.exports = { MUTATIONS };
