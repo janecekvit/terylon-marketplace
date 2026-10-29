@@ -873,14 +873,32 @@ const MUTATIONS = [
     {
         name: "a head below the since no longer starts the events over",
         file: "hooks/register.tsx",
-        find: "    if (head !== null && head < from) {\n",
-        replace: "    if (false) {\n",
+        find: "  return head !== null && head < since\n",
+        replace: "  return false\n",
     },
     {
         name: "the signals told before a reset are kept after it",
         file: "hooks/register.tsx",
         find: "  await keep($, STORE_SIGNALLED, [])\n",
         replace: "",
+    },
+    {
+        name: "an epoch other than the one the pane knows is no longer a reset",
+        file: "hooks/register.tsx",
+        find: "  if (epoch !== null && answered !== null && answered !== epoch) {\n",
+        replace: "  if (false) {\n",
+    },
+    {
+        name: "the epoch an answer names is never stored",
+        file: "hooks/register.tsx",
+        find: "  await keep($, STORE_EPOCH, read_.epoch ?? '')\n",
+        replace: "",
+    },
+    {
+        name: "Terylon's reset is ignored",
+        file: "hooks/register.tsx",
+        find: "  if (page.reset === true) {\n",
+        replace: "  if (false) {\n",
     },
 ];
 

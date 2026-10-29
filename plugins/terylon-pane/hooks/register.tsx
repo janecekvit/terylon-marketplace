@@ -107,7 +107,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.11.0'
+export const MOD_VERSION = '1.11.1'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -137,6 +137,8 @@ const PROMPT_REPEAT_MILLISECONDS = 60000
 
 // What the store keeps across sessions: where the pane last read the events, when, and what it signalled.
 const STORE_LAST_SEQ = 'lastSeq'
+// THE EVENT LOG'S IDENTITY, kept beside lastSeq: a sequence means something only within its epoch. '' where none is known.
+const STORE_EPOCH = 'epoch'
 const STORE_LAST_SEEN_AT = 'lastSeenAt'
 const STORE_SIGNALLED = 'signalled'
 
@@ -680,14 +682,33 @@ async function eventsRefused($: EngineInterface, answered: TerylonAnswer): Promi
   await eventsFailed($, kind, why(answered) || COPY.noServerTitle)
 }
 
-// Reads events_since from the stored sequence, page by page, up to `most` events.
-async function readEvents($: EngineInterface, since: number, most: number): Promise<{ events: Json[]; last: number; isWhole: boolean; reset: { from: number; head: number } | null } | null> {
+// WHETHER AN ANSWER OF events_since MEANS TERYLON'S HISTORY WAS RESET, in this order: it says so; its epoch is known
+// and not the pane's; or, from a server that names no epoch, its head is below the since asked.
+function isReset(page: Json, since: number, epoch: string | null): boolean {
+  if (page.reset === true) {
+    return true
+  }
+
+  const answered = text(page.epoch)
+
+  if (epoch !== null && answered !== null && answered !== epoch) {
+    return true
+  }
+
+  const head = number(page.head)
+
+  return head !== null && head < since
+}
+
+// Reads events_since from the stored position, page by page, up to `most` events; its epoch is sent once known.
+async function readEvents($: EngineInterface, since: number, epoch: string | null, most: number): Promise<{ events: Json[]; last: number; epoch: string | null; isWhole: boolean; reset: { from: number; head: number } | null } | null> {
   const events: Json[] = []
   let from = since
+  let known = epoch
 
   for (;;) {
-    debug($, `calling events_since since ${from}`)
-    const answered = await callTerylon($, 'events_since', { since: from, limit: EVENTS_PAGE })
+    debug($, `calling events_since since ${from}${known === null ? '' : ` in epoch ${known}`}`)
+    const answered = await callTerylon($, 'events_since', known === null ? { since: from, limit: EVENTS_PAGE } : { since: from, epoch: known, limit: EVENTS_PAGE })
 
     if (answered.kind !== 'ok') {
       await eventsRefused($, answered)
@@ -700,21 +721,22 @@ async function readEvents($: EngineInterface, since: number, most: number): Prom
     const page = answered.value
     const head = number(page.head)
 
-    // A HEAD BELOW THE SINCE ASKED is Terylon reset, its sequence begun again: a gap or not, the old history is gone.
-    if (head !== null && head < from) {
-      return { events: [], last: head, isWhole: true, reset: { from, head } }
+    // A RESET WINS OVER A GAP: the old history is gone, so nothing of it is summed up.
+    if (isReset(page, from, known)) {
+      return { events: [], last: head ?? number(page.last) ?? 0, epoch: text(page.epoch), isWhole: true, reset: { from, head: head ?? number(page.last) ?? 0 } }
     }
 
+    known = text(page.epoch) ?? known
     events.push(...list(page.events))
     from = number(page.last) ?? from
     debug($, `events_since answered ${list(page.events).length} events, last ${from}${page.more === true ? ', more' : ''}${page.gap === true ? ', a gap' : ''}`)
 
     if (page.gap === true || events.length > most) {
-      return { events, last: head ?? from, isWhole: false, reset: null }
+      return { events, last: head ?? from, epoch: known, isWhole: false, reset: null }
     }
 
     if (page.more !== true) {
-      return { events, last: from, isWhole: true, reset: null }
+      return { events, last: from, epoch: known, isWhole: true, reset: null }
     }
   }
 }
@@ -805,6 +827,7 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
   storeRefusals = 0
 
   const lastSeq = number(await kept($, STORE_LAST_SEQ))
+  const epoch = text(await kept($, STORE_EPOCH))
   const lastSeenAt = number(await kept($, STORE_LAST_SEEN_AT))
   debug($, `the last look: sequence ${lastSeq ?? 'none'}, at ${lastSeenAt ?? 'never'}`)
 
@@ -822,6 +845,7 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
     await eventsAnswered($)
 
     await keep($, STORE_LAST_SEQ, number(head.value.head) ?? number(head.value.last) ?? 0)
+    await keep($, STORE_EPOCH, text(head.value.epoch) ?? '')
     await keep($, STORE_LAST_SEEN_AT, now)
     await eventsRead($)
 
@@ -830,14 +854,14 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
 
   const awayMs = lastSeenAt === null ? 0 : now - lastSeenAt
   const isCatchUp = isStart && awayMs > CATCH_UP_AFTER_MS
-  const read_ = await readEvents($, lastSeq, CATCH_UP_MOST_EVENTS)
+  const read_ = await readEvents($, lastSeq, epoch, CATCH_UP_MOST_EVENTS)
 
   if (read_ === null) {
     return
   }
 
   if (read_.reset !== null) {
-    await startOver($, read_.reset, now)
+    await startOver($, read_.reset, read_.epoch, now)
 
     return
   }
@@ -861,22 +885,24 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
   }
 
   await keep($, STORE_LAST_SEQ, read_.last)
+  await keep($, STORE_EPOCH, read_.epoch ?? '')
   await keep($, STORE_LAST_SEEN_AT, now)
   await eventsRead($)
 }
 
-// TERYLON BEGAN ITS SEQUENCE AGAIN: the pane goes on from the new head, tells nothing of the old history, and forgets
-// what it remembered of the stories in it. Said once, in the debug log and on the band.
-async function startOver($: EngineInterface, reset: { from: number; head: number }, now: number): Promise<void> {
-  debug($, `Terylon's sequence went back from ${reset.from} to ${reset.head}; starting over`)
+// TERYLON'S HISTORY WAS RESET: the pane goes on from the new epoch and head, tells nothing of the old history, and
+// forgets what it remembered of the stories in it. Said once, in the debug log and on the band.
+async function startOver($: EngineInterface, reset: { from: number; head: number }, epoch: string | null, now: number): Promise<void> {
+  debug($, `Terylon's history was reset (asked from ${reset.from}, its head is ${reset.head}); starting over`)
   settled.clear()
   storyTargets.clear()
   await keep($, STORE_SIGNALLED, [])
   await keep($, STORE_LAST_SEQ, reset.head)
+  await keep($, STORE_EPOCH, epoch ?? '')
   await keep($, STORE_LAST_SEEN_AT, now)
 
   const base = await baseUrl($)
-  await update($, band, (): PaneBand => ({ text: `${COPY.resetHeading} · ${COPY.resetBody(String(reset.from), String(reset.head))}`, link: consoleLink(base, 'history'), isAlert: false }))
+  await update($, band, (): PaneBand => ({ text: `${COPY.resetHeading} · ${COPY.resetBody(String(reset.head))}`, link: consoleLink(base, 'history'), isAlert: false }))
   await eventsRead($)
 }
 
