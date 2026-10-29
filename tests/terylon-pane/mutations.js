@@ -636,6 +636,12 @@ const MUTATIONS = [
         find: "        ? goalsState.open.some(item => item.id === plan.goal)\n",
         replace: "        ? true\n",
     },
+    {
+        name: "under Closed the open goals' plans are listed again",
+        file: "hooks/register.tsx",
+        find: "      const shownPlans = isClosedShown ? goalsState.plans.filter(plan => goalsState.closed.some(item => item.id === plan.goal)) : openPlans\n",
+        replace: "      const shownPlans = openPlans\n",
+    },
 ];
 
 module.exports = { MUTATIONS };

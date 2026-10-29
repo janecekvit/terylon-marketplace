@@ -103,7 +103,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.8.1'
+export const MOD_VERSION = '1.8.2'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -2894,6 +2894,8 @@ export const register: Register = on => {
       const openPlans = goalsState.plans.filter(plan => (goalsState.closedFrom === 'terylon'
         ? goalsState.open.some(item => item.id === plan.goal)
         : !goalsState.closed.some(item => item.id === plan.goal)))
+      // UNDER CLOSED, THE CLOSED GOALS' PLANS ALONE (Terylon Testing's round, #48): each button draws its own goals' plans.
+      const shownPlans = isClosedShown ? goalsState.plans.filter(plan => goalsState.closed.some(item => item.id === plan.goal)) : openPlans
       // OPEN · N AND CLOSED · M (#41, board D): the one selected filled, the other dim, as the tabs are.
       const switchButton = (key: string, name: string, count: number, isSelected: boolean, showing: 'open' | 'closed') => (
         <Button key={key} label={`${name}${COPY.count(count)}`} variant={isSelected ? 'primary' : undefined} dimColor={isSelected ? undefined : true} onPress={() => showGoals($, showing)}>
@@ -2952,8 +2954,8 @@ export const register: Register = on => {
                 onPress: () => go({ screen: 'goal', goal: item.id }),
               })),
           ])}
-          {goalsState.phase === 'ok' && openPlans.length === 0 && cardOf('plans-empty', COPY.plans, null, [quiet(elements, COPY.noPlans)])}
-          {openPlans.map(plan => planCard(plan))}
+          {goalsState.phase === 'ok' && !isClosedShown && openPlans.length === 0 && cardOf('plans-empty', COPY.plans, null, [quiet(elements, COPY.noPlans)])}
+          {shownPlans.map(plan => planCard(plan))}
           {goalsState.sentence !== null && goalsState.phase === 'ok' && reason(goalsState.sentence)}
           {hasInput && 'Input' in elements && cardOf('goal-new', COPY.newGoal, null, [
             <elements.Input key="goal-draft" placeholder={COPY.newGoalPlaceholder} value={goalsState.draft} onInput={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, draft: value }))} onSubmit={() => addGoal($)} />,

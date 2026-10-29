@@ -222,3 +222,31 @@ test('AFTER S44: a plan stays on the Goals tab only under an open goal, the clos
   expect(await ui.find({ key: 'plan-144' })).toBeUndefined()
   expect(closedReads(terylon.calls)).toEqual([])
 })
+
+// TERYLON TESTING'S ROUND (#48): under Closed, the plans of open goals were still listed below the closed goals.
+for (const shape of ['before S44', 'after S44'] as const) {
+  test(`${shape.toUpperCase()}: Closed shows only the closed goals and their plans; Open only the open ones and theirs`, async ($, on) => {
+    const terylon = world(on)
+    // Plan 41 is goal 3's, which is open; plan 144 is goal 8's, which is done.
+    terylon.answers.goals_list = shape === 'after S44' ? s44(2) : { goals: [...OPEN_GOALS, ...CLOSED_GOALS] }
+    terylon.answers.plans_list = { plans: [...PLANS.plans, { id: 144, goal: 8, goalTitle: 'TEST: earlier output', state: 'approved', estimateUsd: 4, comment: null, stories: [] }] }
+    await $.session.start(SESSION)
+    await terylon.clock.settle()
+
+    const ui = await $.ui.mount(MOUNT)
+    await ui.press({ key: 'tab-goals' })
+    expect(await ui.find({ key: 'plan-41' })).toBeDefined()
+    expect(await ui.find({ key: 'plan-144' })).toBeUndefined()
+
+    await ui.press({ key: 'goals-show-closed' })
+    expect(await ui.find({ key: 'goal-8' })).toBeDefined()
+    expect(await ui.find({ key: 'plan-41' })).toBeUndefined()
+    expect(await ui.find({ key: 'plan-144' })).toBeDefined()
+    // NO "No plan waits." under Closed: that card speaks of the open goals' plans.
+    expect(await ui.find({ type: 'Text', text: exact('No plan waits.') })).toBeUndefined()
+
+    await ui.press({ key: 'goals-show-open' })
+    expect(await ui.find({ key: 'plan-41' })).toBeDefined()
+    expect(await ui.find({ key: 'plan-144' })).toBeUndefined()
+  })
+}
