@@ -107,7 +107,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.11.1'
+export const MOD_VERSION = '1.11.2'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -214,6 +214,13 @@ let lastStories: Json[] = []
 let policy: Json | null = null
 let lastAttemptAt = 0
 let isPolling = false
+
+// WHETHER THE MAIN LOOP'S TURN RUNS, from turn.start and turn.complete: a prompt submitted meanwhile waits for its end.
+let isTurnRunning = false
+// The done-signal's candidates found while a turn ran, and the keys already toasted for them; bounded.
+const HELD_MOST = 200
+const held: Candidate[] = []
+const heldToasted: string[] = []
 let answeringServer: string | null = null
 
 // WHAT AN ACT JUST CHANGED, drawn at once and kept until Terylon's own answer shows the subject moved (the owner's walk
@@ -741,10 +748,8 @@ async function readEvents($: EngineInterface, since: number, epoch: string | nul
   }
 }
 
-// THE DONE-SIGNAL: once per story and verdict commit. Each story's latest move alone, read again with story_get right
-// before the post, so that nothing asks for what has already happened; several are one summary, one turn.
-async function postSignals($: EngineInterface, candidates: Candidate[]): Promise<void> {
-  const done = await signalled($)
+// Each story's latest move alone, read again with story_get, and only what no earlier signal told.
+async function settleSignals($: EngineInterface, candidates: Candidate[], done: string[]): Promise<Signal[]> {
   const signals: Signal[] = []
   const now = await $.clock.now()
 
@@ -772,6 +777,35 @@ async function postSignals($: EngineInterface, candidates: Candidate[]): Promise
     signals.push(signalFor(settled_, verdict))
   }
 
+  return signals
+}
+
+function toastOf(signals: Signal[]): string {
+  return signals.length === 1 ? signals[0]?.toast ?? '' : signalsSummary(signals).toast
+}
+
+// THE DONE-SIGNAL: once per story and verdict commit, several in one summary, one turn. A PROMPT WAITS FOR THE RUNNING
+// TURN, so one found while a turn runs is held: its toast goes now, and its prompt only at the turn's end, read again.
+async function postSignals($: EngineInterface, candidates: Candidate[]): Promise<void> {
+  const done = await signalled($)
+
+  if (isTurnRunning) {
+    const signals = await settleSignals($, candidates, [...done, ...heldToasted])
+    held.push(...candidates)
+    held.splice(0, Math.max(0, held.length - HELD_MOST))
+
+    if (signals.length > 0) {
+      heldToasted.push(...signals.map(signal => signal.key))
+      debug($, `holding the done-signal ${signals.map(signal => signal.key).join(', ')} until the turn ends`)
+      $.ui.toast(toastOf(signals))
+    }
+
+    return
+  }
+
+  const toasted = heldToasted.splice(0)
+  const signals = await settleSignals($, [...held.splice(0), ...candidates], done)
+
   if (signals.length === 0) {
     return
   }
@@ -780,7 +814,27 @@ async function postSignals($: EngineInterface, candidates: Candidate[]): Promise
   const posted = signals.length === 1 ? { prompt: signals[0]?.prompt ?? '', toast: signals[0]?.toast ?? '' } : signalsSummary(signals)
   debug($, `posting the done-signal ${signals.map(signal => signal.key).join(', ')}`)
   await $.prompt.submit({ text: posted.prompt })
-  $.ui.toast(posted.toast)
+
+  if (signals.some(signal => !toasted.includes(signal.key))) {
+    $.ui.toast(posted.toast)
+  }
+}
+
+// The turn ended: what was held is read again and posted, unless a tick is reading the events, which posts it itself.
+async function flushHeld($: EngineInterface): Promise<void> {
+  if (isPolling || isTurnRunning || held.length === 0) {
+    return
+  }
+
+  isPolling = true
+
+  try {
+    await postSignals($, [])
+  } catch (error) {
+    await eventsFailed($, 'failed', messageOf(error))
+  } finally {
+    isPolling = false
+  }
 }
 
 async function markSignalled($: EngineInterface, candidates: Candidate[]): Promise<void> {
@@ -894,6 +948,8 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
 // forgets what it remembered of the stories in it. Said once, in the debug log and on the band.
 async function startOver($: EngineInterface, reset: { from: number; head: number }, epoch: string | null, now: number): Promise<void> {
   debug($, `Terylon's history was reset (asked from ${reset.from}, its head is ${reset.head}); starting over`)
+  held.splice(0)
+  heldToasted.splice(0)
   settled.clear()
   storyTargets.clear()
   await keep($, STORE_SIGNALLED, [])
@@ -1946,6 +2002,25 @@ export const register: Register = on => {
     $.clock.every(WATCH_MILLISECONDS, () => watchEvents($))
 
     return next(e)
+  })
+
+  on('turn.start', async ($, e, next) => {
+    if (e.agentId === undefined) {
+      isTurnRunning = true
+    }
+
+    return next(e)
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    const result = await next(e)
+
+    if (e.agentId === undefined) {
+      isTurnRunning = false
+      $.clock.after(0, () => flushHeld($))
+    }
+
+    return result
   })
 
   on('command.run', { command: 'terylon-pane' }, async $ => {

@@ -900,6 +900,18 @@ const MUTATIONS = [
         find: "  if (page.reset === true) {\n",
         replace: "  if (false) {\n",
     },
+    {
+        name: "a done-signal found while a turn runs is posted at once again",
+        file: "hooks/register.tsx",
+        find: "  if (isTurnRunning) {\n",
+        replace: "  if (false) {\n",
+    },
+    {
+        name: "a held done-signal is no longer posted at the turn's end",
+        file: "hooks/register.tsx",
+        find: "      $.clock.after(0, () => flushHeld($))\n",
+        replace: "",
+    },
 ];
 
 module.exports = { MUTATIONS };
