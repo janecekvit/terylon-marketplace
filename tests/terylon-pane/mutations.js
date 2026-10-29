@@ -786,6 +786,30 @@ const MUTATIONS = [
         find: "      note($, `terylon-pane: the Status tab begins on ",
         replace: "      void (`terylon-pane: the Status tab begins on ",
     },
+    {
+        name: "a reason is drawn with its control characters again",
+        file: "hooks/health.ts",
+        find: ".replace(new RegExp(CONTROL_CHARACTER.source, 'g'), ' ')",
+        replace: "",
+    },
+    {
+        name: "the Status tab lights ⚠ for a part TERYLON_PANE_STATUS leaves out",
+        file: "hooks/register.tsx",
+        find: "(!off.has('events') && (current.events !== null || isEventsSilent(current)))",
+        replace: "(current.events !== null || isEventsSilent(current))",
+    },
+    {
+        name: "Diagnostics no longer says the done-signal's state as plain text",
+        file: "hooks/register.tsx",
+        find: "...eventsDiagnostics.map(line => <Text color=\"subtle\" mono>{line}</Text>),",
+        replace: "",
+    },
+    {
+        name: "the done-signal's card title is drawn red again",
+        file: "hooks/register.tsx",
+        find: "const eventsTitle = (title: string) => <Text size=\"heading\" weight=\"semibold\">",
+        replace: "const eventsTitle = (title: string) => <Text size=\"heading\" weight=\"semibold\" color=\"error\">",
+    },
 ];
 
 module.exports = { MUTATIONS };

@@ -44,8 +44,8 @@ import type {
 import { COPY } from './copy'
 import { CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, NARROW_COLUMNS, STEPPER_COLUMNS, dots, meter, phaseGlyph, planChain, planOrder, proofsOf, segments, slotsGauge, spendBar, splitHash, stepper } from './drawing'
 import type { Picture, Proofs } from './drawing'
-import { ALERT_SOURCES, alertCount, checkTree, healthLine, stateWord, statusDrawingOf, treeLine } from './health'
-import type { Health } from './health'
+import { ALERT_SOURCES, alertCount, checkTree, healthLine, plainLine, stateWord, statusDrawingOf, treeLine, typedLine } from './health'
+import type { Health, StatusPart } from './health'
 import { MISSING_SERVER, NEEDS_TEXT, NOT_ALLOWED, SERVER_CANDIDATES, TEXT_LIMITS, actArguments, allowRules, assertPaneTool, isSendable, readResult } from './terylon'
 import type { TerylonAnswer } from './terylon'
 import {
@@ -104,7 +104,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.9.6'
+export const MOD_VERSION = '1.9.7'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -384,9 +384,14 @@ function healthOf(current: PaneSnapshot, offset: number): Health {
   }
 }
 
-// Something the owner should look at: the connection, the leader paused, an alert.
-function hasProblem(current: PaneSnapshot): boolean {
-  return (current.connection !== 'ok' && current.connection !== 'connecting') || current.paused !== null || current.alerts > 0 || current.events !== null || isEventsSilent(current)
+// Something the owner should look at: the connection, the leader paused, an alert. A part TERYLON_PANE_STATUS leaves
+// out lights no ⚠, so the tab never warns over a list that shows nothing.
+function hasProblem(current: PaneSnapshot, off: ReadonlySet<StatusPart> = new Set()): boolean {
+  if (off.has('problems')) {
+    return false
+  }
+
+  return (current.connection !== 'ok' && current.connection !== 'connecting') || current.paused !== null || (!off.has('alerts') && current.alerts > 0) || (!off.has('events') && (current.events !== null || isEventsSilent(current)))
 }
 
 // The watchdog's finding, said while the queue reads and no failure of events_since says why already.
@@ -2006,7 +2011,9 @@ export const register: Register = on => {
     const now = await $.clock.now()
     const base = await baseUrl($)
     const offset = zoneOffset(now)
-    const at = (moment: number | null) => (moment === null ? '?' : clock(new Date(moment).toISOString(), offset) ?? '?')
+    const at = (moment: number | null) => (typeof moment !== 'number' || !Number.isFinite(moment) ? '?' : clock(new Date(moment).toISOString(), offset) ?? '?')
+    // WHAT THE OWNER LEFT OUT to find the part Desktop does not draw (TERYLON_PANE_STATUS); unset, nothing is.
+    const drawingAsked = statusDrawingOf(await $.env.get('TERYLON_PANE_STATUS'))
     const age = current.fetchedAt === null ? null : COPY.ago(Math.max(0, Math.round((now - current.fetchedAt) / 1000)))
     const isStale = current.connection === 'unreachable'
     const stale = isStale ? COPY.stale : ''
@@ -2139,7 +2146,7 @@ export const register: Register = on => {
         {tabButton('tab-goals', '2', COPY.tabGoals, { screen: 'goals' }, tab === 'goals', null)}
         {tabButton('tab-bell', '3', COPY.tabBell(0), { screen: 'bell' }, tab === 'bell', current.notices > 0 ? { text: String(current.notices), tone: 'warning' } : null)}
         {tabButton('tab-memory', '4', COPY.tabMemory, { screen: 'memory' }, tab === 'memory', null)}
-        {tabButton('tab-status', '5', COPY.tabStatus(false), { screen: 'status' }, tab === 'status', hasProblem(current) ? { text: '⚠', tone: 'warning' } : null)}
+        {tabButton('tab-status', '5', COPY.tabStatus(false), { screen: 'status' }, tab === 'status', hasProblem(current, drawingAsked.off) ? { text: '⚠', tone: 'warning' } : null)}
       </Box>
     )
     const context = (
@@ -2159,7 +2166,8 @@ export const register: Register = on => {
     const footer = <Text key="footer" color="subtle" size="footnote" mono>{COPY.footer}</Text>
     // A FAULT OF THE MACHINE, for a bell row's chip: an alert source, or a notice the Status tab counts as an alert.
     const isMachineFault = (notice: { id: number; source: string }) => ALERT_SOURCES.includes(notice.source) || current.alertNotices.some(alert => alert.id === notice.id)
-    const reason = (problem: string | null) => (problem === null ? null : <Text color="subtle" size="footnote" wrap="truncate-end">{COPY.reason(problem)}</Text>)
+    // A REASON IS ONE CLEAN LINE, whatever it was handed: no control character, no page of text, never an object.
+    const reason = (problem: unknown) => (problem === null || problem === undefined ? null : <Text color="subtle" size="footnote" wrap="truncate-end">{COPY.reason(plainLine(problem))}</Text>)
     const retry = <Button key="retry" label={COPY.retry} variant="primary" onPress={() => tick($, true)} />
     const steps = (lines: readonly string[]) => (
       <Box flexDirection="column">
@@ -2273,42 +2281,56 @@ export const register: Register = on => {
             <Link href={notice.link === null ? consoleLink(base, 'bell') : `${base}${notice.link}`} label={COPY.bellInConsole} />,
           ], 'bad')))
         // ITS OWN Try again AND RULES, KEYED APART from the connection's: two elements of one key are one too many.
-        const eventsRetry = <Button key="events-retry" label={COPY.retry} variant="primary" onPress={() => tick($, true)} />
-        // THE DONE-SIGNAL'S OWN PROBLEM: the queue may read well while events_since, or the store, fails on its own.
+        // THE DONE-SIGNAL'S OWN PROBLEM: the queue may read well while events_since, or the store, fails on its own. DRAWN
+        // ONLY IN WHAT DESKTOP HAS DRAWN ON THIS TAB: a plain card and title, a plain Button, no red stroke or primary.
         const events = current.events
         const silentSince = isEventsSilent(current) ? current.eventsSilentSince : null
+        const eventsTitle = (title: string) => <Text size="heading" weight="semibold">{`⚠ ${title}`}</Text>
+        const eventsRetry = () => <Button key="events-retry" label={COPY.retry} onPress={() => tick($, true)} />
         const eventsCard = await part('events', () => events === null
           ? silentSince === null
             ? null
-            : cardOf('problem-events', warned(COPY.eventsSilentTitle), COPY.statusSince(at(silentSince)), [
+            : cardOf('problem-events', eventsTitle(COPY.eventsSilentTitle), COPY.statusSince(at(silentSince)), [
                 <Text color="inactive">{COPY.eventsSilentBody(Math.round((now - silentSince) / 1000), current.eventsAnsweredAt === null ? null : at(current.eventsAnsweredAt))}</Text>,
                 steps(COPY.fixEventsSilent),
-                eventsRetry,
-              ], 'bad')
+                eventsRetry(),
+              ])
           : events.kind === 'not-allowed'
-            ? cardOf('problem-events', warned(COPY.eventsNotAllowedTitle), COPY.notAllowedHint, [
+            ? cardOf('problem-events', eventsTitle(COPY.eventsNotAllowedTitle), COPY.notAllowedHint, [
                 <Text color="inactive">{COPY.eventsNotAllowedBody}</Text>,
                 reason(events.reason),
                 ...rulesFix(COPY.fixEventsNotAllowed, 'events-allow-rules'),
-                eventsRetry,
-              ], 'bad')
+                eventsRetry(),
+              ])
             : events.kind === 'store'
-              ? cardOf('problem-events', warned(COPY.eventsStoreTitle), COPY.statusSince(at(events.since)), [
+              ? cardOf('problem-events', eventsTitle(COPY.eventsStoreTitle), COPY.statusSince(at(events.since)), [
                   <Text color="inactive">{COPY.eventsStoreBody}</Text>,
                   reason(events.reason),
                   steps(COPY.fixEventsStore),
-                  eventsRetry,
-                ], 'bad')
-              : cardOf('problem-events', warned(COPY.eventsStoppedTitle), COPY.statusSince(at(events.since)), [
+                  eventsRetry(),
+                ])
+              : cardOf('problem-events', eventsTitle(COPY.eventsStoppedTitle), COPY.statusSince(at(events.since)), [
                   <Text color="inactive">{COPY.eventsStoppedBody(at(events.since))}</Text>,
                   reason(events.reason),
                   steps(COPY.fixEventsStopped),
                   <Link href={consoleLink(base, 'health')} label={COPY.health} />,
-                  eventsRetry,
-                ], 'bad'))
-        // WHAT THE OWNER LEFT OUT to find the part Desktop does not draw (TERYLON_PANE_STATUS); unset, nothing is.
-        const drawingAsked = statusDrawingOf(await $.env.get('TERYLON_PANE_STATUS'))
+                  eventsRetry(),
+                ]))
         const isShown = (name: Parameters<typeof drawingAsked.off.has>[0]) => !drawingAsked.off.has(name)
+        // THE DONE-SIGNAL'S STATE AS PLAIN TEXT, read as kept, each value with its type: a part that does draw says what
+        // the events card would have drawn from.
+        const raw = (await read($, snapshot)) as unknown as Record<string, unknown>
+        const rawEvents = (raw.events ?? null) as Record<string, unknown> | null
+        const eventsDiagnostics = [
+          COPY.diagnosticsEvents('events', rawEvents === null || typeof rawEvents !== 'object' ? typedLine(rawEvents) : typedLine(rawEvents.kind)),
+          COPY.diagnosticsEvents('since', typedLine(rawEvents?.since)),
+          COPY.diagnosticsEvents('reason', typedLine(rawEvents?.reason)),
+          COPY.diagnosticsEvents('answeredAt', typedLine(raw.eventsAnsweredAt)),
+          COPY.diagnosticsEvents('watchedSince', typedLine(raw.eventsWatchedSince)),
+          COPY.diagnosticsEvents('silentSince', typedLine(raw.eventsSilentSince)),
+          COPY.diagnosticsEvents('store refusals', String(storeRefusals)),
+        ]
+        note($, `terylon-pane: the Status tab's done-signal: ${eventsDiagnostics.join('; ')}`)
         const problems = [problemCard, rulesCard, isShown('events') ? eventsCard : null, pausedCard, ...(isShown('alerts') ? (Array.isArray(alertCards) ? alertCards : [alertCards]) : [])].filter(item => item !== null)
         const slotsCard = await part('slots', () => cardOf('status-slots', COPY.statusSlots, COPY.statusSlotsHint, [
           look.isGraphic ? picture(elements, slotsGauge(current.slotsUsed, current.slots, true)) : null,
@@ -2432,6 +2454,7 @@ export const register: Register = on => {
                   <Text color="subtle" mono>{COPY.diagnosticsVersion(MOD_VERSION)}</Text>,
                   <Text color="subtle" mono>{COPY.diagnosticsUrl(base)}</Text>,
                   <Text color="subtle" mono>{COPY.diagnosticsServer(current.server)}</Text>,
+                  ...eventsDiagnostics.map(line => <Text color="subtle" mono>{line}</Text>),
                   <Text color="subtle" size="footnote">{COPY.diagnosticsDebug}</Text>,
                 ])}
                 {footer}
@@ -3512,7 +3535,7 @@ export const register: Register = on => {
             <Text color="subtle" size="footnote">{COPY.addOnPhoneNote}</Text>
           </Box>
         )}
-        {statusDrawingOf(await $.env.get('TERYLON_PANE_STATUS')).isLogShown && cardOf('pane-log', COPY.paneLogTitle, COPY.paneLogHint, [
+        {drawingAsked.isLogShown && cardOf('pane-log', COPY.paneLogTitle, COPY.paneLogHint, [
           notes.length === 0 ? quiet(elements, COPY.paneLogEmpty) : null,
           ...notes.map(line => <Text color="subtle" size="footnote" mono>{line}</Text>),
         ])}

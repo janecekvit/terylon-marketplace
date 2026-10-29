@@ -273,12 +273,13 @@ The names are separated by commas or spaces; anything else changes nothing.
 | no terylon server | `terylon-os` is not installed, or its server is not connected | `claude mcp list` |
 | refused: not the owner | Terylon answered, but not to its owner | sign this PC into the tailnet with your own account |
 | a tab says *… did not load* · *Terylon did not answer within 8 s* | the tab's calls did not finish under Desktop's 10 s bound on a press | read the debug log's `terylon-pane: loading … failed:` line, then press the tab again |
-| Status: *Claude Code refused the done-signal's call* | the queue reads, but no allow rule lets `events_since` through, so nothing is told | add `mcp__plugin_terylon-os_terylon__events_since` as the card spells it; if it is there, restart Claude Desktop |
-| Status: *The done-signal stopped* | `events_since` reached Terylon and did not answer as the owner's | read *Reason:* and Health in the console |
-| Status: *The pane cannot keep its place* | Claude Code's store for the mod refused or did not answer | check that `~/.claude` is writable, restart Claude Desktop |
+| Status: *⚠ Claude Code refused the done-signal's call* | the queue reads, but no allow rule lets `events_since` through, so nothing is told | add `mcp__plugin_terylon-os_terylon__events_since` as the card spells it; if it is there, restart Claude Desktop |
+| Status: *⚠ The done-signal stopped* | `events_since` reached Terylon and did not answer as the owner's | read *Reason:* and Health in the console |
+| Status: *⚠ The pane cannot keep its place* | Claude Code's store for the mod refused or did not answer | check that `~/.claude` is writable, restart Claude Desktop |
+| Status › Diagnostics: `events: …`, `since: …`, `reason: …`, `answeredAt: …`, `watchedSince: …`, `silentSince: …`, `store refusals: N` | the done-signal's state as the pane keeps it, each value with its type, in plain text: what the done-signal's card draws from | read the lines from a screenshot when the card itself does not draw; `events: null` and `silentSince: null` mean nothing is wrong with it |
 | Desktop's own *Nothing to show yet — terylon-pane has not drawn in this pane* on a tab | the host did not draw what the tab returned, though `plugin test` draws it | set `TERYLON_PANE_STATUS` to `log` and read the Status tab's lines on the Queue tab (or `terylon-pane: the Status tab draws …` under `claude --debug`): they say the render ran, what it returned and anything in it a host may refuse; then find the part with `TERYLON_PANE_STATUS`, starting from `log, minimal` |
 | Status: *The Status tab's … did not draw* | one part of the tab threw while drawing; the rest is drawn around it | read *Reason:* and the debug log's `terylon-pane: the Status tab's … did not draw:` line; press *Refresh* |
-| Status: *The done-signal hears nothing* | `events_since` has not answered for more than 90 s while the queue reads, and nothing failed that the pane saw: the call is held, or the events path stopped before it | read the debug log's `terylon-pane: events:` lines: the last look read, each `events_since` called and what it answered, each signal posted, and where it stopped |
+| Status: *⚠ The done-signal hears nothing* | `events_since` has not answered for more than 90 s while the queue reads, and nothing failed that the pane saw: the call is held, or the events path stopped before it | read the debug log's `terylon-pane: events:` lines: the last look read, each `events_since` called and what it answered, each signal posted, and where it stopped |
 
 ## Tests
 

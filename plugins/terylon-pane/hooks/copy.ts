@@ -82,6 +82,7 @@ export const COPY = {
   diagnosticsVersion: (version: string) => `terylon-pane ${version}`,
   diagnosticsUrl: (url: string) => `TERYLON_URL ${url === '' ? '(not set)' : url}`,
   diagnosticsServer: (server: string | null) => `server ${server ?? '(none has answered yet)'}`,
+  diagnosticsEvents: (name: string, value: string) => `${name}: ${value}`,
   diagnosticsDebug: 'Every failure is in claude --debug under terylon-pane:',
 
   // Tabs.

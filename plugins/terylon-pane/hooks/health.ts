@@ -134,6 +134,25 @@ export function checkTree(tree: unknown): TreeCheck {
   }
 }
 
+// The longest reason a card draws: a store's or a call's words, cut so that no host is handed a page of them.
+export const REASON_LONGEST = 300
+
+// A value drawn as one line of text: whatever it is, a string with no control character, cut at `longest`.
+export function plainLine(value: unknown, longest = REASON_LONGEST): string {
+  const line = String(value).replace(new RegExp(CONTROL_CHARACTER.source, 'g'), ' ').replace(/\s+/g, ' ').trim()
+
+  return clip(line, longest)
+}
+
+// A value as Diagnostics names it, its type first: a time kept by an earlier version reads `string 2026-…`, not `?`.
+export function typedLine(value: unknown): string {
+  if (value === null || value === undefined) {
+    return String(value)
+  }
+
+  return `${typeof value} ${plainLine(typeof value === 'object' ? JSON.stringify(value) : value, 80)}`
+}
+
 // The check in one line for the debug log and the pane's own log.
 export function treeLine(check: TreeCheck): string {
   const findings = [
