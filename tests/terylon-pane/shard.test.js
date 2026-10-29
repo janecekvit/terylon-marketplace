@@ -1,4 +1,4 @@
-// The mutation suite's shards (#42): every mutation runs in exactly one shard, so four parallel jobs green means
+// The mutation suite's shards (#42): every mutation runs in exactly one shard, so six parallel jobs green means
 // every mutation was planted and caught, none twice and none skipped. Free, milliseconds; no claude needed.
 "use strict";
 
@@ -7,8 +7,8 @@ const assert = require("node:assert/strict");
 const { MUTATIONS } = require("./mutations.js");
 const { parseShard, selectShard } = require("./shard.js");
 
-// The shard count CI's matrix runs; ci.yml's pane-mutations job names the same four.
-const CI_SHARD_COUNT = 4;
+// The shard count CI's matrix runs; ci.yml's pane-mutations job names the same six.
+const CI_SHARD_COUNT = 6;
 
 function shardsOf(items, count)
 {
@@ -22,7 +22,7 @@ function shardsOf(items, count)
     return shards;
 }
 
-test("4 shards cover every mutation exactly once", () =>
+test("6 shards cover every mutation exactly once", () =>
 {
     const shards = shardsOf(MUTATIONS, CI_SHARD_COUNT);
     const seen = new Map();
