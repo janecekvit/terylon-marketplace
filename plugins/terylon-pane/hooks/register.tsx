@@ -106,7 +106,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.10.0'
+export const MOD_VERSION = '1.10.1'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -2833,6 +2833,8 @@ export const register: Register = on => {
     const repeatingCard = (repeating: PaneRepeating) => {
       const [newest, ...older] = repeating.runs
       // ONE KEY PER RUN: two runs of one story would otherwise draw two children of one key.
+      // AN OLDER RUN THAT WENT WELL IS QUIET, as the design draws it: only one that waits keeps its colour.
+      const olderTone = (run: PaneRepeatingRun) => (run.tone === 'success' ? 'subtle' : run.tone)
       const runKey = (run: PaneRepeatingRun, index: number) => (repeating.runs.findIndex(item => item.story === run.story) === index ? `repeating-run-${run.story}` : `repeating-run-${run.story}-${index}`)
 
       return cardOf('goal-repeating', repeating.title, <Text color="success" size="footnote" mono>{COPY.repeating}</Text>, [
@@ -2853,10 +2855,10 @@ export const register: Register = on => {
           ? (
               <Box key={`repeating-older-${index}`} flexDirection="row" justifyContent="space-between" gap={1}>
                 <Text color="subtle" tabular>{run.day}</Text>
-                <Text color={run.tone}>{run.state}</Text>
+                <Text color={olderTone(run)}>{run.state}</Text>
               </Box>
             )
-          : rowOf({ key: runKey(run, index + 1), kind: null, title: look.isNarrow ? `${run.day} · ${run.state}` : run.day, detail: run.state, detailTone: run.tone, onPress: () => go({ screen: 'story', story: run.story ?? 0 }) }))),
+          : rowOf({ key: runKey(run, index + 1), kind: null, title: look.isNarrow ? `${run.day} · ${run.state}` : run.day, detail: run.state, detailTone: olderTone(run), onPress: () => go({ screen: 'story', story: run.story ?? 0 }) }))),
         <Text key="repeating-foot" color="subtle" size="footnote">{COPY.repeatingFoot}</Text>,
         <Link key="repeating-console" href={repeating.console} label={COPY.repeatingInConsole} />,
       ])

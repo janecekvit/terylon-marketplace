@@ -107,8 +107,15 @@ for (const [surface, props] of [['desktop', PANE_PROPS], ['terminal', PANE_PROPS
       expect(row?.text).toContain(state)
     }
 
+    // THE NEWEST RUN IN ITS COLOUR, an older one that went well quiet, one that waits amber. The narrow dock folds an
+    // older run's state into its title instead.
+    if (surface !== 'narrow dock') {
+      expect((await ui.findAll({ type: 'Text', text: exact('green · accepted') })).map(node => node.props.color)).toEqual(['success', 'subtle'])
+      expect((await ui.find({ type: 'Text', text: exact('red · waits for you') }))?.props.color).toBe('warning')
+    }
+
     expect(await ui.find({ type: 'Text', text: exact('Started by your routine; Terylon keeps no clock.') })).toBeDefined()
-    expect((await ui.find({ type: 'Link', text: 'Task in the console ↗' }))?.props.href).toBe(`${BASE}/?cockpit=waiting&task=12`)
+    expect((await ui.find({ type: 'Link', text: 'The task in the console ↗' }))?.props.href).toBe(`${BASE}/?cockpit=waiting&task=12`)
     expect(undrawable(await ui.drawn())).toEqual([])
   })
 }
@@ -130,14 +137,14 @@ test('the newest run and an older one each open their story', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: exact('#86 Run of story 86') })).toBeDefined()
 })
 
-test('the summary says when every run waits for the owner, when the task is paused, and a version waiting', async ($, on) => {
+test('the summary says when green runs wait for the owner, when the task is paused, and a version waiting', async ($, on) => {
   const terylon = repeatingWorld(on, { ...REPEATING, approved: { ...REPEATING.approved, autoAccept: false }, paused: '2026-10-28T08:00:00Z', waiting: { version: 2 } })
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await openGoal12(ui)
-  expect(await ui.find({ type: 'Text', text: exact('Approved version 1 · up to $0.50 a run · every run waits for you · paused · version 2 waits for you') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('Approved version 1 · up to $0.50 a run · green runs wait for you · paused · version 2 waits for you') })).toBeDefined()
 })
 
 test('a task with no run yet says so, and a goal without repeating keeps its stories card', async ($, on) => {
@@ -147,7 +154,7 @@ test('a task with no run yet says so, and a goal without repeating keeps its sto
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await openGoal12(ui)
-  expect(await ui.find({ type: 'Text', text: exact('No run yet.') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('No run yet: your routine starts each one.') })).toBeDefined()
   expect(await ui.find({ key: 'repeating-newest' })).toBeUndefined()
 
   terylon.answers.goal_get = repeatingGoal(null)
@@ -178,7 +185,7 @@ for (const [surface, props] of [['desktop', PANE_PROPS], ['terminal', PANE_PROPS
     await openGoal12(ui)
 
     expect(await ui.find({ key: 'goal-repeating' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('Approved version two · every run waits for you') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('Approved version two · green runs wait for you') })).toBeDefined()
     // AN UNKNOWN STATE IS DRAWN AS RUNNING, and a time that cannot be read as "?".
     expect(await ui.find({ type: 'Text', text: exact('running') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('?') })).toBeDefined()
