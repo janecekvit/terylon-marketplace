@@ -33,6 +33,9 @@ import type {
   PaneBell,
   PaneGoal,
   PaneGoals,
+  PaneRepeating,
+  PaneRepeatingRun,
+  PanePlan,
   PaneMemory,
   PanePolicyForm,
   PaneScreen,
@@ -77,6 +80,7 @@ import {
   questionChoices,
   questionItems,
   queuedItems,
+  repeatingOf,
   runningItems,
   spend,
   storyView,
@@ -84,6 +88,7 @@ import {
   verifiedIds,
   waitingItems,
 } from './queue'
+import type { Zone } from './queue'
 import {
   CATCH_UP_AFTER_MS,
   CATCH_UP_MOST_EVENTS,
@@ -107,7 +112,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.11.2'
+export const MOD_VERSION = '1.11.3'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -383,7 +388,7 @@ function zoneOffset(now: number): number {
   return new Date(now).getTimezoneOffset()
 }
 
-function healthOf(current: PaneSnapshot, offset: number): Health {
+function healthOf(current: PaneSnapshot, offset: Zone): Health {
   return {
     connection: current.connection,
     failingSince: current.failingSince === null ? null : clock(new Date(current.failingSince).toISOString(), offset),
@@ -427,7 +432,7 @@ async function watchEvents($: EngineInterface): Promise<void> {
 async function showHealth($: EngineInterface): Promise<void> {
   const current = await readSnapshot($)
 
-  $.ui.status(healthLine(healthOf(current, zoneOffset(await $.clock.now()))))
+  $.ui.status(healthLine(healthOf(current, zoneOffset)))
 }
 
 async function failed($: EngineInterface, answered: TerylonAnswer, tool: string, now: number): Promise<void> {
@@ -482,7 +487,7 @@ async function refresh($: EngineInterface): Promise<boolean> {
   const notices = await callTerylon($, 'notices_list')
   const previous = await readSnapshot($)
   const alerts = notices.kind === 'ok' ? alertCount(notices.value) : previous.alerts
-  const alertNotices = notices.kind === 'ok' ? alertItems(notices.value, now, zoneOffset(now)) : previous.alertNotices
+  const alertNotices = notices.kind === 'ok' ? alertItems(notices.value, now, zoneOffset) : previous.alertNotices
 
   if (policy === null) {
     const answered = await callTerylon($, 'policy_get')
@@ -499,7 +504,7 @@ async function refresh($: EngineInterface): Promise<boolean> {
   }
 
   const base = await baseUrl($)
-  const offset = zoneOffset(now)
+  const offset = zoneOffset
   const running = runningItems(lastFlight, offset, verifiedIds(lastBriefing))
   const inFlight = new Set(running.map(item => item.story))
   const paused = pausedOf((lastBriefing.leader ?? null) as Json | null, lastFlight.paused === true, offset)
@@ -1128,12 +1133,12 @@ async function openStory($: EngineInterface, id: number): Promise<void> {
   const question = (await readSnapshot($)).questions.find(item => item.subject === `story/${id}`) ?? null
 
   if (answered.kind !== 'ok' && Object.keys(inFlight).length === 0) {
-    await update($, story, (): PaneStory | null => ({ ...storyView(id, {}, {}, null, now, zoneOffset(now)), phase: 'error', sentence: why(answered) }))
+    await update($, story, (): PaneStory | null => ({ ...storyView(id, {}, {}, null, now, zoneOffset), phase: 'error', sentence: why(answered) }))
     return
   }
 
   const document = settledStory(answered.kind === 'ok' ? answered.value : {}, id, now)
-  const view_ = storyView(id, document, inFlight, question, now, zoneOffset(now))
+  const view_ = storyView(id, document, inFlight, question, now, zoneOffset)
   await update($, story, (): PaneStory | null => view_)
 
   // A RUNNING STORY OPENS ON "NOW WORKING" (S32): the pane moves the least that shows it, and not at all when it shows.
@@ -1153,7 +1158,7 @@ async function readFlight($: EngineInterface, now: number): Promise<void> {
 
   lastFlight = flight.value
 
-  const running = runningItems(lastFlight, zoneOffset(now), verifiedIds(lastBriefing))
+  const running = runningItems(lastFlight, zoneOffset, verifiedIds(lastBriefing))
 
   await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({
     ...EMPTY_SNAPSHOT,
@@ -1362,17 +1367,19 @@ async function addGoal($: EngineInterface): Promise<void> {
 }
 
 async function openGoal($: EngineInterface, id: number): Promise<void> {
-  await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'loading', sentence: null, title: '', meta: '', stories: [], isOpen: false, openStories: [] }))
+  await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'loading', sentence: null, title: '', meta: '', stories: [], isOpen: false, openStories: [], repeating: null }))
 
   const answered = await callTerylon($, 'goal_get', { goal: id })
 
   if (answered.kind !== 'ok') {
-    await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'error', sentence: why(answered), title: '', meta: '', stories: [], isOpen: false, openStories: [] }))
+    await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'error', sentence: why(answered), title: '', meta: '', stories: [], isOpen: false, openStories: [], repeating: null }))
     return
   }
 
   const document = answered.value
-  const state = settledState(`goal-${id}`, String(document.state ?? ''), await $.clock.now())
+  const now = await $.clock.now()
+  const state = settledState(`goal-${id}`, String(document.state ?? ''), now)
+  const repeating = repeatingOf({ ...document, id }, await baseUrl($), now, zoneOffset)
 
   await update($, goal, (): PaneGoal | null => ({
     goal: id,
@@ -1386,6 +1393,7 @@ async function openGoal($: EngineInterface, id: number): Promise<void> {
     openStories: list(document.storyList)
       .filter(item => OPEN_STORY_STATES.includes(String(item.state ?? '')))
       .map(item => ({ id: number(item.id) ?? 0, title: text(item.title) ?? '', isRunning: ['dispatched', 'running'].includes(String(item.state ?? '')) })),
+    repeating,
   }))
 
   if ((await read($, goals)).phase !== 'ok') {
@@ -1411,7 +1419,7 @@ async function readBellFromTerylon($: EngineInterface): Promise<void> {
   const now = await $.clock.now()
 
   await update($, bell, (): PaneBell =>
-    bellView(notices.value, leader.kind === 'ok' ? leader.value : null, metrics.kind === 'ok' ? metrics.value : null, now, zoneOffset(now)))
+    bellView(notices.value, leader.kind === 'ok' ? leader.value : null, metrics.kind === 'ok' ? metrics.value : null, now, zoneOffset))
 }
 
 // A notice marked handled from the Bell tab (#360): notice_handle is a write the owner decided is not a gate, so
@@ -1732,7 +1740,7 @@ async function openMemory($: EngineInterface): Promise<void> {
 
   const now = await $.clock.now()
 
-  await update($, memory, (current: PaneMemory): PaneMemory => ({ ...current, phase: 'ok', files, rules, pending: list(answered.value.proposals).length, proposals: proposalItems(answered.value, zoneOffset(now)), edit: null, sentence: null }))
+  await update($, memory, (current: PaneMemory): PaneMemory => ({ ...current, phase: 'ok', files, rules, pending: list(answered.value.proposals).length, proposals: proposalItems(answered.value, zoneOffset), edit: null, sentence: null }))
 }
 
 // A MEMORY EDIT IS A PROPOSAL: memory_propose, then the owner confirms it in the console's memory gate.
@@ -2078,7 +2086,7 @@ export const register: Register = on => {
 
     const current = await readSnapshot($)
     const now = await $.clock.now()
-    const offset = zoneOffset(now)
+    const offset = zoneOffset
     const stuck = current.running.filter(item => item.isStuck).length
     // THE BAND IS UNCHANGED BUT FOR ITS DIGITS (S32): tabular, so a count that moves at a poll does not shift the row.
     const pair = (name: string, value: string, color: 'inactive' | 'warning' | 'suggestion') => [
@@ -2163,7 +2171,7 @@ export const register: Register = on => {
     const shown = await read($, open)
     const now = await $.clock.now()
     const base = await baseUrl($)
-    const offset = zoneOffset(now)
+    const offset = zoneOffset
     const at = (moment: number | null) => (typeof moment !== 'number' || !Number.isFinite(moment) ? '?' : clock(new Date(moment).toISOString(), offset) ?? '?')
     // WHAT THE OWNER LEFT OUT to find the part Desktop does not draw (TERYLON_PANE_STATUS); unset, nothing is.
     const drawingAsked = statusDrawingOf(await $.env.get('TERYLON_PANE_STATUS'))
@@ -3265,7 +3273,10 @@ export const register: Register = on => {
       const orderAlt = COPY.planOrderAlt(plan.stories.map(item => ({ title: item.title, after: item.after.map(place => plan.stories[place - 1]?.title ?? `#${place}`) })))
 
       const planKey = `plan-${plan.id}`
-      const card_ = cardOf(`plan-${plan.id}`, <Text size="heading" weight="semibold">{COPY.plan(plan.id)}<Text color="subtle" weight="regular">{` · ${plan.goalTitle}`}</Text></Text>, plan.stateText, [
+      // A value an older version stored has no taskVersion: it is drawn as a plan of stories until plans_list is read again.
+      const taskVersion = plan.taskVersion ?? null
+      const planSubtitle = taskVersion === null ? plan.goalTitle : COPY.taskVersion(taskVersion.version, taskVersion.title ?? plan.goalTitle)
+      const card_ = cardOf(`plan-${plan.id}`, <Text size="heading" weight="semibold">{COPY.plan(plan.id)}<Text color="subtle" weight="regular">{` · ${planSubtitle}`}</Text></Text>, plan.stateText, [
         // A PLAN AS A CHAIN (S32): the order and the "after" of its stories as an Svg, as 1 → 2 → 3 on the terminal. Only
         // the order (#39): the sizes beside it, "S ~$3 → M ~$5", read as nodes of a second chain, and a plan of one story
         // drew "○ M" above its row. A plan of one story has no order to draw; each size is said on its story's row.
@@ -3285,7 +3296,8 @@ export const register: Register = on => {
             onPress: () => go({ screen: 'story', story: item.id }),
           })),
         plan.comment === null ? null : <Text color="inactive">{plan.comment}</Text>,
-        <Text color="inactive" size="footnote">{COPY.planNote}</Text>,
+        taskVersion === null ? <Text color="inactive" size="footnote">{COPY.planNote}</Text> : null,
+        taskVersion === null || taskVersion.terms === null ? null : <Text key={`plan-${plan.id}-terms`} color="inactive" size="footnote">{taskVersion.terms}</Text>,
         // THE PLAN'S ACTS (S27): Approve in one press, Rethink… with its comment; editing criteria stays the console's.
         <Box flexDirection="row" gap={1} flexWrap="wrap">
           {plan.isProposed && actButton(planKey, 'plan_approve', plan.id, { isPrimary: true })}
@@ -3296,14 +3308,59 @@ export const register: Register = on => {
         plan.isProposed && actState(planKey).open === 'plan_rethink' ? <Text color="subtle" size="footnote">{COPY.rethinkNote}</Text> : null,
         actBusyNote(planKey),
         plan.isProposed ? (
-          <Text key={`plan-${plan.id}-note`} color="subtle" size="footnote">{COPY.approveNote(plan.stories.length)}</Text>
+          <Text key={`plan-${plan.id}-note`} color="subtle" size="footnote">{taskVersion === null ? COPY.approveNote(plan.stories.length) : COPY.approveVersionNote(taskVersion.version)}</Text>
         ) : null,
-        plan.isProposed ? <Link key={`plan-${plan.id}-console`} href={plan.console} label={COPY.approveConsole} /> : null,
+        plan.isProposed ? <Link key={`plan-${plan.id}-console`} href={plan.console} label={taskVersion === null ? COPY.approveConsole : COPY.planInConsole} /> : null,
       ], plan.isProposed ? 'wait' : 'plain')
 
       return [card_, actOutcome(planKey, plan.console, COPY.planInConsole, [
         actState(planKey).outcome?.tool === 'plan_approve' ? <Button key={`act-${planKey}-queue`} label={COPY.openQueue} variant="primary" onPress={() => show($, QUEUE, true)} /> : null,
       ])]
+    }
+
+    // A REPEATING TASK'S CARD (Terylon S43), in place of the goal's stories: the summary, the newest run in a box of its
+    // own with the link to its story, the older runs as rows, the foot and the task's sheet in the console. Every
+    // child is keyed and every word a string: Desktop drops the whole tab when it cannot draw one card.
+    const repeatingCard = (repeating: PaneRepeating, versions: readonly PanePlan[]) => {
+      const [newest, ...older] = repeating.runs
+      // ONE KEY PER RUN: two runs of one story would otherwise draw two children of one key.
+      // AN OLDER RUN THAT WENT WELL IS QUIET, as the design draws it: only one that waits keeps its colour.
+      const olderTone = (run: PaneRepeatingRun) => (run.tone === 'success' ? 'subtle' : run.tone)
+      const runKey = (run: PaneRepeatingRun, index: number) => (repeating.runs.findIndex(item => item.story === run.story) === index ? `repeating-run-${run.story}` : `repeating-run-${run.story}-${index}`)
+
+      return cardOf('goal-repeating', repeating.title, <Text color="success" size="footnote" mono>{COPY.repeating}</Text>, [
+        <Text key="repeating-summary" color="subtle" size="footnote">{repeating.summary}</Text>,
+        // THE TASK'S SETTLED VERSIONS, in one line here rather than as plans below the card: nothing in them waits.
+        versions.length === 0 ? null : (
+          <Text key="repeating-versions" color="subtle" size="footnote">
+            {COPY.repeatingVersions(versions.map(plan => ({ version: plan.taskVersion?.version ?? null, plan: plan.id, isWithdrawn: plan.state === 'withdrawn' })))}
+          </Text>
+        ),
+        newest === undefined
+          ? <Box key="repeating-none" flexDirection="column">{quiet(elements, COPY.repeatingNoRun)}</Box>
+          : (
+              <Box key="repeating-newest" flexDirection="column" borderStyle="round" borderColor="subtle" paddingX={look.isGraphic ? 'sm' : 1} gap={look.isGraphic ? 'xs' : 0}>
+                <Box flexDirection="row" justifyContent="space-between" gap={1}>
+                  <Text tabular>{newest.day}</Text>
+                  <Text color={newest.tone}>{newest.state}</Text>
+                </Box>
+                {newest.line === '' ? null : <Text color="subtle" size="footnote">{newest.line}</Text>}
+                {newest.story === null ? null : <Button key={runKey(newest, 0)} label={COPY.openRun} plain onPress={() => go({ screen: 'story', story: newest.story ?? 0 })} />}
+              </Box>
+            ),
+        // AN OLDER RUN: its day the press, its state a Text of its own in its tone. Folded into one Button's label, Desktop
+        // drew the state in the label's colour; the narrow dock keeps both on one line, "day · state".
+        ...older.map((run, index) => (
+          <Box key={`repeating-older-${index}`} flexDirection="row" justifyContent={look.isNarrow ? 'flex-start' : 'space-between'} gap={look.isNarrow ? 0 : 1}>
+            {run.story === null
+              ? <Text key={`repeating-older-${index}-day`} color="subtle" tabular>{run.day}</Text>
+              : <Button key={runKey(run, index + 1)} label={run.day} plain onPress={() => go({ screen: 'story', story: run.story ?? 0 })} />}
+            <Text key={`repeating-older-${index}-state`} color={olderTone(run)}>{look.isNarrow ? ` · ${run.state}` : run.state}</Text>
+          </Box>
+        )),
+        <Text key="repeating-foot" color="subtle" size="footnote">{COPY.repeatingFoot}</Text>,
+        <Link key="repeating-console" href={repeating.console} label={COPY.repeatingInConsole} />,
+      ])
     }
 
     if (screen.screen === 'plan') {
@@ -3325,6 +3382,12 @@ export const register: Register = on => {
       const plans = goalsState.plans.filter(item => item.goal === screen.goal)
       const goalKey = `goal-${screen.goal}`
       const goalAct = actState(goalKey)
+      // A value an older version stored has no `repeating`: it is an ordinary goal until goal_get is read again.
+      const repeating = shownGoal?.repeating ?? null
+      // A REPEATING TASK'S SETTLED VERSION PLANS are said on its card; a version that waits stays below as an act.
+      const settledVersions = repeating === null
+        ? []
+        : plans.filter(plan => (plan.taskVersion ?? null) !== null && !plan.isProposed && plan.state !== 'rethink').sort((first, second) => first.id - second.id)
 
       if (shownGoal === null || shownGoal.goal !== screen.goal || shownGoal.phase === 'loading') {
         return (
@@ -3347,14 +3410,15 @@ export const register: Register = on => {
                   <Text color="subtle" size="footnote">{shownGoal.meta}</Text>
                 </Box>
               )}
-          {shownGoal.phase === 'ok' && cardOf('goal-stories', COPY.goalStories, <Text color="subtle" size="footnote" tabular>{String(shownGoal.stories.length)}</Text>, [
+          {shownGoal.phase === 'ok' && repeating !== null && repeatingCard(repeating, settledVersions)}
+          {shownGoal.phase === 'ok' && repeating === null && cardOf('goal-stories', COPY.goalStories, <Text color="subtle" size="footnote" tabular>{String(shownGoal.stories.length)}</Text>, [
             shownGoal.stories.length === 0 ? quiet(elements, COPY.noGoalStories) : null,
             ...shownGoal.stories.map(item =>
               rowOf({ key: `goal-story-${item.id}`, kind: COPY.kindStory, title: item.title, detail: item.state, onPress: () => go({ screen: 'story', story: item.id }) })),
           ])}
           {questions.length > 0 && cardOf('goal-questions', headingOf(COPY.goalQuestionsHeading, questions.length, 'text'), null, questions.map(item =>
             rowOf({ key: `goal-question-${item.id}`, kind: COPY.kindQuestion, kindTone: 'warning', title: firstLine(item.text), onPress: () => go({ screen: 'question', question: item.id }) })), 'wait')}
-          {plans.map(plan =>
+          {plans.filter(plan => !settledVersions.includes(plan)).map(plan =>
             rowOf({ key: `goal-plan-${plan.id}`, kind: COPY.kindPlan, title: COPY.plan(plan.id), detail: plan.stateText, detailTone: plan.isProposed ? 'warning' : 'subtle', onPress: () => go({ screen: 'plan', plan: plan.id }) }))}
           {/* THE GOAL'S ACT (S27): Drop goal… asks once more, saying what it withdraws and what keeps running. */}
           {shownGoal.phase === 'ok' && shownGoal.isOpen && goalAct.open !== 'goal_drop' && (
