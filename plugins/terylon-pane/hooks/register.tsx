@@ -87,6 +87,7 @@ import {
   verifiedIds,
   waitingItems,
 } from './queue'
+import type { Zone } from './queue'
 import {
   CATCH_UP_AFTER_MS,
   CATCH_UP_MOST_EVENTS,
@@ -110,7 +111,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.10.2'
+export const MOD_VERSION = '1.10.3'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -377,7 +378,7 @@ function zoneOffset(now: number): number {
   return new Date(now).getTimezoneOffset()
 }
 
-function healthOf(current: PaneSnapshot, offset: number): Health {
+function healthOf(current: PaneSnapshot, offset: Zone): Health {
   return {
     connection: current.connection,
     failingSince: current.failingSince === null ? null : clock(new Date(current.failingSince).toISOString(), offset),
@@ -421,7 +422,7 @@ async function watchEvents($: EngineInterface): Promise<void> {
 async function showHealth($: EngineInterface): Promise<void> {
   const current = await readSnapshot($)
 
-  $.ui.status(healthLine(healthOf(current, zoneOffset(await $.clock.now()))))
+  $.ui.status(healthLine(healthOf(current, zoneOffset)))
 }
 
 async function failed($: EngineInterface, answered: TerylonAnswer, tool: string, now: number): Promise<void> {
@@ -476,7 +477,7 @@ async function refresh($: EngineInterface): Promise<boolean> {
   const notices = await callTerylon($, 'notices_list')
   const previous = await readSnapshot($)
   const alerts = notices.kind === 'ok' ? alertCount(notices.value) : previous.alerts
-  const alertNotices = notices.kind === 'ok' ? alertItems(notices.value, now, zoneOffset(now)) : previous.alertNotices
+  const alertNotices = notices.kind === 'ok' ? alertItems(notices.value, now, zoneOffset) : previous.alertNotices
 
   if (policy === null) {
     const answered = await callTerylon($, 'policy_get')
@@ -493,7 +494,7 @@ async function refresh($: EngineInterface): Promise<boolean> {
   }
 
   const base = await baseUrl($)
-  const offset = zoneOffset(now)
+  const offset = zoneOffset
   const running = runningItems(lastFlight, offset, verifiedIds(lastBriefing))
   const inFlight = new Set(running.map(item => item.story))
   const paused = pausedOf((lastBriefing.leader ?? null) as Json | null, lastFlight.paused === true, offset)
@@ -1021,12 +1022,12 @@ async function openStory($: EngineInterface, id: number): Promise<void> {
   const question = (await readSnapshot($)).questions.find(item => item.subject === `story/${id}`) ?? null
 
   if (answered.kind !== 'ok' && Object.keys(inFlight).length === 0) {
-    await update($, story, (): PaneStory | null => ({ ...storyView(id, {}, {}, null, now, zoneOffset(now)), phase: 'error', sentence: why(answered) }))
+    await update($, story, (): PaneStory | null => ({ ...storyView(id, {}, {}, null, now, zoneOffset), phase: 'error', sentence: why(answered) }))
     return
   }
 
   const document = settledStory(answered.kind === 'ok' ? answered.value : {}, id, now)
-  const view_ = storyView(id, document, inFlight, question, now, zoneOffset(now))
+  const view_ = storyView(id, document, inFlight, question, now, zoneOffset)
   await update($, story, (): PaneStory | null => view_)
 
   // A RUNNING STORY OPENS ON "NOW WORKING" (S32): the pane moves the least that shows it, and not at all when it shows.
@@ -1046,7 +1047,7 @@ async function readFlight($: EngineInterface, now: number): Promise<void> {
 
   lastFlight = flight.value
 
-  const running = runningItems(lastFlight, zoneOffset(now), verifiedIds(lastBriefing))
+  const running = runningItems(lastFlight, zoneOffset, verifiedIds(lastBriefing))
 
   await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({
     ...EMPTY_SNAPSHOT,
@@ -1267,7 +1268,7 @@ async function openGoal($: EngineInterface, id: number): Promise<void> {
   const document = answered.value
   const now = await $.clock.now()
   const state = settledState(`goal-${id}`, String(document.state ?? ''), now)
-  const repeating = repeatingOf({ ...document, id }, await baseUrl($), now, zoneOffset(now))
+  const repeating = repeatingOf({ ...document, id }, await baseUrl($), now, zoneOffset)
 
   await update($, goal, (): PaneGoal | null => ({
     goal: id,
@@ -1307,7 +1308,7 @@ async function readBellFromTerylon($: EngineInterface): Promise<void> {
   const now = await $.clock.now()
 
   await update($, bell, (): PaneBell =>
-    bellView(notices.value, leader.kind === 'ok' ? leader.value : null, metrics.kind === 'ok' ? metrics.value : null, now, zoneOffset(now)))
+    bellView(notices.value, leader.kind === 'ok' ? leader.value : null, metrics.kind === 'ok' ? metrics.value : null, now, zoneOffset))
 }
 
 // A notice marked handled from the Bell tab (#360): notice_handle is a write the owner decided is not a gate, so
@@ -1628,7 +1629,7 @@ async function openMemory($: EngineInterface): Promise<void> {
 
   const now = await $.clock.now()
 
-  await update($, memory, (current: PaneMemory): PaneMemory => ({ ...current, phase: 'ok', files, rules, pending: list(answered.value.proposals).length, proposals: proposalItems(answered.value, zoneOffset(now)), edit: null, sentence: null }))
+  await update($, memory, (current: PaneMemory): PaneMemory => ({ ...current, phase: 'ok', files, rules, pending: list(answered.value.proposals).length, proposals: proposalItems(answered.value, zoneOffset), edit: null, sentence: null }))
 }
 
 // A MEMORY EDIT IS A PROPOSAL: memory_propose, then the owner confirms it in the console's memory gate.
@@ -1955,7 +1956,7 @@ export const register: Register = on => {
 
     const current = await readSnapshot($)
     const now = await $.clock.now()
-    const offset = zoneOffset(now)
+    const offset = zoneOffset
     const stuck = current.running.filter(item => item.isStuck).length
     // THE BAND IS UNCHANGED BUT FOR ITS DIGITS (S32): tabular, so a count that moves at a poll does not shift the row.
     const pair = (name: string, value: string, color: 'inactive' | 'warning' | 'suggestion') => [
@@ -2040,7 +2041,7 @@ export const register: Register = on => {
     const shown = await read($, open)
     const now = await $.clock.now()
     const base = await baseUrl($)
-    const offset = zoneOffset(now)
+    const offset = zoneOffset
     const at = (moment: number | null) => (typeof moment !== 'number' || !Number.isFinite(moment) ? '?' : clock(new Date(moment).toISOString(), offset) ?? '?')
     // WHAT THE OWNER LEFT OUT to find the part Desktop does not draw (TERYLON_PANE_STATUS); unset, nothing is.
     const drawingAsked = statusDrawingOf(await $.env.get('TERYLON_PANE_STATUS'))

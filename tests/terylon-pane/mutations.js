@@ -900,6 +900,18 @@ const MUTATIONS = [
         find: "onPress={() => go({ screen: 'story', story: newest.story ?? 0 })}",
         replace: "onPress={() => undefined}",
     },
+    {
+        name: "one offset for every run: a run is drawn in today's offset",
+        file: "hooks/queue.ts",
+        find: "  // EACH MOMENT IN ITS OWN OFFSET: a run from before a change of clocks keeps its hour, and today is today's.\n  const local = new Date(at - offsetAt(zone, at) * 60000)\n",
+        replace: "  // EACH MOMENT IN ITS OWN OFFSET: a run from before a change of clocks keeps its hour, and today is today's.\n  const local = new Date(at - offsetAt(zone, now) * 60000)\n",
+    },
+    {
+        name: "one offset for every time: clock draws a moment in the offset of no moment of its own",
+        file: "hooks/queue.ts",
+        find: "  const date = new Date(moment - offsetAt(zone, moment) * 60000)\n",
+        replace: "  const date = new Date(moment - offsetAt(zone, Date.parse('2026-10-28T21:00:00Z')) * 60000)\n",
+    },
 ];
 
 module.exports = { MUTATIONS };

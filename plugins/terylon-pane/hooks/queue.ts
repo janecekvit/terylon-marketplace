@@ -74,14 +74,25 @@ export function firstLine(value: string): string {
   return value.split('\n')[0]?.trim() ?? ''
 }
 
-export function clock(iso: unknown, zoneOffsetMinutes = 0): string | null {
+// THE HOST'S OFFSET FROM UTC, in minutes: a fixed one, or the offset at each moment. A moment is drawn in its own
+// offset, so a time from before a change of clocks keeps the hour it had, not today's.
+export type Zone = number | ((moment: number) => number)
+
+export function offsetAt(zone: Zone, moment: number): number {
+  const offset = typeof zone === 'function' ? zone(moment) : zone
+
+  return Number.isFinite(offset) ? offset : 0
+}
+
+export function clock(iso: unknown, zone: Zone = 0): string | null {
   const at = text(iso)
 
   if (at === null) {
     return null
   }
 
-  const date = new Date(Date.parse(at) - zoneOffsetMinutes * 60000)
+  const moment = Date.parse(at)
+  const date = new Date(moment - offsetAt(zone, moment) * 60000)
 
   if (Number.isNaN(date.getTime())) {
     return null
@@ -91,18 +102,18 @@ export function clock(iso: unknown, zoneOffsetMinutes = 0): string | null {
 }
 
 // "14:20" today, "11. 10." on another day: when a notice was raised, in the host's own time zone.
-export function when(iso: unknown, now: number, zoneOffsetMinutes = 0): string {
+export function when(iso: unknown, now: number, zone: Zone = 0): string {
   const at = Date.parse(String(iso ?? ''))
 
   if (Number.isNaN(at)) {
     return ''
   }
 
-  const local = new Date(at - zoneOffsetMinutes * 60000)
-  const today = new Date(now - zoneOffsetMinutes * 60000)
+  const local = new Date(at - offsetAt(zone, at) * 60000)
+  const today = new Date(now - offsetAt(zone, now) * 60000)
 
   if (local.toISOString().slice(0, 10) === today.toISOString().slice(0, 10)) {
-    return clock(iso, zoneOffsetMinutes) ?? ''
+    return clock(iso, zone) ?? ''
   }
 
   return `${local.getUTCDate()}. ${local.getUTCMonth() + 1}.`
@@ -275,7 +286,7 @@ export function verifiedIds(briefing: Json): ReadonlySet<number> {
   return new Set(list(briefing.storiesVerified).map(story => number(story.id)).filter((id): id is number => id !== null))
 }
 
-export function runningItems(flight: Json, zoneOffsetMinutes = 0, waiting: ReadonlySet<number> = new Set()): PaneRunningItem[] {
+export function runningItems(flight: Json, zone: Zone = 0, waiting: ReadonlySet<number> = new Set()): PaneRunningItem[] {
   return list(flight.stories).filter(story => !NOT_RUNNING_STATES.has(String(story.state ?? '')) && !waiting.has(number(story.id) ?? -1)).map(story => {
     const progress = (story.progress ?? null) as Json | null
     const step = number(progress?.step)
@@ -288,7 +299,7 @@ export function runningItems(flight: Json, zoneOffsetMinutes = 0, waiting: Reado
     const now = phases.findIndex(phase => phase.status === 'now')
     // THE PHASE OF EIGHT the row is at (the S32 canvas: "5/8 · $2.10"), else the step, as 1.1.2 said it.
     const where = stuck !== null
-      ? COPY.stuckSince(clock(stuck.since, zoneOffsetMinutes) ?? '?')
+      ? COPY.stuckSince(clock(stuck.since, zone) ?? '?')
       : isVerifying
         ? COPY.verifying
         : now >= 0
@@ -333,20 +344,20 @@ export function queuedItems(stories: Json[], inFlight: ReadonlySet<number>, hasF
     })
 }
 
-export function doneTodayItems(stories: Json[], now: number, zoneOffsetMinutes = 0): PaneDoneItem[] {
-  const today = new Date(now - zoneOffsetMinutes * 60000).toISOString().slice(0, 10)
+export function doneTodayItems(stories: Json[], now: number, zone: Zone = 0): PaneDoneItem[] {
+  const today = new Date(now - offsetAt(zone, now) * 60000).toISOString().slice(0, 10)
 
   return stories
     .filter(story => ENDED_STATES.has(String(story.state ?? '')))
     .filter(story => {
       const at = Date.parse(String(story.updatedAt ?? ''))
 
-      return !Number.isNaN(at) && new Date(at - zoneOffsetMinutes * 60000).toISOString().slice(0, 10) === today
+      return !Number.isNaN(at) && new Date(at - offsetAt(zone, at) * 60000).toISOString().slice(0, 10) === today
     })
     .map(story => ({
       story: number(story.id) ?? 0,
       title: `#${number(story.id) ?? 0} ${text(story.title) ?? ''}`.trim(),
-      detail: COPY.mergedAt(clock(story.updatedAt, zoneOffsetMinutes) ?? '?', money(story.costUsd)),
+      detail: COPY.mergedAt(clock(story.updatedAt, zone) ?? '?', money(story.costUsd)),
       isAccepted: isAcceptedStory(story),
     }))
 }
@@ -371,11 +382,11 @@ export function header(flight: Json, policy: Json | null): string {
 }
 
 // The leader's kill switch, from leader_status or the briefing's copy of it: { at, source, reason } or null.
-export function pausedOf(leader: Json | null, isFlightPaused: boolean, zoneOffsetMinutes = 0): { since: string | null; reason: string | null } | null {
+export function pausedOf(leader: Json | null, isFlightPaused: boolean, zone: Zone = 0): { since: string | null; reason: string | null } | null {
   const paused = (leader?.paused ?? null) as Json | boolean | null
 
   if (paused !== null && typeof paused === 'object') {
-    return { since: clock(paused.at, zoneOffsetMinutes), reason: text(paused.reason) }
+    return { since: clock(paused.at, zone), reason: text(paused.reason) }
   }
 
   return paused === true || isFlightPaused ? { since: null, reason: null } : null
@@ -525,7 +536,7 @@ function blockedSpan(timeline: Json[], since: number, now: number): number {
   return blockedFrom === null ? total : total + Math.max(0, now - blockedFrom)
 }
 
-export function storyView(id: number, document: Json, inFlight: Json, question: PaneQuestionItem | null, now: number, zoneOffsetMinutes = 0): PaneStory {
+export function storyView(id: number, document: Json, inFlight: Json, question: PaneQuestionItem | null, now: number, zone: Zone = 0): PaneStory {
   const state = String(inFlight.state ?? document.state ?? '')
   const progress = progressOf(inFlight, document)
   const step = number(progress?.step)
@@ -547,7 +558,7 @@ export function storyView(id: number, document: Json, inFlight: Json, question: 
   const timeline: PaneEvent[] = list(document.timeline)
     .slice()
     .reverse()
-    .map(event => ({ time: when(event.at, now, zoneOffsetMinutes), actor: text(event.actor) ?? '', summary: text(event.summary) ?? text(event.type) ?? '' }))
+    .map(event => ({ time: when(event.at, now, zone), actor: text(event.actor) ?? '', summary: text(event.summary) ?? text(event.type) ?? '' }))
   const tone: PaneStory['stateTone'] = state === 'verified' || state === 'merged' || state === 'accepted'
     ? 'success'
     : state === 'blocked' || inFlight.stuck != null
@@ -581,7 +592,7 @@ export function storyView(id: number, document: Json, inFlight: Json, question: 
       ? null
       : {
           commit: (text(verdict.commit) ?? '').slice(0, 7),
-          at: clock(verdict.at, zoneOffsetMinutes),
+          at: clock(verdict.at, zone),
           isGreen: verdict.green === true,
           checks: list(verdict.checks).map(check => ({ name: text(check.name) ?? '', isPass: check.result === 'pass', detail: text(check.detail) ?? '' })),
         },
@@ -804,15 +815,16 @@ function afterPlaces(story: Json, ids: readonly (number | null)[]): number[] {
 
 // "Today 05:00" on the local day of `now`, "27 Oct 05:00" on another, in the host's own time zone; "?" for a time
 // that cannot be read, so nothing undefined or NaN reaches the drawing.
-export function runDay(iso: unknown, now: number, zoneOffsetMinutes = 0): string {
+export function runDay(iso: unknown, now: number, zone: Zone = 0): string {
   const at = Date.parse(String(iso ?? ''))
 
-  if (!Number.isFinite(at) || !Number.isFinite(now) || !Number.isFinite(zoneOffsetMinutes)) {
+  if (!Number.isFinite(at) || !Number.isFinite(now)) {
     return '?'
   }
 
-  const local = new Date(at - zoneOffsetMinutes * 60000)
-  const today = new Date(now - zoneOffsetMinutes * 60000)
+  // EACH MOMENT IN ITS OWN OFFSET: a run from before a change of clocks keeps its hour, and today is today's.
+  const local = new Date(at - offsetAt(zone, at) * 60000)
+  const today = new Date(now - offsetAt(zone, now) * 60000)
   const time = `${String(local.getUTCHours()).padStart(2, '0')}:${String(local.getUTCMinutes()).padStart(2, '0')}`
 
   if (local.toISOString().slice(0, 10) === today.toISOString().slice(0, 10)) {
@@ -853,7 +865,7 @@ function fileName(value: unknown): string | null {
 
 // A REPEATING TASK'S GOAL (Terylon S43), from goal_get's `repeating`: null when the goal is not one. Every field is
 // read tolerantly: a missing or odd-typed one draws less, never throws.
-export function repeatingOf(goal: Json, base: string, now: number, zoneOffsetMinutes = 0): PaneRepeating | null {
+export function repeatingOf(goal: Json, base: string, now: number, zone: Zone = 0): PaneRepeating | null {
   const repeating = goal.repeating
 
   if (repeating === null || typeof repeating !== 'object' || Array.isArray(repeating)) {
@@ -884,7 +896,7 @@ export function repeatingOf(goal: Json, base: string, now: number, zoneOffsetMin
 
       return {
         story: number(run.story),
-        day: runDay(run.startedAt, now, zoneOffsetMinutes),
+        day: runDay(run.startedAt, now, zone),
         ...runStateOf(run.state),
         line: [...files, ...(cost === null ? [] : [`$${money(cost)}`])].join(' · '),
       }
@@ -932,7 +944,7 @@ export function planItems(plans: Json, base: string): PanePlan[] {
   })
 }
 
-function noticeOf(notice: Json, now: number, zoneOffsetMinutes: number): PaneNotice {
+function noticeOf(notice: Json, now: number, zone: Zone): PaneNotice {
   const link = text(notice.link)
 
   return {
@@ -940,14 +952,14 @@ function noticeOf(notice: Json, now: number, zoneOffsetMinutes: number): PaneNot
     source: text(notice.source) ?? '',
     title: text(notice.title) ?? '',
     body: text(notice.body) ?? '',
-    when: when(notice.raisedAt, now, zoneOffsetMinutes),
+    when: when(notice.raisedAt, now, zone),
     link: link !== null && link.startsWith('/') ? link : null,
   }
 }
 
 // The alerts among the bell's notices, for the Status tab: each with its body, which says what to do.
-export function alertItems(notices: Json, now: number, zoneOffsetMinutes = 0): PaneNotice[] {
-  return list(notices.notices).filter(isAlert).map(notice => noticeOf(notice, now, zoneOffsetMinutes))
+export function alertItems(notices: Json, now: number, zone: Zone = 0): PaneNotice[] {
+  return list(notices.notices).filter(isAlert).map(notice => noticeOf(notice, now, zone))
 }
 
 // The newest handled notice of each key (a backup, a production deploy), so one that repeats shows once.
@@ -969,9 +981,9 @@ function lastOfEachKey(notices: Json[]): Json[] {
     })
 }
 
-export function bellView(notices: Json, leader: Json | null, metrics: Json | null, now: number, zoneOffsetMinutes = 0): PaneBell {
+export function bellView(notices: Json, leader: Json | null, metrics: Json | null, now: number, zone: Zone = 0): PaneBell {
   const all = list(notices.notices)
-  const paused = pausedOf(leader, false, zoneOffsetMinutes)
+  const paused = pausedOf(leader, false, zone)
   const rows: { value: string; label: string }[] = metrics === null
     ? []
     : [
@@ -985,8 +997,8 @@ export function bellView(notices: Json, leader: Json | null, metrics: Json | nul
     phase: 'ok',
     sentence: null,
     unhandledCount: number(notices.unhandled) ?? all.filter(notice => notice.handledAt == null).length,
-    unhandled: all.filter(notice => notice.handledAt == null).map(notice => noticeOf(notice, now, zoneOffsetMinutes)),
-    handled: lastOfEachKey(all.filter(notice => notice.handledAt != null)).slice(0, HANDLED_SHOWN).map(notice => noticeOf(notice, now, zoneOffsetMinutes)),
+    unhandled: all.filter(notice => notice.handledAt == null).map(notice => noticeOf(notice, now, zone)),
+    handled: lastOfEachKey(all.filter(notice => notice.handledAt != null)).slice(0, HANDLED_SHOWN).map(notice => noticeOf(notice, now, zone)),
     leader: paused === null ? { isPaused: false, text: COPY.leaderRuns } : { isPaused: true, text: COPY.leaderPaused(paused.since, paused.reason) },
     metrics: rows,
     handling: null,
@@ -997,7 +1009,7 @@ export function bellView(notices: Json, leader: Json | null, metrics: Json | nul
 // THE MEMORY'S PROPOSALS (S27), as memory_get lists them on Terylon main aaf07e8: the pending ones only, each with its
 // operations (several for a consolidation), why, and who proposed it. `by` is "web:<login>" for the owner and "brain"
 // for the leader: the pane keeps only which of the two, never the login.
-export function proposalItems(memory: Json, zoneOffsetMinutes = 0): PaneProposal[] {
+export function proposalItems(memory: Json, zone: Zone = 0): PaneProposal[] {
   return list(memory.proposals).map(proposal => {
     const by = text(proposal.by) ?? ''
     const subject = /^story\/(\d+)$/.exec(text(proposal.subject) ?? '')
@@ -1014,7 +1026,7 @@ export function proposalItems(memory: Json, zoneOffsetMinutes = 0): PaneProposal
       why: text(proposal.why),
       by: by.startsWith('web:') || by === 'owner' ? 'owner' : 'leader',
       story: subject === null ? number(proposal.story) : Number(subject[1]),
-      at: clock(proposal.at, zoneOffsetMinutes),
+      at: clock(proposal.at, zone),
     }
   })
 }
