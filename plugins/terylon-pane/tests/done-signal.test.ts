@@ -358,7 +358,7 @@ test('A PART OF THE STATUS TAB THAT THROWS is one problem with its reason and st
     expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Slots') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Policy') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.9') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.10') })).toBeDefined()
     await ui.unmount()
   }
   expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith("terylon-pane: the Status tab's alerts did not draw: "))).toBe(true)
@@ -449,7 +449,7 @@ test('TERYLON_PANE_STATUS=minimal draws the Status tab as plain lines alone: no 
     await ui.press({ key: 'tab-status' })
     expect(await ui.find({ type: 'Text', text: exact('Agentic OS: ok') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Problems: 0') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.9') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.10') })).toBeDefined()
     expect(await ui.findAll({ type: 'Svg' })).toEqual([])
     expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeUndefined()
     expect((await ui.findAll({ type: 'Button' })).every(button => String(button.key).startsWith('tab-'))).toBe(true)
@@ -629,4 +629,44 @@ test('the store file is read from a refusal on Windows or POSIX, and a refusal t
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'tab-status' })
   expect(await ui.find({ type: 'Text', text: /Delete the pane's store file: ~\/\.claude\/plugins\/store\/terylon-pane_terylon-\*\.json\./ })).toBeDefined()
+})
+
+// STORY 129 AS IT HAPPENED: a list story the owner accepted, its verified and its accepted move in one read.
+test('VERIFIED THEN ACCEPTED BY THE OWNER IN ONE READ: the accepted line alone, never the Accept ask', async ($, on) => {
+  const terylon = world(on, { store: { lastSeq: 2481, lastSeenAt: Date.parse('2026-10-11T21:59:00Z') } })
+  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), Number(args.since) >= 2483 ? [] : [
+    { ...storyMoved(2482, 129, 'TEST S43: owner accept', 'verified'), pullRequest: null },
+    { ...storyMoved(2483, 129, 'TEST S43: owner accept', 'merged', 'accepted'), pullRequest: null },
+  ])
+  terylon.answers.story_get = { id: 129, goal: 36, title: 'TEST S43: owner accept', state: 'merged', target: 'list', timeline: [] }
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  expect(terylon.prompts).toEqual(['Story #129 „TEST S43: owner accept“ je přijatá bez merge. Shrň mi, s čím byla přijata.'])
+})
+
+test('AFTER ACCEPT PRESSED IN THE PANE, its verified move asks nothing, though story_get still says verified or does not answer', async ($, on) => {
+  const terylon = world(on)
+  withListStory(terylon)
+  terylon.answers.story_accept = { accepted: true, sentence: "Story 352's result is accepted.", commandId: 'c4', subjectId: 352 }
+  let moved: Record<string, unknown>[] = []
+  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), moved.filter(event => Number(event.seq) > Number(args.since)), 18100)
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'accept-352' })
+  await ui.press({ key: 'open-story-352' })
+  await ui.press({ key: 'act-story-352-accept' })
+
+  // Terylon's read lags: the verified move comes after the press, and story_get still answers verified.
+  moved = [listMoved(18101)]
+  await terylon.clock.advance(30000)
+  expect(terylon.prompts.filter(prompt => prompt.includes('čeká na moje přijetí'))).toEqual([])
+
+  // And where story_get does not answer at all.
+  terylon.answers.story_get = undefined as never
+  moved = [...moved, listMoved(18102)]
+  await terylon.clock.advance(30000)
+  expect(terylon.prompts.filter(prompt => prompt.includes('čeká na moje přijetí'))).toEqual([])
 })

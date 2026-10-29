@@ -107,7 +107,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.9.9'
+export const MOD_VERSION = '1.9.10'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -717,26 +717,30 @@ async function readEvents($: EngineInterface, since: number, most: number): Prom
 async function postSignals($: EngineInterface, candidates: Candidate[]): Promise<void> {
   const done = await signalled($)
   const signals: Signal[] = []
+  const now = await $.clock.now()
 
   for (const candidate of coalesce(candidates)) {
     const answered = await callTerylon($, 'story_get', { story: candidate.story })
-    const story = answered.kind === 'ok' ? answered.value : null
-    const settled = settleCandidate(candidate, story)
+    // AN ACCEPT PRESSED IN THE PANE stands over a story_get that lags, or that did not answer.
+    const story = answered.kind === 'ok'
+      ? settledStory(answered.value, candidate.story, now)
+      : settled.has(`story-${candidate.story}`) ? settledStory({ id: candidate.story, state: 'verified' }, candidate.story, now) : null
+    const settled_ = settleCandidate(candidate, story)
 
-    if (settled === null) {
+    if (settled_ === null) {
       debug($, `not posting ${candidate.story}:${candidate.kind}: the story is ${text(story?.state) ?? 'moved on'} now`)
       continue
     }
 
-    const verdict = settled.kind === 'verified' && story !== null ? verdictOf(story) : null
-    const key = signalKey(settled, verdict)
+    const verdict = settled_.kind === 'verified' && story !== null ? verdictOf(story) : null
+    const key = signalKey(settled_, verdict)
 
     if (done.includes(key)) {
       continue
     }
 
     done.push(key)
-    signals.push(signalFor(settled, verdict))
+    signals.push(signalFor(settled_, verdict))
   }
 
   if (signals.length === 0) {

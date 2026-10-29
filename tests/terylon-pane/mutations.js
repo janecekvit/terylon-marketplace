@@ -819,8 +819,8 @@ const MUTATIONS = [
     {
         name: "a signal is posted without reading the story again, asking for an Accept already given",
         file: "hooks/register.tsx",
-        find: "    const settled = settleCandidate(candidate, story)\n",
-        replace: "    const settled: Candidate | null = candidate\n",
+        find: "    const settled_ = settleCandidate(candidate, story)\n",
+        replace: "    const settled_: Candidate | null = candidate\n",
     },
     {
         name: "a blocked or verified story under a dropped goal asks the owner again",
@@ -851,6 +851,12 @@ const MUTATIONS = [
         file: "hooks/register.tsx",
         find: "<Text color=\"subtle\" size=\"footnote\">{COPY.reason(plainLine(problem, REASON_WHOLE))}</Text>",
         replace: "<Text color=\"subtle\" size=\"footnote\" wrap=\"truncate-end\">{COPY.reason(plainLine(problem, REASON_WHOLE))}</Text>",
+    },
+    {
+        name: "an Accept pressed in the pane no longer stands over a story_get that lags",
+        file: "hooks/register.tsx",
+        find: "      ? settledStory(answered.value, candidate.story, now)\n      : settled.has(`story-${candidate.story}`) ? settledStory({ id: candidate.story, state: 'verified' }, candidate.story, now) : null\n",
+        replace: "      ? answered.value\n      : null\n",
     },
 ];
 
