@@ -5,7 +5,7 @@ description: >-
   PR, associates the work items it belongs to, fills the description via write-pr-description, and
   can add reviewers and set auto-complete. Triggers on phrasings like "create a PR", "open a pull
   request", "raise a PR for this branch", "PR for this work item". Optional flags --auto and --dry-run.
-allowed-tools: Bash(git *), Read, Grep, Glob, Write, Bash(gh *), mcp__ado__*
+allowed-tools: Bash(git *) Read Grep Glob Write Bash(gh *) mcp__ado__*
 ---
 
 # create-pr
@@ -263,22 +263,7 @@ Read the pull request back rather than trusting the write's response, and read t
 
 Only when `--auto-complete` was passed, and only after a **typed confirmation in the same turn**. **Never under `--auto`.** On a PR that already satisfies its policies this merges the branch immediately — treat it as a merge, not as scheduling.
 
-Refuse unless all hold, re-checked immediately before the write:
-
-- the pull request is **active and not a draft** — a draft runs no policies, so auto-merge on a draft is a landmine that fires on publish
-- it is **mergeable** — conflicts block it
-- auto-merge is **not already set** by someone else
-
-**Read those three the way `forge-ops` documents them, never from their English names.** One forge returns them as numbers and the other as words, so a gate written against `"active"` matches nothing on the numeric side and passes everything through. This is the likeliest way for this step to silently do nothing.
-
-Then the `set-auto-merge` operation, with the strategy, whether to delete the source branch, and whether merging should transition the linked items.
-
-- **Completion options may be sent whole.** Anything a human previously chose and you omit is reset. Read the current options first and echo them back.
-- **Decide the item transition explicitly.** Where it defaults to on, merging advances every linked item on the board — a side effect outside git that the human must consent to.
-- **Never send a policy-bypass reason.** It is the API equivalent of overriding branch policies, a permission-gated human decision. If asked, refuse and point at the forge's own interface.
-- Pick a strategy the target branch's policy actually allows — a merge-commit strategy against a squash-only policy sits un-merged forever.
-
-**The write's response cannot confirm this**, because it may strip the very fields it set. Read the pull request back and report what you observed. The same applies to *cancelling* auto-merge: if the setting survives the read-back, say the cancel did not take.
+**Refuse unless the pull request is active and not a draft, is mergeable, and has no auto-merge set by someone else**, re-checked immediately before the write. Before setting it, read [`references/auto-complete.md`](references/auto-complete.md): how to read those three conditions, the completion options, the item transition, the strategy and how the result is read back.
 
 ### 11. Report
 
@@ -307,24 +292,8 @@ This skill reads the local history and may push (step 3, with permission). It ne
 
 ## Common mistakes
 
-- **Assuming a ref shape** — one forge wants full `refs/heads/<branch>` names and the other bare ones, so normalise to what `forge-ops` asks for rather than to what you remember. The stripping rule belongs to diff building, not here.
-- **Assembling an identifier by hand** — the link operation wants what `resolve-repo-id` returned, and one forge rejects the names every neighbouring call accepts.
-- **Validating candidate items in one batch** — where the forge nulls the whole batch on one unknown id, the good ones tell you nothing.
-- **Trusting a number because it resolves** — PR ids and work-item ids collide. Run the plausibility gate.
-- **Reporting auto-complete or a reviewer as set from the write response** — the response is trimmed. Read the PR back.
-- **Creating the PR before the branch is pushed** — the server builds it from the remote ref.
-- **Writing the description here** — it belongs to `write-pr-description`, along with the budget that keeps the forge's character cap from rejecting the call.
-- **Issuing a platform call without loading `forge-ops` first** — every schema is `additionalProperties: false`, so a stale parameter name rejects the whole call.
-- **Deriving the base from repo metadata instead of the detected integration branch** — the chain is `--base` → `origin/HEAD` → first of `main` / `master` / `develop`, matching `write-pr-description`. Any other rule makes the two disagree about what the PR is diffed against.
+The mistakes this skill has been seen to make, each with its correction, are in [`references/common-mistakes.md`](references/common-mistakes.md). Read it before step 7.
 
 ## Verification
 
-1. `/create-pr --dry-run` on a branch named `feat/<id>-<slug>` with two or more commits. Expect the forge reported in one line, the item detected from the branch name at high confidence, a description from `write-pr-description`, and **no writes of any kind**.
-2. Same on a branch whose name carries a *pull request* id. Expect the candidate demoted by the plausibility gate and **not** auto-selected, with the reason named.
-3. `/create-pr` on an unpushed branch. Expect a stop at step 3 asking permission to push — no PR, and no push under `--auto`.
-4. `/create-pr` on a branch that already has an active PR. Expect top-up mode: no second PR, only the missing pieces filled, each reported.
-5. `/create-pr --reviewers=<colleague>`. Expect a confirmation before the add; afterwards the read-back shows `isRequired` **absent** and the chat says "optional".
-6. `/create-pr --auto-complete=squash --auto`. Expect creation and association to proceed while auto-complete still stops for a typed confirmation.
-7. `/create-pr --auto-complete` on a draft PR. Expect refusal naming `isDraft` as the reason.
-
-> **See also:** `write-pr-description` for the body, `review-pr` for the review pass, `address-pr-comments` for the inbound direction.
+The manual checks a maintainer runs after changing this skill are in [`references/verification.md`](references/verification.md). They are not needed to run it.

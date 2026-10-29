@@ -1,7 +1,7 @@
 ---
 name: briefing
-description: "Use when the owner asks what is new in Terylon, what waits on them, or how the leader stands — plans at the gate, verified stories waiting for their merge, open questions, blocked stories, a paused leader."
-allowed-tools: mcp__plugin_terylon-os_terylon__*, mcp__terylon__*
+description: "Use when the owner asks what is new in Terylon, what waits on them, or how the leader stands — plans at the gate, verified stories waiting for their merge, open questions, blocked stories, a paused leader. Reads Terylon's briefing, says in a few lines what waits on the owner and offers the one next act that matters most."
+allowed-tools: mcp__plugin_terylon-os_terylon__* mcp__terylon__*
 ---
 
 # briefing — what waits on the owner

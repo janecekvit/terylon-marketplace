@@ -5,7 +5,7 @@ description: >-
   isolated git worktree on a new branch (Terylon `feat/<name>` convention, project-local
   `.claude/worktrees/`), or detects existing isolation / native worktree tooling first. Self-contained;
   pure git, no external dependencies.
-allowed-tools: Bash(git *), Read, Grep, Glob
+allowed-tools: Bash(git *) Read Grep Glob
 ---
 
 # create-workspace

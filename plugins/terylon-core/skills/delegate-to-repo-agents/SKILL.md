@@ -5,7 +5,7 @@ description: >-
   in a target repository that ships its own agents — a stack-specific implementer, a domain reviewer,
   a framework specialist. Covers how to discover them, when delegating beats doing the work yourself,
   and the rules a delegating persona must not break. Loaded by name by the personas; not a user command.
-allowed-tools: Read, Grep, Glob
+allowed-tools: Read Grep Glob
 ---
 
 # delegate-to-repo-agents

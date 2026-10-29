@@ -275,12 +275,25 @@ test("Azure DevOps carries every key; GitHub declares exactly planning, estimate
     assert.deepStrictEqual(notCarried(declaredKeys(GITHUB_REFERENCE)), ["planning", "estimate", "priority"]);
 });
 
+// A skill's own reference files, which it reads as part of its instructions.
+function referenceFiles(skill)
+{
+    const directory = path.join(path.dirname(skill), "references");
+
+    if (!fileSystem.existsSync(directory))
+    {
+        return [];
+    }
+
+    return fileSystem.readdirSync(directory).filter((name) => name.endsWith(".md")).map((name) => path.join(directory, name));
+}
+
 test("neither authoring skill names a platform field, an MCP tool or a gh subcommand", () =>
 {
     for (const skill of AUTHORING_SKILLS)
     {
-        const body = withoutFrontmatter(readText(skill));
-        const lines = body.split("\n").filter((line) => PLATFORM_NAME_PATTERN.test(line));
+        const texts = [withoutFrontmatter(readText(skill)), ...referenceFiles(skill).map(readText)];
+        const lines = texts.join("\n").split("\n").filter((line) => PLATFORM_NAME_PATTERN.test(line));
 
         assert.deepStrictEqual(lines, [], `${path.basename(path.dirname(skill))} names platform specifics`);
     }

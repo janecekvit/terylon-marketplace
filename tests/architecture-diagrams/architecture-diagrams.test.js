@@ -1,6 +1,6 @@
-// The architecture diagrams (#36): each is a Mermaid flowchart with the ELK layout, written in the Markdown that owns it,
-// every flowchart follows the adaptive style of .claude/rules/markdown.md (no theme of its own, so GitHub's light and dark
-// themes both draw it), and the plugin graph in the root README.md draws exactly the edges every plugin.json#dependencies declares.
+// The architecture diagrams: each is a Mermaid flowchart with the ELK layout, written in the Markdown that owns it, every
+// flowchart follows the adaptive style of .claude/rules/markdown.md (no theme of its own, so GitHub's light and dark themes
+// both draw it), and the plugin graph in the root README.md draws exactly the edges every plugin.json#dependencies declares.
 // Whether a block parses is checked by hand with mermaid-cli; no job here starts a browser.
 "use strict";
 
@@ -17,8 +17,12 @@ const PLUGINS_DIRECTORY = path.join(REPOSITORY_ROOT, "plugins");
 // A fenced Mermaid block: its body, up to the closing fence.
 const MERMAID_BLOCK = /^```mermaid\n([\s\S]*?)^```$/gm;
 
-// The front matter every flowchart opens with, exactly: the ELK layout and the padding that keeps labels off the border.
-const ELK_FRONT_MATTER = /^---\nconfig:\n  layout: elk\n  flowchart:\n    padding: 16\n---\n/;
+// How every flowchart opens, exactly: the keyword first, because Azure DevOps renders a block only when it starts with it,
+// then the init directive asking for the ELK layout and the padding that keeps labels off the border.
+const ELK_OPENING = /^flowchart (TD|TB|BT|LR|RL)\n%%\{init: \{"layout": "elk", "flowchart": \{"padding": 16\}\}\}%%\n/;
+
+// YAML front matter at the top of a block, which Azure DevOps does not render.
+const FRONT_MATTER = /^---\n/;
 
 // What a flowchart must never set: a theme of its own stops GitHub switching it between light and dark, and a font
 // family is measured in one font and drawn in another, which clips the labels.
@@ -199,12 +203,24 @@ test("every Mermaid block in docs/architecture and the README's plugin graph is 
     }
 });
 
-test("every flowchart in README.md and docs/ opens with the ELK front matter, sets no theme, theme variables or font, and holds no HTML", () =>
+function documentedMermaidBlocks()
 {
     const files = [path.join(REPOSITORY_ROOT, "README.md")].concat(markdownFilesUnder(DOCS_DIRECTORY));
-    const flowcharts = files
-        .flatMap((filePath) => mermaidBlocksOf(filePath).map((block) => ({ filePath, block })))
-        .filter((entry) => /^flowchart /m.test(entry.block));
+
+    return files.flatMap((filePath) => mermaidBlocksOf(filePath).map((block) => ({ filePath, block })));
+}
+
+test("no Mermaid block in README.md or docs/ opens with front matter", () =>
+{
+    for (const { filePath, block } of documentedMermaidBlocks())
+    {
+        assert.doesNotMatch(block, FRONT_MATTER, `${path.relative(REPOSITORY_ROOT, filePath)}: a block opens with front matter; open it with the keyword`);
+    }
+});
+
+test("every flowchart in README.md and docs/ opens with its keyword and the ELK init directive, sets no theme, theme variables or font, and holds no HTML", () =>
+{
+    const flowcharts = documentedMermaidBlocks().filter((entry) => /^flowchart /m.test(entry.block));
 
     assert.ok(flowcharts.length >= 5, `expected at least the five flowcharts, found ${flowcharts.length}`);
 
@@ -212,9 +228,26 @@ test("every flowchart in README.md and docs/ opens with the ELK front matter, se
     {
         const where = path.relative(REPOSITORY_ROOT, filePath);
 
-        assert.match(block, ELK_FRONT_MATTER, `${where}: a flowchart lacks the exact front matter:\n${block.slice(0, 200)}`);
+        assert.match(block, ELK_OPENING, `${where}: a flowchart does not open with its keyword and the exact init directive:\n${block.slice(0, 200)}`);
         assert.doesNotMatch(block, FORBIDDEN_SETTINGS, `${where}: a flowchart sets a theme, theme variables or a font family`);
         assert.doesNotMatch(block, HTML_IN_BLOCK, `${where}: a flowchart holds HTML; break a label's line with a Markdown string`);
+    }
+});
+
+// A subgraph's id, and a style line naming one with its title colour and its dashed stroke.
+const SUBGRAPH = /^\s*subgraph (\w+)/gm;
+const DASHED_SUBGRAPH_STYLE = /^\s*style (\w+) [^\n]*\bcolor:#[0-9A-Fa-f]{6}\b[^\n]*\bstroke-dasharray:3 3/gm;
+
+test("every subgraph has a style that sets its title colour and a dashed stroke", () =>
+{
+    for (const { filePath, block } of documentedMermaidBlocks())
+    {
+        const styled = new Set([...block.matchAll(DASHED_SUBGRAPH_STYLE)].map((match) => match[1]));
+
+        for (const [, subgraph] of block.matchAll(SUBGRAPH))
+        {
+            assert.ok(styled.has(subgraph), `${path.relative(REPOSITORY_ROOT, filePath)}: subgraph ${subgraph} has no style with an explicit color: and stroke-dasharray:3 3; its title vanishes on a dark preview`);
+        }
     }
 });
 
@@ -269,4 +302,15 @@ test("the title check catches the colours that were unreadable in dark mode", ()
     const violatedBoundaries = new Set(titleContrastViolations(before).map((violation) => violation.split(":")[0]));
 
     assert.deepEqual([...violatedBoundaries].sort(), ["adapters", "outside", "port", "roles", "session", "terylon"]);
+});
+
+test("the opening check has teeth: front matter, a late keyword or a missing directive is refused", () =>
+{
+    const directive = "%%{init: {\"layout\": \"elk\", \"flowchart\": {\"padding\": 16}}}%%";
+
+    assert.match(`flowchart TD\n${directive}\n    a --> b\n`, ELK_OPENING);
+    assert.match("---\nconfig:\n  layout: elk\n---\nflowchart TD\n", FRONT_MATTER);
+    assert.doesNotMatch("---\nconfig:\n  layout: elk\n---\nflowchart TD\n", ELK_OPENING);
+    assert.doesNotMatch(`%% a comment first\nflowchart TD\n${directive}\n`, ELK_OPENING);
+    assert.doesNotMatch("flowchart TD\n    a --> b\n", ELK_OPENING);
 });

@@ -8,7 +8,7 @@ description: >-
   an interruption costs one step instead of the whole run, and reports the session id, the worktree
   and the branch. Not for work this session should do itself, however long that work is, and not for
   a task with no step boundary to commit on. Optional flags --auto and --dry-run.
-allowed-tools: Bash(claude *), Bash(git *), Read, Grep, Glob, AskUserQuestion
+allowed-tools: Bash(claude *) Bash(git *) Read Grep Glob AskUserQuestion
 ---
 
 # background-run
@@ -191,4 +191,4 @@ Both exist because of the same 2026-08-25 test, and neither replaces the other.
 
 ## Verification
 
-What has been measured against the real tooling, and what has not, is recorded in `VERIFICATION.md` beside this file. Read it before repeating any claim above as established.
+What has been measured against the real tooling, and what has not, is recorded in [`references/verification.md`](references/verification.md). Read it before repeating any claim above as established.

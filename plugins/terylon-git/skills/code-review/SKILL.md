@@ -6,7 +6,7 @@ description: >-
   run before pushing or opening a PR. Triggers on phrasings like "review my
   changes", "review my branch", "code review", "review the diff", "review
   before push".
-allowed-tools: Bash(git *), Read, Grep, Glob
+allowed-tools: Bash(git *) Read Grep Glob
 ---
 
 # Review Diff

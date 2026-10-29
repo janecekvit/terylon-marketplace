@@ -4,7 +4,7 @@ description: >-
   Use when another Terylon skill needs Azure DevOps MCP mechanics — URL/ID parsing,
   repo-id resolution, PR/work-item metadata, diffs, threads/comments, eligibility,
   and the ADO posting conventions. Internal mechanics library for other skills, not a user command.
-allowed-tools: Read, Grep, Glob, Bash(git *), mcp__ado__*
+allowed-tools: Read Grep Glob Bash(git *) mcp__ado__*
 ---
 
 # forge-ops — Azure DevOps MCP engine
@@ -16,7 +16,7 @@ This skill is a **mechanics library rather than a user command**. Its normal cal
 The single source of truth is the reference document:
 
 ```
-${CLAUDE_PLUGIN_ROOT}/skills/forge-ops/references/forge-ops.md
+${CLAUDE_SKILL_DIR}/references/forge-ops.md
 ```
 
 ## What it owns vs. what it does NOT own
