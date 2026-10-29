@@ -112,7 +112,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.11.7'
+export const MOD_VERSION = '1.11.8'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -981,13 +981,14 @@ async function isSignaller($: EngineInterface, now: number): Promise<boolean> {
   return true
 }
 
-// This session's id for the lease; one the engine does not give is made here, unique enough on one machine.
-async function sessionIdOf($: EngineInterface): Promise<string> {
+// This session's id for the lease; one the engine does not give is its start and its directory, which no other
+// session on the machine shares at the same millisecond.
+async function sessionIdOf($: EngineInterface, cwd: string): Promise<string> {
   try {
     return await $.session.id()
   } catch {
-    // An engine without session.id still needs a name no other session takes.
-    return `session-${await $.clock.now()}-${Math.random().toString(36).slice(2)}`
+    // An engine without session.id still needs a name: it is no secret, only told apart from another session's.
+    return `session-${await $.clock.now()}-${cwd}`
   }
 }
 
@@ -2158,7 +2159,7 @@ export const register: Register = on => {
     await $.command.register({ name: 'terylon-memory', description: "Opens the Terylon pane on the leader's memory; an edit is confirmed in the console" })
     storyTargets.clear()
     isInteractiveSession = e.isInteractive
-    sessionId = await sessionIdOf($)
+    sessionId = await sessionIdOf($, e.cwd)
     const startedAt = await $.clock.now()
     await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, eventsWatchedSince: startedAt }))
     await showHealth($)
