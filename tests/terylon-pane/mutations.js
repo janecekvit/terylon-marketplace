@@ -795,8 +795,8 @@ const MUTATIONS = [
     {
         name: "the Status tab lights ⚠ for a part TERYLON_PANE_STATUS leaves out",
         file: "hooks/register.tsx",
-        find: "(!off.has('events') && (current.events !== null || isEventsSilent(current)))",
-        replace: "(current.events !== null || isEventsSilent(current))",
+        find: "(!off.has('events') && (current.events !== null || isEventsSilent(current) || current.signallerMissingSince !== null))",
+        replace: "(current.events !== null || isEventsSilent(current) || current.signallerMissingSince !== null)",
     },
     {
         name: "Diagnostics no longer says the done-signal's state as plain text",
@@ -1020,7 +1020,7 @@ const MUTATIONS = [
     {
         name: "a session no person is at posts the done-signal",
         file: "hooks/register.tsx",
-        find: "  if (!isInteractiveSession) {\n",
+        find: "  if (isUnattended && !isOwners) {\n",
         replace: "  if (false) {\n",
     },
     {
@@ -1032,8 +1032,38 @@ const MUTATIONS = [
     {
         name: "the owner's typing no longer moves the lease",
         file: "hooks/register.tsx",
-        find: "    if (e.origin.kind === 'composer' || e.origin.kind === 'bridge') {\n",
+        find: "    if (e.origin?.kind === 'composer' || e.origin?.kind === 'bridge') {\n",
         replace: "    if (false) {\n",
+    },
+    {
+        name: "taking an empty lease requires a typed turn again",
+        file: "hooks/register.tsx",
+        find: "  const mayTake = isMine || !isLive || isTyped",
+        replace: "  const mayTake = isMine || (!isLive && typedAt !== null) || isTyped",
+    },
+    {
+        name: "an empty or lapsed lease is no longer taken",
+        file: "hooks/register.tsx",
+        find: "  const mayTake = isMine || !isLive || isTyped",
+        replace: "  const mayTake = isMine || isTyped",
+    },
+    {
+        name: "no session posting the done-signal is hidden from the Status tab",
+        file: "hooks/register.tsx",
+        find: "isShown('events') ? signallerCard : null, ",
+        replace: "",
+    },
+    {
+        name: "the lease is taken without reading it back",
+        file: "hooks/register.tsx",
+        find: "  if (holder !== null && holder.session !== sessionId) {\n",
+        replace: "  if (false) {\n",
+    },
+    {
+        name: "a session that names no isInteractive is taken for one nobody is at",
+        file: "hooks/register.tsx",
+        find: "    isUnattended = e.isInteractive === false && (e.surface === null || e.surface === undefined)\n",
+        replace: "    isUnattended = e.isInteractive !== true\n",
     },
 ];
 

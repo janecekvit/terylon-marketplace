@@ -187,3 +187,91 @@ test('A STORE THAT REFUSES keeps no lease: a session the owner neither sees nor 
   expect(terylon.prompts).toEqual([])
   expect(await diagnosticsLine($, 'signaller: none')).toBe(true)
 })
+
+// The engine beneath the pane's turn hooks: a turn starts with its id and ends with its answer.
+function turns(on: On): void {
+  on('turn.start', async ($, e) => ({ turnId: e.turnId }))
+  on('turn.complete', async ($, e) => ({ text: e.answer }))
+}
+
+// What Desktop's 2.1.309 starts a session with: its directory, and no isInteractive or surface at all.
+const DESKTOP_2_1_309 = { cwd: '/work' } as never
+
+test("LIVENESS, the owner's machine as it stood: a store of the old shape and a session that names no isInteractive takes the lease at its first tick, reads the events and writes the store", async ($, on) => {
+  const kept = machine(on, { lastSeq: 2887, lastSeenAt: WORLD_NOW - 60000, epoch: '' })
+  const terylon = world(on, { store: null })
+  const log = movingTerylon(terylon)
+  await $.session.start(DESKTOP_2_1_309)
+  await terylon.clock.settle()
+
+  expect(leaseIn(kept)?.session).toBe(THIS)
+  expect(eventsCalls(terylon)).toBeGreaterThanOrEqual(1)
+  expect(kept.has('epoch')).toBe(false)
+  expect(kept.get('lastSeenAt')).toBe(WORLD_NOW)
+
+  log.moved = [storyMoved(2888, 327, 'Events since the last look', 'verified')]
+  await terylon.clock.advance(30000)
+  expect(terylon.prompts.filter(prompt => prompt.startsWith('Story #327'))).toHaveLength(1)
+})
+
+test('COMPARE AND SET: where another session took the same empty lease in the same tick and its write stuck, this one does not signal', async ($, on) => {
+  const kept = new Map<string, unknown>(Object.entries(SEEN))
+  on('session.id', async () => ({ value: THIS }) as never)
+  on('store.get', async ($_, e) => ({ value: kept.get(e.key) }) as never)
+  on('store.set', async ($_, e) => {
+    // The other session's write of the lease lands right after this one's.
+    kept.set(e.key, e.key === 'signaller' ? { ...(e.value as Lease), session: OTHER } : e.value)
+    return { value: undefined } as never
+  })
+  const terylon = world(on, { store: null })
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  expect(eventsCalls(terylon)).toBe(0)
+  expect(await diagnosticsLine($, /^signaller: another \(since \d\d:\d\d\)$/)).toBe(true)
+})
+
+test('EVERY SESSION BUSY: the lease is still taken with no lease to find, and the signal waits for the turn to end', async ($, on) => {
+  turns(on)
+  const kept = machine(on, SEEN)
+  const terylon = world(on, { store: null })
+  const log = movingTerylon(terylon)
+  await $.turn.start({ text: 'something else', turnId: 't1' })
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+  expect(leaseIn(kept)?.session).toBe(THIS)
+
+  log.moved = [storyMoved(18101, 327, 'Events since the last look', 'verified')]
+  await terylon.clock.advance(30000)
+  expect(eventsCalls(terylon)).toBeGreaterThanOrEqual(2)
+  expect(terylon.prompts).toEqual([])
+  expect(terylon.toasts).toEqual(['Terylon: #327 verified, waiting for merge'])
+
+  await $.turn.complete({ answer: '', durationMs: 1000, isAborted: false, reason: 'answer', turnId: 't1' })
+  await terylon.clock.settle()
+  expect(terylon.prompts).toHaveLength(1)
+})
+
+test('NO SIGNALLER FOR LONGER THAN A LEASE is a problem on the Status tab with its steps, never a quiet none', async ($, on) => {
+  on('store.get', async () => ({ deny: 'EACCES: permission denied' }) as never)
+  on('store.set', async () => ({ deny: 'EACCES: permission denied' }) as never)
+  const terylon = world(on, { store: null })
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  // Nobody has seen this session yet, and the store keeps no lease: no session signals.
+  await terylon.clock.advance(30000)
+  await terylon.clock.advance(30000)
+  await terylon.clock.advance(30000)
+  await terylon.clock.advance(30000)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'tab-status' })
+  expect(await ui.find({ type: 'Text', text: exact('⚠ No session is posting the done-signal') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^1\. Type in the Claude session you work in/ })).toBeDefined()
+
+  // The owner looking at this session makes it the signaller at its next tick, and the problem goes.
+  await terylon.clock.advance(30000)
+  await terylon.clock.advance(10000)
+  expect(await ui.find({ type: 'Text', text: exact('⚠ No session is posting the done-signal') })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: exact('signaller: this session') })).toBeDefined()
+})

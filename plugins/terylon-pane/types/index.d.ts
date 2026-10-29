@@ -83,6 +83,8 @@ export type PaneSnapshot = {
   // WHO POSTS THE DONE-SIGNAL on this machine: this session, another that holds the lease since when, or none.
   signaller: 'this' | 'another' | 'none'
   signallerSince: number | null
+  // Since when no session has posted the done-signal, once that outlasts a lease: null while one does.
+  signallerMissingSince: number | null
 }
 
 export type PaneScreen =

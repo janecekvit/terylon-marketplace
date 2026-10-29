@@ -112,7 +112,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.11.8'
+export const MOD_VERSION = '1.11.9'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -182,6 +182,7 @@ const EMPTY_SNAPSHOT: PaneSnapshot = {
   eventsSilentSince: null,
   signaller: 'none',
   signallerSince: null,
+  signallerMissingSince: null,
 }
 
 const QUEUE: PaneScreen = { screen: 'queue' }
@@ -226,10 +227,10 @@ let policy: Json | null = null
 let lastAttemptAt = 0
 let isPolling = false
 
-// THIS SESSION, as the lease names it: its id, whether a person is at its prompt, whether its band or pane was drawn,
-// and when the owner last typed in it.
+// THIS SESSION, as the lease names it: its id, whether nobody is at it, whether its band or pane was drawn, and when
+// the owner last typed in it.
 let sessionId = ''
-let isInteractiveSession = true
+let isUnattended = false
 let isSeen = false
 let typedAt: number | null = null
 
@@ -421,7 +422,7 @@ function hasProblem(current: PaneSnapshot, off: ReadonlySet<StatusPart> = new Se
     return false
   }
 
-  return (current.connection !== 'ok' && current.connection !== 'connecting') || current.paused !== null || (!off.has('alerts') && current.alerts > 0) || (!off.has('events') && (current.events !== null || isEventsSilent(current)))
+  return (current.connection !== 'ok' && current.connection !== 'connecting') || current.paused !== null || (!off.has('alerts') && current.alerts > 0) || (!off.has('events') && (current.events !== null || isEventsSilent(current) || current.signallerMissingSince !== null))
 }
 
 // The watchdog's finding, said while the queue reads and no failure of events_since says why already.
@@ -437,8 +438,10 @@ async function watchEvents($: EngineInterface): Promise<void> {
     const since = current.eventsAnsweredAt ?? current.eventsWatchedSince
     // ANOTHER SESSION READS THE EVENTS while this one does not hold the lease: its silence is no problem.
     const silentSince = current.signaller === 'this' && since !== null && now - since > EVENTS_SILENT_MILLISECONDS ? since : null
+    // NO SESSION POSTS THE DONE-SIGNAL for longer than a lease: a problem, never a quiet "none".
+    const missingSince = current.signaller === 'none' && current.signallerSince !== null && now - current.signallerSince > LEASE_MILLISECONDS ? current.signallerSince : null
 
-    return silentSince === current.eventsSilentSince ? current : { ...EMPTY_SNAPSHOT, ...current, eventsSilentSince: silentSince }
+    return silentSince === current.eventsSilentSince && missingSince === current.signallerMissingSince ? current : { ...EMPTY_SNAPSHOT, ...current, eventsSilentSince: silentSince, signallerMissingSince: missingSince }
   })
 }
 
@@ -553,6 +556,7 @@ async function refresh($: EngineInterface): Promise<boolean> {
     eventsSilentSince: current.eventsSilentSince ?? null,
     signaller: current.signaller ?? 'none',
     signallerSince: current.signallerSince ?? null,
+    signallerMissingSince: current.signallerMissingSince ?? null,
     questions: questionItems(lastBriefing),
   }))
   await showHealth($)
@@ -926,20 +930,29 @@ function leaseOf(value: unknown): Lease | null {
   return typeof lease.session === 'string' && typeof lease.since === 'number' && typeof lease.until === 'number' ? { session: lease.session, since: lease.since, until: lease.until, seen: lease.seen === true } : null
 }
 
+// Who signals, and since when; for none, since when this session has seen no signaller at all.
 async function showSignaller($: EngineInterface, who: PaneSnapshot['signaller'], since: number | null): Promise<void> {
-  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => (current.signaller === who && current.signallerSince === since ? current : { ...EMPTY_SNAPSHOT, ...current, signaller: who, signallerSince: since }))
+  const now = await $.clock.now()
+
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => {
+    const at = who === 'none' ? (current.signaller === 'none' ? current.signallerSince ?? now : now) : since
+
+    return current.signaller === who && current.signallerSince === at ? current : { ...EMPTY_SNAPSHOT, ...current, signaller: who, signallerSince: at }
+  })
 }
 
-// WHETHER THIS SESSION POSTS THE DONE-SIGNAL: it holds the lease, renewed now, or takes it. A session no person is at
-// never does; one the owner typed in takes it, and so does one drawn where the holder never was.
+// WHETHER THIS SESSION POSTS THE DONE-SIGNAL. A machine with no live lease always gets one: any attended session takes
+// an empty or lapsed lease, and the one whose write is read back holds it. The owner's typing, or a band drawn where the
+// holder's never was, moves it; a session nobody is at never takes it.
 async function isSignaller($: EngineInterface, now: number): Promise<boolean> {
-  if (!isInteractiveSession) {
+  const isOwners = isSeen || typedAt !== null
+
+  if (isUnattended && !isOwners) {
     await showSignaller($, 'none', null)
 
     return false
   }
 
-  const isOwners = isSeen || typedAt !== null
   const answered = await storeCall($, () => $.store.get(STORE_SIGNALLER))
 
   // A STORE THAT REFUSES keeps no lease: only a session the owner sees or types in posts.
@@ -953,9 +966,11 @@ async function isSignaller($: EngineInterface, now: number): Promise<boolean> {
 
   const lease = leaseOf(answered.value)
   const isMine = lease !== null && lease.session === sessionId
-  const isTaken = !isMine && lease !== null && lease.until > now && !(typedAt !== null && typedAt > lease.since) && !(isOwners && !lease.seen)
+  const isLive = lease !== null && lease.until > now
+  const isTyped = typedAt !== null && lease !== null && typedAt > lease.since
+  const mayTake = isMine || !isLive || isTyped || (isOwners && lease !== null && !lease.seen)
 
-  if (isTaken && lease !== null) {
+  if (!mayTake && lease !== null) {
     await showSignaller($, 'another', lease.since)
 
     return false
@@ -968,6 +983,16 @@ async function isSignaller($: EngineInterface, now: number): Promise<boolean> {
     await showSignaller($, isOwners ? 'this' : 'none', null)
 
     return isOwners
+  }
+
+  // COMPARE AND SET: two sessions that took an empty lease in one tick read it back, and only the last write holds it.
+  const back = await storeCall($, () => $.store.get(STORE_SIGNALLER))
+  const holder = 'error' in back ? null : leaseOf(back.value)
+
+  if (holder !== null && holder.session !== sessionId) {
+    await showSignaller($, 'another', holder.since)
+
+    return false
   }
 
   if (!isMine) {
@@ -1151,6 +1176,7 @@ function snapshotOf(value: unknown): PaneSnapshot {
     eventsSilentSince: time(kept.eventsSilentSince),
     signaller: kept.signaller === 'this' || kept.signaller === 'another' ? kept.signaller : 'none',
     signallerSince: time(kept.signallerSince),
+    signallerMissingSince: time(kept.signallerMissingSince),
   }
 }
 
@@ -2158,7 +2184,10 @@ export const register: Register = on => {
     await $.command.register({ name: 'terylon', description: 'Opens the Terylon pane (the same as /terylon-pane)' })
     await $.command.register({ name: 'terylon-memory', description: "Opens the Terylon pane on the leader's memory; an edit is confirmed in the console" })
     storyTargets.clear()
-    isInteractiveSession = e.isInteractive
+    // UNATTENDED ONLY WHEN THE ENGINE SAYS SO TWICE: no person at the prompt and nowhere to draw, a -p run or the SDK.
+    // An engine that names neither starts a session someone is at.
+    isUnattended = e.isInteractive === false && (e.surface === null || e.surface === undefined)
+    debug($, `this session starts with isInteractive ${String(e.isInteractive)}, surface ${String(e.surface)}: ${isUnattended ? 'nobody is at it' : 'someone is at it'}`)
     sessionId = await sessionIdOf($, e.cwd)
     const startedAt = await $.clock.now()
     await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, eventsWatchedSince: startedAt }))
@@ -2174,7 +2203,7 @@ export const register: Register = on => {
   on('prompt.submit', async ($, e, next) => {
     const result = await next(e)
 
-    if (e.origin.kind === 'composer' || e.origin.kind === 'bridge') {
+    if (e.origin?.kind === 'composer' || e.origin?.kind === 'bridge') {
       typedAt = await $.clock.now()
     }
 
@@ -2650,6 +2679,13 @@ export const register: Register = on => {
                   <Link href={consoleLink(base, 'health')} label={COPY.health} />,
                   eventsRetry(),
                 ]))
+        const missingSince = current.signallerMissingSince
+        const signallerCard = await part('signaller', () => missingSince === null
+          ? null
+          : cardOf('problem-signaller', eventsTitle(COPY.signallerMissingTitle), COPY.statusSince(at(missingSince)), [
+              <Text color="inactive">{COPY.signallerMissingBody}</Text>,
+              steps(COPY.fixSignallerMissing),
+            ]))
         const isShown = (name: Parameters<typeof drawingAsked.off.has>[0]) => !drawingAsked.off.has(name)
         // THE DONE-SIGNAL'S STATE AS PLAIN TEXT, read as kept, each value with its type: a part that does draw says what
         // the events card would have drawn from.
@@ -2666,7 +2702,7 @@ export const register: Register = on => {
           COPY.diagnosticsEvents('signaller', current.signaller === 'this' ? COPY.signallerThis : current.signaller === 'another' ? COPY.signallerAnother(at(current.signallerSince)) : COPY.signallerNone),
         ]
         note($, `terylon-pane: the Status tab's done-signal: ${eventsDiagnostics.join('; ')}`)
-        const problems = [problemCard, rulesCard, isShown('events') ? eventsCard : null, pausedCard, ...(isShown('alerts') ? (Array.isArray(alertCards) ? alertCards : [alertCards]) : [])].filter(item => item !== null)
+        const problems = [problemCard, rulesCard, isShown('events') ? eventsCard : null, isShown('events') ? signallerCard : null, pausedCard, ...(isShown('alerts') ? (Array.isArray(alertCards) ? alertCards : [alertCards]) : [])].filter(item => item !== null)
         const slotsCard = await part('slots', () => cardOf('status-slots', COPY.statusSlots, COPY.statusSlotsHint, [
           look.isGraphic ? picture(elements, slotsGauge(current.slotsUsed, current.slots, true)) : null,
           <Text tabular>{COPY.statusSlotsLine(current.slotsUsed, current.slots)}</Text>,

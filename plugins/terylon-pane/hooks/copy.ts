@@ -86,6 +86,13 @@ export const COPY = {
   signallerThis: 'this session',
   signallerAnother: (since: string) => `another (since ${since})`,
   signallerNone: 'none',
+  signallerMissingTitle: 'No session is posting the done-signal',
+  signallerMissingBody: 'No open session holds the lease that lets one read Terylon\'s events and post them, so nothing that moves is told here.',
+  fixSignallerMissing: [
+    'Type in the Claude session you work in, or open the Terylon pane there: that session takes the lease within a tick.',
+    'If it stays, check that this is not a claude -p run, and see Diagnostics under signaller and store refusals.',
+    'Then run claude --debug and read the lines under terylon-pane: events:',
+  ],
   diagnosticsDebug: 'Every failure is in claude --debug under terylon-pane:',
 
   // Tabs.
