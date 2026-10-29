@@ -20,9 +20,10 @@ const MOD_ROOT = path.join(__dirname, "..", "..", "plugins", "terylon-pane");
 const RUN_TIMEOUT_MILLISECONDS = 240000;
 
 // Where the host's offset is read: the pane's zoneOffset, and the tests' hostZoneOffset beside it.
+// `parameter` names the moment each reads the offset at, for a zone whose offset changes with it.
 const OFFSET_READS = [
-    { file: "hooks/register.tsx", find: "  return new Date(now).getTimezoneOffset()\n" },
-    { file: "tests/fixtures.ts", find: "  return new Date(moment).getTimezoneOffset()\n" },
+    { file: "hooks/register.tsx", find: "  return new Date(now).getTimezoneOffset()\n", parameter: "now" },
+    { file: "tests/fixtures.ts", find: "  return new Date(moment).getTimezoneOffset()\n", parameter: "moment" },
 ];
 
 // Each zone as getTimezoneOffset gives it on the fixtures' day, 2026-10-11: minutes behind UTC, east negative.
@@ -30,6 +31,12 @@ const ZONES = [
     { name: "Europe/Prague, UTC+2 in summer time", offset: -120 },
     { name: "America/New_York, UTC-4 in summer time", offset: 240 },
     { name: "Asia/Tokyo, UTC+9", offset: -540 },
+    // Prague's own 2026 rule, summer time from 29 March to 25 October at 01:00 UTC: a moment before the change
+    // must keep its hour when it is drawn after it.
+    {
+        name: "Europe/Prague across its changes of clocks",
+        offset: moment => `(${moment} >= Date.parse('2026-03-29T01:00:00Z') && ${moment} < Date.parse('2026-10-25T01:00:00Z') ? -120 : -60)`,
+    },
 ];
 
 function skipReason()
@@ -60,8 +67,10 @@ function copyMod()
     return target;
 }
 
-function plantOffset(target, read, offset)
+function plantOffset(target, read, zoneOffset)
 {
+    const offset = typeof zoneOffset === "function" ? zoneOffset(read.parameter) : zoneOffset;
+
     const file = path.join(target, read.file);
     const text = fs.readFileSync(file, "utf8");
 

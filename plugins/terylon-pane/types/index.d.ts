@@ -205,6 +205,10 @@ export type PanePlan = {
   comment: string | null
   stories: PanePlanStory[]
   console: string
+  // A REPEATING TASK'S VERSION PLAN (Terylon S43) has no stories: approving it approves the version each later run uses.
+  // Its version, the task's title and its terms (budget, auto-accept) where Terylon sends them, else null. Absent in a
+  // value an older version stored.
+  taskVersion?: PaneTaskVersion | null
 }
 
 export type PaneGoals = {
@@ -241,7 +245,17 @@ export type PaneGoal = {
   // has not ended, stopping a run first (Terylon S35, #388), and the drop says which, by title (#35).
   isOpen: boolean
   openStories: { id: number; title: string; isRunning: boolean }[]
+  // A REPEATING TASK'S GOAL (Terylon S43): its card replaces the stories card. Absent in a value an older version stored.
+  repeating?: PaneRepeating | null
 }
+
+// One run of a repeating task, newest first: its day in the host's time zone, its state in words and that state's tone,
+// and its files with its cost. `story` is null when Terylon names none, and the run then opens nothing.
+export type PaneRepeatingRun = { story: number | null; day: string; state: string; tone: 'success' | 'warning' | 'subtle'; line: string }
+
+export type PaneRepeating = { title: string; summary: string; runs: PaneRepeatingRun[]; console: string }
+
+export type PaneTaskVersion = { version: string | null; title: string | null; terms: string | null }
 
 export type PaneNotice = { id: number; source: string; title: string; body: string; when: string; link: string | null }
 

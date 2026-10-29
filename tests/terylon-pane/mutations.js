@@ -870,6 +870,81 @@ const MUTATIONS = [
         find: "    return 'none'\n",
         replace: "    return String(value)\n",
     },
+    {
+        name: "the repeating card no longer replaces the stories card",
+        file: "hooks/register.tsx",
+        find: "repeating === null && cardOf('goal-stories'",
+        replace: "cardOf('goal-stories'",
+    },
+    {
+        name: "the summary says green runs accept themselves whatever autoAccept says",
+        file: "hooks/queue.ts",
+        find: "    terms.autoAccept === true ? COPY.repeatingAcceptsItself : COPY.repeatingWaitsForYou,\n",
+        replace: "    COPY.repeatingAcceptsItself,\n",
+    },
+    {
+        name: "the summary no longer says a repeating task is paused",
+        file: "hooks/queue.ts",
+        find: "    text(document.paused) === null && document.paused !== true ? null : COPY.repeatingPaused,\n",
+        replace: "",
+    },
+    {
+        name: "a run's unknown state is drawn as it came, not as running",
+        file: "hooks/queue.ts",
+        find: "    default:\n      return { state: COPY.runRunning, tone: 'subtle' }\n",
+        replace: "    default:\n      return { state: String(state), tone: 'subtle' }\n",
+    },
+    {
+        name: "the newest run's link opens nothing",
+        file: "hooks/register.tsx",
+        find: "onPress={() => go({ screen: 'story', story: newest.story ?? 0 })}",
+        replace: "onPress={() => undefined}",
+    },
+    {
+        name: "one offset for every run: a run is drawn in today's offset",
+        file: "hooks/queue.ts",
+        find: "  // EACH MOMENT IN ITS OWN OFFSET: a run from before a change of clocks keeps its hour, and today is today's.\n  const local = new Date(at - offsetAt(zone, at) * 60000)\n",
+        replace: "  // EACH MOMENT IN ITS OWN OFFSET: a run from before a change of clocks keeps its hour, and today is today's.\n  const local = new Date(at - offsetAt(zone, now) * 60000)\n",
+    },
+    {
+        name: "one offset for every time: clock draws a moment in the offset of no moment of its own",
+        file: "hooks/queue.ts",
+        find: "  const date = new Date(moment - offsetAt(zone, moment) * 60000)\n",
+        replace: "  const date = new Date(moment - offsetAt(zone, Date.parse('2026-10-28T21:00:00Z')) * 60000)\n",
+    },
+    {
+        name: "a version plan waits on the Queue as 0 stories again",
+        file: "hooks/queue.ts",
+        find: "    const taskVersion = taskVersionOf(plan)\n    items.push({\n",
+        replace: "    const taskVersion = null as { version: string | null } | null\n    items.push({\n",
+    },
+    {
+        name: "a version plan's card says it starts all 0 stories again",
+        file: "hooks/register.tsx",
+        find: "      const taskVersion = plan.taskVersion ?? null\n",
+        replace: "      const taskVersion = null as { version: string | null } | null\n",
+    },
+    {
+        name: "an older run's state is folded back into its day's Button",
+        edits: [
+            {
+                file: "hooks/register.tsx",
+                find: "            <Text key={`repeating-older-${index}-state`} color={olderTone(run)}>{look.isNarrow ? ` · ${run.state}` : run.state}</Text>\n",
+                replace: "",
+            },
+            {
+                file: "hooks/register.tsx",
+                find: "label={run.day} plain onPress={() => go({ screen: 'story', story: run.story ?? 0 })} />}",
+                replace: "label={`${run.day}  ${run.state}`} plain onPress={() => go({ screen: 'story', story: run.story ?? 0 })} />}",
+            },
+        ],
+    },
+    {
+        name: "a repeating task's settled version plans are listed below its card again",
+        file: "hooks/register.tsx",
+        find: "          {plans.filter(plan => !settledVersions.includes(plan)).map(plan =>\n",
+        replace: "          {plans.map(plan =>\n",
+    },
 ];
 
 module.exports = { MUTATIONS };
