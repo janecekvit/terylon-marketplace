@@ -19,6 +19,10 @@ const WINDOWS_MAX_PATH = 260;
 // What git prints when a checkout wrote only part of the tree, and what it prints when a name is too long.
 const PARTIAL_CHECKOUT_MESSAGE = /You can inspect what was checked out|Filename too long|unable to create file .*(too long|No such file)/i;
 
+// What Claude Code prints when git checked the clone out with core.longpaths but its own move of the temporary clone
+// to its final name fails on Windows, as it does past MAX_PATH.
+const RENAME_REFUSED_MESSAGE = /EPERM[^\n]*rename[^\n]*temp_git_/i;
+
 // The temporary directory `marketplace add` clones into before renaming it: a millisecond timestamp and a six-character
 // id, longer than the final name, so the checkout reaches its deepest path there.
 const TEMPORARY_CLONE_NAME = "temp_git_0000000000000_000000..clone";
@@ -56,18 +60,30 @@ function projectedClonePathLength(cloneDirectory, trackedPath)
 }
 
 // One line naming the cause and the fix when a clone fails on a path that is too long; null for any other failure.
+// Past MAX_PATH, core.longpaths gets git's checkout through, but Claude Code's own rename of the clone is refused with
+// EPERM, which no setting here reaches: then only a shorter --out helps.
 function explainCloneFailure({ output, platform, cloneDirectory, trackedPath })
 {
-    if (platform !== "win32" || !PARTIAL_CHECKOUT_MESSAGE.test(output))
+    if (platform !== "win32")
     {
         return null;
     }
 
     const projectedLength = projectedClonePathLength(cloneDirectory, trackedPath);
+    const cause = `path too long: the clone's deepest file, ${trackedPath}, lands at ${projectedLength} characters `
+        + `under ${cloneDirectory}, past Windows' MAX_PATH of ${WINDOWS_MAX_PATH}; `;
 
-    return `path too long: the clone's deepest file, ${trackedPath}, lands at ${projectedLength} characters `
-        + `under ${cloneDirectory}, past Windows' MAX_PATH of ${WINDOWS_MAX_PATH}; `
-        + `pass a shorter --out (such as --out C:/t/e2e), or enable long paths for git (git config --global core.longpaths true)`;
+    if (PARTIAL_CHECKOUT_MESSAGE.test(output))
+    {
+        return cause + "pass a shorter --out (such as --out C:/t/e2e), or enable long paths for git (git config --global core.longpaths true)";
+    }
+
+    if (RENAME_REFUSED_MESSAGE.test(output) && projectedLength >= WINDOWS_MAX_PATH)
+    {
+        return cause + "Claude Code's move of the clone to its final name was refused (EPERM); pass a shorter --out (such as --out C:/t/e2e)";
+    }
+
+    return null;
 }
 
 module.exports =

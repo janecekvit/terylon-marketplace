@@ -74,6 +74,30 @@ test("on Windows, git's partial-checkout message is replaced by the cause and th
     assert.match(line, /core\.longpaths true/);
 });
 
+// Claude Code's words when git got through with core.longpaths but the move of its temporary clone was refused.
+const RENAME_REFUSED_OUTPUT = "Error: Failed to add marketplace. Technical details: EPERM: operation not permitted, rename 'C:\\t\\x\\plugins\\marketplaces\\temp_git_1793261153958_42id5y' -> 'C:\\t\\x\\plugins\\marketplaces\\terylon'\n";
+
+test("on Windows past MAX_PATH, Claude Code's refused rename of the clone is said as the path too long, with a shorter --out as the fix", () =>
+{
+    const cloneDirectory = "C:/Users/alice/" + "x".repeat(150) + "/clean/consumer-config/plugins/marketplaces/temp_git_0000000000000_000000..clone";
+    const trackedPath = "plugins/terylon-core/skills/measure-token-spend/scripts/measure-token-spend.test.js";
+    const line = explainCloneFailure({ output: RENAME_REFUSED_OUTPUT, platform: "win32", cloneDirectory, trackedPath });
+
+    assert.ok(line !== null);
+    assert.ok(!line.includes("\n"), "the explanation is one line");
+    assert.match(line, /^path too long: /);
+    assert.match(line, /EPERM/);
+    assert.match(line, /--out C:\/t\/e2e/);
+    assert.doesNotMatch(line, /core\.longpaths/, "long paths for git are already set and do not reach the rename");
+});
+
+test("a refused rename within MAX_PATH is not called a path too long", () =>
+{
+    const line = explainCloneFailure({ output: RENAME_REFUSED_OUTPUT, platform: "win32", cloneDirectory: "C:/t/e2e/clean/consumer-config/plugins/marketplaces/temp_git_0000000000000_000000..clone", trackedPath: "a.md" });
+
+    assert.strictEqual(line, null);
+});
+
 test("any other failure, or any other platform, keeps git's own message", () =>
 {
     const cloneDirectory = "C:/t/e2e/clean/consumer-config/plugins/marketplaces/terylon";

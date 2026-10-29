@@ -119,7 +119,7 @@ function installStage({ source, ref, workDirectory, binDirectory, mcpBase, check
 
     if (process.platform === "win32" && projectedLength >= WINDOWS_MAX_PATH)
     {
-        log(`the clone's deepest file lands at ${projectedLength} characters, past MAX_PATH; core.longpaths is set for git, and a shorter --out avoids it`);
+        log(`the clone's deepest file lands at ${projectedLength} characters, past MAX_PATH: Claude Code's move of the clone will fail; pass a shorter --out (such as --out C:/t/e2e)`);
     }
 
     const added = run("claude", ["--settings", settingsFile, "plugin", "marketplace", "add", `${source}#${ref}`], { env: environment, cwd: projectDirectory });
