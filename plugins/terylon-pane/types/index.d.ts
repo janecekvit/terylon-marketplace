@@ -30,7 +30,16 @@ export type PaneRunningItem = {
 
 export type PaneQueuedItem = { story: number; title: string; detail: string; isHeld: boolean }
 
-export type PaneDoneItem = { story: number; title: string; detail: string }
+// An ended story of today: merged over a repository, or accepted in Terylon's own list.
+export type PaneDoneItem = { story: number; title: string; detail: string; isAccepted: boolean }
+
+// WHY THE DONE-SIGNAL CANNOT RUN: events_since did not answer as the owner's, or the store that keeps the pane's place
+// refused. The kind names the fix the Status tab draws; the reason is the engine's or Terylon's own words.
+export type PaneEventsProblem = {
+  kind: 'not-allowed' | 'no-server' | 'unreachable' | 'refused' | 'store' | 'failed'
+  reason: string
+  since: number
+}
 
 export type PaneQuestionItem = {
   id: number
@@ -65,6 +74,12 @@ export type PaneSnapshot = {
   queued: PaneQueuedItem[]
   doneToday: PaneDoneItem[]
   questions: PaneQuestionItem[]
+  events: PaneEventsProblem | null
+  // THE WATCHDOG'S CLOCK: when events_since last answered, and when this session began to wait for it.
+  eventsAnsweredAt: number | null
+  eventsWatchedSince: number | null
+  // Since when events_since has not answered, once the watchdog's bound has passed: null while all is well.
+  eventsSilentSince: number | null
 }
 
 export type PaneScreen =

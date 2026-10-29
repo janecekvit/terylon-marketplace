@@ -54,10 +54,13 @@ for (const [surface, props] of [['desktop', PANE_PROPS], ['terminal', PANE_PROPS
     expect((await ui.find({ key: 'goals-show-open' }))?.props.variant).toBeUndefined()
     expect((await ui.find({ key: 'goal-1' }))?.text).toContain('Old')
     expect(await ui.find({ key: 'goal-3' })).toBeUndefined()
+    // A CLOSED GOAL'S TITLE IS DIM, by the engine's own dimming and not by a colour alone, which Desktop drew bright.
+    expect((await ui.find({ type: 'Text', text: exact('Old') }))?.props.dimColor).toBe(true)
 
     await ui.press({ key: 'goals-show-open' })
     expect(await ui.find({ key: 'goal-3' })).toBeDefined()
     expect(await ui.find({ key: 'goal-1' })).toBeUndefined()
+    expect((await ui.find({ type: 'Text', text: exact('P1 · Agentic OS') }))?.props.dimColor).toBeUndefined()
   })
 }
 

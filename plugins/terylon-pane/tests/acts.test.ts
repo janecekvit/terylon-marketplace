@@ -233,11 +233,15 @@ test('STORY, VERIFIED IN TERYLON\'S LIST: Accept, and no merge at all', async ($
   terylon.answers.story_get = (args: Record<string, unknown>) => (args.story === 352 ? STORY_LIST : STORY_327)
   terylon.answers.work_in_flight = { ...FLIGHT, stories: [...FLIGHT.stories, { id: 352, title: 'Weekly cost summary', state: 'verified', attempt: 1, progress: null, costUsd: 1.8, budgetUsd: 4 }] }
   terylon.answers.story_accept = { accepted: true, sentence: "Story 352's result is accepted.", commandId: 'c4', subjectId: 352 }
+  terylon.answers.briefing = { ...BRIEFING, storiesVerified: [...BRIEFING.storiesVerified, { id: 352, title: 'Weekly cost summary', environment: null }] }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
+  // A VERIFIED STORY IS REACHED FROM ITS WAITING ROW: work_in_flight still lists it, and Running does not draw it.
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'story-352' })
+  expect(await ui.find({ key: 'story-352' })).toBeUndefined()
+  await ui.press({ key: 'accept-352' })
+  await ui.press({ key: 'open-story-352' })
   expect((await ui.find({ key: 'act-story-352-accept' }))?.props.variant).toBe('primary')
   expect(await ui.find({ type: 'Link', text: 'Merge in the console ↗' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: exact('A list story has no merge: Accept ends it as done.') })).toBeDefined()
