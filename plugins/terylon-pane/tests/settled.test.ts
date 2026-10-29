@@ -115,3 +115,14 @@ test('a summary asks what waits for the owner only when something does', () => {
   expect(signalsSummary([told('merged', 1), told('accepted', 2)]).prompt.split('\n').at(-1)).toBe('Shrň mi to.')
   expect(signalsSummary([told('merged', 1), told('blocked', 2)]).prompt.split('\n').at(-1)).toBe('Shrň mi to a u každé, která čeká na mě, co od ní potřebuju udělat.')
 })
+
+test('WHERE story_get DOES NOT ANSWER, a read that carries verified then accepted still tells the accepted line alone', async ($, on) => {
+  const terylon = world(on, { store: SEEN })
+  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), Number(args.since) >= 18102 ? [] : [verified(18101, 125), accepted(18102, 125)])
+  terylon.answers.story_get = undefined as never
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  expect(terylon.prompts).toEqual(['Story #125 „TEST S43: sum the amounts · run 1“ je přijatá bez merge. Shrň mi, s čím byla přijata.'])
+  expect(terylon.toasts).toEqual(['Terylon: #125 accepted'])
+})
