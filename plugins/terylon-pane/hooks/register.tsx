@@ -103,7 +103,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.8.0'
+export const MOD_VERSION = '1.8.1'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -2826,8 +2826,8 @@ export const register: Register = on => {
     // THE GOALS TAB: open goals by priority, the plans, and a new goal with its priority and target.
     if (screen.screen === 'goals') {
       const isClosedShown = shown.includes('goals-closed')
-      // A CLOSED GOAL'S PLANS LEAVE THE TAB (the owner's walk of 1.5.0, #35), AND SO DOES A WITHDRAWN PLAN, which waits
-      // on nothing (#48): plans_list says `state: 'withdrawn'`. Both stay on the goal's own screen.
+      // A CLOSED GOAL'S PLANS LEAVE THE TAB, AND SO DOES A WITHDRAWN PLAN (plans_list's `state: 'withdrawn'`), which
+      // waits on nothing. Both stay on the goal's own screen.
       const openPlans = goalsState.plans.filter(plan => plan.state !== 'withdrawn' && !goalsState.closed.some(item => item.id === plan.goal))
       const goalPickers = [
         'Select' in elements ? (

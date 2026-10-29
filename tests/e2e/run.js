@@ -254,7 +254,7 @@ function main()
     const options = parseArguments(process.argv.slice(2));
 
     // Every git this process and its children start, the clone `marketplace add` makes included, may write
-    // paths past Windows' MAX_PATH (#48). Set before any child is spawned, so each inherits it.
+    // paths past Windows' MAX_PATH. Set before any child is spawned, so each inherits it.
     Object.assign(process.env, longPathGitEnvironment(process.env));
 
     if (options === null)

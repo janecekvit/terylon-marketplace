@@ -1,7 +1,7 @@
 "use strict";
 
 //
-// Unit checks for the install stage's long-path handling on Windows (#48). Run: node --test tests/e2e/long-paths.test.js
+// Unit checks for the install stage's long-path handling on Windows. Run: node --test tests/e2e/long-paths.test.js
 // Windows itself is not exercised here: these check the pure parts, and that the setting reaches a real git.
 //
 
@@ -18,7 +18,7 @@ const {
     explainCloneFailure,
 } = require("./lib/long-paths.js");
 
-// git's last words when a checkout on Windows stopped at MAX_PATH, as the 2026-10-28 round saw them.
+// git's last words when a checkout on Windows stopped at MAX_PATH.
 const PARTIAL_CHECKOUT_OUTPUT = "error: unable to create file plugins/x: Filename too long\nfatal: unable to checkout working tree\nwarning: Clone succeeded, but checkout failed.\nYou can inspect what was checked out with 'git status'\nand retry with 'git restore --source=HEAD :/'\n";
 
 test("core.longpaths is added as the first GIT_CONFIG entry when none is set", () =>

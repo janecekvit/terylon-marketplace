@@ -165,7 +165,7 @@ export const COPY = {
   retry: 'Try again',
   unreachableTitle: 'Terylon does not answer',
   unreachableWhen: (since: string) => `since ${since} · retrying every minute`,
-  // No answer yet (the pane started while Terylon was down) leaves no state to show, and says so (#48).
+  // No answer yet (the pane started while Terylon was down) leaves no state to show, and says so.
   unreachableBody: (time: string | null) =>
     time === null
       ? 'Nothing to show yet: Terylon has not answered since the pane started. Work on the homelab goes on.'
@@ -209,7 +209,7 @@ export const COPY = {
   phasesHint: (done: number, all: number) => `${done} of ${all}`,
   phaseAdmitted: 'Admitted to a slot',
   // The stepper's labels under its nodes (S32), short enough for eight columns: Admitted, then the seven stages, by
-  // the phase's own label, since a list story draws no Pull request phase (#48).
+  // the phase's own label, since a list story draws no Pull request phase.
   phaseShort: (label: string) => PHASE_SHORT[label] ?? label,
   phaseTooltip: (label: string, role: string | null, status: string, step: string | null) =>
     [label, role, status === 'now' ? 'now' : status === 'done' ? 'done' : 'to come', step].filter(part => part !== null).join(' · '),

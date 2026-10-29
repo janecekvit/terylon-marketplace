@@ -457,8 +457,7 @@ test('TWO WAITING PLANS OF ONE GOAL are both drawn, each with its own acts, and 
   expect(await ui.find({ key: 'goal-plan-42' })).toBeDefined()
 })
 
-// THE TEST ROUND OF 2026-10-28 (#48): plans 653 and 655 read "withdrawn · every story of it was abandoned" and stayed
-// on the Goals tab. A withdrawn plan waits on nothing: the tab folds it away, and its goal's own screen keeps it.
+// A WITHDRAWN PLAN waits on nothing: the Goals tab folds it away, and its goal's own screen keeps it.
 const WITHDRAWN_PLAN = { id: 653, goal: 3, goalTitle: 'Agentic OS', state: 'withdrawn', estimateUsd: 4, comment: 'every story of it was abandoned', stories: [] }
 
 test('A WITHDRAWN PLAN LEAVES THE GOALS TAB and stays on its goal\'s screen; a waiting plan of the same goal stays on both', async ($, on) => {

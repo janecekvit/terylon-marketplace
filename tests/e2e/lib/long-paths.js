@@ -1,21 +1,14 @@
 "use strict";
 
 //
-// long-paths — the install stage's clone on Windows, where a path past MAX_PATH breaks the checkout (#48).
+// long-paths — the install stage's clone on Windows, where a path past MAX_PATH breaks the checkout and git says only
+// "You can inspect what was checked out with 'git status' …".
 //
-//   claude plugin marketplace add   clones into <out>/<pass>/consumer-config/plugins/marketplaces/temp_git_<ms>_<id>..clone/
-//                                   first, then renames it to terylon/ (measured 2026-10-29 on 2.1.312, with a git wrapper)
-//   + the longest tracked path      83 characters on 2026-10-28
-//   = past 260 characters           git checks out nothing past the limit, and says only
-//                                   "You can inspect what was checked out with 'git status' …"
-//
-// Two answers, both here:
 //   longPathGitEnvironment    core.longpaths=true for every git the harness's children start, through
-//                             GIT_CONFIG_COUNT/KEY/VALUE, which git reads from the environment (2.31 and later)
-//                             and the clone `marketplace add` makes inherits (measured 2026-10-29 on 2.1.312: Claude
-//                             Code appends 38 entries of its own to the count, and core.longpaths still reads true
-//                             in its clone); git outside Windows ignores the setting
+//                             GIT_CONFIG_COUNT/KEY/VALUE, which the clone `marketplace add` makes inherits
 //   explainCloneFailure       when the clone still fails, one line naming the cause and the fix instead of git's
+//
+// How the clone was measured to inherit the setting, and where it checks out: CLAUDE.md, under Testing.
 //
 
 const path = require("path");

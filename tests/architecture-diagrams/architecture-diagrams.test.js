@@ -38,7 +38,7 @@ const EDGE = /^\s*(\w+)\s+(-->|-\.->)(?:\|"[^"]*"\|)?\s+(\w+)\s*$/gm;
 // semi-transparent fill, over the page.
 const SUBGRAPH_STYLE = /^\s*style (\w+) (.*)$/gm;
 
-// GitHub's two page backgrounds, light and dark: a boundary's title is drawn on both, since no flowchart sets a theme (#48).
+// GitHub's two page backgrounds, light and dark: a boundary's title is drawn on both, since no flowchart sets a theme.
 const PAGE_BACKGROUNDS = ["#ffffff", "#0d1117"];
 
 // The contrast a boundary's title must reach on its tinted fill over each page background. No single colour reaches 4.5:1 on
@@ -255,9 +255,9 @@ test("every boundary's title reads on its tinted fill over both GitHub backgroun
     assert.deepEqual(violations, []);
 });
 
-test("the title check catches the colours that were unreadable in dark mode (#48)", () =>
+test("the title check catches the colours that were unreadable in dark mode", () =>
 {
-    // The boundaries as they stood before #48: each title in its layer's own colour.
+    // Each title in its layer's own colour, as the boundaries were drawn before the title colours.
     const before = [
         "    style adapters fill:#0478571A,stroke:#047857,color:#047857",
         "    style roles fill:#4F46E51A,stroke:#4F46E5,color:#4F46E5",

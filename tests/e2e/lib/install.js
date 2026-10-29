@@ -112,7 +112,7 @@ function installStage({ source, ref, workDirectory, binDirectory, mcpBase, check
     log(`installing ${source}#${ref} into ${configDirectory}`);
 
     // The deepest file the clone writes, estimated from this checkout's tracked paths: on Windows, said up front
-    // when it passes MAX_PATH, and named instead of git's message when the clone fails on it (#48).
+    // when it passes MAX_PATH, and named instead of git's message when the clone fails on it.
     const cloneDirectory = marketplaceCloneDirectory(configDirectory);
     const trackedPath = longestTrackedPath(run("git", ["ls-files"], { cwd: REPOSITORY_ROOT }).stdout.split("\n"));
     const projectedLength = projectedClonePathLength(cloneDirectory, trackedPath);

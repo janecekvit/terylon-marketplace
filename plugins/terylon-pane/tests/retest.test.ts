@@ -166,7 +166,7 @@ test('A VERIFIED LIST STORY\'S CARD SAYS ACCEPT IN ITS STEPPER: the last phase i
   expect((await pictures(ui)).some(picture => /Merge/.test(picture.source) || /Merge/.test(picture.alt))).toBe(false)
 })
 
-test('A LIST STORY\'S PHASES HAVE NO PULL REQUEST: verdict, then Accept; a repository story keeps its Pull req. (#48)', async ($, on) => {
+test('A LIST STORY\'S PHASES HAVE NO PULL REQUEST: verdict, then Accept; a repository story keeps its Pull req.', async ($, on) => {
   const terylon = world(on)
   withListStory(terylon)
   await $.session.start(SESSION)

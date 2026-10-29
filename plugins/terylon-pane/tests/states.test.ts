@@ -52,7 +52,7 @@ test('frame G: unreachable keeps the last state, says it is stale and why, and r
   expect(terylon.calls.length).toBeGreaterThan(before)
 })
 
-test('unreachable before the first answer says there is nothing to show yet, never a "?" for the time (#48)', async ($, on) => {
+test('unreachable before the first answer says there is nothing to show yet, never a "?" for the time', async ($, on) => {
   const terylon = world(on)
   terylon.mode.server = 'down'
   await $.session.start(SESSION)
