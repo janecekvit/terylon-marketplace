@@ -206,11 +206,13 @@ export const COPY = {
   ],
   eventsStoreTitle: 'The pane cannot keep its place',
   eventsStoreBody:
-    "Claude Code's store for the pane refused, where it keeps the last event it read and the stories it told. The pane goes on from memory for this session; a story verified while Claude Desktop was closed is not told when it opens again.",
-  fixEventsStore: [
-    'Check that your Claude Code configuration folder (~/.claude) is writable.',
-    'Restart Claude Desktop.',
-    'If it stays, run claude --debug and read the lines under terylon-pane: events:',
+    "Claude Code's store for the pane refused, where it keeps the last event it read and the stories it told. The pane goes on from memory for this session; a story verified while Claude Desktop was closed is not told when it opens again. A store file that cannot be read, such as one cut short while Desktop was closing, is neither read nor written again until it is deleted.",
+  // Where the pane's store file is when the refusal names none: every user's own, so never a path of anyone's.
+  storeFilePattern: '~/.claude/plugins/store/terylon-pane_terylon-*.json',
+  fixEventsStore: (file: string) => [
+    `Delete the pane's store file: ${file}. It holds only where the pane last looked and the signals it told, so nothing that matters is lost.`,
+    "Restart Claude Desktop: the pane reads Terylon's newest event and goes on from there.",
+    'If the card comes back, check that your Claude Code configuration folder (~/.claude) is writable, then run claude --debug and read the lines under terylon-pane: events:',
   ],
   eventsSilentTitle: 'The done-signal hears nothing',
   eventsSilentBody: (seconds: number, last: string | null) =>

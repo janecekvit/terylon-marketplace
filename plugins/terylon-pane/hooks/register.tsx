@@ -44,7 +44,7 @@ import type {
 import { COPY } from './copy'
 import { CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, NARROW_COLUMNS, STEPPER_COLUMNS, dots, meter, phaseGlyph, planChain, planOrder, proofsOf, segments, slotsGauge, spendBar, splitHash, stepper } from './drawing'
 import type { Picture, Proofs } from './drawing'
-import { ALERT_SOURCES, alertCount, checkTree, healthLine, plainLine, stateWord, statusDrawingOf, treeLine, typedLine } from './health'
+import { ALERT_SOURCES, REASON_WHOLE, alertCount, checkTree, healthLine, plainLine, stateWord, statusDrawingOf, storeFileOf, treeLine, typedLine } from './health'
 import type { Health, StatusPart } from './health'
 import { MISSING_SERVER, NEEDS_TEXT, NOT_ALLOWED, SERVER_CANDIDATES, TEXT_LIMITS, actArguments, allowRules, assertPaneTool, isSendable, readResult } from './terylon'
 import type { TerylonAnswer } from './terylon'
@@ -107,7 +107,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.9.8'
+export const MOD_VERSION = '1.9.9'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -2187,7 +2187,8 @@ export const register: Register = on => {
     // A FAULT OF THE MACHINE, for a bell row's chip: an alert source, or a notice the Status tab counts as an alert.
     const isMachineFault = (notice: { id: number; source: string }) => ALERT_SOURCES.includes(notice.source) || current.alertNotices.some(alert => alert.id === notice.id)
     // A REASON IS ONE CLEAN LINE, whatever it was handed: no control character, no page of text, never an object.
-    const reason = (problem: unknown) => (problem === null || problem === undefined ? null : <Text color="subtle" size="footnote" wrap="truncate-end">{COPY.reason(plainLine(problem))}</Text>)
+    // Wrapped, not cut: a store's refusal ends in the file that is the fix.
+    const reason = (problem: unknown) => (problem === null || problem === undefined ? null : <Text color="subtle" size="footnote">{COPY.reason(plainLine(problem, REASON_WHOLE))}</Text>)
     const retry = <Button key="retry" label={COPY.retry} variant="primary" onPress={() => tick($, true)} />
     const steps = (lines: readonly string[]) => (
       <Box flexDirection="column">
@@ -2326,7 +2327,7 @@ export const register: Register = on => {
               ? cardOf('problem-events', eventsTitle(COPY.eventsStoreTitle), COPY.statusSince(at(events.since)), [
                   <Text color="inactive">{COPY.eventsStoreBody}</Text>,
                   reason(events.reason),
-                  steps(COPY.fixEventsStore),
+                  steps(COPY.fixEventsStore(storeFileOf(events.reason) ?? COPY.storeFilePattern)),
                   eventsRetry(),
                 ])
               : cardOf('problem-events', eventsTitle(COPY.eventsStoppedTitle), COPY.statusSince(at(events.since)), [
@@ -2344,7 +2345,7 @@ export const register: Register = on => {
         const eventsDiagnostics = [
           COPY.diagnosticsEvents('events', rawEvents === null || typeof rawEvents !== 'object' ? typedLine(rawEvents) : typedLine(rawEvents.kind)),
           COPY.diagnosticsEvents('since', typedLine(rawEvents?.since)),
-          COPY.diagnosticsEvents('reason', typedLine(rawEvents?.reason)),
+          COPY.diagnosticsEvents('reason', typedLine(rawEvents?.reason, REASON_WHOLE)),
           COPY.diagnosticsEvents('answeredAt', typedLine(raw.eventsAnsweredAt)),
           COPY.diagnosticsEvents('watchedSince', typedLine(raw.eventsWatchedSince)),
           COPY.diagnosticsEvents('silentSince', typedLine(raw.eventsSilentSince)),

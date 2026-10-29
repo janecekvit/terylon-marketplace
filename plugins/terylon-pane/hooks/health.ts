@@ -145,12 +145,23 @@ export function plainLine(value: unknown, longest = REASON_LONGEST): string {
 }
 
 // A value as Diagnostics names it, its type first: a time kept by an earlier version reads `string 2026-…`, not `?`.
-export function typedLine(value: unknown): string {
+export function typedLine(value: unknown, longest = 80): string {
   if (value === null || value === undefined) {
     return String(value)
   }
 
-  return `${typeof value} ${plainLine(typeof value === 'object' ? JSON.stringify(value) : value, 80)}`
+  return `${typeof value} ${plainLine(typeof value === 'object' ? JSON.stringify(value) : value, longest)}`
+}
+
+// The longest reason drawn whole, wrapped: a store's refusal names its file, and the path is the fix.
+export const REASON_WHOLE = 1000
+
+// A store file a refusal names: a Windows path or an absolute POSIX one, up to its `.json`.
+const STORE_FILE = /([A-Za-z]:[\\/][^:*?"<>|\r\n]*?\.json|\/[^\s:*?"<>|]*?\.json)/
+
+// THE PANE'S STORE FILE, as the host's refusal names it, or null where it names none.
+export function storeFileOf(reason: string): string | null {
+  return STORE_FILE.exec(reason)?.[1] ?? null
 }
 
 // The check in one line for the debug log and the pane's own log.

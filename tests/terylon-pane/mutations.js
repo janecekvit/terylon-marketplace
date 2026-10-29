@@ -834,6 +834,24 @@ const MUTATIONS = [
         find: "  const posted = signals.length === 1 ? { prompt: signals[0]?.prompt ?? '', toast: signals[0]?.toast ?? '' } : signalsSummary(signals)\n",
         replace: "  for (const signal of signals.slice(1)) {\n    await $.prompt.submit({ text: signal.prompt })\n  }\n  const posted = { prompt: signals[0]?.prompt ?? '', toast: signals[0]?.toast ?? '' }\n",
     },
+    {
+        name: "the store card no longer says to delete the torn store file",
+        file: "hooks/copy.ts",
+        find: "    `Delete the pane's store file: ${file}. It holds only",
+        replace: "    `Check the pane's store file: ${file}. It holds only",
+    },
+    {
+        name: "the store card no longer names the file the refusal names",
+        file: "hooks/register.tsx",
+        find: "steps(COPY.fixEventsStore(storeFileOf(events.reason) ?? COPY.storeFilePattern))",
+        replace: "steps(COPY.fixEventsStore(COPY.storeFilePattern))",
+    },
+    {
+        name: "a reason is cut to one line again, its path lost",
+        file: "hooks/register.tsx",
+        find: "<Text color=\"subtle\" size=\"footnote\">{COPY.reason(plainLine(problem, REASON_WHOLE))}</Text>",
+        replace: "<Text color=\"subtle\" size=\"footnote\" wrap=\"truncate-end\">{COPY.reason(plainLine(problem, REASON_WHOLE))}</Text>",
+    },
 ];
 
 module.exports = { MUTATIONS };

@@ -7,7 +7,7 @@
 import { test, expect } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { checkTree, treeLine } from '../hooks/health'
+import { checkTree, storeFileOf, treeLine } from '../hooks/health'
 
 import { BRIEFING, FLIGHT, HOUR, PANE_PROPS, PLANS, SESSION, STORY_327, events, exact, lateOnTheLocalDayOf, storyMoved, world } from './fixtures'
 
@@ -78,8 +78,9 @@ test('A STORE THAT REFUSES does not stop the done-signal: events_since is called
     expect(title?.props.size).toBe('heading')
     expect(title?.props.color).toBeUndefined()
     expect((await ui.find({ type: 'Text', text: /^Reason: (reading|writing) \w+ (from|to) the store failed: / }))?.text).toContain(STORE_REFUSAL)
-    expect(await ui.find({ type: 'Text', text: exact('1. Check that your Claude Code configuration folder (~/.claude) is writable.') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('3. If it stays, run claude --debug and read the lines under terylon-pane: events:') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^1\. Delete the pane's store file: ~\/\.claude\/plugins\/store\/terylon-pane_terylon-\*\.json\./ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact("2. Restart Claude Desktop: the pane reads Terylon's newest event and goes on from there.") })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('3. If the card comes back, check that your Claude Code configuration folder (~/.claude) is writable, then run claude --debug and read the lines under terylon-pane: events:') })).toBeDefined()
     expect(await ui.find({ key: 'events-retry' })).toBeDefined()
     await ui.unmount()
   }
@@ -357,7 +358,7 @@ test('A PART OF THE STATUS TAB THAT THROWS is one problem with its reason and st
     expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Slots') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Policy') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.8') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.9') })).toBeDefined()
     await ui.unmount()
   }
   expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith("terylon-pane: the Status tab's alerts did not draw: "))).toBe(true)
@@ -448,7 +449,7 @@ test('TERYLON_PANE_STATUS=minimal draws the Status tab as plain lines alone: no 
     await ui.press({ key: 'tab-status' })
     expect(await ui.find({ type: 'Text', text: exact('Agentic OS: ok') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Problems: 0') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.8') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.9') })).toBeDefined()
     expect(await ui.findAll({ type: 'Svg' })).toEqual([])
     expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeUndefined()
     expect((await ui.findAll({ type: 'Button' })).every(button => String(button.key).startsWith('tab-'))).toBe(true)
@@ -523,7 +524,7 @@ test('A HOSTILE REASON draws as one clean line: no control character, no page of
     const line = await ui.find({ type: 'Text', text: /^Reason: EACCES/ })
     expect(line).toBeDefined()
     expect(String(line?.text)).not.toMatch(/[\u0000-\u0008\u000B-\u001F\u007F]/)
-    expect(String(line?.text).length).toBeLessThanOrEqual('Reason: '.length + 300)
+    expect(String(line?.text).length).toBeLessThanOrEqual('Reason: '.length + 1000)
     await ui.unmount()
   }
 })
@@ -593,4 +594,39 @@ test('AN S43 PLAN that repeats and carries no stories draws on the Goals tab bes
     expect(await ui.find({ key: 'goals-show-open' })).toBeDefined()
     await ui.unmount()
   }
+})
+
+// THE TORN STORE FILE, as Desktop on Windows refused it: the host names the file, which it neither reads nor writes.
+const TORN = 'writing lastSeenAt to the store failed: terylon-pane@terylon: store file C:\\Users\\alice\\.claude\\plugins\\store\\terylon-pane_terylon-3f2a9c.json is not valid JSON: Unexpected token'
+
+test('A STORE FILE THAT CANNOT BE READ: the card names the file the refusal names, says deleting it loses nothing, and to restart', async ($, on) => {
+  seedSnapshot(on, { ...SNAPSHOT_1_8_3, events: { kind: 'store', reason: TORN, since: Date.parse('2026-10-11T21:50:00Z') } })
+  world(on)
+  await $.session.start(SESSION)
+
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    await ui.press({ key: 'tab-status' })
+    expect(await ui.find({ type: 'Text', text: /Delete the pane's store file: C:\\Users\\alice\\\.claude\\plugins\\store\\terylon-pane_terylon-3f2a9c\.json\. It holds only where the pane last looked and the signals it told, so nothing that matters is lost\.$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Restart Claude Desktop: the pane reads Terylon's newest event and goes on from there\.$/ })).toBeDefined()
+    // THE REASON WHOLE, wrapped, on the card and in Diagnostics: the path at its end is the fix.
+    const line = await ui.find({ type: 'Text', text: exact(`Reason: ${TORN}`) })
+    expect(line).toBeDefined()
+    expect(line?.props.wrap).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: exact(`reason: string ${TORN}`) })).toBeDefined()
+    await ui.unmount()
+  }
+})
+
+test('the store file is read from a refusal on Windows or POSIX, and a refusal that names none says where it is', async ($, on) => {
+  expect(storeFileOf(TORN)).toBe('C:\\Users\\alice\\.claude\\plugins\\store\\terylon-pane_terylon-3f2a9c.json')
+  expect(storeFileOf('store file /home/alice/.claude/plugins/store/terylon-pane_terylon-3f2a9c.json: EACCES')).toBe('/home/alice/.claude/plugins/store/terylon-pane_terylon-3f2a9c.json')
+  expect(storeFileOf(STORE_REFUSAL)).toBeNull()
+
+  seedSnapshot(on, { ...SNAPSHOT_1_8_3, events: { kind: 'store', reason: STORE_REFUSAL, since: Date.parse('2026-10-11T21:50:00Z') } })
+  world(on)
+  await $.session.start(SESSION)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'tab-status' })
+  expect(await ui.find({ type: 'Text', text: /Delete the pane's store file: ~\/\.claude\/plugins\/store\/terylon-pane_terylon-\*\.json\./ })).toBeDefined()
 })
