@@ -4,7 +4,7 @@
 //   work_in_flight ─▶ a story stuck
 //        │
 //        ▼  ONCE per story and verdict commit (the key, kept in $.store): a new commit is a new signal
-//   $.prompt.submit — a turn of its own once the session is idle, never folded into a running one
+//   $.prompt.submit — a turn of its own, queued behind the running one: several of one read are one summary
 //
 // Back after more than CATCH_UP_AFTER_MS away: ONE summary instead, the signals of the gap inside it.
 // More than CATCH_UP_MOST_EVENTS behind: no summary at all, a link to the console. Never a brief, a spec
@@ -30,7 +30,7 @@ export type SignalKind = 'verified' | 'merged' | 'accepted' | 'abandoned' | 'blo
 
 export type Candidate = { story: number; kind: SignalKind; seq: number; title: string; pullRequest: number | null; reason: string | null }
 
-export type Signal = { key: string; story: number; kind: SignalKind; prompt: string; toast: string }
+export type Signal = { key: string; story: number; kind: SignalKind; prompt: string; toast: string; line: string }
 
 // The verdict a verified story carries: its commit, its environment, its pull request, and whether the story is in
 // Terylon's own list, which waits for the owner's Accept rather than a merge.
@@ -142,7 +142,82 @@ export function signalFor(candidate: Candidate, verdict: Verdict | null): Signal
       break
   }
 
-  return { key: signalKey(candidate, verdict), story, kind: candidate.kind, prompt, toast }
+  // THE STATEMENT ALONE, for a summary of several: the prompt up to its ask.
+  const line = prompt.replace(/ Shrň mi[^]*$/, '')
+
+  return { key: signalKey(candidate, verdict), story, kind: candidate.kind, prompt, toast, line }
+}
+
+// ONE STORY, ITS LATEST MOVE: a page that carries verified then merged, or blocked twice then abandoned, tells only the
+// last. A stuck story from work_in_flight stands only where no event of the same read moved it.
+export function coalesce(candidates: Candidate[]): Candidate[] {
+  const moved = new Map<number, Candidate>()
+  const stuck: Candidate[] = []
+
+  for (const candidate of candidates) {
+    if (candidate.kind === 'stuck') {
+      stuck.push(candidate)
+      continue
+    }
+
+    const kept = moved.get(candidate.story)
+
+    if (kept === undefined || candidate.seq >= kept.seq) {
+      moved.set(candidate.story, candidate)
+    }
+  }
+
+  return [...[...moved.values()].sort((left, right) => left.seq - right.seq), ...stuck.filter(candidate => !moved.has(candidate.story))]
+}
+
+// The states after which a story asks nothing of the owner any more.
+const ENDED = ['merged', 'accepted', 'abandoned']
+
+// A goal's states that end every story under it.
+const GOAL_ENDED = ['dropped', 'abandoned', 'closed']
+
+// WHAT A SIGNAL STILL MEANS, read against the story as story_get answers it right before the post: a verified story
+// merged or accepted since asks for no Accept, a blocked one unblocked or abandoned is not blocked, and nothing under a
+// dropped goal asks anything. An answer about another story, or none, leaves the signal as it was read.
+export function settleCandidate(candidate: Candidate, story: Json | null): Candidate | null {
+  if (story === null || number(story.id) !== candidate.story) {
+    return candidate
+  }
+
+  const state = text(story.state)
+  const goal = story.goal !== null && typeof story.goal === 'object' ? (story.goal as Json) : null
+  const goalState = text(story.goalState) ?? text(goal?.state)
+  const isAsk = candidate.kind === 'verified' || candidate.kind === 'blocked' || candidate.kind === 'stuck'
+
+  if (isAsk && goalState !== null && GOAL_ENDED.includes(goalState)) {
+    return null
+  }
+
+  switch (candidate.kind) {
+    case 'verified':
+      return state === null || state === 'verified' ? candidate : null
+    case 'blocked':
+      return state === null || state === 'blocked' ? candidate : null
+    case 'stuck':
+      return state !== null && (ENDED.includes(state) || state === 'verified') ? null : candidate
+    default:
+      return candidate
+  }
+}
+
+// SEVERAL SIGNALS OF ONE READ ARE ONE PROMPT: each is a turn of its own otherwise, queued one behind another.
+export function signalsSummary(signals: Signal[]): { prompt: string; toast: string } {
+  const isAsking = signals.some(signal => signal.kind === 'verified' || signal.kind === 'blocked' || signal.kind === 'stuck')
+
+  return {
+    prompt: [
+      `Terylon: od posledního pohledu se pohnulo ${signals.length} story:`,
+      ...signals.map(signal => `- ${signal.line}`),
+      '',
+      isAsking ? 'Shrň mi to a u každé, která čeká na mě, co od ní potřebuju udělat.' : 'Shrň mi to.',
+    ].join('\n'),
+    toast: `Terylon: ${signals.length} stories moved`,
+  }
 }
 
 export function verdictOf(story: Json): Verdict {
@@ -165,7 +240,7 @@ function hours(milliseconds: number): string {
 
 // The one summary posted on a return after CATCH_UP_AFTER_MS: done, waiting for you, running, stuck, spend.
 export function catchUpSummary(input: { awayMs: number; events: Json[]; briefing: Json; flight: Json; policy: Json | null }): { prompt: string; waitingCount: number; band: string } {
-  const ended = candidatesFromEvents(input.events).filter(candidate => candidate.kind === 'merged' || candidate.kind === 'accepted' || candidate.kind === 'abandoned')
+  const ended = coalesce(candidatesFromEvents(input.events)).filter(candidate => candidate.kind === 'merged' || candidate.kind === 'accepted' || candidate.kind === 'abandoned')
   const done = ended.map(candidate => `#${candidate.story} ${candidate.kind === 'merged' ? 'mergnutá' : candidate.kind === 'accepted' ? 'přijatá' : 'opuštěná'}`)
   const verified = list(input.briefing.storiesVerified).map(story => `#${number(story.id) ?? 0} ověřená (${text(story.target) === 'list' ? 'accept' : 'merge'})`)
   const plans = list(input.briefing.plansWaiting).map(plan => `plán ${number(plan.id) ?? 0}, ${number(plan.stories) ?? 0} story (schválení)`)

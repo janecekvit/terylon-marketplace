@@ -8,7 +8,7 @@ const MUTATIONS = [
     {
         name: "the done-signal is removed",
         file: "hooks/register.tsx",
-        find: "    await $.prompt.submit({ text: signal.prompt })\n",
+        find: "  await $.prompt.submit({ text: posted.prompt })\n",
         replace: "",
     },
     {
@@ -809,6 +809,30 @@ const MUTATIONS = [
         file: "hooks/register.tsx",
         find: "const eventsTitle = (title: string) => <Text size=\"heading\" weight=\"semibold\">",
         replace: "const eventsTitle = (title: string) => <Text size=\"heading\" weight=\"semibold\" color=\"error\">",
+    },
+    {
+        name: "a story's moves of one read are told one by one again, verified after it was accepted",
+        file: "hooks/register.tsx",
+        find: "  for (const candidate of coalesce(candidates)) {",
+        replace: "  for (const candidate of candidates) {",
+    },
+    {
+        name: "a signal is posted without reading the story again, asking for an Accept already given",
+        file: "hooks/register.tsx",
+        find: "    const settled = settleCandidate(candidate, story)\n",
+        replace: "    const settled: Candidate | null = candidate\n",
+    },
+    {
+        name: "a blocked or verified story under a dropped goal asks the owner again",
+        file: "hooks/signals.ts",
+        find: "  if (isAsk && goalState !== null && GOAL_ENDED.includes(goalState)) {",
+        replace: "  if (isAsk && goalState === 'never') {",
+    },
+    {
+        name: "several signals of one read are one prompt each again, a turn each",
+        file: "hooks/register.tsx",
+        find: "  const posted = signals.length === 1 ? { prompt: signals[0]?.prompt ?? '', toast: signals[0]?.toast ?? '' } : signalsSummary(signals)\n",
+        replace: "  for (const signal of signals.slice(1)) {\n    await $.prompt.submit({ text: signal.prompt })\n  }\n  const posted = { prompt: signals[0]?.prompt ?? '', toast: signals[0]?.toast ?? '' }\n",
     },
 ];
 

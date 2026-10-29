@@ -92,11 +92,14 @@ import {
   candidatesFromEvents,
   candidatesFromFlight,
   catchUpSummary,
+  coalesce,
+  settleCandidate,
   signalFor,
   signalKey,
+  signalsSummary,
   verdictOf,
 } from './signals'
-import type { Candidate, Verdict } from './signals'
+import type { Candidate, Signal, Verdict } from './signals'
 
 type Json = Record<string, unknown>
 
@@ -104,7 +107,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.9.7'
+export const MOD_VERSION = '1.9.8'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -709,25 +712,42 @@ async function readEvents($: EngineInterface, since: number, most: number): Prom
   }
 }
 
-// THE DONE-SIGNAL: one prompt per story and verdict commit, posted when the session is idle.
+// THE DONE-SIGNAL: once per story and verdict commit. Each story's latest move alone, read again with story_get right
+// before the post, so that nothing asks for what has already happened; several are one summary, one turn.
 async function postSignals($: EngineInterface, candidates: Candidate[]): Promise<void> {
   const done = await signalled($)
+  const signals: Signal[] = []
 
-  for (const candidate of candidates) {
-    const verdict = await verdictFor($, candidate)
-    const key = signalKey(candidate, verdict)
+  for (const candidate of coalesce(candidates)) {
+    const answered = await callTerylon($, 'story_get', { story: candidate.story })
+    const story = answered.kind === 'ok' ? answered.value : null
+    const settled = settleCandidate(candidate, story)
+
+    if (settled === null) {
+      debug($, `not posting ${candidate.story}:${candidate.kind}: the story is ${text(story?.state) ?? 'moved on'} now`)
+      continue
+    }
+
+    const verdict = settled.kind === 'verified' && story !== null ? verdictOf(story) : null
+    const key = signalKey(settled, verdict)
 
     if (done.includes(key)) {
       continue
     }
 
-    const signal = signalFor(candidate, verdict)
     done.push(key)
-    await keep($, STORE_SIGNALLED, done.slice(-SIGNALS_KEPT))
-    debug($, `posting the done-signal ${key}`)
-    await $.prompt.submit({ text: signal.prompt })
-    $.ui.toast(signal.toast)
+    signals.push(signalFor(settled, verdict))
   }
+
+  if (signals.length === 0) {
+    return
+  }
+
+  await keep($, STORE_SIGNALLED, done.slice(-SIGNALS_KEPT))
+  const posted = signals.length === 1 ? { prompt: signals[0]?.prompt ?? '', toast: signals[0]?.toast ?? '' } : signalsSummary(signals)
+  debug($, `posting the done-signal ${signals.map(signal => signal.key).join(', ')}`)
+  await $.prompt.submit({ text: posted.prompt })
+  $.ui.toast(posted.toast)
 }
 
 async function markSignalled($: EngineInterface, candidates: Candidate[]): Promise<void> {

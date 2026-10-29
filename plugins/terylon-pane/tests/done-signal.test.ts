@@ -181,10 +181,13 @@ test('A LIST STORY VERIFIED WHILE THE PANE WAS CLOSED: on reopen, the catch-up s
 test('A LIST STORY VERIFIED, back within 2 h: its own prompt and toast say it waits for Accept; a repository story keeps its merge', async ($, on) => {
   const terylon = world(on, { store: { lastSeq: 18100, lastSeenAt: Date.parse('2026-10-11T21:30:00Z') } })
   withListStory(terylon)
-  terylon.answers.events_since = (args: Record<string, unknown>) =>
-    events(Number(args.since), Number(args.since) >= 18102 ? [] : [listMoved(18101), storyMoved(18102, 327, 'Events since the last look', 'verified')])
+  // ONE MOVE PER READ, so that each is its own prompt: two in one read are one summary.
+  let moved: Record<string, unknown>[] = [listMoved(18101)]
+  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), moved.filter(event => Number(event.seq) > Number(args.since)))
   await $.session.start(SESSION)
   await terylon.clock.settle()
+  moved = [...moved, storyMoved(18102, 327, 'Events since the last look', 'verified')]
+  await terylon.clock.advance(30000)
 
   expect(terylon.prompts).toEqual([
     'Story #352 „Weekly cost summary“ je ověřená a čeká na moje přijetí (Accept). Shrň mi důkazy a co mám proklikat, než ji přijmu.',
@@ -354,7 +357,7 @@ test('A PART OF THE STATUS TAB THAT THROWS is one problem with its reason and st
     expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Slots') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Policy') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.7') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.8') })).toBeDefined()
     await ui.unmount()
   }
   expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith("terylon-pane: the Status tab's alerts did not draw: "))).toBe(true)
@@ -445,7 +448,7 @@ test('TERYLON_PANE_STATUS=minimal draws the Status tab as plain lines alone: no 
     await ui.press({ key: 'tab-status' })
     expect(await ui.find({ type: 'Text', text: exact('Agentic OS: ok') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Problems: 0') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.7') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.8') })).toBeDefined()
     expect(await ui.findAll({ type: 'Svg' })).toEqual([])
     expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeUndefined()
     expect((await ui.findAll({ type: 'Button' })).every(button => String(button.key).startsWith('tab-'))).toBe(true)
