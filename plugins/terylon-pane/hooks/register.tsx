@@ -107,7 +107,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.9.10'
+export const MOD_VERSION = '1.9.11'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -2468,9 +2468,10 @@ export const register: Register = on => {
                       </Box>
                     )
                   : [slotsCard, costCard])}
-                {isShown('problems') && cardOf('status-problems', headingOf(COPY.statusProblems, problems.length, problems.length > 0 ? 'warning' : 'inactive'), null, [
-                  problems.length === 0 ? quiet(elements, COPY.nothingWrong) : null,
-                ])}
+                {/* THE PROBLEMS UNDER THEIR HEADING, never an empty card above them: the card says only that nothing is wrong. */}
+                {isShown('problems') && (problems.length === 0
+                  ? cardOf('status-problems', headingOf(COPY.statusProblems, 0, 'inactive'), null, [quiet(elements, COPY.nothingWrong)])
+                  : headingOf(COPY.statusProblems, problems.length, 'warning'))}
                 {isShown('problems') && problems}
                 {isShown('outcomes') && actOutcome('leader', consoleLink(base, 'work'), COPY.workInConsole)}
                 {isShown('policy') && policyCard}

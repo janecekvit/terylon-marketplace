@@ -858,6 +858,18 @@ const MUTATIONS = [
         find: "      ? settledStory(answered.value, candidate.story, now)\n      : settled.has(`story-${candidate.story}`) ? settledStory({ id: candidate.story, state: 'verified' }, candidate.story, now) : null\n",
         replace: "      ? answered.value\n      : null\n",
     },
+    {
+        name: "the Status tab draws an empty Problems card above its problems again",
+        file: "hooks/register.tsx",
+        find: "                  : headingOf(COPY.statusProblems, problems.length, 'warning'))}",
+        replace: "                  : cardOf('status-problems', headingOf(COPY.statusProblems, problems.length, 'warning'), null, []))}",
+    },
+    {
+        name: "Diagnostics says undefined or null again where a value is missing",
+        file: "hooks/health.ts",
+        find: "    return 'none'\n",
+        replace: "    return String(value)\n",
+    },
 ];
 
 module.exports = { MUTATIONS };

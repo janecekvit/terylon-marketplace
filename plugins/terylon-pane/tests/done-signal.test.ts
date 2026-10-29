@@ -358,7 +358,7 @@ test('A PART OF THE STATUS TAB THAT THROWS is one problem with its reason and st
     expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Slots') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Policy') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.10') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.11') })).toBeDefined()
     await ui.unmount()
   }
   expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith("terylon-pane: the Status tab's alerts did not draw: "))).toBe(true)
@@ -449,7 +449,7 @@ test('TERYLON_PANE_STATUS=minimal draws the Status tab as plain lines alone: no 
     await ui.press({ key: 'tab-status' })
     expect(await ui.find({ type: 'Text', text: exact('Agentic OS: ok') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Problems: 0') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.10') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.9.11') })).toBeDefined()
     expect(await ui.findAll({ type: 'Svg' })).toEqual([])
     expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeUndefined()
     expect((await ui.findAll({ type: 'Button' })).every(button => String(button.key).startsWith('tab-'))).toBe(true)
@@ -539,7 +539,7 @@ test('DIAGNOSTICS SAYS THE DONE-SIGNAL AS KEPT, each value with its type, as pla
   // Of another shape, the events problem is read as none: no card, and no ⚠ over an empty list.
   expect(await ui.find({ type: 'Text', text: exact('⚠ The pane cannot keep its place') })).toBeUndefined()
   expect((await ui.find({ key: 'tab-status' }))?.text).not.toContain('⚠')
-  for (const line of ['events: string store', 'since: string 2026-10-11T21:50:00Z', 'reason: object {"code":"EACCES"}', 'answeredAt: string never', 'watchedSince: undefined', 'silentSince: number NaN', 'store refusals: 0']) {
+  for (const line of ['events: string store', 'since: string 2026-10-11T21:50:00Z', 'reason: object {"code":"EACCES"}', 'answeredAt: string never', 'watchedSince: none', 'silentSince: number NaN', 'store refusals: 0']) {
     expect(await ui.find({ type: 'Text', text: exact(line) })).toBeDefined()
   }
   expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith("terylon-pane: the Status tab's done-signal: events: string store; since: string"))).toBe(true)
@@ -577,7 +577,7 @@ test('AN S43 PAGE OF events_since: repeating tasks, a type the pane does not kno
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'tab-status' })
   expect(await ui.find({ type: 'Text', text: exact('Nothing wrong.') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: exact('events: null') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('events: none') })).toBeDefined()
   expect(eventsLogs(terylon).some(line => line.startsWith('terylon-pane: events: stopped'))).toBe(false)
 })
 
@@ -669,4 +669,35 @@ test('AFTER ACCEPT PRESSED IN THE PANE, its verified move asks nothing, though s
   moved = [...moved, listMoved(18102)]
   await terylon.clock.advance(30000)
   expect(terylon.prompts.filter(prompt => prompt.includes('čeká na moje přijetí'))).toEqual([])
+})
+
+test("WITH A PROBLEM, its card stands under the Problems heading, never an empty Problems card above it; with none, the card says so", async ($, on) => {
+  seedSnapshot(on, { ...SNAPSHOT_1_8_3, events: { kind: 'store', reason: STORE_REFUSAL, since: Date.parse('2026-10-11T21:50:00Z') } })
+  world(on)
+  await $.session.start(SESSION)
+
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    await ui.press({ key: 'tab-status' })
+    expect(await ui.find({ type: 'Text', text: exact('Problems · 1') })).toBeDefined()
+    expect(await ui.find({ key: 'status-problems' })).toBeUndefined()
+    expect(await ui.find({ key: 'problem-events' })).toBeDefined()
+    // NO VALUE READS none in Diagnostics, never undefined or null.
+    expect(await ui.find({ type: 'Text', text: exact('watchedSince: none') })).toBeDefined()
+    await ui.unmount()
+  }
+})
+
+test('with nothing wrong, the Problems card says so, and Diagnostics reads none for the done-signal', async ($, on) => {
+  const terylon = world(on)
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'tab-status' })
+  expect(await ui.find({ key: 'status-problems' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('Nothing wrong.') })).toBeDefined()
+  for (const line of ['events: none', 'since: none', 'reason: none']) {
+    expect(await ui.find({ type: 'Text', text: exact(line) })).toBeDefined()
+  }
 })

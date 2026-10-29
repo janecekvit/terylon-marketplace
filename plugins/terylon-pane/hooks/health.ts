@@ -144,10 +144,11 @@ export function plainLine(value: unknown, longest = REASON_LONGEST): string {
   return clip(line, longest)
 }
 
-// A value as Diagnostics names it, its type first: a time kept by an earlier version reads `string 2026-…`, not `?`.
+// A value as Diagnostics names it, its type first: a time kept by an earlier version reads `string 2026-…`, not `?`;
+// no value at all reads `none`.
 export function typedLine(value: unknown, longest = 80): string {
   if (value === null || value === undefined) {
-    return String(value)
+    return 'none'
   }
 
   return `${typeof value} ${plainLine(typeof value === 'object' ? JSON.stringify(value) : value, longest)}`
