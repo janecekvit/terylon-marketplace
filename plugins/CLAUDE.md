@@ -34,7 +34,7 @@ plugins/terylon-<role>/
 ## Naming
 
 - Every plugin slug is `terylon-<role>` — lowercase, kebab-case, role is a short noun (no `-engineer` / `-developer` suffix).
-- **`terylon-os` is the product's own plugin** (#332): not a role on a team but Terylon itself, the agentic OS extension — its `/mcp` server and the skills that mirror the server's prompts — and its mod is `terylon-pane`. It was `terylon` until the operator's rename of 2026-10-12, because `terylon@terylon` collided with the marketplace's name and broke this rule.
+- **`terylon-os` is the product's own plugin**: not a role on a team but Terylon itself, the agentic OS extension — its `/mcp` server and the skills that mirror the server's prompts — and its mod is `terylon-pane`. It is not named `terylon`, because `terylon@terylon` would collide with the marketplace's name.
 - The `terylon-` prefix is intentionally redundant with the `@terylon` marketplace suffix. Reason: Claude Code's slash-command autocomplete filters by the per-plugin slug shown in the tag column. Putting `terylon` into every slug means a user can type `/terylon` and see every command from every Terylon-marketplace plugin in one filtered list, without having to remember per-role slugs.
 - Slug must match the directory name AND the `name` field in `plugin.json` AND the `name` in the corresponding entry of `marketplace.json`.
 
@@ -92,11 +92,34 @@ Consumers only re-fetch when this field changes, so pushing to `main` without a 
 
 ## Skill conventions
 
-These conventions apply to every `SKILL.md` under `plugins/terylon-<role>/skills/<skill>/`.
+These conventions apply to every skill under `plugins/terylon-<role>/skills/<skill>/`. **Every skill follows the [Agent Skills specification](https://agentskills.io/specification)**, and `tests/skill-spec/skill-spec.test.js` holds each one to it in the *Unit suites* job.
 
 ### Frontmatter
 
-**The frontmatter rules for skills and agents — the fields, `description` starting with `Use when …`, and never setting `disable-model-invocation` — are stated once, in `.claude/rules/markdown.md`, under *Frontmatter*.**
+**The frontmatter rules for skills and agents — the specification's keys, `description` starting with `Use when …`, `allowed-tools` space-separated, and never setting `disable-model-invocation` — are stated once, in `.claude/rules/markdown.md`, under *Frontmatter*.**
+
+### Layout, size and file references
+
+```
+skills/<skill>/
+├── SKILL.md          the instructions, loaded when the skill is
+├── references/       detail read on demand: a standard, a recipe catalogue, a manual checklist
+├── assets/           templates and data the skill fills or reads
+└── scripts/          code the skill runs, with its tests beside it
+```
+
+| Rule | Limit | Why |
+|---|---|---|
+| Nothing beside `SKILL.md` but those three folders, each flat | no other file or folder | the specification's layout; a reader knows where to look |
+| The body | under 500 lines **and** about 5000 tokens, counted as characters ÷ 4 | the whole body loads with the skill, on every run |
+| A file reference | relative to the skill root, one level deep — `references/<file>.md`, `scripts/<file>.js` — and it exists | the specification's form, and a moved file fails the guard instead of the run |
+| A command that runs a script | `node "${CLAUDE_SKILL_DIR}/scripts/<file>.js"` | the command runs in the consumer's repository; Claude Code substitutes `${CLAUDE_SKILL_DIR}` with the skill's own folder (read in its loader, 2.1.312) |
+| `${CLAUDE_PLUGIN_ROOT}` in a skill | only `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json`, the version a footer reads | anything else under it reaches outside the skill |
+| Another plugin's file, or a `../` path | never | see *Cross-skill references* |
+
+**What moves out of the body first:** the manual *Verification* checklist (`references/verification.md`), a section only one branch of a run needs (fan-out over several items, auto-complete, the reduction ladder), and long tables. The body keeps the steps, the gates and every safety constraint, inline: a skill whose reference is never opened must still refuse what it must refuse. Each moved section leaves its heading and a pointer saying **when** to read the file.
+
+**`skills-ref validate`, the specification's own validator, checks the frontmatter and the name only**; the guard checks the same rules and the ones above it leaves out. It is a Python package installed from the specification's repository, so nothing here runs it.
 
 ### URL-input + `--auto` / `--dry-run` pattern
 
@@ -115,14 +138,9 @@ remote state may have changed during analysis.
 
 ### Heavy reference
 
-If a skill needs more than ~60 lines of API tables, request shapes, or enum encodings,
-move them to a `references/<file>.md` subdirectory **inside the skill** and link from
-`SKILL.md` with the relative path `references/<file>.md`. If two or more skills genuinely
-need the same heavy reference, lift it to `<plugin>/shared/<file>.md` and reference it from
-each `SKILL.md` as `${CLAUDE_PLUGIN_ROOT}/shared/<file>.md` — Claude Code substitutes that
-variable inline in skill content (see the [plugins reference](https://code.claude.com/docs/en/plugins-reference#environment-variables)).
-Avoid parent-directory relative imports between skills; they are not in the spec and break
-if the file layout shifts.
+If a skill needs more than ~60 lines of API tables, request shapes, or enum encodings, move them to `references/<file>.md` **inside the skill** and link it from `SKILL.md` with a relative Markdown link to `references/<file>.md` — or name it in a `Read` as `${CLAUDE_SKILL_DIR}/references/<file>.md` where the read must be deterministic.
+
+**A reference two skills of one plugin both need is copied into each skill's `references/`**, because a skill reaches only its own files. The copy carries the line `<!-- An identical copy of this file sits in every skill that carries it; edit them together. -->`, and `tests/skill-spec` fails when the copies differ. `side-effects.md` in `terylon-test`'s three verifying skills is the worked example; an agent, which is not a skill, reads one of the copies through `${CLAUDE_PLUGIN_ROOT}`. A plugin's `shared/` holds code its scripts and hooks import — `oet.js`, `transcript.js`, `ado-server.js` — and no file a skill references.
 
 ### External MCP server prerequisites
 
@@ -200,7 +218,7 @@ and `terylon-forge` declares `dependencies: ["terylon-git"]` so the engine is al
 present. A split like this is the normal outcome when an engine has no forge dependency:
 put it in the lowest plugin that can host it, and let the transports depend upwards.
 
-**A transport names operations, never tools.** The engine owns the tool surface; a transport that restates a call shape becomes a second place to fix when the surface moves — and it moves. `@azure-devops/mcp` 2.9.0 consolidated every tool into action-based forms, renaming all but one of them and turning `projectName` into `project`; because every schema is `additionalProperties: false`, each stale name fails the whole call rather than degrading. The marketplace had those names copied across nine files and would have failed on first contact. It moved again with #332: Microsoft's remote server kept that action-based surface but added `orgName` to every tool, dropped the identity lookup and moved the namespace to `mcp__ado__*` — and again only `forge-ops` changed.
+**A transport names operations, never tools.** The engine owns the tool surface; a transport that restates a call shape becomes a second place to fix when the surface moves — and it moves. `@azure-devops/mcp` 2.9.0 consolidated every tool into action-based forms, renaming all but one of them and turning `projectName` into `project`; because every schema is `additionalProperties: false`, each stale name fails the whole call rather than degrading. The marketplace had those names copied across nine files and would have failed on first contact. It moved again when the server became Microsoft's remote one, which kept that action-based surface but added `orgName` to every tool, dropped the identity lookup and moved the namespace to `mcp__ado__*` — and again only `forge-ops` changed.
 
 So a transport writes ``the `update-pr-description` operation``, not the tool it resolves to. When the server changes, one file changes.
 
@@ -326,7 +344,7 @@ terylon-os (no dependencies)                       Terylon itself: /mcp + a skil
 
 **The two adapters are siblings of the role plugins, not layers under them.** Nothing declares an adapter: the consumer enables the one their repositories are hosted on, and the port arrives as its dependency. A consumer therefore enables **two** keys — a role plugin and an adapter.
 
-`terylon-forge` **replaced `terylon-devops`**, which no longer exists. That plugin mixed two things: the transports, which were portable and are now the port, and the Azure DevOps mechanics, which were not and are now `terylon-ado`. The engine skill `ado-mcp` became `forge-ops`, and the MCP namespace moved with the server, from `mcp__plugin_terylon-devops_ado__*` to `mcp__plugin_terylon-ado_ado__*` — and since #332, when the server became Microsoft's remote one registered at the user scope, to `mcp__ado__*`.
+`terylon-forge` **replaced `terylon-devops`**, which no longer exists. That plugin mixed two things: the transports, which were portable and are now the port, and the Azure DevOps mechanics, which were not and are now `terylon-ado`. The engine skill `ado-mcp` became `forge-ops`, and the MCP namespace moved with the server, from `mcp__plugin_terylon-devops_ado__*` to `mcp__plugin_terylon-ado_ado__*` — and, with Microsoft's remote server registered at the user scope, to `mcp__ado__*`.
 
 `terylon-core` is the **root**, not a second leaf. It needs neither git nor a forge, only a shell and the local session transcripts, and every other plugin sits on it. It **replaced `terylon-metrics`**, which no longer exists, and its arrival removed the `superpowers` dependency: `write-plan` and `run-build-loop` replaced two of those skills, `finish-branch` in `terylon-git` a third, and the remaining three were dropped because `developer`, `refactorer` and `debugger` already carried them in their own prose. A skill that only restates what the persona says costs cache-write to load and buys nothing.
 
@@ -380,7 +398,7 @@ So the **dependency** edge still points down; only the **load** points up. Three
 | `terylon-dev` | `develop`, `brainstorm`, `write-plan`, `run-build-loop`, `background-run` | `leader`, `planner`, `developer`, `debugger`, `refactorer`, `security-reviewer`, `performance-reviewer`, `architecture-reviewer`, `edge-case-reviewer` |
 | `terylon-test` | `test`, `verify-test-plan`, `run-build-and-tests`, `run-ui-flows` | `tester` |
 
-`terylon-core` also ships the `SubagentStop` hook that records per-agent spend continuously, plus `shared/oet.js`, `shared/weights.json` and `shared/transcript.js`. The last is the one place that reads a transcript's usage: the hook and `measure-token-spend` both call it, so neither can drift on how a response's repeated records are collapsed — a question they answered wrong, identically and in two copies, until the module existed.
+`terylon-core` also ships the `SubagentStop` hook that records per-agent spend continuously, plus `shared/oet.js`, `shared/weights.json` and `shared/transcript.js`. The last is the one place that reads a transcript's usage: the hook and `measure-token-spend` both call it, so neither can drift on how a response's repeated records are collapsed.
 
 `background-run` is the one component in `terylon-dev` that the pipeline never calls. It exercises git and the `claude --bg` CLI, so the *exercises* test alone would allow it in `terylon-git` — and that is exactly the failure mode the placement rule warns about, because `terylon-git` is a dependency of everything and would install it for every consumer. Its only audience is the operator driving this plugin, so it lives beside them. Being unreachable from `develop` is not evidence of a misplacement; it is a skill the operator invokes, not a persona the loop dispatches.
 

@@ -1,0 +1,23 @@
+# develop — common mistakes
+
+- **Writing your own build loop.** The loop belongs to `leader`, which runs `run-build-loop`. This skill only hosts the gates.
+- **Pasting content into dispatches.** Seed-specs, plans, and diffs travel **by path**.
+- **Trying to prompt from a subagent.** `AskUserQuestion` works only here. `leader` returns `NEEDS_CLARIFICATION` and you do the asking.
+- **Hand-rolled isolation.** Use `create-workspace`, or `--here`.
+- **Committing to the default branch.** Never.
+- **Over-decomposing trivial work.** A genuine one-line change takes the trivial route.
+- **Running the intake on an item nobody has defined.** An item with no stated outcome takes the brainstorm mode of Gate 0. Intake asks what a seed leaves open; it cannot ask what the seed *is*.
+- **Brainstorming an item that already carries acceptance criteria.** The dialogue re-decides work that was decided, and the second answer is not more true than the first.
+- **Keeping the old count after a brainstorm split one item into three.** Restate it before any workspace exists.
+- **Routing brainstormed items together.** One design can yield a documentation item and two full-chain ones; the route is per item.
+- **Inventing intake answers under `--auto`.** The brainstorm mode is a dialogue. Skip it, say so, and proceed on the seed as given.
+- **Running the full chain on documentation.** A change with nothing to execute takes the documentation route: no planner, Gate 1 falls on the diff. A planner's plan for doc work is longer than the docs it edits.
+- **Avoiding a gate to save tokens.** A gate ends the leader and the next one starts fresh, which is the cheapest reset available. Length is what costs; a gate shortens it. Batching a single return's answers is still worth it, but for a saving an order of magnitude smaller.
+- **Taking the first work item and dropping the rest.** Several items fan out; they are not a queue you may silently truncate.
+- **Splitting a prose item on its bullets.** Only `---` splits. `implement the uploader with: retry, backoff, logging` is one story whose scope happens to be a list.
+- **Merging items across a `---`.** The separator is the user's statement of intent, not a hint to weigh against how related the items look.
+- **Creating workspaces before stating the count.** One echoed line — `Read 3 items: …` — catches a missing separator while it is still free to fix.
+- **Colliding slugs.** Two items that slugify identically share a seed-spec, and the second silently overwrites the first.
+- **Barriering the fan-out.** Waiting for every leader before hosting any gate turns concurrent planning back into sequential planning.
+- **Unlabelled questions during a fan-out.** A question without its work-item number gets answered against the wrong story.
+- **`--here` with several items.** Concurrent builds in one checkout corrupt each other. Refuse the combination.

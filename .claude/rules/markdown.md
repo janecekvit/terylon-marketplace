@@ -40,14 +40,29 @@ Two deliberate exceptions:
 
 `SKILL.md` and agent files carry YAML frontmatter. It is not decoration — Claude Code parses it.
 
+**A skill's frontmatter is the [Agent Skills specification](https://agentskills.io/specification)'s, and nothing else.** `tests/skill-spec` refuses any other key.
+
 ```yaml
 ---
-name: <slug>                    # MUST match the directory name (skills) or the file name (agents)
-description: Use when <trigger>  # triggering conditions, never the internal workflow
-allowed-tools: Read, Grep, Glob  # skills only
-tools: [Read, Grep, Glob, Agent] # agents only
-disallowedTools: [Edit, Write]   # agents only — read-only lenses need this
-skills: [<name>, …]              # agents only — skills this agent may load, by name
+name: <slug>                         # = the directory; 1-64 of a-z 0-9 -, no leading, trailing or double hyphen
+description: Use when <trigger>. <what it does>   # 1-1024 characters; the trigger first, then the what
+allowed-tools: Read Grep Bash(git *) # space-separated, as the specification writes it (experimental there)
+license: <name>                      # optional; the plugin's manifest already says Apache-2.0
+compatibility: <requirements>        # optional, 1-500 characters; only for a real environment requirement
+metadata:                            # optional; string keys to string values
+  <key>: "<value>"
+---
+```
+
+An agent is not a skill, and its frontmatter is the plugin agent specification's:
+
+```yaml
+---
+name: <slug>                    # = the file name
+description: Use when <trigger>
+tools: [Read, Grep, Glob, Agent]
+disallowedTools: [Edit, Write]  # read-only lenses need this
+skills: [<name>, …]             # skills this agent may load, by name
 ---
 ```
 
@@ -62,12 +77,15 @@ So the two carry different halves and both are needed:
 
 Declaring without prose leaves an agent holding a skill it has no reason to open. Prose without the declaration relies on the name resolving anyway. **A safety constraint belongs in the prose regardless** — inline and short, where it cannot be missed if the skill is never loaded. The procedure can live in the skill; the boundary cannot.
 
-**Never set `disable-model-invocation`.** It hides the skill from being loaded by name, which breaks the engine/transport pattern this repo is built on: `forge-ops` and `code-review` exist to be called by other skills, and a hidden engine cannot be called at all. A skill that is mainly for other skills says so in its prose instead.
+**Never set `disable-model-invocation`.** It hides the skill from being loaded by name, which breaks the engine/transport pattern this repo is built on: `forge-ops` and `code-review` exist to be called by other skills, and a hidden engine cannot be called at all. A skill that is mainly for other skills says so in its prose instead. The specification has no such key either.
 
-- **`description` starts with `Use when …`** and lists triggering conditions with concrete symptoms. It is what the model matches against — describing the internal workflow there wastes the field.
+- **`description` starts with `Use when …`** and lists triggering conditions with concrete symptoms, then says what the skill does. It is what the model matches against — describing the internal workflow there wastes the field.
 - **`name` follows the kind:** skills are named for the action (`create-workspace`, `code-review`), agents for the role (`developer`, `code-reviewer`). See the naming section in `plugins/CLAUDE.md`.
+- **A key Claude Code reads and the specification lacks goes under `metadata`** when Claude Code honours it there; otherwise the skill does without it. No skill here needs one.
 - **Agent frontmatter must not carry** `permissionMode`, `hooks`, or `mcpServers`. They are not in the plugin agent specification.
-- A rules file may use a `paths:` frontmatter block to scope itself to matching files, as this one does.
+- A rules file carries a `paths:` frontmatter block to scope itself to matching files, as this one does.
+
+The body, the supporting folders and the file references are `plugins/CLAUDE.md`'s, under *Skill conventions*.
 
 ## Structure
 
@@ -82,7 +100,7 @@ Declaring without prose leaves an agent holding a skill it has no reason to open
 
 This is not a stylistic preference. Prose is **interpretable**; a table is not. "Wrap repository files freely, but not what goes to Azure DevOps" reads as a guideline someone can weigh against how long the line feels — the same rule as a table keyed on the target leaves nothing to weigh. That matters more here than in most repositories, because these documents are read as instructions by a model, and an instruction that can be interpreted eventually will be. Structure removes the room.
 
-The rule holds for what this repo **generates** as well as for what it commits: pull request descriptions, work items, review findings, and answers in a session. Wherever there is a shape and the target renders markdown, draw it.
+The rule holds for what this repo **generates** as well as for what it commits: pull request descriptions, work items, review findings, and answers in a session. Wherever there is a shape and the target renders markdown, draw it. **What a plugin writes to a forge** draws a table, or a box drawing in a bare fence, by default; a Mermaid block it writes starts with its keyword and carries no front matter, as below, because a consumer's Azure DevOps renders nothing else.
 
 Two limits. A diagram that is wrong is worse than prose, because it is believed — see *Keep them true* below. And a table with one row is a sentence wearing a costume; use one when there are cases, not to decorate a single fact.
 
@@ -108,41 +126,47 @@ Three kinds of drawing, and each shape has one of them:
 | Shape | Drawn as | Lives in |
 |---|---|---|
 | **Structure** — components, their dependencies and boundaries, the static view | a Mermaid `flowchart` in a ` ```mermaid ` fence, in the adaptive style below | the Markdown file that owns it: `docs/architecture/README.md`, the ADR that draws it, or, for the plugin graph, the root `README.md` |
-| **A flow over time** — a resolution, a pipeline, a sequence of calls with branches | Mermaid in a ` ```mermaid ` fence: a `flowchart` takes the same front matter and edge colour, a `sequenceDiagram` the default theme with no colours of its own | the article that walks the flow, usually in `docs/flows/` |
+| **A flow over time** — a resolution, a pipeline, a sequence of calls with branches | Mermaid in a ` ```mermaid ` fence: a `flowchart` takes the same opening and edge colour, a `sequenceDiagram` the default theme with translucent boxes | the article that walks the flow, usually in `docs/flows/` |
 | **A short inline sketch** — a dispatch chain in a `SKILL.md`, the dependency graph an orienting document must carry, a layout | box drawing in a bare fence, by the rules below | the file it orients |
 
 - **The block is the source and the picture.** GitHub renders a ` ```mermaid ` fence where it stands; nothing is generated, so there is no file to regenerate and no copy to go stale. To change a diagram, edit its block.
 - **Each diagram has exactly one block.** Another document that needs it links to the heading that holds it and never pastes a second copy. **The main diagram is the plugin graph, in the root `README.md` under *Architecture*,** because that is where a consumer lands; every other document links to `README.md#architecture`. The forge port and terylon-os with its pane are drawn once each, in `docs/architecture/README.md`.
-- **ELK, not dagre.** GitHub renders both; ELK's edges are orthogonal and edges leaving a subgraph do not cross, which reads far better on a dependency graph.
+- **ELK, not dagre — and readable on dagre.** GitHub renders both; ELK's edges are orthogonal and edges leaving a subgraph do not cross, which reads far better on a dependency graph. A renderer without ELK falls back to dagre, so every diagram is laid out to read there too: few crossings by construction, no meaning carried by position alone.
 - **Comments are `%%`, on their own line, next to the node or edge they explain.** What a source comment says about why an edge or a colour is there belongs in the block, not in prose beside it.
 - **No HTML in a label.** A line break is a Markdown string, the label in backticks inside its quotes with a real newline: ``a["`terylon-core\nthe root`"]`` (written over two source lines). No `<br/>`, no icons and no `click` links: Azure DevOps's renderer refuses them, and GitHub drops the last two.
-- **Shapes:** `(["…"])` for something outside the marketplace, `[("…")]` for a store, `[/"…"/]` for a note or a page, `[["…"]]` for "one of many". A dashed edge is `-.->`, its annotation in `|"…"|`.
+- **Shapes by kind:** a stadium `(["…"])` for something external, outside the marketplace, `[("…")]` for a store, `[/"…"/]` for a note or a page, `[["…"]]` for "one of many". A dashed edge is `-.->`, its annotation in `|"…"|`.
 - **The source stays plain text everywhere else**, so write node labels and ids a reader can follow unrendered.
+
+#### A dense picture splits in two
+
+| Picture | Drawn as |
+|---|---|
+| **The steps** | a `sequenceDiagram`: one `box` per trust boundary, each check a `Note`, an alternative an `opt` |
+| **The architecture** | a simplified `flowchart`: each box at most 2 lines, each edge labelled with its step number from the sequence |
+
+**Why Mermaid** is a measurement: the same threat-model diagram was 32.6 KB in draw.io, 7.6 KB in D2 and 7.1 KB in Mermaid, 22 % of draw.io (measured 2026-10, by the owner, on one diagram drawn in all three). The rest of the reasoning is in [`diagrams-are-mermaid-blocks.md`](../../docs/architecture/diagrams-are-mermaid-blocks.md).
 
 #### The adaptive style: one drawing for GitHub's light and dark themes
 
-Every flowchart opens with exactly this front matter, and sets **no `theme` and no `themeVariables`**. GitHub then draws it in its light theme in light mode and its dark theme in dark mode, on a transparent background:
+Every block **starts with its diagram keyword**, and a flowchart asks for ELK with an init directive on the line after it. It sets **no `theme` and no `themeVariables`**, so GitHub draws it in its light theme in light mode and its dark theme in dark mode, on a transparent background:
 
 ```text
----
-config:
-  layout: elk
-  flowchart:
-    padding: 16
----
 flowchart TD
+%%{init: {"layout": "elk", "flowchart": {"padding": 16}}}%%
 ```
+
+**Never `---` front matter.** Azure DevOps' preview renders a block only when it starts with the keyword, and the plugins write into consumers' Azure DevOps; one form for both forges is cheaper than remembering which is which. Why Mermaid at all, and why this form, is in [`diagrams-are-mermaid-blocks.md`](../../docs/architecture/diagrams-are-mermaid-blocks.md).
 
 | Element | Style | Because |
 |---|---|---|
 | A node, through `classDef` and `:::class` | a saturated fill, a darker stroke, **white text**, from the palette below | white on a saturated fill reads on either background; a pale fill glares in dark mode |
-| A boundary, through `subgraph` and `style` | a semi-transparent fill `#RRGGBBAA` with alpha `1A` (`14` for a large area), the stroke and the title in the layer's colour: `style port fill:#B453091A,stroke:#B45309,color:#B45309` | the background shows through, so the box tints in either theme |
-| A boundary outside the trust it encloses, or outside the chain | dashed: `stroke-dasharray:3 3` | |
+| A boundary, through `subgraph` and **one `style` line per subgraph** | a semi-transparent fill `#RRGGBBAA` with alpha `1A` (`14` for a large area), the stroke and the title in the layer's colour, the stroke dashed: `style port fill:#B453091A,stroke:#B45309,color:#B45309,stroke-dasharray:3 3` | the background shows through, so the box tints in either theme; **without an explicit `color:` the title vanishes in Azure DevOps' dark preview** |
 | A boundary with no layer of its own | the neutral `#8B949E`, alpha `14` | a dark grey title vanishes on the dark background |
-| Edges | `linkStyle default stroke:#8B949E`; an edge label takes no colour | the theme colours the labels |
+| Edges | `linkStyle default stroke:#8B949E`; an edge label is short and takes no colour; a token or key flow is dotted, `-.->` | the theme colours the labels |
+| A node's category | one `classDef` per category, from the palette below | one meaning per colour |
 | A node left without a class (the owner, or a flow's ordinary step) | the theme's own colours | |
 | Text | **never set `fontFamily`** | GitHub measures text in one font and draws it in another, so a set font clips the labels |
-| A `sequenceDiagram` | the default theme, no colours of its own | |
+| A `sequenceDiagram` | the default theme; a `box` per trust boundary takes a translucent `rgba()` fill, `box rgba(37, 99, 235, 0.1) Agentic OS` | an opaque box hides the lifelines in the dark preview |
 
 One meaning per colour, across every diagram here:
 
@@ -158,11 +182,9 @@ One meaning per colour, across every diagram here:
 
 The first six are the owner's palette, shared with their other repositories; red is this repository's one addition, because a stop and the merge gate must not read as an ordinary step.
 
-**Check every block before pushing.** CI starts no browser for it. Render each block twice with `@mermaid-js/mermaid-cli@11.4.2` against the pre-installed headless shell, with `--no-sandbox`: once in the default theme with `-b '#ffffff'`, once with `-t dark -b '#0d1117'`. Look at both renders, see that no label is clipped and every word reads on both backgrounds, and commit only the Markdown. `node --test tests/architecture-diagrams/architecture-diagrams.test.js` fails on a flowchart without the front matter above, or with a `theme`, `themeVariables` or `fontFamily`, and holds the plugin graph's edges to `plugin.json#dependencies`.
+**Check every block before pushing.** CI starts no browser for it. Render each block with `@mermaid-js/mermaid-cli@11.4.2` against the pre-installed headless shell (`/opt/pw-browsers/chromium_headless_shell-*/`), with `--no-sandbox`, three times: in the default theme with `-b '#ffffff'`, with `-t dark -b '#0d1117'`, and once with the init directive removed, which is dagre. Look at all three: no label clipped, every word readable on both backgrounds, ELK's edges orthogonal, and the dagre drawing still readable. Commit only the Markdown; the owner checks it on GitHub. `node --test tests/architecture-diagrams/architecture-diagrams.test.js` fails on a block with front matter, on a flowchart without the opening above, or with a `theme`, `themeVariables` or `fontFamily`, and holds the plugin graph's edges to `plugin.json#dependencies`.
 
 **The plugin graph stays a box drawing in every orienting document but one.** The root `README.md` draws it as the Mermaid block instead: it is read on GitHub, where the block renders in both themes, and a third hand-drawn copy of the same edges there would be one more copy to drift. Every other orienting document keeps its box drawing, because a terminal and an agent's context window render no Mermaid. Both drawings are derived from `plugin.json#dependencies`.
-
-**This reverses the D2 decision (2026-10-26, #36).** Until then structure was drawn in [D2](https://d2lang.com): a `.d2` source in `docs/architecture/`, an `.svg` rendered from it in a light and a dark theme by `Scripts/render-diagrams.js`, both committed, and a Diagrams workflow with a pinned D2 failing on a stale SVG. It worked, and it cost a second file per diagram, a render script, a Go toolchain in CI and a version pin, all to keep a picture in step with a source nobody read on GitHub. Mermaid with ELK now gives the same orthogonal layout from a block that is its own picture, so the source and what a reader sees are one text, read alike by a person and a model, and models write Mermaid more reliably than D2. What D2 still did better: an explicit dark theme per diagram; the default Mermaid theme following GitHub's is what replaces it. The first Mermaid drawings kept D2's light pastels, with a rule that **a container takes a stroke and no fill**; the adaptive style above replaced that on 2026-10-27, because pale fills glared and white-on-saturated reads on both of GitHub's backgrounds.
 
 ### ASCII diagrams for call chains and dependencies
 

@@ -7,13 +7,8 @@ Every transport in `terylon-forge` is written against an operation catalog with 
 First hit wins. **There is no default and no guess.**
 
 ```mermaid
----
-config:
-  layout: elk
-  flowchart:
-    padding: 16
----
 flowchart TD
+%%{init: {"layout": "elk", "flowchart": {"padding": 16}}}%%
     remote(["a transport is about to do something remote"])
     explicitUrl{"Step 1. did the user pass an explicit URL?"}
     forgeVariable{"Step 2. is TERYLON_FORGE set?"}

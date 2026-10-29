@@ -6,7 +6,7 @@ description: >-
   the PR if a URL is given, on either forge. Triggers on phrasings like "write PR
   description", "generate PR summary", "summarize my changes for PR". Optional
   flags --auto and --dry-run.
-allowed-tools: Bash(git *), Bash(gh *), Bash(wc *), Read, Grep, Glob, Write, mcp__ado__*
+allowed-tools: Bash(git *) Bash(gh *) Bash(wc *) Read Grep Glob Write mcp__ado__*
 ---
 
 # Pull Request — Write the Description
@@ -118,69 +118,7 @@ Fill the template from the diff and commit log. **Caveman style — terse, high-
 - **Group** changes by logical theme (or by file) under short bold sub-headers; bullets, not paragraphs.
 - The **Summary** stays one dense sentence — what the PR does plus the load-bearing "why", no preamble.
 
-**Checklist items in `## Test plan` (or any other checklist-style section) MUST use
-unchecked markdown checkboxes `- [ ]`.** Do NOT pre-check items with `- [x]` and do NOT
-substitute static glyphs (`✓`, `✅`, `🟢`, "Done", etc.) for the checkbox. Reason: a
-pre-checked box is a claim nobody verified, and on at least one forge it renders as a
-static tick the reviewer cannot toggle at all, which
-defeats the purpose of a checklist. Even items you have already verified locally stay as
-`- [ ]` — the reviewer ticks them after re-verifying on the PR. If you need to record
-"already done by author", write it in prose elsewhere, not as a checklist item.
-
-**Every test-plan item is a procedure with an expected result, never a claim about the
-outcome.** The `tester` executes this list; an item with nothing in it to perform comes back
-as *untestable as written* and the pull request reads as unverified even when the work was
-done and checked.
-
-```markdown
-Wrong:  - [ ] tester returns in two phases and writes nothing without approval
-Right:  - [ ] Dispatch the tester with no approval; assert the PR's thread count and the
-              work item's comment count are unchanged and the return is AWAITING_WRITE_APPROVAL
-```
-
-The wrong form is an **acceptance criterion that wandered into a test plan**. Criteria state
-outcomes and live on the work item; a test plan states runs and lives here. Writing the same
-sentence in both is what makes the two lists feel duplicated, and it is the generator's fault,
-not the reader's.
-
-**Render the build's plan when there is one; reverse-engineer only when there is not.** If the
-run produced `docs/terylon/plans/<slug>.md`, its per-task test cases already say what was run
-and what was expected — carry those into `## Test plan`. A diff shows what changed; only the
-build knows what was executed against it, so inventing the plan from the diff produces
-plausible items nobody ran.
-
-**When no plan file exists, never invent one.** The trivial and documentation routes in
-`develop` skip the planner, so there is nothing to render — and a diff cannot tell you what was
-run. Emit only what you can actually attest (the commands the build reports having run), and
-leave the remainder to the author with the `_TBD by author_` marker this skill already uses for
-template sections it cannot fill. An empty-but-honest section costs the author a few minutes; a
-section of invented procedures costs the reader their trust in every checklist this marketplace
-writes, because the tester will return them as *untestable as written* and the pull request will
-read as unverified.
-
-This is the same rule the verification pipeline holds itself to: a missing capability is
-reported, never quietly replaced by the nearest available substitute.
-
-**Carry across any tick you find; never regenerate over one.** Something may have ticked
-items since this description was last written — a reviewer by hand, or a skill that
-executed the plan and holds the exemption `forge-ops` describes. Rewriting the region as
-fresh `- [ ]` would erase that, and the forge that keeps no revision history for a
-description is the one that decides here: the loss cannot be recovered, so the rule binds
-on both.
-
-When the existing region carries `- [X]` items, or headings grouping items by how they
-were checked, **preserve them**: match your regenerated items against the ones already
-there, keep the state of every item that survives, and say in the chat summary which ticks
-you carried and which items were new. When you cannot match an item confidently, keep the
-old line rather than replacing it — a stale line the author can delete beats a verified
-result silently reset.
-
-You do not need to know what produced a tick, and should not try to tell. Anything already
-in the region was put there by someone; your job is to regenerate the plan without
-destroying it.
-
-The prohibition above still binds *you*: you generate a plan, and generating is not
-executing, however sure you feel about an item.
+**Before writing `## Test plan` or any checklist section, read [`references/test-plan.md`](references/test-plan.md).** In short: every item is an unchecked `- [ ]`, never pre-ticked; every item is a procedure with an expected result, never an outcome; render the build's plan when there is one and never invent one; carry every existing tick across a regeneration.
 
 **Do NOT hard-wrap lines inside the generated description.** One forge's renderer treats
 every source line break as a visible line break rather than as a markdown soft wrap, so
@@ -308,26 +246,7 @@ DESCRIPTION
 
 #### 8d. Reduction ladder
 
-Over budget? Apply these **in order**, re-measuring after each rung, and stop at the first that fits. The order is fixed so two runs on the same diff produce the same output.
-
-1. Drop any diff-stat, commit list, or file enumeration.
-2. Collapse file-scoped bullets into their theme, naming at most the 2 load-bearing paths.
-3. Drop the third sub-header, merging at most one of its bullets into the nearest survivor.
-4. Rewrite over-long bullets down to 150 characters, longest first — cut the justification clause, keep verb, object and location.
-5. Drop the lowest-value bullets, last-in-section first, until **Changes** has 5. Never below 2.
-6. Cut **Test plan** to 3 — keep what a reviewer cannot infer: the risky path, the regression, the manual step. Never below 1.
-7. Cut the summary to one sentence, 200 characters.
-8. Drop whole sections the repo template did not ask for, heading included.
-9. Reduce each remaining group to a single one-line bullet, 3 lines total.
-10. Floor shape: sentinel, summary, one sentence, footer.
-11. Still over — do not post; fall back to the `B_eff < FLOOR` behaviour in 8a.
-
-**Invariants no rung may break:**
-
-- **Never drop the sentinel or the footer.** The next run needs both to find the region; losing either makes it append a duplicate instead of replacing.
-- **Never truncate mid-anything.** Reduction means rewriting a unit or removing a whole unit, never slicing a string. No half sentences, no dangling `[link](`, no unclosed backtick, no trailing ellipsis.
-- **Never leave a dangling heading** — removing a section's last bullet removes its heading too, unless the repo template mandates the section, which then keeps `_TBD by author_`.
-- **Never cut foreign content.** It is not ours; the budget bends around it.
+Over budget? Apply the ladder in [`references/reduction-ladder.md`](references/reduction-ladder.md), **in order**, re-measuring after each rung, and stop at the first that fits. Its invariants bind every rung: never drop the sentinel or the footer, never truncate mid-anything, never leave a dangling heading, never cut foreign content.
 
 Then write the description via the `forge-ops` update recipe, and print confirmation with a link to the PR **and the region's measured length against `B_eff`**.
 
@@ -387,43 +306,4 @@ For no-URL mode: `(Local-only — paste into your PR when you open it.)`
 
 ## Verification
 
-1. `/write-pr-description --dry-run` on a branch with 3+ commits ahead of the repo's
-   integration branch. Expect: the base is detected from `origin/HEAD` (reported in the
-   summary), chat output with a template-shaped description, no platform calls.
-   Test-plan items are emitted as `- [ ]`, never `- [x]` or `✓`.
-2. `/write-pr-description <my-PR-url> --dry-run`.
-   Expect: same description, target branch read from PR metadata, no write.
-3. `/write-pr-description <my-PR-url>`.
-   Expect: confirmation prompt; on `push`, the `update-pr-description` operation runs;
-   refreshing the PR shows the new description wrapped with the start sentinel
-   `<!-- write-pr-description:start -->` and the Claude Code footer.
-4. Re-run step 3.
-   Expect: sentinel detected → only the marked region is rewritten on `push`. Any content
-   before the sentinel or after the footer (e.g. CI preview links the deploy bot posted in
-   the meantime) survives intact.
-   **Then test the gap explicitly:** run again, and while the skill waits for `push`, edit
-   the PR description in the browser to append a line after the footer. Say `push`. Expect
-   the appended line to survive — it only does if step 7 re-fetched rather than reusing the
-   step-2 snapshot.
-   **And test the cap:** on a branch large enough that the generated description exceeds
-   the forge's cap, expect the skill to report which sections it dropped and to write
-   successfully, rather than failing on `too_big`. The Test plan and the footer survive.
-5. `/write-pr-description <my-PR-url> --auto` on a PR whose description contains a
-   CI-posted block (preview links, connection strings) and no sentinel.
-   Expect: the Claude region is **appended** to the existing content, preceded by a blank
-   line. The CI block at the top is untouched. No `overwrite` prompt.
-6. Legacy compatibility — re-run on a PR whose description carries only the older footer
-   without a sentinel.
-   Expect: whole description is replaced with the new sentinel-wrapped region (treated as
-   legacy Claude-only content).
-7. **Test-plan shape.** Every generated `## Test plan` item names a run and its expected result.
-   No item is an outcome claim ("the tester writes nothing without approval") — that shape is an
-   acceptance criterion and belongs on the work item, and the `tester` returns it as *untestable
-   as written*.
-8. **No invented procedures.** On a branch whose run produced no `docs/terylon/plans/<slug>.md`
-   (the trivial or documentation route), the section carries only what the build reports having
-   run, and the remainder is marked `_TBD by author_`. Expect **no** plausible-looking procedure
-   reverse-engineered from the diff. On a branch that *did* produce a plan file, expect its
-   per-task test cases to appear rather than a fresh set derived from the diff.
-
-> **See also:** `create-pr` for opening the pull request this description goes into, `review-pr` for the review pass, `address-pr-comments` for the inbound direction.
+The manual checks a maintainer runs after changing this skill are in [`references/verification.md`](references/verification.md). They are not needed to run it.

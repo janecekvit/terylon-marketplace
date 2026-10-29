@@ -1,7 +1,7 @@
 ---
 name: show-story
-description: "Use when the owner asks about one Terylon story in flight — \"how is 333 doing\", \"why is it blocked\", \"summarise the story in the session\" — its step, cost, attempts, pull request and verdicts, and what it needs."
-allowed-tools: mcp__plugin_terylon-os_terylon__*, mcp__terylon__*
+description: "Use when the owner asks about one Terylon story in flight — \"how is 333 doing\", \"why is it blocked\", \"summarise the story in the session\". Reports its step, cost, attempts, pull request and verdicts, says what it needs, and offers the act that fits without taking it."
+allowed-tools: mcp__plugin_terylon-os_terylon__* mcp__terylon__*
 ---
 
 # show-story — one story in flight

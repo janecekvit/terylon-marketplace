@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "terylon-ado",
-  "version": "1.5.3",
+  "version": "1.6.0",
   "description": "The Azure DevOps adapter — fills the terylon-forge port with ADO mechanics over Microsoft's remote Azure DevOps MCP server (https://mcp.dev.azure.com), signed in with OAuth as the owner. The connect skill registers it from ADO_MCP_CLIENT_ID and ADO_MCP_TENANT_ID; every call carries ADO_ORGANIZATION. No default organisation.",
   "author": {
     "name": "Vít Janeček"

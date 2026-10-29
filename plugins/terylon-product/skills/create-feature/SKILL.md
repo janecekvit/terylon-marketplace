@@ -5,14 +5,14 @@ description: >-
   Triggers on phrasings like "write a Feature", "draft a Feature spec", "update Feature N",
   "is this Feature ready", "review this Feature". Applies the Terylon Feature Specification
   Standard in this skill's references/.
-allowed-tools: Read, Edit, Write, Bash(git *), Bash(gh *), mcp__ado__*
+allowed-tools: Read Edit Write Bash(git *) Bash(gh *) mcp__ado__*
 ---
 
 # Create Feature
 
 ## Overview
 
-Drafts, updates, and reviews Features against the Terylon Feature Specification Standard, on whichever forge the repository is hosted on — a work item on Azure DevOps, an issue on GitHub. It is written against the port's **work-item keys** and never names a platform field; where each key lives is the adapter's answer. The standard itself - naming rules, the field template, the Definition of Ready, the quality bar - lives in `${CLAUDE_PLUGIN_ROOT}/skills/create-feature/references/feature-standard.md` and is the **single source of truth**. This skill does not restate it; it reads the rule at runtime and applies it. Always read that file at the start.
+Drafts, updates, and reviews Features against the Terylon Feature Specification Standard, on whichever forge the repository is hosted on — a work item on Azure DevOps, an issue on GitHub. It is written against the port's **work-item keys** and never names a platform field; where each key lives is the adapter's answer. The standard itself - naming rules, the field template, the Definition of Ready, the quality bar - lives in [`references/feature-standard.md`](references/feature-standard.md) and is the **single source of truth**. This skill does not restate it; it reads the rule at runtime and applies it. Always read that file at the start.
 
 **Core discipline:** never fabricate the inputs a drafter can't know. Customer names, external references, business context, and real-world numbers are not yours to invent - gather them from the user (or mark `N/A` / `TBD` with a note). A confident-looking spec full of invented references is worse than one that flags its gaps.
 
@@ -20,13 +20,13 @@ Drafts, updates, and reviews Features against the Terylon Feature Specification 
 
 - Forge access comes from an adapter. `terylon-forge`, the port, is auto-installed because this plugin declares `dependencies: ["terylon-forge"]`, but it ships no adapter. **`resolve-forge`** (in the port) decides which adapter a run targets — from a pasted Feature URL first, then `TERYLON_FORGE`, then the git remote — and a forge whose adapter is not enabled stops the run.
 - Platform mechanics (call shapes, where each key lives, field encodings) are owned by the **`forge-ops`** engine skill of that adapter, `terylon-ado` or `terylon-github`. **Load `forge-ops` by name** — plugin-qualified when both are enabled — for the exact recipes before the first platform call. Reference it by name only - it lives in a different plugin, so do not path into it (`${CLAUDE_PLUGIN_ROOT}` is local to `terylon-product`, and parent-directory relative imports are banned).
-- The standard this skill applies is `${CLAUDE_PLUGIN_ROOT}/skills/create-feature/references/feature-standard.md`, owned by this repo. Read it at the start of every run.
+- The standard this skill applies is `references/feature-standard.md`, owned by this repo. Read it at the start of every run.
 
 ## Mode: write a new Feature
 
 ### 1. Read the standard
 
-Read `${CLAUDE_PLUGIN_ROOT}/skills/create-feature/references/feature-standard.md`. Use Section 1 for naming, Section 2 for the field template, Section 3 for the readiness check, Section 4 as the quality bar.
+Read `${CLAUDE_SKILL_DIR}/references/feature-standard.md`. Use Section 1 for naming, Section 2 for the field template, Section 3 for the readiness check, Section 4 as the quality bar.
 
 ### 2. Intake - gather inputs before drafting
 
@@ -61,7 +61,7 @@ Given a Feature ID (or a pasted draft), validate and improve it against the stan
 
 ### 1. Read the standard
 
-Read `${CLAUDE_PLUGIN_ROOT}/skills/create-feature/references/feature-standard.md`.
+Read `${CLAUDE_SKILL_DIR}/references/feature-standard.md`.
 
 ### 2. Fetch the work item
 
@@ -179,13 +179,13 @@ Report which items are not yet met. A draft with `[needs input]` placeholders is
 
 ## How to extend
 
-The standard lives in this repo and is owned here. To change the template, the naming convention, the DoR checklist, or the quality bar, edit `${CLAUDE_PLUGIN_ROOT}/skills/create-feature/references/feature-standard.md` directly via PR, bump the `**Version:**` / `**Last updated:**` header in that file, and bump `terylon-product`'s `plugin.json` version so consumers re-fetch.
+The standard lives in this repo and is owned here. To change the template, the naming convention, the DoR checklist, or the quality bar, edit `references/feature-standard.md` directly via PR, bump the `**Version:**` / `**Last updated:**` header in that file, and bump `terylon-product`'s `plugin.json` version so consumers re-fetch.
 
 ## Verification
 
 In Claude Code from the repo root:
 
-1. Run `/create-feature` (or ask "draft a feature spec") in a session — confirm the skill loads and reads the standard at `${CLAUDE_PLUGIN_ROOT}/skills/create-feature/references/feature-standard.md` before drafting.
+1. Run `/create-feature` (or ask "draft a feature spec") in a session — confirm the skill loads and reads the standard at `references/feature-standard.md` before drafting.
 2. Pass a sample brief (e.g. "draft a feature: SIEM log forwarding for enterprise customers, depends on the platform team") and confirm the draft uses the Section 2 template verbatim (all seven fields, UX included), runs the Section 3 DoR check, and writes `[needs input]` for fields the brief didn't cover (not invented content).
 3. Given an existing Feature id or URL on either forge, the review mode must call the `fetch-work-item` operation before commenting on the title or fields, and must report on the UX field's three edge states.
 4. Footer identity — a pushed Feature's footer reads `create-feature@<terylon-product version>`, resolved from this plugin's own `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json`.

@@ -1,7 +1,7 @@
 ---
 name: connect
 description: "Use when the Azure DevOps tools (mcp__ado__*) are missing, after setting or changing ADO_MCP_CLIENT_ID or ADO_MCP_TENANT_ID, or on a machine that has never reached Azure DevOps: registers Microsoft's remote Azure DevOps MCP server at the user scope from the environment, then the owner signs in once with OAuth. Idempotent — an unchanged registration is left alone and keeps its sign-in."
-allowed-tools: Bash(node *), Read
+allowed-tools: Bash(node *) Read
 ---
 
 # connect — register the remote Azure DevOps MCP server
@@ -11,7 +11,7 @@ Registers the user-scope server `ado` — Microsoft's remote server at `https://
 ## Usage
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/skills/connect/scripts/connect.js" [--check]
+node "${CLAUDE_SKILL_DIR}/scripts/connect.js" [--check]
 ```
 
 `--check` says where the registration stands and changes nothing. Without it, a missing registration is added, a changed one is removed and added again, and **an unchanged one is left alone, so its sign-in is kept**.

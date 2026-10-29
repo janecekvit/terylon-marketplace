@@ -824,7 +824,7 @@ Applies to every write (PR threads, PR descriptions, WI comments):
 
 `${CLAUDE_PLUGIN_ROOT}` always resolves to the plugin that **owns the executing file** — it is plugin-local, and parent-directory relative imports across plugins are banned by `plugins/CLAUDE.md`. This forces two delegation mechanisms:
 
-- **Inside this plugin:** deterministic `Read ${CLAUDE_PLUGIN_ROOT}/skills/forge-ops/references/forge-ops.md`, reachable because it is this plugin's own file.
+- **Inside this plugin:** deterministic `Read ${CLAUDE_SKILL_DIR}/references/forge-ops.md`, reachable because it is this plugin's own file.
 - **From anywhere else — which is every caller:** load the `forge-ops` skill **by name**, plugin-qualified as `terylon-ado:forge-ops` when both adapters are enabled. Reference it by name only, **never with a path or `@`**, and never path into `terylon-ado` from another plugin's file: `${CLAUDE_PLUGIN_ROOT}` there resolves to the caller's own plugin, so the path silently points at a file that does not exist.
 
 **Consequence for shared docs:** there is no cross-plugin file path, so a shared reference cannot live as a path-imported doc across plugins. Centralizing it in the `forge-ops` skill (loaded by name) is the supported cross-plugin mechanism.
