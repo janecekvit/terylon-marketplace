@@ -107,7 +107,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.9.12'
+export const MOD_VERSION = '1.11.0'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -681,7 +681,7 @@ async function eventsRefused($: EngineInterface, answered: TerylonAnswer): Promi
 }
 
 // Reads events_since from the stored sequence, page by page, up to `most` events.
-async function readEvents($: EngineInterface, since: number, most: number): Promise<{ events: Json[]; last: number; isWhole: boolean } | null> {
+async function readEvents($: EngineInterface, since: number, most: number): Promise<{ events: Json[]; last: number; isWhole: boolean; reset: { from: number; head: number } | null } | null> {
   const events: Json[] = []
   let from = since
 
@@ -698,16 +698,23 @@ async function readEvents($: EngineInterface, since: number, most: number): Prom
     await eventsAnswered($)
 
     const page = answered.value
+    const head = number(page.head)
+
+    // A HEAD BELOW THE SINCE ASKED is Terylon reset, its sequence begun again: a gap or not, the old history is gone.
+    if (head !== null && head < from) {
+      return { events: [], last: head, isWhole: true, reset: { from, head } }
+    }
+
     events.push(...list(page.events))
     from = number(page.last) ?? from
     debug($, `events_since answered ${list(page.events).length} events, last ${from}${page.more === true ? ', more' : ''}${page.gap === true ? ', a gap' : ''}`)
 
     if (page.gap === true || events.length > most) {
-      return { events, last: number(page.head) ?? from, isWhole: false }
+      return { events, last: head ?? from, isWhole: false, reset: null }
     }
 
     if (page.more !== true) {
-      return { events, last: from, isWhole: true }
+      return { events, last: from, isWhole: true, reset: null }
     }
   }
 }
@@ -829,6 +836,12 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
     return
   }
 
+  if (read_.reset !== null) {
+    await startOver($, read_.reset, now)
+
+    return
+  }
+
   const base = await baseUrl($)
   const candidates = [...candidatesFromEvents(read_.events), ...candidatesFromFlight(lastFlight)]
 
@@ -849,6 +862,21 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
 
   await keep($, STORE_LAST_SEQ, read_.last)
   await keep($, STORE_LAST_SEEN_AT, now)
+  await eventsRead($)
+}
+
+// TERYLON BEGAN ITS SEQUENCE AGAIN: the pane goes on from the new head, tells nothing of the old history, and forgets
+// what it remembered of the stories in it. Said once, in the debug log and on the band.
+async function startOver($: EngineInterface, reset: { from: number; head: number }, now: number): Promise<void> {
+  debug($, `Terylon's sequence went back from ${reset.from} to ${reset.head}; starting over`)
+  settled.clear()
+  storyTargets.clear()
+  await keep($, STORE_SIGNALLED, [])
+  await keep($, STORE_LAST_SEQ, reset.head)
+  await keep($, STORE_LAST_SEEN_AT, now)
+
+  const base = await baseUrl($)
+  await update($, band, (): PaneBand => ({ text: `${COPY.resetHeading} · ${COPY.resetBody(String(reset.from), String(reset.head))}`, link: consoleLink(base, 'history'), isAlert: false }))
   await eventsRead($)
 }
 

@@ -870,6 +870,18 @@ const MUTATIONS = [
         find: "    return 'none'\n",
         replace: "    return String(value)\n",
     },
+    {
+        name: "a head below the since no longer starts the events over",
+        file: "hooks/register.tsx",
+        find: "    if (head !== null && head < from) {\n",
+        replace: "    if (false) {\n",
+    },
+    {
+        name: "the signals told before a reset are kept after it",
+        file: "hooks/register.tsx",
+        find: "  await keep($, STORE_SIGNALLED, [])\n",
+        replace: "",
+    },
 ];
 
 module.exports = { MUTATIONS };

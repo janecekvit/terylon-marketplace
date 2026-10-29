@@ -186,6 +186,8 @@ export const COPY = {
   health: 'Health ↗',
   tooFarHeading: 'Missed too much',
   tooFarBody: (count: string) => `over ${count} events since the last look; a summary would not be whole`,
+  resetHeading: 'Terylon started over',
+  resetBody: (since: string, head: string) => `its events went back from ${since} to ${head}; nothing before is caught up`,
 
   // THE DONE-SIGNAL STOPPED: events_since, or the store that keeps the pane's place, failed. Each kind says its fix.
   eventsNotAllowedTitle: "Claude Code refused the done-signal's call",
