@@ -8,8 +8,8 @@ const MUTATIONS = [
     {
         name: "the done-signal is removed",
         file: "hooks/register.tsx",
-        find: "  await $.prompt.submit({ text: posted.prompt })\n",
-        replace: "",
+        find: "  const entered = await submitted($, posted.prompt)\n",
+        replace: "  const entered: true | string = true\n",
     },
     {
         name: "the catch-up summary is removed",
@@ -984,14 +984,14 @@ const MUTATIONS = [
     {
         name: "a held done-signal is no longer posted at the turn's end",
         file: "hooks/register.tsx",
-        find: "      $.clock.after(0, () => flushHeld($))\n",
-        replace: "",
+        find: "      isTurnRunning = false\n      $.clock.after(0, () => flushHeld($))\n",
+        replace: "      isTurnRunning = false\n",
     },
     {
         name: "a blank stored epoch is taken for an epoch",
         file: "hooks/register.tsx",
-        find: "  const epoch = text(await kept($, STORE_EPOCH))\n",
-        replace: "  const epoch = String(await kept($, STORE_EPOCH) ?? '')\n",
+        find: "  const epoch = text(storedEpoch)\n",
+        replace: "  const epoch = storedEpoch === undefined || storedEpoch === null ? null : String(storedEpoch)\n",
     },
     {
         name: "a blank epoch an earlier version wrote is left in the store",
