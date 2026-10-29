@@ -112,7 +112,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.11.3'
+export const MOD_VERSION = '1.11.4'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -142,7 +142,7 @@ const PROMPT_REPEAT_MILLISECONDS = 60000
 
 // What the store keeps across sessions: where the pane last read the events, when, and what it signalled.
 const STORE_LAST_SEQ = 'lastSeq'
-// THE EVENT LOG'S IDENTITY, kept beside lastSeq: a sequence means something only within its epoch. '' where none is known.
+// THE EVENT LOG'S IDENTITY, kept beside lastSeq: a sequence means something only within its epoch.
 const STORE_EPOCH = 'epoch'
 const STORE_LAST_SEEN_AT = 'lastSeenAt'
 const STORE_SIGNALLED = 'signalled'
@@ -664,6 +664,13 @@ async function keep($: EngineInterface, key: string, value: unknown): Promise<vo
   }
 }
 
+// AN EPOCH IS WRITTEN ONLY ONCE ONE IS KNOWN: a blank or a value of another type reads as none, never as an epoch.
+async function keepEpoch($: EngineInterface, epoch: string | null): Promise<void> {
+  if (epoch !== null) {
+    await keep($, STORE_EPOCH, epoch)
+  }
+}
+
 async function signalled($: EngineInterface): Promise<string[]> {
   const value = await kept($, STORE_SIGNALLED)
 
@@ -904,7 +911,7 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
     await eventsAnswered($)
 
     await keep($, STORE_LAST_SEQ, number(head.value.head) ?? number(head.value.last) ?? 0)
-    await keep($, STORE_EPOCH, text(head.value.epoch) ?? '')
+    await keepEpoch($, text(head.value.epoch))
     await keep($, STORE_LAST_SEEN_AT, now)
     await eventsRead($)
 
@@ -944,7 +951,7 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
   }
 
   await keep($, STORE_LAST_SEQ, read_.last)
-  await keep($, STORE_EPOCH, read_.epoch ?? '')
+  await keepEpoch($, read_.epoch)
   await keep($, STORE_LAST_SEEN_AT, now)
   await eventsRead($)
 }
@@ -959,7 +966,7 @@ async function startOver($: EngineInterface, reset: { from: number; head: number
   storyTargets.clear()
   await keep($, STORE_SIGNALLED, [])
   await keep($, STORE_LAST_SEQ, reset.head)
-  await keep($, STORE_EPOCH, epoch ?? '')
+  await keepEpoch($, epoch)
   await keep($, STORE_LAST_SEEN_AT, now)
 
   const base = await baseUrl($)

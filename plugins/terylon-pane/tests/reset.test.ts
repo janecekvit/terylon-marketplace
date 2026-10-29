@@ -212,3 +212,38 @@ for (const head of [null, '5', undefined]) {
     expect(terylon.prompts[0]).toStartWith('Story #327')
   })
 }
+
+for (const stored of ['', '   ', 42, null]) {
+  test(`A STORED EPOCH OF ${JSON.stringify(stored)} is none known: the first real epoch is adopted silently, never a reset`, async ($, on) => {
+    const terylon = world(on, { store: { lastSeq: 18100, epoch: stored, lastSeenAt: Date.parse('2026-10-11T21:59:00Z') } })
+    serve(terylon, 'reset', { epoch: NEW_EPOCH, head: 18100, moved: [] })
+    await $.session.start(SESSION)
+    await terylon.clock.settle()
+
+    expect(eventsCalls(terylon)).toEqual([{ since: 18100, limit: 500 }])
+    expect(resetLines(terylon)).toEqual([])
+    expect(await bandText($)).toBeUndefined()
+
+    await terylon.clock.advance(30000)
+    expect(eventsCalls(terylon).at(-1)).toEqual({ since: 18100, epoch: NEW_EPOCH, limit: 500 })
+  })
+}
+
+test('NO BLANK EPOCH IS WRITTEN: from a server that names none, the store keeps no epoch at all', async ($, on) => {
+  // The store answered by the test, so that every write is seen.
+  const kept = new Map<string, unknown>([['lastSeq', 18100], ['lastSeenAt', Date.parse('2026-10-11T21:59:00Z')]])
+  const written: { key: string; value: unknown }[] = []
+  on('store.get', async ($_, e) => ({ value: kept.get(e.key) }) as never)
+  on('store.set', async ($_, e) => {
+    kept.set(e.key, e.value)
+    written.push({ key: e.key, value: e.value })
+    return { value: undefined } as never
+  })
+  const terylon = world(on, { store: null })
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+  await terylon.clock.advance(30000)
+
+  expect(written.some(entry => entry.key === 'lastSeq')).toBe(true)
+  expect(written.filter(entry => entry.key === 'epoch')).toEqual([])
+})

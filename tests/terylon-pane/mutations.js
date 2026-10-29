@@ -966,7 +966,7 @@ const MUTATIONS = [
     {
         name: "the epoch an answer names is never stored",
         file: "hooks/register.tsx",
-        find: "  await keep($, STORE_EPOCH, read_.epoch ?? '')\n",
+        find: "  await keepEpoch($, read_.epoch)\n",
         replace: "",
     },
     {
@@ -986,6 +986,12 @@ const MUTATIONS = [
         file: "hooks/register.tsx",
         find: "      $.clock.after(0, () => flushHeld($))\n",
         replace: "",
+    },
+    {
+        name: "a blank stored epoch is taken for an epoch",
+        file: "hooks/register.tsx",
+        find: "  const epoch = text(await kept($, STORE_EPOCH))\n",
+        replace: "  const epoch = String(await kept($, STORE_EPOCH) ?? '')\n",
     },
 ];
 
