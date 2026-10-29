@@ -945,6 +945,84 @@ const MUTATIONS = [
         find: "          {plans.filter(plan => !settledVersions.includes(plan)).map(plan =>\n",
         replace: "          {plans.map(plan =>\n",
     },
+    {
+        name: "History is called Closed again",
+        file: "hooks/copy.ts",
+        find: "  goalsHistory: 'History',\n",
+        replace: "  goalsHistory: 'Closed',\n",
+    },
+    {
+        name: "History's empty state is the old line again",
+        file: "hooks/copy.ts",
+        find: "  historyEmpty: 'History is empty.',\n",
+        replace: "  historyEmpty: 'No closed goals.',\n",
+    },
+    {
+        name: "a History row no longer ends with Delete…",
+        file: "hooks/register.tsx",
+        find: "                trail: isClosedShown ? { href: consoleLink(base, 'goals'), label: COPY.deleteInConsole } : null,\n",
+        replace: "                trail: null,\n",
+    },
+    {
+        name: "Delete… links elsewhere than the console's Goals",
+        file: "hooks/register.tsx",
+        find: "trail: isClosedShown ? { href: consoleLink(base, 'goals'),",
+        replace: "trail: isClosedShown ? { href: consoleLink(base, `goals&goal=${item.id}`),",
+    },
+    {
+        name: "a deleted goal's goal_get is drawn as a failure",
+        file: "hooks/register.tsx",
+        find: "  // A GOAL DELETED FOR GOOD: Terylon's sentence, quietly, and the goal gone from every list.\n  if (answered.kind === 'refused' && isDeletedSentence(answered.sentence)) {\n",
+        replace: "  if (false) {\n",
+    },
+    {
+        name: "a deleted goal's screen throws",
+        file: "hooks/register.tsx",
+        find: "            {quiet(elements, shownGoal.sentence ?? COPY.goalDeleted(screen.goal))}\n",
+        replace: "            {(() => { throw new Error(shownGoal.sentence ?? 'deleted') })()}\n",
+    },
+    {
+        name: "a story deleted with its goal is drawn as a failure",
+        file: "hooks/register.tsx",
+        find: "  // A STORY DELETED WITH ITS GOAL: Terylon's sentence, quietly; nothing of it is signalled or settled any more.\n  if (answered.kind === 'refused' && isDeletedSentence(answered.sentence)) {\n",
+        replace: "  if (false) {\n",
+    },
+    {
+        name: "a deleted goal stays listed in History",
+        file: "hooks/register.tsx",
+        find: "    const closed = current.closed.filter(item => !gone.has(item.id))\n",
+        replace: "    const closed = current.closed\n",
+    },
+    {
+        name: "a closed list read after the deletion lists the deleted goal again",
+        file: "hooks/register.tsx",
+        find: "  const closedNow = { ...answered.value, goals: list(answered.value.goals).filter(item => !deletedGoals.has(number(item.id) ?? -1)).map(",
+        replace: "  const closedNow = { ...answered.value, goals: list(answered.value.goals).map(",
+    },
+    {
+        name: "a deleted goal's plans stay listed",
+        file: "hooks/register.tsx",
+        find: "list(plansAnswer.value.plans).filter(item => !deletedGoals.has(number(item.goal) ?? -1)).map(",
+        replace: "list(plansAnswer.value.plans).map(",
+    },
+    {
+        name: "GoalDeleted in the feed is ignored",
+        file: "hooks/register.tsx",
+        find: "  await forgetGoals($, deletedGoalsOf(read_.events))\n",
+        replace: "",
+    },
+    {
+        name: "a story deleted with its goal still posts its signal",
+        file: "hooks/register.tsx",
+        find: "    if ((answered.kind === 'refused' && isDeletedSentence(answered.sentence)) || (answered.kind === 'ok' && deletedGoals.has(goalOfStory(answered.value) ?? -1))) {\n",
+        replace: "    if (false) {\n",
+    },
+    {
+        name: "size S is missing from the sizes",
+        file: "hooks/copy.ts",
+        find: "  sizes: ['S', 'M', 'L', 'XL'] as readonly string[],\n",
+        replace: "  sizes: ['M', 'L', 'XL'] as readonly string[],\n",
+    },
 ];
 
 module.exports = { MUTATIONS };

@@ -98,11 +98,15 @@ import {
   candidatesFromFlight,
   catchUpSummary,
   coalesce,
+  deletedGoalsOf,
+  goalOfStory,
+  isDeletedSentence,
   settleCandidate,
   signalFor,
   signalKey,
   signalsSummary,
   verdictOf,
+  withoutDeletedGoals,
 } from './signals'
 import type { Candidate, Signal, Verdict } from './signals'
 
@@ -112,7 +116,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.10.6'
+export const MOD_VERSION = '1.13.0'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -233,6 +237,10 @@ const OPEN_STORY_STATES: readonly string[] = ['approved', 'dispatched', 'running
 const settled = new Map<string, { from: readonly string[]; to: string; until: number }>()
 // Where each verified story is kept, as story_get said it: `list`, or its repository's target.
 const storyTargets = new Map<number, string>()
+// THE GOALS DELETED FOR GOOD, and the stories deleted with them, as the feed or Terylon's answers said it this session:
+// nothing of them is listed, opened as a failure or signalled again.
+const deletedGoals = new Set<number>()
+const deletedStories = new Set<number>()
 
 // WHAT THE PANE KEEPS IN $.store, mirrored here: where a store refuses, the session still reads from its last place and
 // signals each story once, and only a return after Desktop was closed is lost.
@@ -685,6 +693,63 @@ async function eventsRefused($: EngineInterface, answered: TerylonAnswer): Promi
   await eventsFailed($, kind, why(answered) || COPY.noServerTitle)
 }
 
+// GOALS DELETED FOR GOOD: dropped from the Goals tab, its plans, the queue's questions and every settled act; an open
+// goal screen of one says so quietly. The stories known under them are dropped with them.
+async function forgetGoals($: EngineInterface, ids: readonly number[]): Promise<void> {
+  if (ids.length === 0) {
+    return
+  }
+
+  const gone = new Set(ids)
+  const goalsNow = await readGoals($)
+  const shownGoal = await read($, goal)
+  const stories = [
+    ...goalsNow.plans.filter(plan => gone.has(plan.goal)).flatMap(plan => plan.stories.map(item => item.id)),
+    ...(shownGoal !== null && gone.has(shownGoal.goal) ? shownGoal.stories.map(item => item.id) : []),
+  ]
+
+  for (const id of ids) {
+    deletedGoals.add(id)
+    settled.delete(`goal-${id}`)
+  }
+
+  for (const id of stories) {
+    deletedStories.add(id)
+    settled.delete(`story-${id}`)
+    storyTargets.delete(id)
+  }
+
+  debug($, `goals deleted: ${ids.join(', ')}; dropped with ${stories.length} of their stories`)
+  await update($, goals, (current: PaneGoals): PaneGoals => {
+    const closed = current.closed.filter(item => !gone.has(item.id))
+
+    return {
+      ...current,
+      open: current.open.filter(item => !gone.has(item.id)),
+      closed,
+      // A DELETED GOAL READ IN HISTORY leaves its count too; one never read there is counted again by the next poll.
+      closedCount: Math.max(0, current.closedCount - (current.closed.length - closed.length)),
+      plans: current.plans.filter(plan => !gone.has(plan.goal)),
+    }
+  })
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({
+    ...EMPTY_SNAPSHOT,
+    ...current,
+    questions: (current.questions ?? []).filter(item => !ids.some(id => item.subject === `goal/${id}`)),
+  }))
+
+  const shownStory = await read($, story)
+
+  if (shownStory !== null && shownStory.goal !== null && gone.has(shownStory.goal)) {
+    deletedStories.add(shownStory.story)
+    await update($, story, (current: PaneStory | null): PaneStory | null => (current === null || current.story !== shownStory.story ? current : { ...current, phase: 'deleted', sentence: COPY.storyDeleted(shownStory.story) }))
+  }
+
+  if (shownGoal !== null && gone.has(shownGoal.goal)) {
+    await update($, goal, (current: PaneGoal | null): PaneGoal | null => (current === null || current.goal !== shownGoal.goal ? current : { ...current, phase: 'deleted', sentence: COPY.goalDeleted(shownGoal.goal) }))
+  }
+}
+
 // Reads events_since from the stored sequence, page by page, up to `most` events.
 async function readEvents($: EngineInterface, since: number, most: number): Promise<{ events: Json[]; last: number; isWhole: boolean } | null> {
   const events: Json[] = []
@@ -725,7 +790,20 @@ async function postSignals($: EngineInterface, candidates: Candidate[]): Promise
   const now = await $.clock.now()
 
   for (const candidate of coalesce(candidates)) {
+    if (deletedStories.has(candidate.story)) {
+      debug($, `not posting ${candidate.story}:${candidate.kind}: the story was deleted with its goal`)
+      continue
+    }
+
     const answered = await callTerylon($, 'story_get', { story: candidate.story })
+
+    // A STORY DELETED WITH ITS GOAL asks nothing: story_get says so in a sentence, or names a goal the feed deleted.
+    if ((answered.kind === 'refused' && isDeletedSentence(answered.sentence)) || (answered.kind === 'ok' && deletedGoals.has(goalOfStory(answered.value) ?? -1))) {
+      deletedStories.add(candidate.story)
+      debug($, `not posting ${candidate.story}:${candidate.kind}: the story was deleted with its goal`)
+      continue
+    }
+
     // AN ACCEPT PRESSED IN THE PANE stands over a story_get that lags, or that did not answer.
     const story = answered.kind === 'ok'
       ? settledStory(answered.value, candidate.story, now)
@@ -835,7 +913,13 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
   }
 
   const base = await baseUrl($)
-  const candidates = [...candidatesFromEvents(read_.events), ...candidatesFromFlight(lastFlight)]
+  // A GOALDELETED IN THE FEED drops its goal everywhere, before anything of its stories could be told.
+  await forgetGoals($, deletedGoalsOf(read_.events))
+  const events = withoutDeletedGoals(read_.events, deletedGoals)
+  const candidates = [
+    ...candidatesFromEvents(events),
+    ...candidatesFromFlight(lastFlight).filter(candidate => !deletedStories.has(candidate.story)),
+  ]
 
   if (!read_.isWhole) {
     // Too far behind for a whole summary: say so, link the console, tell nothing piecemeal.
@@ -843,7 +927,7 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
     await update($, band, (): PaneBand => ({ text: `${COPY.tooFarHeading} · ${COPY.tooFarBody(String(CATCH_UP_MOST_EVENTS))}`, link: consoleLink(base, 'history'), isAlert: true }))
   } else if (isCatchUp) {
     // Back after a long time away: ONE summary, the gap's signals inside it.
-    const summary = catchUpSummary({ awayMs, events: read_.events, briefing: lastBriefing, flight: lastFlight, policy })
+    const summary = catchUpSummary({ awayMs, events, briefing: lastBriefing, flight: lastFlight, policy })
     await markSignalled($, candidates)
     debug($, `posting the catch-up summary of ${read_.events.length} events`)
     await $.prompt.submit({ text: summary.prompt })
@@ -1022,6 +1106,15 @@ async function openStory($: EngineInterface, id: number): Promise<void> {
   const inFlight = settledStory(list(lastFlight.stories).find(item => number(item.id) === id) ?? {}, id, now)
   const question = (await readSnapshot($)).questions.find(item => item.subject === `story/${id}`) ?? null
 
+  // A STORY DELETED WITH ITS GOAL: Terylon's sentence, quietly; nothing of it is signalled or settled any more.
+  if (answered.kind === 'refused' && isDeletedSentence(answered.sentence)) {
+    deletedStories.add(id)
+    settled.delete(`story-${id}`)
+    storyTargets.delete(id)
+    await update($, story, (): PaneStory | null => ({ ...storyView(id, {}, {}, null, now, zoneOffset), phase: 'deleted', sentence: answered.sentence }))
+    return
+  }
+
   if (answered.kind !== 'ok' && Object.keys(inFlight).length === 0) {
     await update($, story, (): PaneStory | null => ({ ...storyView(id, {}, {}, null, now, zoneOffset), phase: 'error', sentence: why(answered) }))
     return
@@ -1132,7 +1225,7 @@ async function loadGoals($: EngineInterface): Promise<void> {
     target: typeof current?.target === 'string' ? current.target : OWN_LIST,
     adding: current?.adding ?? 'idle',
     addSentence: typeof current?.addSentence === 'string' ? current.addSentence : null,
-    // THE CLOSED GOALS ALREADY READ stay until the next press of Closed, or a closedCount that changed.
+    // THE CLOSED GOALS ALREADY READ stay until the next press of History, or a closedCount that changed.
     showing: current?.showing === 'closed' ? 'closed' : 'open',
     closed: Array.isArray(current?.closed) ? current.closed : [],
     closedCount: typeof current?.closedCount === 'number' ? current.closedCount : 0,
@@ -1156,8 +1249,9 @@ async function readGoalsFromTerylon($: EngineInterface): Promise<void> {
 
   // WHAT AN ACT JUST CHANGED, over what the two lists still answer (#35).
   const now = await $.clock.now()
-  const goalsNow = { ...goalsAnswer.value, goals: list(goalsAnswer.value.goals).map(item => ({ ...item, state: settledState(`goal-${number(item.id) ?? 0}`, String(item.state ?? ''), now) })) }
-  const plansNow = plansAnswer.kind === 'ok' ? { ...plansAnswer.value, plans: list(plansAnswer.value.plans).map(item => ({ ...item, state: settledState(`plan-${number(item.id) ?? 0}`, String(item.state ?? ''), now) })) } : {}
+  // A GOAL DELETED FOR GOOD stays gone, its plans with it, where a list read right after the deletion still names it.
+  const goalsNow = { ...goalsAnswer.value, goals: list(goalsAnswer.value.goals).filter(item => !deletedGoals.has(number(item.id) ?? -1)).map(item => ({ ...item, state: settledState(`goal-${number(item.id) ?? 0}`, String(item.state ?? ''), now) })) }
+  const plansNow = plansAnswer.kind === 'ok' ? { ...plansAnswer.value, plans: list(plansAnswer.value.plans).filter(item => !deletedGoals.has(number(item.goal) ?? -1)).map(item => ({ ...item, state: settledState(`plan-${number(item.id) ?? 0}`, String(item.state ?? ''), now) })) } : {}
   const items = goalItems(goalsNow, questions)
   const plans = plansAnswer.kind === 'ok' ? planItems(plansNow, base) : []
   const targets = targetsOf(goalsAnswer.value)
@@ -1172,7 +1266,7 @@ async function readGoalsFromTerylon($: EngineInterface): Promise<void> {
       return { ...read_, closed: items.closed, closedCount: items.closed.length, closedFrom: 'list', closedPhase: 'ok', closedSentence: null }
     }
 
-    // AFTER S44: what a press of Closed read is kept while closedCount says the same; never read again from here.
+    // AFTER S44: what a press of History read is kept while closedCount says the same; never read again from here.
     const isKept = current.closedFrom === 'terylon' && current.closedCount === closedCount && current.closedPhase !== 'idle'
 
     return isKept
@@ -1181,7 +1275,7 @@ async function readGoalsFromTerylon($: EngineInterface): Promise<void> {
   })
 }
 
-// OPEN OR CLOSED, PRESSED. With S44 a press of Closed reads the closed goals, and nothing else ever does.
+// OPEN OR HISTORY, PRESSED. With S44 a press of History reads the closed goals, and nothing else ever does.
 async function showGoals($: EngineInterface, showing: 'open' | 'closed'): Promise<void> {
   await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, showing }))
 
@@ -1211,7 +1305,7 @@ async function readClosedGoals($: EngineInterface): Promise<void> {
 
   const now = await $.clock.now()
   const questions = (await readSnapshot($)).questions
-  const closedNow = { ...answered.value, goals: list(answered.value.goals).map(item => ({ ...item, state: settledState(`goal-${number(item.id) ?? 0}`, String(item.state ?? ''), now) })) }
+  const closedNow = { ...answered.value, goals: list(answered.value.goals).filter(item => !deletedGoals.has(number(item.id) ?? -1)).map(item => ({ ...item, state: settledState(`goal-${number(item.id) ?? 0}`, String(item.state ?? ''), now) })) }
 
   await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, closed: goalItems(closedNow, questions).closed, closedPhase: 'ok', closedSentence: null }))
 }
@@ -1260,6 +1354,13 @@ async function openGoal($: EngineInterface, id: number): Promise<void> {
   await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'loading', sentence: null, title: '', meta: '', stories: [], isOpen: false, openStories: [], repeating: null }))
 
   const answered = await callTerylon($, 'goal_get', { goal: id })
+
+  // A GOAL DELETED FOR GOOD: Terylon's sentence, quietly, and the goal gone from every list.
+  if (answered.kind === 'refused' && isDeletedSentence(answered.sentence)) {
+    await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'deleted', sentence: answered.sentence, title: '', meta: '', stories: [], isOpen: false, openStories: [], repeating: null }))
+    await forgetGoals($, [id])
+    return
+  }
 
   if (answered.kind !== 'ok') {
     await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'error', sentence: why(answered), title: '', meta: '', stories: [], isOpen: false, openStories: [], repeating: null }))
@@ -1791,6 +1892,8 @@ type Row = {
   detailTone?: Tone
   // The console link the pointer reveals over the row's right edge (hover-reveal); without the proof it sits in the body.
   reveal?: { href: string; label: string } | null
+  // A console link that ends the row, always drawn beside the press: History's Delete….
+  trail?: { href: string; label: string } | null
   onPress: () => unknown
   body?: unknown
 }
@@ -1827,7 +1930,7 @@ function row(elements: Elements, look: Look, input: Row): unknown {
 
   return (
     <Box key={`row-${input.key}`} flexDirection="column" hover={isRevealed ? { backgroundColor: 'userMessageBackgroundHover' } : undefined}>
-      <Box flexDirection="row" minWidth={0} overflow="hidden" gap={isRevealed ? 'sm' : undefined}>
+      <Box flexDirection="row" minWidth={0} overflow="hidden" gap={isRevealed || (input.trail !== undefined && input.trail !== null) ? (look.isGraphic ? 'sm' : 1) : undefined}>
         <Button key={input.key} plain onPress={input.onPress}>
           {children}
         </Button>
@@ -1836,6 +1939,11 @@ function row(elements: Elements, look: Look, input: Row): unknown {
           // NO KEY ON THE REVEAL: a keyed Box is a hover scope of its own, and one drawn "none" is never under the pointer.
           <Box flexShrink={0} display="none" hover={{ display: 'flex' }}>
             <Link href={input.reveal.href} label={input.reveal.label} />
+          </Box>
+        )}
+        {input.trail !== undefined && input.trail !== null && (
+          <Box flexShrink={0}>
+            <Link href={input.trail.href} label={input.trail.label} />
           </Box>
         )}
       </Box>
@@ -2537,6 +2645,17 @@ export const register: Register = on => {
           <Box flexDirection="column" gap={1}>
             {backButton}
             {quiet(elements, COPY.storyLoading)}
+          </Box>
+        )
+      }
+
+      // DELETED WITH ITS GOAL: the sentence, quietly, and ‹ back; never a failure.
+      if (shownStory.phase === 'deleted') {
+        return (
+          <Box flexDirection="column" gap={1}>
+            {backButton}
+            {quiet(elements, shownStory.sentence ?? '')}
+            {footer}
           </Box>
         )
       }
@@ -3269,6 +3388,17 @@ export const register: Register = on => {
         )
       }
 
+      // DELETED FOR GOOD: the sentence, quietly, and ‹ back; never a failure.
+      if (shownGoal.phase === 'deleted') {
+        return (
+          <Box flexDirection="column" gap={1}>
+            {backButton}
+            {quiet(elements, shownGoal.sentence ?? COPY.goalDeleted(screen.goal))}
+            {footer}
+          </Box>
+        )
+      }
+
       return (
         <Box flexDirection="column" gap={1}>
           {backButton}
@@ -3318,7 +3448,7 @@ export const register: Register = on => {
         : !goalsState.closed.some(item => item.id === plan.goal)))
       // UNDER CLOSED, THE CLOSED GOALS' PLANS ALONE: each button draws its own goals' plans.
       const shownPlans = isClosedShown ? tabPlans.filter(plan => goalsState.closed.some(item => item.id === plan.goal)) : openPlans
-      // OPEN · N AND CLOSED · M: the one selected filled, the other dim, as the tabs are.
+      // OPEN · N AND HISTORY · M: the one selected filled, the other dim, as the tabs are. History is the closed goals.
       const switchButton = (key: string, name: string, count: number, isSelected: boolean, showing: 'open' | 'closed') => (
         <Button key={key} label={`${name}${COPY.count(count)}`} variant={isSelected ? 'primary' : undefined} dimColor={isSelected ? undefined : true} onPress={() => showGoals($, showing)}>
           {!look.isGraphic && isSelected ? '● ' : ''}
@@ -3330,7 +3460,7 @@ export const register: Register = on => {
       const goalSwitch = (
         <Box flexDirection="row" gap={look.isGraphic ? 'xs' : 1} flexWrap="wrap">
           {switchButton('goals-show-open', COPY.goalsOpen, goalsState.open.length, !isClosedShown, 'open')}
-          {switchButton('goals-show-closed', COPY.goalsClosed, goalsState.closedCount, isClosedShown, 'closed')}
+          {switchButton('goals-show-closed', COPY.goalsHistory, goalsState.closedCount, isClosedShown, 'closed')}
         </Box>
       )
       const closedRetry = (label: string) => <Button key="goals-closed-retry" label={label} onPress={() => showGoals($, 'closed')} />
@@ -3341,7 +3471,7 @@ export const register: Register = on => {
           ? [reason(goalsState.closedSentence), closedRetry(COPY.retry)]
           : goalsState.closedPhase === 'changed'
             ? [quiet(elements, COPY.closedChanged), closedRetry(COPY.closedReadAgain)]
-            : goalsState.closed.length === 0 ? [quiet(elements, COPY.noClosedGoals)] : null
+            : goalsState.closed.length === 0 ? [quiet(elements, COPY.historyEmpty)] : null
       const goalRows = isClosedShown ? goalsState.closed : goalsState.open
       const goalPickers = [
         'Select' in elements ? (
@@ -3372,6 +3502,8 @@ export const register: Register = on => {
                 title: item.title,
                 titleTone: isClosedShown ? 'subtle' : undefined,
                 isTitleDim: isClosedShown,
+                // DELETE… ENDS EACH HISTORY ROW: the console's Goals, where the owner deletes it; no tool of the pane deletes.
+                trail: isClosedShown ? { href: consoleLink(base, 'goals'), label: COPY.deleteInConsole } : null,
                 detail: item.questions > 0 ? COPY.goalQuestions(item.questions) : item.stories,
                 detailTone: item.questions > 0 ? 'warning' : 'subtle',
                 onPress: () => go({ screen: 'goal', goal: item.id }),

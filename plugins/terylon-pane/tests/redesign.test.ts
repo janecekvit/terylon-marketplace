@@ -276,7 +276,7 @@ test('the Status tab says the machine in one word, large, in its colour, its tim
 
     expect(word?.props).toMatchObject({ size: 'title', weight: 'semibold', color: 'success' })
     expect((await ui.find({ type: 'Text', text: /^\s*last answer at / }))?.props.tabular).toBe(true)
-    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.10.6') }))?.props.mono).toBe(true)
+    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.13.0') }))?.props.mono).toBe(true)
     await ui.unmount()
   }
 })
@@ -302,7 +302,7 @@ test('THE NEW TASK: goal, after and size are Selects over tasks_add, and what is
 
   expect((await ui.find({ key: 'add-goal' }))?.props.options).toEqual([{ value: '3', label: 'P1 · Agentic OS' }, { value: '11', label: 'Test z telefonu' }])
   expect((await ui.find({ key: 'add-after' }))?.props.value).toBe('')
-  expect((await ui.find({ key: 'add-size' }))?.props.options).toEqual([{ value: 'M', label: 'M' }, { value: 'L', label: 'L' }, { value: 'XL', label: 'XL' }])
+  expect((await ui.find({ key: 'add-size' }))?.props.options).toEqual([{ value: 'S', label: 'S' }, { value: 'M', label: 'M' }, { value: 'L', label: 'L' }, { value: 'XL', label: 'XL' }])
   expect((await ui.find({ key: 'add-size' }))?.props.value).toBe('M')
   expect(await ui.find({ key: 'add-pickers' })).toBeDefined()
 
