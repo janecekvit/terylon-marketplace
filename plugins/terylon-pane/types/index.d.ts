@@ -205,6 +205,9 @@ export type PanePlan = {
   comment: string | null
   stories: PanePlanStory[]
   console: string
+  // A REPEATING TASK'S VERSION PLAN (Terylon S43) has no stories: approving it approves the version each later run uses.
+  // `version` is null where Terylon names none. Absent in a value an older version stored.
+  taskVersion?: { version: string | null } | null
 }
 
 export type PaneGoals = {

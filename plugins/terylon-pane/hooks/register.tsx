@@ -111,7 +111,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.10.3'
+export const MOD_VERSION = '1.10.4'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -3143,7 +3143,10 @@ export const register: Register = on => {
       const orderAlt = COPY.planOrderAlt(plan.stories.map(item => ({ title: item.title, after: item.after.map(place => plan.stories[place - 1]?.title ?? `#${place}`) })))
 
       const planKey = `plan-${plan.id}`
-      const card_ = cardOf(`plan-${plan.id}`, <Text size="heading" weight="semibold">{COPY.plan(plan.id)}<Text color="subtle" weight="regular">{` · ${plan.goalTitle}`}</Text></Text>, plan.stateText, [
+      // A value an older version stored has no taskVersion: it is drawn as a plan of stories until plans_list is read again.
+      const taskVersion = plan.taskVersion ?? null
+      const planSubtitle = taskVersion === null ? plan.goalTitle : COPY.taskVersion(taskVersion.version, plan.goalTitle)
+      const card_ = cardOf(`plan-${plan.id}`, <Text size="heading" weight="semibold">{COPY.plan(plan.id)}<Text color="subtle" weight="regular">{` · ${planSubtitle}`}</Text></Text>, plan.stateText, [
         // A PLAN AS A CHAIN (S32): the order and the "after" of its stories as an Svg, as 1 → 2 → 3 on the terminal. Only
         // the order (#39): the sizes beside it, "S ~$3 → M ~$5", read as nodes of a second chain, and a plan of one story
         // drew "○ M" above its row. A plan of one story has no order to draw; each size is said on its story's row.
@@ -3163,7 +3166,7 @@ export const register: Register = on => {
             onPress: () => go({ screen: 'story', story: item.id }),
           })),
         plan.comment === null ? null : <Text color="inactive">{plan.comment}</Text>,
-        <Text color="inactive" size="footnote">{COPY.planNote}</Text>,
+        taskVersion === null ? <Text color="inactive" size="footnote">{COPY.planNote}</Text> : null,
         // THE PLAN'S ACTS (S27): Approve in one press, Rethink… with its comment; editing criteria stays the console's.
         <Box flexDirection="row" gap={1} flexWrap="wrap">
           {plan.isProposed && actButton(planKey, 'plan_approve', plan.id, { isPrimary: true })}
@@ -3174,9 +3177,9 @@ export const register: Register = on => {
         plan.isProposed && actState(planKey).open === 'plan_rethink' ? <Text color="subtle" size="footnote">{COPY.rethinkNote}</Text> : null,
         actBusyNote(planKey),
         plan.isProposed ? (
-          <Text key={`plan-${plan.id}-note`} color="subtle" size="footnote">{COPY.approveNote(plan.stories.length)}</Text>
+          <Text key={`plan-${plan.id}-note`} color="subtle" size="footnote">{taskVersion === null ? COPY.approveNote(plan.stories.length) : COPY.approveVersionNote(taskVersion.version)}</Text>
         ) : null,
-        plan.isProposed ? <Link key={`plan-${plan.id}-console`} href={plan.console} label={COPY.approveConsole} /> : null,
+        plan.isProposed ? <Link key={`plan-${plan.id}-console`} href={plan.console} label={taskVersion === null ? COPY.approveConsole : COPY.planInConsole} /> : null,
       ], plan.isProposed ? 'wait' : 'plain')
 
       return [card_, actOutcome(planKey, plan.console, COPY.planInConsole, [

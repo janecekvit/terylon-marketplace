@@ -912,6 +912,18 @@ const MUTATIONS = [
         find: "  const date = new Date(moment - offsetAt(zone, moment) * 60000)\n",
         replace: "  const date = new Date(moment - offsetAt(zone, Date.parse('2026-10-28T21:00:00Z')) * 60000)\n",
     },
+    {
+        name: "a version plan waits on the Queue as 0 stories again",
+        file: "hooks/queue.ts",
+        find: "    const taskVersion = taskVersionOf(plan)\n    items.push({\n",
+        replace: "    const taskVersion = null as { version: string | null } | null\n    items.push({\n",
+    },
+    {
+        name: "a version plan's card says it starts all 0 stories again",
+        file: "hooks/register.tsx",
+        find: "      const taskVersion = plan.taskVersion ?? null\n",
+        replace: "      const taskVersion = null as { version: string | null } | null\n",
+    },
 ];
 
 module.exports = { MUTATIONS };

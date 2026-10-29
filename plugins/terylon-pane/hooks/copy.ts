@@ -131,6 +131,10 @@ export const COPY = {
     environment === null ? 'verified · waiting for merge' : `verified in ${environment} · waiting for merge`,
   planWaiting: (estimate: string | null) => (estimate === null ? 'to approve' : `to approve · ~$${estimate}`),
   planTitle: (plan: number, goal: string, stories: number) => `Plan ${plan} · ${goal} · ${stories} ${stories === 1 ? 'story' : 'stories'}`,
+  // A repeating task's version plan (Terylon S43): no stories to count, one version to approve.
+  taskVersion: (version: string | null, task: string) => (version === null ? `a new version of ${task}` : `version ${version} of ${task}`),
+  taskVersionTitle: (plan: number, version: string | null, task: string) => `Plan ${plan} · ${version === null ? `a new version of ${task}` : `version ${version} of ${task}`}`,
+  approveVersionNote: (version: string | null) => `Approve: each later task_run uses ${version === null ? 'this version' : `version ${version}`}.`,
   blocked: (reason: string) => `blocked: ${reason}`,
   verifying: 'verifying',
   stuckSince: (time: string) => `stuck since ${time}`,

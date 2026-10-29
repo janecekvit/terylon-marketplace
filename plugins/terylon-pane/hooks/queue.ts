@@ -241,11 +241,14 @@ export function waitingItems(briefing: Json, base: string): PaneWaitingItem[] {
   for (const plan of list(briefing.plansWaiting)) {
     const id = number(plan.id) ?? 0
     const estimate = number(plan.estimateUsd)
+    const taskVersion = taskVersionOf(plan)
     items.push({
       kind: 'plan',
       key: `plan-${id}`,
       target: id,
-      title: COPY.planTitle(id, text(plan.goalTitle) ?? '', number(plan.stories) ?? 0),
+      title: taskVersion === null
+        ? COPY.planTitle(id, text(plan.goalTitle) ?? '', number(plan.stories) ?? 0)
+        : COPY.taskVersionTitle(id, taskVersion.version, text(plan.goalTitle) ?? ''),
       detail: COPY.planWaiting(estimate === null ? null : estimate.toFixed(0)),
       console: consoleLink(base, `plan&plan=${id}`),
     })
@@ -905,6 +908,21 @@ export function repeatingOf(goal: Json, base: string, now: number, zone: Zone = 
   }
 }
 
+// A REPEATING TASK'S VERSION PLAN (Terylon S43): approving it approves the version each later task_run uses, and it
+// carries no stories. It says so with `repeating`, or by having no stories while it waits or runs: no other plan has
+// none then, though a withdrawn one or one sent back may list none. Its version where Terylon names one.
+export function taskVersionOf(plan: Json): { version: string | null } | null {
+  const repeating = plan.repeating !== null && typeof plan.repeating === 'object' && !Array.isArray(plan.repeating) ? (plan.repeating as Json) : null
+  const stories = Array.isArray(plan.stories) ? plan.stories.length : number(plan.stories)
+  const isSetAside = ['withdrawn', 'rethink'].includes(String(plan.state ?? ''))
+
+  if (repeating === null && (stories !== 0 || isSetAside)) {
+    return null
+  }
+
+  return { version: versionOf(repeating?.version ?? plan.version) }
+}
+
 export function planItems(plans: Json, base: string): PanePlan[] {
   return list(plans.plans).map(plan => {
     const id = number(plan.id) ?? 0
@@ -940,6 +958,7 @@ export function planItems(plans: Json, base: string): PanePlan[] {
         }
       }),
       console: consoleLink(base, `plan&plan=${id}`),
+      taskVersion: taskVersionOf(plan),
     }
   })
 }

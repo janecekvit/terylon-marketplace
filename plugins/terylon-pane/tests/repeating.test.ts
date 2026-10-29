@@ -4,9 +4,9 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { repeatingOf, runDay } from '../hooks/queue'
+import { repeatingOf, runDay, taskVersionOf } from '../hooks/queue'
 
-import { BASE, NARROW_PANE_PROPS, PANE_PROPS, SESSION, exact, hostZoneOffset, lateOnTheLocalDayOf, world } from './fixtures'
+import { BASE, BRIEFING, NARROW_PANE_PROPS, PANE_PROPS, SESSION, exact, hostZoneOffset, lateOnTheLocalDayOf, world } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -255,4 +255,61 @@ test('repeatingOf is null for a goal that is not repeating, and tolerates what i
 
   const empty = repeatingOf({ id: 12, title: 'Forex', repeating: {} }, BASE, NOW)
   expect(empty).toEqual({ title: 'Forex', summary: 'No version approved yet', runs: [], console: `${BASE}/?cockpit=waiting&task=12` })
+})
+
+// A REPEATING TASK'S VERSION PLAN: approving it approves the version each later run uses; it has no stories to count.
+const VERSION_PLAN = { id: 2573, goal: 12, goalTitle: 'Daily forex statistics', state: 'proposed', estimateUsd: null, comment: null, stories: [], repeating: { version: 2 } }
+
+for (const [surface, props] of [['desktop', PANE_PROPS], ['terminal', PANE_PROPS], ['narrow dock', NARROW_PANE_PROPS]] as const) {
+  test(`${surface}: a version plan waits on the Queue as the version it approves, with no story count`, async ($, on) => {
+    const terylon = repeatingWorld(on, REPEATING)
+    terylon.answers.briefing = { ...BRIEFING, plansWaiting: [{ id: 2573, goal: 12, goalTitle: 'Daily forex statistics', stories: 0, estimateUsd: null, repeating: { version: 2 } }] }
+    await $.session.start(SESSION)
+    await terylon.clock.settle()
+
+    const ui = await $.ui.mount({ ...PANE, props, surface: surface === 'terminal' ? 'terminal' : 'desktop' })
+    expect(await ui.find({ type: 'Text', text: /Plan 2573 · version 2 of Daily forex statistics/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /0 stories/ })).toBeUndefined()
+  })
+}
+
+test('a version plan Terylon names no version of waits as a new version, never as 0 stories', async ($, on) => {
+  const terylon = repeatingWorld(on, REPEATING)
+  terylon.answers.briefing = { ...BRIEFING, plansWaiting: [{ id: 2573, goal: 12, goalTitle: 'Daily forex statistics', stories: 0, estimateUsd: null }] }
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /Plan 2573 · a new version of Daily forex statistics/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /0 stories/ })).toBeUndefined()
+})
+
+test('a version plan\'s card says what Approve does to later runs, never "all 0 stories"', async ($, on) => {
+  const terylon = repeatingWorld(on, REPEATING)
+  terylon.answers.plans_list = { plans: [VERSION_PLAN] }
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await openGoal12(ui)
+  await ui.press({ key: 'goal-plan-2573' })
+
+  expect(await ui.find({ type: 'Text', text: exact('Approve: each later task_run uses version 2.') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /0 stories|its story|both stories/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: exact(' · version 2 of Daily forex statistics') })).toBeDefined()
+  expect((await ui.find({ type: 'Link', text: 'Plan in the console ↗' }))?.props.href).toBe(`${BASE}/?cockpit=plan&plan=2573`)
+  expect(await ui.find({ type: 'Button', text: /Approve/ })).toBeDefined()
+  expect(undrawable(await ui.drawn())).toEqual([])
+})
+
+test('taskVersionOf: repeating names the version; no stories while waiting is a version too; a set-aside plan is not', () => {
+  expect(taskVersionOf({ id: 1, stories: [], repeating: { version: 2 } })).toEqual({ version: '2' })
+  expect(taskVersionOf({ id: 1, stories: 3, repeating: { version: 'two' } })).toEqual({ version: 'two' })
+  expect(taskVersionOf({ id: 1, stories: 0 })).toEqual({ version: null })
+  expect(taskVersionOf({ id: 1, state: 'proposed', stories: [] })).toEqual({ version: null })
+  expect(taskVersionOf({ id: 1, state: 'proposed', stories: [{ id: 5 }] })).toBeNull()
+  expect(taskVersionOf({ id: 1, state: 'withdrawn', stories: [] })).toBeNull()
+  expect(taskVersionOf({ id: 1, state: 'rethink', stories: [] })).toBeNull()
+  expect(taskVersionOf({ id: 1, stories: 2 })).toBeNull()
+  expect(taskVersionOf({ id: 1, repeating: 'yes', stories: 1 })).toBeNull()
 })
