@@ -143,7 +143,7 @@ Enable it yourself, per project or per session — the plugin ships no `.mcp.jso
 }
 ```
 
-Pin the version rather than floating `@latest`: `shared/side-effects.md` requires the browser install to match the installed `@playwright/mcp`, and a floating package silently breaks that pairing.
+Pin the version rather than floating `@latest`: `side-effects.md`, in the `references/` of each of its skills, requires the browser install to match the installed `@playwright/mcp`, and a floating package silently breaks that pairing.
 
 `run-ui-flows` probes for it before doing anything and reports the answer either way.
 

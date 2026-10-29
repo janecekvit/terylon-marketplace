@@ -1,7 +1,7 @@
 ---
 name: finish-branch
 description: Use when a feature branch's work is complete and the tests are green, and the branch has to be integrated — merged locally, pushed for a pull request, or left alone. Verifies the suite, detects whether the work sits in a worktree, presents the integration choice, and cleans up only what this marketplace created.
-allowed-tools: Bash(git *), Read, Grep, Glob, AskUserQuestion
+allowed-tools: Bash(git *) Read Grep Glob AskUserQuestion
 ---
 
 # finish-branch

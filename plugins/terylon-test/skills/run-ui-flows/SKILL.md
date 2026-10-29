@@ -6,7 +6,7 @@ description: >-
   automation first, drives the interface through Playwright, and reports the steps taken and the state
   observed. Reports what happened; it never decides what that means. Loaded by name by
   verify-test-plan; not a user command.
-allowed-tools: Read, Grep, Glob, Bash, mcp__playwright__*
+allowed-tools: Read Grep Glob Bash mcp__playwright__*
 ---
 
 # run-ui-flows
@@ -66,7 +66,7 @@ This skill drives the interface live, for flows no spec covers. **It never deleg
 
 ## Side effects
 
-Starting the application under test is a side effect: announce it, name the port, and stop it on return. Artifacts go to the fixtures directory, never inside the repository under test. The rules are in `${CLAUDE_PLUGIN_ROOT}/shared/side-effects.md`; this skill does not restate them.
+Starting the application under test is a side effect: announce it, name the port, and stop it on return. Artifacts go to the fixtures directory, never inside the repository under test. The rules are in [`references/side-effects.md`](references/side-effects.md); this skill does not restate them.
 
 ## Report
 

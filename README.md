@@ -45,13 +45,8 @@ You enable **two** plugins for a repository: the **role** you work in, and the *
 ## How a story travels
 
 ```mermaid
----
-config:
-  layout: elk
-  flowchart:
-    padding: 16
----
 flowchart LR
+%%{init: {"layout": "elk", "flowchart": {"padding": 16}}}%%
     subgraph develop ["develop: terylon-dev"]
         direction TB
         brainstorm["`brainstorm
@@ -83,6 +78,7 @@ terylon-forge`"]
     createPr --> reviewAndTest["`review-pr / test
 terylon-forge, terylon-test`"]
 
+    style develop fill:#8B949E14,stroke:#8B949E,color:#8B949E,stroke-dasharray:3 3
     linkStyle default stroke:#8B949E
 ```
 
@@ -91,18 +87,13 @@ Each agent is a role with its own instructions, dispatched by the `leader` and r
 ## Architecture
 
 ```mermaid
----
-config:
-  layout: elk
-  flowchart:
-    padding: 16
----
+flowchart BT
+%%{init: {"layout": "elk", "flowchart": {"padding": 16}}}%%
 %% The marketplace's plugins and the dependencies their manifests declare.
 %% The source of truth is this block: edit it here; nothing is generated from it.
 %% Every edge between two plugins is one entry of a plugin.json#dependencies array, drawn from the
 %% plugin that declares it to the plugin it names. A dashed one is declared although the chain
 %% already reaches it. The manifests are the source of truth; when they change, redraw this.
-flowchart BT
     %% One colour per kind, the palette of .claude/rules/markdown.md: the chain (blue), the port (amber),
     %% adapters (green), role plugins (indigo), Terylon's own plugins (purple), notes (grey).
     %% No theme is set, so GitHub draws the block in its light or dark theme.
@@ -139,7 +130,6 @@ a test plan and acceptance criteria`"]:::role
     end
 
     %% Terylon's own plugins: the owner's product, not a role in the development workflow.
-    %% Dashed: outside the chain.
     subgraph outside ["Outside the chain: Terylon itself"]
         os["`terylon-os
 Terylon's /mcp server + one skill per prompt
@@ -167,8 +157,8 @@ Everything else arrives as a dependency.`"/]:::note
     consumer -.->|"enables one"| roles
     consumer -.->|"enables one"| adapters
 
-    style adapters fill:#0478571A,stroke:#047857,color:#047857
-    style roles fill:#4F46E51A,stroke:#4F46E5,color:#4F46E5
+    style adapters fill:#0478571A,stroke:#047857,color:#047857,stroke-dasharray:3 3
+    style roles fill:#4F46E51A,stroke:#4F46E5,color:#4F46E5,stroke-dasharray:3 3
     style outside fill:#7E22CE1A,stroke:#7E22CE,color:#7E22CE,stroke-dasharray:3 3
     linkStyle default stroke:#8B949E
 ```
@@ -296,7 +286,7 @@ The marketplace is built with itself: its stories, builds, reviews and test-plan
 
 | Job | Runs | Needs |
 |---|---|---|
-| Unit suites | `node --test "**/*.test.js"`: the forge-port contract and fixture tests, the harness's ref checks, the hook and measurement scripts, the Terylon pane's command and version checks, and the tests of the pane's plan and shards. The pane's mutation and zone suites skip in this job, which installs no `claude` CLI, and run in the pane's own jobs instead | nothing |
+| Unit suites | `node --test "**/*.test.js"`: every skill held to the Agent Skills specification, the forge-port contract and fixture tests, the harness's ref checks, the hook and measurement scripts, the Terylon pane's command and version checks, and the tests of the pane's plan and shards. The pane's mutation and zone suites skip in this job, which installs no `claude` CLI, and run in the pane's own jobs instead | nothing |
 | End-to-end install stage | `node tests/e2e/run.js --stages install`: installs the marketplace from the commit under test as a consumer does, and checks every plugin, skill, agent, hook and MCP server loads | nothing: no login, no token, no model call |
 | terylon-pane plan | `tests/terylon-pane/needs-pane-suites.js` over the paths the pull request changes: whether the two suites below run. They do when it changes the mod, its tests, the pinned Claude Code or `ci.yml`, and always on a push to `main` | nothing |
 | terylon-pane mutations (shard 1/4 to 4/4) | `node --test tests/terylon-pane/mutations.test.js` with `MUTATION_SHARD` set: each planted mutation turning the mod's tests red, a quarter of them per runner, in parallel | the plan said run |
@@ -314,6 +304,8 @@ The unit suites run with Node's built-in coverage, and the job uploads the lcov 
 - a model's run varies between two identical attempts, and a check that flakes on a pull request teaches people to re-run it rather than read it.
 
 They are run by hand before a change reaches `main`; the commands are in [`CLAUDE.md`](./CLAUDE.md), under *Testing*.
+
+[`.github/workflows/history-check.yml`](./.github/workflows/history-check.yml) warns, on every pull request, about an added code comment that names a pull request, an issue, a work item or a date; it never fails and is never required.
 
 [`.github/workflows/docs.yml`](./.github/workflows/docs.yml) checks every tracked `.md` file on the same triggers: **Markdown lint** holds it to the conventions of [`.claude/rules/markdown.md`](./.claude/rules/markdown.md) as [`.markdownlint-cli2.jsonc`](./.markdownlint-cli2.jsonc) encodes them, and **Links** runs lychee with [`lychee.toml`](./lychee.toml) over every relative link, anchor and external link.
 

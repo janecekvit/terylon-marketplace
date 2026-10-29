@@ -1,7 +1,7 @@
 ---
 name: run-build-loop
 description: Use when executing an approved implementation plan task by task with a fresh implementer subagent per task. Defines the ledger that survives compaction, the pre-flight scan of the plan, the bounded fix-round loop after a review, and how to pick a model per role. For the controller of the loop, not for the implementer.
-allowed-tools: Read, Grep, Glob, Write, Bash(git *)
+allowed-tools: Read Grep Glob Write Bash(git *)
 ---
 
 # run-build-loop

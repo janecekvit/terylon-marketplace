@@ -1,6 +1,8 @@
 # Side effects — the announcement contract
 
-Shared by `run-build-and-tests` and `run-ui-flows`. Both emit the same block in the same shape, so a reader who has seen one has seen both. Neither skill restates these rules; they reference this file.
+<!-- An identical copy of this file sits in every skill that carries it; edit them together. -->
+
+Shared by `run-build-and-tests`, `run-ui-flows` and `verify-test-plan`, and bound on the `tester` agent. Both executors emit the same block in the same shape, so a reader who has seen one has seen both. Each of the three skills carries this file in its own `references/`, because a skill reaches only its own files; `tests/skill-spec` fails when the copies differ.
 
 **Never mutate the machine silently.** Installing a dependency, starting a service, writing a file, leaving a browser running — each is a side effect, and each is announced before it happens.
 

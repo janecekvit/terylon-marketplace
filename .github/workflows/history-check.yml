@@ -1,0 +1,37 @@
+# Every pull request: warns about added comment lines that name a pull request, an issue, a work item or a
+# date. The rule is .claude/rules/comments.md. Warning-only: the script exits 0 on findings, and this check
+# is never made required.
+name: No history in code
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: history-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  history-check:
+    name: No history in code
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # The whole history: the check diffs the head against its merge base with the base branch.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      # The refs reach the script through the environment, never spliced into the script's text.
+      - name: node tests/no-history-in-code/no-history-in-code.js
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node tests/no-history-in-code/no-history-in-code.js --base "$BASE_SHA" --head "$HEAD_SHA"

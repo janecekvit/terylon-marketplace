@@ -1,7 +1,7 @@
 ---
 name: merge-gate
 description: "Use when the owner wants to merge a verified Terylon story, asks what proves it, or says \"merge 327\" / \"return it\" — walks the verdict and its evidence, then hands the decision to the one gate, merge, which the owner confirms with the passkey in the console."
-allowed-tools: mcp__plugin_terylon-os_terylon__*, mcp__terylon__*
+allowed-tools: mcp__plugin_terylon-os_terylon__* mcp__terylon__*
 ---
 
 # merge-gate — a verified story's evidence, then merge or return

@@ -1,7 +1,7 @@
 ---
 name: write-plan
 description: Use when turning an approved spec or seed-spec into an implementation plan that a per-task implementer will execute without the context that produced it. Defines the plan document's structure — header, global constraints, file map, task shape, interfaces — and the self-review that runs before the plan is handed on.
-allowed-tools: Read, Grep, Glob, Write
+allowed-tools: Read Grep Glob Write
 ---
 
 # write-plan
