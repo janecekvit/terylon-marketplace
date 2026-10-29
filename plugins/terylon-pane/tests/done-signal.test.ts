@@ -230,7 +230,8 @@ test('DONE TODAY: an accepted list story says accepted, a merged one merged', as
 })
 
 test('AN ENDED STORY\'S PHASES say how it ended, never "no stage reported"', async ($, on) => {
-  const terylon = world(on)
+  // ON THE LOCAL DAY, so story 341 is done today in every zone and its row is there to open.
+  const terylon = world(on, { now: lateOnTheLocalDayOf('2026-10-11T12:20:00Z') })
   terylon.answers.story_get = { id: 94, goal: 11, title: 'Weekly cost summary', state: 'accepted', target: 'list', attempt: 1, pullRequest: null, progress: null, timeline: [] }
   await $.session.start(SESSION)
   await terylon.clock.settle()
