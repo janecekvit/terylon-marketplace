@@ -1090,10 +1090,10 @@ const MUTATIONS = [
         replace: "                trail: null,\n",
     },
     {
-        name: "Delete… links elsewhere than the console's Goals",
+        name: "Delete… no longer opens the goal's Delete… sheet in History",
         file: "hooks/queue.ts",
-        find: "  return consoleLink(base, 'goals')\n",
-        replace: "  return consoleLink(base, `goals&goal=${goal}`)\n",
+        find: "  return consoleLink(base, `goals&tab=history&goal=${encodeURIComponent(String(goal))}&sheet=delete`)\n",
+        replace: "  return consoleLink(base, `goals&tab=history&goal=${encodeURIComponent(String(goal))}`)\n",
     },
     {
         name: "a deleted goal's goal_get is drawn as a failure",

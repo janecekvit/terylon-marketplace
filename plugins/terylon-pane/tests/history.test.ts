@@ -5,13 +5,18 @@
 
 import { test, expect } from 'claude-code/testing'
 
+import { deleteLink } from '../hooks/queue'
+
 import { BASE, NARROW_PANE_PROPS, PANE_PROPS, PLANS, SESSION, events, exact, refusal, storyMoved, world } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 const SURFACES = [['desktop', PANE_PROPS, 'desktop'], ['terminal', PANE_PROPS, 'terminal'], ['narrow dock', NARROW_PANE_PROPS, 'desktop']] as const
 
 const DELETE_LINK = 'Delete… ↗'
-const GOALS_IN_CONSOLE = `${BASE}/?cockpit=goals`
+// The goal's row in History with its Delete… sheet open (Terylon S49); the owner still types the number there.
+function deleteHref(goal: number): string {
+  return `${BASE}/?cockpit=goals&tab=history&goal=${goal}&sheet=delete`
+}
 
 const OPEN_GOALS = [
   { id: 3, title: 'P1 · Agentic OS', priority: 1, state: 'open', stories: { running: 2 } },
@@ -59,7 +64,10 @@ for (const [surface, props, drawnOn] of SURFACES) {
     expect(await ui.find({ key: 'goal-5' })).toBeDefined()
     const links = await ui.findAll({ type: 'Link', text: DELETE_LINK })
     expect(links).toHaveLength(2)
-    expect(links.map(link => link.props.href)).toEqual([GOALS_IN_CONSOLE, GOALS_IN_CONSOLE])
+    expect(links.map(link => link.props.href)).toEqual([deleteHref(8), deleteHref(5)])
+    // A LINK ONLY: nothing on it calls a tool, and drawing History called none but the reads.
+    expect(links.every(link => link.props.onPress === undefined)).toBe(true)
+    expect(terylon.calls.filter(call => !['goals_list', 'plans_list', 'briefing', 'work_in_flight', 'stories_list', 'policy_get', 'events_since', 'leader_status', 'notices_list', 'metrics', 'story_get', 'memory_get'].includes(call.tool))).toEqual([])
     expect(deleteCalls(terylon)).toEqual([])
   })
 
@@ -298,4 +306,9 @@ test('AFTER A RESET, a goal deleted in the old history hides nothing: a new goal
   await terylon.clock.settle()
   expect(terylon.prompts).toHaveLength(1)
   expect(terylon.prompts[0]).toStartWith('Story #4')
+})
+
+test('deleteLink is the goal\'s row in History with its Delete… sheet, the id URL-safe', () => {
+  expect(deleteLink('https://terylon.example.ts.net', 52)).toBe('https://terylon.example.ts.net/?cockpit=goals&tab=history&goal=52&sheet=delete')
+  expect(deleteLink('https://terylon.example.ts.net', 1e21)).toBe('https://terylon.example.ts.net/?cockpit=goals&tab=history&goal=1e%2B21&sheet=delete')
 })
