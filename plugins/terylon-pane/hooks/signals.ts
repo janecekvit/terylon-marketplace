@@ -160,14 +160,6 @@ export function heldOf(value: unknown, into: readonly Candidate[] = []): Candida
   return read
 }
 
-// WHAT IS HELD FOR A TURN'S END, once per move: a candidate read again on every tick, or held twice across a reload, is
-// kept once, and each story only at its latest move, as the post itself coalesces them.
-export function heldList(candidates: readonly Candidate[]): Candidate[] {
-  const unique = candidates.filter((candidate, index) => candidates.findIndex(other => other.story === candidate.story && other.kind === candidate.kind && other.seq === candidate.seq) === index)
-
-  return coalesce(unique)
-}
-
 export function signalKey(candidate: Candidate, verdict: Verdict | null): string {
   const which = candidate.kind === 'verified' && verdict?.commit != null ? verdict.commit : String(candidate.seq)
 

@@ -346,6 +346,22 @@ for (const [surface, props] of [['desktop', PANE_PROPS], ['terminal', PANE_PROPS
   })
 }
 
+test('A SETTLED VERSION PLAN leaves the Goals tab, an approved one as a withdrawn one does; a version that waits stays there as an act', async ($, on) => {
+  const terylon = repeatingWorld(on, REPEATING)
+  const version = (id: number, number: number, state: string) => ({ ...LIVE_VERSION_PLAN, id, goal: 12, state, repeating: { ...LIVE_VERSION_PLAN.repeating, version: number, plan: id, state } })
+  terylon.answers.plans_list = { plans: [version(3661, 1, 'approved'), version(3700, 2, 'proposed')] }
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'tab-goals' })
+  await terylon.clock.settle()
+
+  expect(await ui.find({ key: 'plan-3661' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Plan 3661/ })).toBeUndefined()
+  expect(await ui.find({ key: 'plan-3700' })).toBeDefined()
+})
+
 test('an ordinary goal keeps every plan below it', async ($, on) => {
   const terylon = repeatingWorld(on, null)
   terylon.answers.plans_list = { plans: [{ ...LIVE_VERSION_PLAN, goal: 12 }] }

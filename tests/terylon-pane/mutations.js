@@ -687,8 +687,8 @@ const MUTATIONS = [
     {
         name: "a withdrawn plan stays on the Goals tab",
         file: "hooks/register.tsx",
-        find: "const tabPlans = goalsState.plans.filter(plan => plan.state !== 'withdrawn')",
-        replace: "const tabPlans = goalsState.plans",
+        find: "const tabPlans = goalsState.plans.filter(plan => plan.state !== 'withdrawn' && (",
+        replace: "const tabPlans = goalsState.plans.filter(plan => (",
     },
     {
         name: "the closed goals are read on every poll of the goals",
@@ -1164,13 +1164,13 @@ const MUTATIONS = [
     {
         name: "the held signals are not kept in the store",
         file: "hooks/register.tsx",
-        find: "  await keep($, STORE_HELD, heldList(held).map(candidate => ({ ...candidate })))\n",
+        find: "  await keep($, STORE_HELD, held.map(candidate => ({ ...candidate })))\n",
         replace: "",
     },
     {
         name: "the held signals an earlier session kept are not read back",
         file: "hooks/register.tsx",
-        find: "      holdOnly([...held, ...heldOf(await kept($, STORE_HELD))])\n",
+        find: "      held.push(...heldOf(await kept($, STORE_HELD), held))\n",
         replace: "",
     },
     {
@@ -1210,10 +1210,10 @@ const MUTATIONS = [
         replace: "",
     },
     {
-        name: "the held signals are no longer kept once per move",
-        file: "hooks/signals.ts",
-        find: "  return coalesce(unique)\n",
-        replace: "  return [...candidates]\n",
+        name: "a settled version plan of a repeating task is listed on the Goals tab again",
+        file: "hooks/register.tsx",
+        find: "plan.state !== 'withdrawn' && (plan.taskVersion == null || plan.isProposed))",
+        replace: "plan.state !== 'withdrawn')",
     },
 ];
 

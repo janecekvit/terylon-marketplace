@@ -101,7 +101,6 @@ import {
   coalesce,
   deletedGoalsOf,
   goalOfStory,
-  heldList,
   heldOf,
   isDeletedSentence,
   settleCandidate,
@@ -119,7 +118,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.14.0'
+export const MOD_VERSION = '1.14.1'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -928,7 +927,8 @@ async function postSignals($: EngineInterface, candidates: Candidate[]): Promise
 
   if (isTurnRunning) {
     const signals = await settleSignals($, candidates, [...done, ...heldToasted])
-    holdOnly([...held, ...candidates])
+    held.push(...candidates)
+    held.splice(0, Math.max(0, held.length - HELD_MOST))
     await keepHeld($)
 
     if (signals.length > 0) {
@@ -959,7 +959,7 @@ async function postSignals($: EngineInterface, candidates: Candidate[]): Promise
 
   // A KEY IS RECORDED ONLY ONCE ITS PROMPT ENTERED: one dropped or refused is held, read again and posted next time.
   if (entered !== true) {
-    holdOnly([...held, ...read_])
+    held.push(...read_)
     await keepHeld($)
     debug($, `the done-signal ${keys} did not enter the session (${entered}); it is told on the next read`)
 
@@ -975,13 +975,7 @@ async function postSignals($: EngineInterface, candidates: Candidate[]): Promise
 }
 
 async function keepHeld($: EngineInterface): Promise<void> {
-  await keep($, STORE_HELD, heldList(held).map(candidate => ({ ...candidate })))
-}
-
-// What is held becomes these alone, once per move and each story's latest, within its bound.
-function holdOnly(candidates: Candidate[]): void {
-  const list = heldList(candidates)
-  held.splice(0, held.length, ...list.slice(-HELD_MOST))
+  await keep($, STORE_HELD, held.map(candidate => ({ ...candidate })))
 }
 
 // Whether a prompt entered the session: true, or why not, a hook's drop or the engine's refusal.
@@ -1240,7 +1234,7 @@ async function tick($: EngineInterface, isStart: boolean): Promise<void> {
     // unless a turn runs here too.
     if (!isHeldRestored) {
       isHeldRestored = true
-      holdOnly([...held, ...heldOf(await kept($, STORE_HELD))])
+      held.push(...heldOf(await kept($, STORE_HELD), held))
     }
 
     await readMoved($, isStart, now)
@@ -3909,8 +3903,9 @@ export const register: Register = on => {
     // THE GOALS TAB: open goals by priority, the plans, and a new goal with its priority and target.
     if (screen.screen === 'goals') {
       const isClosedShown = goalsState.showing === 'closed'
-      // A WITHDRAWN PLAN (plans_list's `state: 'withdrawn'`) LEAVES THE TAB: it waits on nothing, and stays on its goal's screen.
-      const tabPlans = goalsState.plans.filter(plan => plan.state !== 'withdrawn')
+      // A WITHDRAWN PLAN (plans_list's `state: 'withdrawn'`) LEAVES THE TAB, and so does a repeating task's version plan
+      // once settled: each waits on nothing, and stays on its goal's screen. A version that waits stays, as an act.
+      const tabPlans = goalsState.plans.filter(plan => plan.state !== 'withdrawn' && (plan.taskVersion == null || plan.isProposed))
       // A CLOSED GOAL'S PLANS LEAVE THE OPEN LIST: they stay on the goal's own screen. After
       // S44 the tab knows the open goals alone, so a plan stays only under one of them.
       const openPlans = tabPlans.filter(plan => (goalsState.closedFrom === 'terylon'

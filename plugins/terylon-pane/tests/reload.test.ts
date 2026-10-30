@@ -1,7 +1,7 @@
 // A MODULE UPDATED IN PLACE, as Terylon Testing walked it: after an update loaded into running Desktop sessions no
 // session read events_since for about four minutes, Status said no session posts the done-signal, and the poll came back
 // only when the owner typed. A refused round of $.clock.every stops that timer for good, and a poll that died that way is
-// stood in for here by a clock.every the test refuses. And the store held signals twice, which no session posted.
+// stood in for here by a clock.every the test refuses. And signals held when a lease lapses are posted by the next holder.
 
 import { test, expect } from 'claude-code/testing'
 import type { On } from 'claude-code'
@@ -124,10 +124,11 @@ test('A SESSION TAKEN FOR UNATTENDED renews a lease that names it: a reload\'s s
   expect(terylon.prompts[0]).toStartWith('Story #327')
 })
 
-// STORY 185 under goal 57, dropped; 186 and 187 a repeating task's green runs, verified and waiting for Accept.
+// STORY 185 under goal 57, blocked then abandoned by the goal's drop; 186 and 187 a repeating task's green runs,
+// verified and waiting for Accept.
 const HELD = [
-  { story: 185, kind: 'verified', seq: 3600, title: 'One-off', pullRequest: null, reason: null },
-  { story: 185, kind: 'verified', seq: 3600, title: 'One-off', pullRequest: null, reason: null },
+  { story: 185, kind: 'blocked', seq: 3600, title: 'One-off', pullRequest: null, reason: 'a test failed' },
+  { story: 185, kind: 'abandoned', seq: 3605, title: 'One-off', pullRequest: null, reason: null },
   { story: 186, kind: 'verified', seq: 3610, title: 'Run 1', pullRequest: null, reason: null },
   { story: 187, kind: 'verified', seq: 3620, title: 'Run 2', pullRequest: null, reason: null },
 ]
@@ -138,7 +139,7 @@ function storiesOf185To187(terylon: ReturnType<typeof world>): void {
     : { id: args.story, goal: 58, title: `Run ${Number(args.story) - 185}`, state: 'verified', target: 'list', pullRequest: null, verdict: { commit: `c${String(args.story)}`, environment: null }, timeline: [] })
 }
 
-test('A LAPSED LEASE WITH HELD SIGNALS: the session that takes it reads them back and, idle, posts them once at that tick, 185 under its dropped goal asking nothing', async ($, on) => {
+test('A LAPSED LEASE WITH HELD SIGNALS: the session that takes it reads them back and, idle, posts them once at that tick in one prompt, 185 told abandoned', async ($, on) => {
   const { kept } = machine(on, { ...SEEN, lastSeq: 3684 })
   const terylon = world(on, { store: null })
   terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), [])
@@ -153,13 +154,14 @@ test('A LAPSED LEASE WITH HELD SIGNALS: the session that takes it reads them bac
   await terylon.clock.advance(30000)
   expect(terylon.prompts).toEqual([])
 
-  // Its lease lapses: this session takes it and posts at that tick, once, one summary for 186 and 187.
+  // Its lease lapses: this session takes it and posts at that tick, once, one summary of the three stories.
   await terylon.clock.advance(30000)
   expect(leaseIn(kept).session).toBe(THIS)
   expect(terylon.prompts).toHaveLength(1)
   expect(terylon.prompts[0]).toContain('186')
   expect(terylon.prompts[0]).toContain('187')
-  expect(terylon.prompts[0]).not.toContain('185')
+  expect(terylon.prompts[0]).toContain('185')
+  expect(terylon.prompts[0]).not.toContain('blok')
   expect(kept.get('held')).toEqual([])
 
   await terylon.clock.advance(30000)
@@ -167,11 +169,10 @@ test('A LAPSED LEASE WITH HELD SIGNALS: the session that takes it reads them bac
   expect(terylon.prompts).toHaveLength(1)
 })
 
-test('HELD TWICE IS KEPT ONCE: a held list read back with a duplicate is written back once per story, and posted once at the turn\'s end', async ($, on) => {
+test('HELD ENTRIES FOR ONE STORY post once at the turn\'s end: its latest move alone', async ($, on) => {
   const { kept } = machine(on, { ...SEEN, lastSeq: 18101, held: [
+    { story: 327, kind: 'blocked', seq: 18099, title: 'Events since the last look', pullRequest: 196, reason: 'a test failed' },
     { story: 327, kind: 'verified', seq: 18101, title: 'Events since the last look', pullRequest: 196, reason: null },
-    { story: 327, kind: 'verified', seq: 18101, title: 'Events since the last look', pullRequest: 196, reason: null },
-    { story: 327, kind: 'blocked', seq: 18099, title: 'Events since the last look', pullRequest: 196, reason: null },
   ] })
   const terylon = world(on, { store: null })
   terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), [])
@@ -181,7 +182,6 @@ test('HELD TWICE IS KEPT ONCE: a held list read back with a duplicate is written
   await terylon.clock.advance(30000)
 
   expect(terylon.prompts).toEqual([])
-  expect(kept.get('held')).toEqual([{ story: 327, kind: 'verified', seq: 18101, title: 'Events since the last look', pullRequest: 196, reason: null }])
 
   await $.turn.complete({ ...END, turnId: 't1' })
   await terylon.clock.settle()
