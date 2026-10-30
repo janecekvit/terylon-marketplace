@@ -118,7 +118,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.14.2'
+export const MOD_VERSION = '1.14.3'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -2229,7 +2229,17 @@ function backLabel(stack: readonly PaneScreen[]): string {
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
-type Tone = 'text' | 'inactive' | 'subtle' | 'suggestion' | 'success' | 'warning' | 'error' | 'merged'
+type Tone = 'text' | 'inactive' | 'subtle' | 'suggestion' | 'success' | 'warning' | 'error' | 'merged' | 'attention'
+
+// A WORD THAT WAITS FOR THE OWNER is `attention`: the default text, semibold. The host's light amber reads 4.08:1 on
+// white (tests/contrast.ts), under text's 4.5:1, so `warning` is only ever a stroke, a dot or a ⚠, never a word.
+function colorOf(tone: Tone | undefined): Tone | undefined {
+  return tone === 'attention' ? 'text' : tone
+}
+
+function weightOf(tone: Tone | undefined): 'semibold' | undefined {
+  return tone === 'attention' ? 'semibold' : undefined
+}
 
 // HOW A SURFACE DRAWS (S32): a graphic one (Desktop, the phone, VS Code) takes Svg, type sizes and spacing steps;
 // the terminal draws whole cells, no Svg, and the text fallbacks the canvas's terminal board draws. Below
@@ -2276,7 +2286,7 @@ function heading(elements: Elements, title: string, count?: string, countTone?: 
   return (
     <Text size="heading" weight="semibold" color={titleTone}>
       {title}
-      {count === undefined ? null : <Text tabular color={countTone}>{count}</Text>}
+      {count === undefined ? null : <Text tabular color={colorOf(countTone)} weight={weightOf(countTone)}>{count}</Text>}
     </Text>
   )
 }
@@ -2333,10 +2343,10 @@ function row(elements: Elements, look: Look, input: Row): unknown {
     )
   }
 
-  children.push(<Text color={input.titleTone} dimColor={input.isTitleDim === true ? true : undefined} wrap="truncate-end">{input.title}</Text>)
+  children.push(<Text color={colorOf(input.titleTone)} weight={weightOf(input.titleTone)} dimColor={input.isTitleDim === true ? true : undefined} wrap="truncate-end">{input.title}</Text>)
 
   if (hasDetail) {
-    children.push('  ', <Text size="footnote" tabular color={input.detailTone ?? 'subtle'}>{input.detail}</Text>)
+    children.push('  ', <Text size="footnote" tabular color={colorOf(input.detailTone ?? 'subtle')} weight={weightOf(input.detailTone)}>{input.detail}</Text>)
   }
 
   // NO REVEAL OVER AN OPEN ROW (the owner's walk of 1.2.0): laid over its first line it covered the question; the open
@@ -2506,7 +2516,7 @@ export const register: Register = on => {
             <Text wrap="truncate-end">
               <Text color="inactive">{COPY.title}</Text>
               <Text color="subtle">{' · '}</Text>
-              <Text color={caught.isAlert ? 'warning' : 'inactive'}>{caught.text}</Text>
+              <Text color={caught.isAlert ? 'text' : 'inactive'} weight={caught.isAlert ? 'semibold' : undefined}>{caught.text}</Text>
             </Text>
           </Box>
           <Box flexDirection="row" gap={1} flexShrink={0}>
@@ -2522,14 +2532,14 @@ export const register: Register = on => {
     const offset = zoneOffset
     const stuck = current.running.filter(item => item.isStuck).length
     // THE BAND IS UNCHANGED BUT FOR ITS DIGITS (S32): tabular, so a count that moves at a poll does not shift the row.
-    const pair = (name: string, value: string, color: 'inactive' | 'warning' | 'suggestion') => [
+    const pair = (name: string, value: string, tone: 'inactive' | 'attention' | 'suggestion') => [
       <Text color="subtle">{` · ${name} `}</Text>,
-      <Text color={color} tabular>{value}</Text>,
+      <Text color={colorOf(tone)} weight={weightOf(tone)} tabular>{value}</Text>,
     ]
     const counts = [
-      ...pair(COPY.bandWaiting, String(current.waiting.length), current.waiting.length > 0 ? 'warning' : 'inactive'),
+      ...pair(COPY.bandWaiting, String(current.waiting.length), current.waiting.length > 0 ? 'attention' : 'inactive'),
       ...pair(COPY.bandRunning, String(current.running.length), current.running.length > 0 ? 'suggestion' : 'inactive'),
-      ...(stuck > 0 ? [<Text color="warning" tabular>{COPY.bandStuck(stuck)}</Text>] : []),
+      ...(stuck > 0 ? [<Text color="error" tabular>{COPY.bandStuck(stuck)}</Text>] : []),
     ]
     let segments: unknown[]
     switch (current.connection) {
@@ -2537,10 +2547,10 @@ export const register: Register = on => {
         segments = [<Text color="subtle">{` · ${COPY.connecting}`}</Text>]
         break
       case 'not-allowed':
-        segments = [<Text color="subtle">{' · '}</Text>, <Text color="warning">{COPY.bandNotAllowed}</Text>, <Text color="subtle">{` · ${COPY.bandNotAllowedHint}`}</Text>]
+        segments = [<Text color="subtle">{' · '}</Text>, <Text color="error">{COPY.bandNotAllowed}</Text>, <Text color="subtle">{` · ${COPY.bandNotAllowedHint}`}</Text>]
         break
       case 'no-server':
-        segments = [<Text color="subtle">{' · '}</Text>, <Text color="warning">{COPY.bandNoServer}</Text>, <Text color="subtle">{` · ${COPY.bandNoServerHint}`}</Text>]
+        segments = [<Text color="subtle">{' · '}</Text>, <Text color="error">{COPY.bandNoServer}</Text>, <Text color="subtle">{` · ${COPY.bandNoServerHint}`}</Text>]
         break
       case 'refused':
         segments = [<Text color="subtle">{' · '}</Text>, <Text color="error">{COPY.bandRefused}</Text>]
@@ -2551,7 +2561,7 @@ export const register: Register = on => {
       case 'unreachable':
         segments = [
           <Text color="subtle">{' · '}</Text>,
-          <Text color="warning" tabular>{COPY.disconnected(current.failingSince === null ? '?' : clock(new Date(current.failingSince).toISOString(), offset) ?? '?')}</Text>,
+          <Text color="error" tabular>{COPY.disconnected(current.failingSince === null ? '?' : clock(new Date(current.failingSince).toISOString(), offset) ?? '?')}</Text>,
           ...pair(COPY.bandWaiting, String(current.waiting.length), 'inactive'),
           ...pair(COPY.bandRunning, String(current.running.length), 'inactive'),
           <Text color="subtle">{` · ${COPY.bandRetrying}`}</Text>,
@@ -2560,16 +2570,16 @@ export const register: Register = on => {
       default:
         segments = current.paused !== null
           ? [
-              ...pair(COPY.bandLeader, COPY.bandPaused(current.pausedSince), 'warning'),
-              ...pair(COPY.bandWaiting, String(current.waiting.length), current.waiting.length > 0 ? 'warning' : 'inactive'),
+              ...pair(COPY.bandLeader, COPY.bandPaused(current.pausedSince), 'attention'),
+              ...pair(COPY.bandWaiting, String(current.waiting.length), current.waiting.length > 0 ? 'attention' : 'inactive'),
               ...pair(COPY.bandQueued, String(current.queued.length), 'inactive'),
-              ...pair(COPY.bandBell, String(current.notices), current.notices > 0 ? 'warning' : 'inactive'),
+              ...pair(COPY.bandBell, String(current.notices), current.notices > 0 ? 'attention' : 'inactive'),
             ]
           : [
               ...counts,
               ...pair(COPY.bandQueued, String(current.queued.length), 'inactive'),
-              ...pair(COPY.bandBell, String(current.notices), current.notices > 0 ? 'warning' : 'inactive'),
-              ...(current.alerts > 0 ? [<Text color="warning" tabular>{COPY.bandAlerts(current.alerts)}</Text>] : []),
+              ...pair(COPY.bandBell, String(current.notices), current.notices > 0 ? 'attention' : 'inactive'),
+              ...(current.alerts > 0 ? [<Text color="error" tabular>{COPY.bandAlerts(current.alerts)}</Text>] : []),
             ]
     }
 
@@ -2733,14 +2743,14 @@ export const register: Register = on => {
         {!look.isGraphic && isSelected ? '● ' : ''}
         {name}
         {chip === null ? '' : ' '}
-        {chip === null ? null : <Text tabular color={chip.tone}>{chip.text}</Text>}
+        {chip === null ? null : <Text tabular color={colorOf(chip.tone)} weight={weightOf(chip.tone)}>{chip.text}</Text>}
       </Button>
     )
     const tabs = (
       <Box key="tabs" flexDirection="row" gap={look.isGraphic ? 'xs' : 1} flexWrap="wrap">
         {tabButton('tab-queue', '1', COPY.tabQueue, QUEUE, tab === 'queue', null)}
         {tabButton('tab-goals', '2', COPY.tabGoals, { screen: 'goals' }, tab === 'goals', null)}
-        {tabButton('tab-bell', '3', COPY.tabBell(0), { screen: 'bell' }, tab === 'bell', current.notices > 0 ? { text: String(current.notices), tone: 'warning' } : null)}
+        {tabButton('tab-bell', '3', COPY.tabBell(0), { screen: 'bell' }, tab === 'bell', current.notices > 0 ? { text: String(current.notices), tone: 'attention' } : null)}
         {tabButton('tab-memory', '4', COPY.tabMemory, { screen: 'memory' }, tab === 'memory', null)}
         {tabButton('tab-status', '5', COPY.tabStatus(false), { screen: 'status' }, tab === 'status', hasProblem(current, drawingAsked.off) ? { text: '⚠', tone: 'warning' } : null)}
       </Box>
@@ -2749,7 +2759,7 @@ export const register: Register = on => {
       <Box key="context" flexDirection="row" justifyContent="space-between" gap={1}>
         <Link href={base === '' ? 'https://' : base} label={hostName(base)} />
         <Box flexDirection="row" gap={1}>
-          <Text color={isStale ? 'warning' : 'subtle'} size="footnote" tabular>
+          <Text color={isStale ? 'error' : 'subtle'} size="footnote" tabular>
             {screen.screen === 'memory'
               ? COPY.memoryContext
               : current.connection === 'connecting' ? COPY.connecting : isStale ? COPY.disconnected(at(current.failingSince)) : COPY.connected(age ?? '')}
@@ -2773,7 +2783,7 @@ export const register: Register = on => {
       </Box>
     )
     // A CARD'S TITLE THAT WARNS (the owner's walk of 1.2.0): a problem's in `error`, a waiting card's in `text`, its
-    // stroke carrying the warning. Amber text reads under 4.5:1 on light (tests/contrast.ts), so no card's text is amber.
+    // stroke carrying the warning. Amber text reads under 4.5:1 on light (tests/contrast.ts), so no text is amber.
     const warned = (title: string, tone: 'wait' | 'bad' = 'bad') => <Text size="heading" weight="semibold" color={tone === 'bad' ? 'error' : 'text'}>{title}</Text>
 
 
@@ -3016,7 +3026,7 @@ export const register: Register = on => {
           return cardOf('status-machine', <Text size="caption" color="subtle">{COPY.statusMachine.toUpperCase()}</Text>, null, [
                 <Box flexDirection="row" justifyContent="space-between" gap={1}>
                   <Box flexDirection="row" gap={1}>
-                    <Text size="title" weight="semibold" color={state.tone}>{state.word}</Text>
+                    <Text size="title" weight="semibold" color={colorOf(state.tone)}>{state.word}</Text>
                     {health.failingSince !== null && current.connection !== 'ok' && <Text color="subtle" tabular>{` · ${COPY.statusSince(health.failingSince)}`}</Text>}
                     {current.connection === 'ok' && current.pausedSince !== null && <Text color="subtle" tabular>{` · ${COPY.statusSince(current.pausedSince)}`}</Text>}
                   </Box>
@@ -3051,7 +3061,7 @@ export const register: Register = on => {
                 {/* THE PROBLEMS UNDER THEIR HEADING, never an empty card above them: the card says only that nothing is wrong. */}
                 {isShown('problems') && (problems.length === 0
                   ? cardOf('status-problems', headingOf(COPY.statusProblems, 0, 'inactive'), null, [quiet(elements, COPY.nothingWrong)])
-                  : headingOf(COPY.statusProblems, problems.length, 'warning'))}
+                  : headingOf(COPY.statusProblems, problems.length, 'error'))}
                 {isShown('problems') && problems}
                 {isShown('outcomes') && actOutcome('leader', consoleLink(base, 'work'), COPY.workInConsole)}
                 {isShown('policy') && policyCard}
@@ -3183,7 +3193,7 @@ export const register: Register = on => {
                 // COMPACT, below STEPPER_COLUMNS (the owner's walk, a dock of about 435 px): eight labels ran together, so
                 // only the phase now is named; the tooltips name the rest.
                 look.isCompact
-                  ? (nowAt < 0 ? null : <Text key="phase-now" size="caption" weight="semibold" color={isStuck ? 'warning' : 'suggestion'}>{shownStory.phases[nowAt]?.label ?? ''}</Text>)
+                  ? (nowAt < 0 ? null : <Text key="phase-now" size="caption" weight="semibold" color={isStuck ? 'error' : 'suggestion'}>{shownStory.phases[nowAt]?.label ?? ''}</Text>)
                   : <Box key="phase-labels" flexDirection="row">
                   {shownStory.phases.map((item, index) => (
                     <Box key={`phase-label-${index}`} flexGrow={1} flexShrink={1} minWidth={0} width={0} justifyContent="center">
@@ -3191,7 +3201,7 @@ export const register: Register = on => {
                         size="caption"
                         wrap="truncate-end"
                         weight={item.status === 'now' ? 'semibold' : undefined}
-                        color={item.status === 'now' ? (isStuck ? 'warning' : 'suggestion') : item.status === 'done' ? 'inactive' : index === shownStory.phases.length - 1 ? 'merged' : 'subtle'}
+                        color={item.status === 'now' ? (isStuck ? 'error' : 'suggestion') : item.status === 'done' ? 'inactive' : index === shownStory.phases.length - 1 ? 'merged' : 'subtle'}
                       >
                         {labels[index] ?? item.label}
                       </Text>
@@ -3248,7 +3258,7 @@ export const register: Register = on => {
           {shownStory.environment !== null && cardOf('story-environment', COPY.environment(shownStory.environment.name), null, [
             shownStory.environment.url === null ? null : <Link href={shownStory.environment.url} label={`${shownStory.environment.url} ↗`} />,
           ])}
-          {shownStory.verdict !== null && cardOf('story-verdict', <Text size="heading" weight="semibold" color={shownStory.verdict.isGreen ? 'success' : 'warning'}>{COPY.verdict}</Text>, <Text color="subtle" size="footnote" mono>{COPY.verdictHint(shownStory.verdict.commit)}</Text>, [
+          {shownStory.verdict !== null && cardOf('story-verdict', <Text size="heading" weight="semibold" color={shownStory.verdict.isGreen ? 'success' : 'error'}>{COPY.verdict}</Text>, <Text color="subtle" size="footnote" mono>{COPY.verdictHint(shownStory.verdict.commit)}</Text>, [
             ...shownStory.verdict.checks.map((check, index) => (
               <Box key={`check-${index}`} flexDirection="row" justifyContent="space-between" gap={1}>
                 <Text>
@@ -3260,8 +3270,8 @@ export const register: Register = on => {
             )),
             shownStory.overrun.length === 0 ? null : (
               <Text key="overrun">
-                <Text color="warning">{`! ${COPY.overrun} `}</Text>
-                <Text color="warning">{`${shownStory.overrun.length} · ${shownStory.overrun.join(', ')}`}</Text>
+                <Text color="error">{`! ${COPY.overrun} `}</Text>
+                <Text color="error">{`${shownStory.overrun.length} · ${shownStory.overrun.join(', ')}`}</Text>
               </Text>
             ),
           ])}
@@ -3381,7 +3391,7 @@ export const register: Register = on => {
         <Box flexDirection="column" gap={1}>
           <Box key="question-top" flexDirection="row" justifyContent="space-between">
             {backButton}
-            {index >= 0 && <Text color="warning" tabular>{COPY.questionOf(index + 1, current.questions.length)}</Text>}
+            {index >= 0 && <Text color="text" weight="semibold" tabular>{COPY.questionOf(index + 1, current.questions.length)}</Text>}
           </Box>
           {question !== null && (
             <Box key="question" flexDirection="column" gap={look.isGraphic ? 'xs' : 0}>
@@ -3481,7 +3491,7 @@ export const register: Register = on => {
       if (form.phase === 'refused' || form.phase === 'timeout' || form.phase === 'paused') {
         return (
           <Box flexDirection="column" gap={1}>
-            <Text weight="semibold" color={form.phase === 'paused' ? 'warning' : 'error'}>{form.phase === 'paused' ? COPY.added : COPY.notAdded}</Text>
+            <Text weight="semibold" color={form.phase === 'paused' ? 'text' : 'error'}>{form.phase === 'paused' ? COPY.added : COPY.notAdded}</Text>
             <Text>{form.sentence ?? ''}</Text>
             <Button key="add-retry" label={COPY.editAndRetry} variant="primary" onPress={() => update($, add, (value: PaneAdd): PaneAdd => ({ ...value, phase: 'form' }))} />
             {backButton}
@@ -3540,7 +3550,7 @@ export const register: Register = on => {
             />
           )}
           {isRepositoryGoal && form.problem !== null && <Text key="add-files-problem" color="error">{form.problem}</Text>}
-          {form.goals.length === 0 && <Text color="warning">{COPY.noGoal}</Text>}
+          {form.goals.length === 0 && <Text color="text" weight="semibold">{COPY.noGoal}</Text>}
           {look.isGraphic && !look.isNarrow
             ? (
                 <Box key="add-pickers" flexDirection="row" gap="sm">
@@ -3796,7 +3806,7 @@ export const register: Register = on => {
               <Box key="repeating-newest" flexDirection="column" borderStyle="round" borderColor="subtle" paddingX={look.isGraphic ? 'sm' : 1} gap={look.isGraphic ? 'xs' : 0}>
                 <Box flexDirection="row" justifyContent="space-between" gap={1}>
                   <Text tabular>{newest.day}</Text>
-                  <Text color={newest.tone}>{newest.state}</Text>
+                  <Text color={colorOf(newest.tone)} weight={weightOf(newest.tone)}>{newest.state}</Text>
                 </Box>
                 {newest.line === '' ? null : <Text color="subtle" size="footnote">{newest.line}</Text>}
                 {newest.story === null ? null : <Button key={runKey(newest, 0)} label={COPY.openRun} plain onPress={() => go({ screen: 'story', story: newest.story ?? 0 })} />}
@@ -3809,7 +3819,7 @@ export const register: Register = on => {
             {run.story === null
               ? <Text key={`repeating-older-${index}-day`} color="subtle" tabular>{run.day}</Text>
               : <Button key={runKey(run, index + 1)} label={run.day} plain onPress={() => go({ screen: 'story', story: run.story ?? 0 })} />}
-            <Text key={`repeating-older-${index}-state`} color={olderTone(run)}>{look.isNarrow ? ` · ${run.state}` : run.state}</Text>
+            <Text key={`repeating-older-${index}-state`} color={colorOf(olderTone(run))} weight={weightOf(olderTone(run))}>{look.isNarrow ? ` · ${run.state}` : run.state}</Text>
           </Box>
         )),
         <Text key="repeating-foot" color="subtle" size="footnote">{COPY.repeatingFoot}</Text>,
@@ -3884,7 +3894,7 @@ export const register: Register = on => {
           {questions.length > 0 && cardOf('goal-questions', headingOf(COPY.goalQuestionsHeading, questions.length, 'text'), null, questions.map(item =>
             rowOf({ key: `goal-question-${item.id}`, kind: COPY.kindQuestion, kindTone: 'warning', title: firstLine(item.text), onPress: () => go({ screen: 'question', question: item.id }) })), 'wait')}
           {plans.filter(plan => !settledVersions.includes(plan)).map(plan =>
-            rowOf({ key: `goal-plan-${plan.id}`, kind: COPY.kindPlan, title: COPY.plan(plan.id), detail: plan.stateText, detailTone: plan.isProposed ? 'warning' : 'subtle', onPress: () => go({ screen: 'plan', plan: plan.id }) }))}
+            rowOf({ key: `goal-plan-${plan.id}`, kind: COPY.kindPlan, title: COPY.plan(plan.id), detail: plan.stateText, detailTone: plan.isProposed ? 'attention' : 'subtle', onPress: () => go({ screen: 'plan', plan: plan.id }) }))}
           {/* THE GOAL'S ACT (S27): Drop goal… asks once more, saying what it withdraws and what keeps running. */}
           {shownGoal.phase === 'ok' && shownGoal.isOpen && goalAct.open !== 'goal_drop' && (
             <Box key="goal-actions" flexDirection="row" gap={1}>{actButton(goalKey, 'goal_drop', screen.goal, { isDanger: true, opens: true })}</Box>
@@ -3971,7 +3981,7 @@ export const register: Register = on => {
                 // DELETE… ENDS EACH HISTORY ROW: the console's Goals, where the owner deletes it; no tool of the pane deletes.
                 trail: isClosedShown ? { href: deleteLink(base, item.id), label: COPY.deleteInConsole } : null,
                 detail: item.questions > 0 ? COPY.goalQuestions(item.questions) : item.stories,
-                detailTone: item.questions > 0 ? 'warning' : 'subtle',
+                detailTone: item.questions > 0 ? 'attention' : 'subtle',
                 onPress: () => go({ screen: 'goal', goal: item.id }),
               })),
           ])}
@@ -4043,8 +4053,8 @@ export const register: Register = on => {
           ], bellState.unhandledCount > 0 ? 'wait' : 'plain')}
           {bellState.phase === 'ok' && cardOf('bell-machine', COPY.machine, COPY.machineHint, [
             <Text>
-              <Text color={bellState.leader.isPaused ? 'warning' : 'success'}>{bellState.leader.isPaused ? '! ' : '✓ '}</Text>
-              <Text color={bellState.leader.isPaused ? 'warning' : 'text'}>{bellState.leader.text}</Text>
+              <Text color={bellState.leader.isPaused ? 'warning' : 'success'}>{bellState.leader.isPaused ? '⚠ ' : '✓ '}</Text>
+              <Text color="text" weight={bellState.leader.isPaused ? 'semibold' : undefined}>{bellState.leader.text}</Text>
             </Text>,
             ...bellState.handled.map(notice => (
               <Text key={`handled-${notice.id}`} wrap="truncate-end">
@@ -4167,7 +4177,7 @@ export const register: Register = on => {
               kind: null,
               title: item.title,
               detail: look.isNarrow ? null : item.detail,
-              detailTone: item.isStuck ? 'warning' : 'inactive',
+              detailTone: item.isStuck ? 'error' : 'inactive',
               onPress: () => go({ screen: 'story', story: item.story }),
               // THE RUN'S PHASES (S32): eight segments from progress.stage, dots in the narrow dock, ✓●○◇ on the terminal.
               body: (
@@ -4189,7 +4199,7 @@ export const register: Register = on => {
               kind: item.isHeld ? COPY.kindHeld : COPY.kindQueued,
               title: item.title,
               detail: item.detail,
-              detailTone: item.isHeld ? 'warning' : 'subtle',
+              detailTone: item.isHeld ? 'attention' : 'subtle',
               onPress: () => go({ screen: 'story', story: item.story }),
             })),
         ])}

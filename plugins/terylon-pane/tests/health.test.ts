@@ -68,7 +68,7 @@ test('in a session: the status line counts the alerts, the band says them and it
 
   for (const surface of ['desktop', 'terminal'] as const) {
     const band = await $.ui.mount({ plugin: 'terylon-pane', surface, component: 'AbovePrompt', props: bandProps() })
-    expect((await band.find({ type: 'Text', text: exact(' · 1 alert') }))?.props.color).toBe('warning')
+    expect((await band.find({ type: 'Text', text: exact(' · 1 alert') }))?.props.color).toBe('error')
     expect((await band.find({ key: 'band-open' }))?.props.label).toBe('Open')
     await band.press({ key: 'band-open' })
     await band.unmount()

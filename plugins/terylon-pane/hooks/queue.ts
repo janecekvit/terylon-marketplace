@@ -851,9 +851,9 @@ function runStateOf(state: unknown): { state: string; tone: PaneRepeatingRun['to
     case 'accepted':
       return { state: COPY.runAccepted, tone: 'success' }
     case 'verified':
-      return { state: COPY.runGreenWaits, tone: 'warning' }
+      return { state: COPY.runGreenWaits, tone: 'attention' }
     case 'blocked':
-      return { state: COPY.runRedWaits, tone: 'warning' }
+      return { state: COPY.runRedWaits, tone: 'attention' }
     case 'abandoned':
       return { state: COPY.runAbandoned, tone: 'subtle' }
     default:

@@ -33,7 +33,7 @@ test('well: ok, the slots and the runs in them, the cost today and over 30 days,
     expect(await ui.find({ type: 'Text', text: exact('Problems · 0') })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: exact('Nothing wrong.') }))?.props.color).toBe('subtle')
 
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.14.2') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.14.3') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('TERYLON_URL https://terylon.example.ts.net') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('server plugin:terylon-os:terylon') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Every failure is in claude --debug under terylon-pane:') })).toBeDefined()
@@ -56,7 +56,7 @@ test('not allowed: the reason in the engine\'s words, how to fix it in steps, an
     const ui = await $.ui.mount({ ...PANE, surface })
     await ui.press({ key: 'tab-status' })
 
-    expect((await ui.find({ type: 'Text', text: exact('not allowed') }))?.props.color).toBe('warning')
+    expect((await ui.find({ type: 'Text', text: exact('not allowed') }))?.props.color).toBe('error')
     expect(await ui.find({ type: 'Text', text: exact('Problems · 1') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^Reason: .*auto mode classifier gave no verdict/ })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: exact('How to fix') }))?.props.bold).toBe(true)
@@ -87,7 +87,7 @@ test('not answering: since when, the last answer, the reason, and the tailnet an
     const ui = await $.ui.mount({ ...PANE, surface })
     await ui.press({ key: 'tab-status' })
 
-    expect((await ui.find({ type: 'Text', text: exact('not answering') }))?.props.color).toBe('warning')
+    expect((await ui.find({ type: 'Text', text: exact('not answering') }))?.props.color).toBe('error')
     expect(await ui.find({ type: 'Text', text: /^ · since \d\d:\d\d$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^Reason: .*ETIMEDOUT/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('1. Check the tailnet: tailscale status') })).toBeDefined()
@@ -108,7 +108,7 @@ test('paused: resuming is the owner\'s gate, a link to the console and never a b
     const ui = await $.ui.mount({ ...PANE, surface })
     await ui.press({ key: 'tab-status' })
 
-    expect((await ui.find({ type: 'Text', text: exact('paused') }))?.props.color).toBe('warning')
+    expect((await ui.find({ type: 'Text', text: exact('paused') }))?.props).toMatchObject({ color: 'text', weight: 'semibold' })
     expect(await ui.find({ type: 'Text', text: exact('The leader is paused') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('1. Press Resume, here or on the queue: the leader continues from its log.') })).toBeDefined()
     // RESUME IS THE OWNER'S ACT ON THE PAUSED CARD (S27): a button, no longer a link to the console.
@@ -128,7 +128,7 @@ test('an alert: its own card with the notice\'s body, which says what to do, and
     const ui = await $.ui.mount({ ...PANE, surface })
     await ui.press({ key: 'tab-status' })
 
-    expect((await ui.find({ type: 'Text', text: exact('1 alert') }))?.props.color).toBe('warning')
+    expect((await ui.find({ type: 'Text', text: exact('1 alert') }))?.props.color).toBe('error')
     expect((await ui.find({ type: 'Text', text: exact('the page is not well') }))?.props.color).toBe('error')
     expect(await ui.find({ type: 'Text', text: /^\s*gatus · / })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('gatus says it stopped answering; check the container.') })).toBeDefined()

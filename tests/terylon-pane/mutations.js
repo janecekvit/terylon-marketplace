@@ -50,8 +50,8 @@ const MUTATIONS = [
     {
         name: "the band shows the spend again",
         file: "hooks/register.tsx",
-        find: "              ...(current.alerts > 0 ? [<Text color=\"warning\" tabular>{COPY.bandAlerts(current.alerts)}</Text>] : []),\n",
-        replace: "              ...pair('Today', `$${current.runningUsd}`, 'inactive'),\n              ...(current.alerts > 0 ? [<Text color=\"warning\" tabular>{COPY.bandAlerts(current.alerts)}</Text>] : []),\n",
+        find: "              ...(current.alerts > 0 ? [<Text color=\"error\" tabular>{COPY.bandAlerts(current.alerts)}</Text>] : []),\n",
+        replace: "              ...pair('Today', `$${current.runningUsd}`, 'inactive'),\n              ...(current.alerts > 0 ? [<Text color=\"error\" tabular>{COPY.bandAlerts(current.alerts)}</Text>] : []),\n",
     },
     {
         name: "the status line no longer says the machine's health",
@@ -68,7 +68,7 @@ const MUTATIONS = [
     {
         name: "the band draws a waiting count calm",
         file: "hooks/register.tsx",
-        find: "      ...pair(COPY.bandWaiting, String(current.waiting.length), current.waiting.length > 0 ? 'warning' : 'inactive'),\n      ...pair(COPY.bandRunning",
+        find: "      ...pair(COPY.bandWaiting, String(current.waiting.length), current.waiting.length > 0 ? 'attention' : 'inactive'),\n      ...pair(COPY.bandRunning",
         replace: "      ...pair(COPY.bandWaiting, String(current.waiting.length), 'inactive'),\n      ...pair(COPY.bandRunning",
     },
     {
@@ -113,8 +113,8 @@ const MUTATIONS = [
     {
         name: "a row's title is no longer cut at the card's edge",
         file: "hooks/register.tsx",
-        find: "<Text color={input.titleTone} dimColor={input.isTitleDim === true ? true : undefined} wrap=\"truncate-end\">{input.title}</Text>",
-        replace: "<Text color={input.titleTone} dimColor={input.isTitleDim === true ? true : undefined}>{input.title}</Text>",
+        find: "<Text color={colorOf(input.titleTone)} weight={weightOf(input.titleTone)} dimColor={input.isTitleDim === true ? true : undefined} wrap=\"truncate-end\">{input.title}</Text>",
+        replace: "<Text color={colorOf(input.titleTone)} weight={weightOf(input.titleTone)} dimColor={input.isTitleDim === true ? true : undefined}>{input.title}</Text>",
     },
     {
         name: "an empty card says nothing",
@@ -168,7 +168,7 @@ const MUTATIONS = [
     {
         name: "the band drops the bell's count",
         file: "hooks/register.tsx",
-        find: "              ...pair(COPY.bandBell, String(current.notices), current.notices > 0 ? 'warning' : 'inactive'),\n              ...(current.alerts",
+        find: "              ...pair(COPY.bandBell, String(current.notices), current.notices > 0 ? 'attention' : 'inactive'),\n              ...(current.alerts",
         replace: "              ...(current.alerts",
     },
     {
@@ -330,8 +330,8 @@ const MUTATIONS = [
     {
         name: "the band's digits are no longer tabular",
         file: "hooks/register.tsx",
-        find: "      <Text color={color} tabular>{value}</Text>,\n",
-        replace: "      <Text color={color}>{value}</Text>,\n",
+        find: "      <Text color={colorOf(tone)} weight={weightOf(tone)} tabular>{value}</Text>,\n",
+        replace: "      <Text color={colorOf(tone)} weight={weightOf(tone)}>{value}</Text>,\n",
     },
     {
         name: "the narrow dock is drawn as the wide pane",
@@ -861,8 +861,8 @@ const MUTATIONS = [
     {
         name: "the Status tab draws an empty Problems card above its problems again",
         file: "hooks/register.tsx",
-        find: "                  : headingOf(COPY.statusProblems, problems.length, 'warning'))}",
-        replace: "                  : cardOf('status-problems', headingOf(COPY.statusProblems, problems.length, 'warning'), null, []))}",
+        find: "                  : headingOf(COPY.statusProblems, problems.length, 'error'))}",
+        replace: "                  : cardOf('status-problems', headingOf(COPY.statusProblems, problems.length, 'error'), null, []))}",
     },
     {
         name: "Diagnostics says undefined or null again where a value is missing",
@@ -929,7 +929,7 @@ const MUTATIONS = [
         edits: [
             {
                 file: "hooks/register.tsx",
-                find: "            <Text key={`repeating-older-${index}-state`} color={olderTone(run)}>{look.isNarrow ? ` · ${run.state}` : run.state}</Text>\n",
+                find: "            <Text key={`repeating-older-${index}-state`} color={colorOf(olderTone(run))} weight={weightOf(olderTone(run))}>{look.isNarrow ? ` · ${run.state}` : run.state}</Text>\n",
                 replace: "",
             },
             {
@@ -1214,6 +1214,12 @@ const MUTATIONS = [
         file: "hooks/register.tsx",
         find: "plan.state !== 'withdrawn' && (plan.taskVersion == null || plan.isProposed))",
         replace: "plan.state !== 'withdrawn')",
+    },
+    {
+        name: "a word is drawn amber again, under 4.5:1 in the light theme",
+        file: "hooks/register.tsx",
+        find: "<Text color=\"text\" weight=\"semibold\">{COPY.noGoal}</Text>",
+        replace: "<Text color=\"warning\">{COPY.noGoal}</Text>",
     },
 ];
 

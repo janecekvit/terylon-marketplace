@@ -47,7 +47,7 @@ test('calm: every value at its default is inactive, names subtle, one truncating
   }
 })
 
-test('something waits: Waiting in warning, Running in suggestion, the rest stays inactive', async ($, on) => {
+test('something waits: Waiting in semibold text, Running in suggestion, the rest stays inactive', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -56,16 +56,16 @@ test('something waits: Waiting in warning, Running in suggestion, the rest stays
     const band = await $.ui.mount(bandOn(surface))
 
     expect(await band.find({ type: 'Text', text: exact('Terylon · Waiting 3 · Running 2 · Queue 2 · Bell 2') })).toBeDefined()
-    expect((await band.find({ type: 'Text', text: exact('3') }))?.props.color).toBe('warning')
-    // THE BELL'S COUNT (#360): the unhandled notices, in warning while any waits.
-    expect((await band.findAll({ type: 'Text', text: exact('2') })).map(text => text.props.color)).toEqual(['suggestion', 'inactive', 'warning'])
+    expect((await band.find({ type: 'Text', text: exact('3') }))?.props).toMatchObject({ color: 'text', weight: 'semibold' })
+    // THE BELL'S COUNT: the unhandled notices, in semibold text while any waits.
+    expect((await band.findAll({ type: 'Text', text: exact('2') })).map(text => [text.props.color, text.props.weight])).toEqual([['suggestion', undefined], ['inactive', undefined], ['text', 'semibold']])
     expect(await band.find({ type: 'Text', text: /Today|Slots|\$/ })).toBeUndefined()
     expect((await band.find({ key: 'band-open' }))?.props.label).toBe('Open')
     await band.unmount()
   }
 })
 
-test('a stuck story is counted beside Running, in warning', async ($, on) => {
+test('a stuck story is counted beside Running, in error', async ($, on) => {
   const terylon = world(on)
   terylon.answers.work_in_flight = {
     slots: 2,
@@ -76,10 +76,10 @@ test('a stuck story is counted beside Running, in warning', async ($, on) => {
   await terylon.clock.settle()
 
   const band = await $.ui.mount(bandOn('desktop'))
-  expect((await band.find({ type: 'Text', text: exact(' (1 stuck)') }))?.props.color).toBe('warning')
+  expect((await band.find({ type: 'Text', text: exact(' (1 stuck)') }))?.props.color).toBe('error')
 })
 
-test('the leader paused: since when, in warning, and no spend or slots', async ($, on) => {
+test('the leader paused: since when, in semibold text, and no spend or slots', async ($, on) => {
   const terylon = world(on)
   terylon.answers.briefing = { ...(terylon.answers.briefing as object), leader: { paused: { at: '2026-10-11T14:05:00Z', source: 'cockpit', reason: null } } }
   await $.session.start(SESSION)
@@ -87,7 +87,7 @@ test('the leader paused: since when, in warning, and no spend or slots', async (
 
   for (const surface of SURFACES) {
     const band = await $.ui.mount(bandOn(surface))
-    expect((await band.find({ type: 'Text', text: /^paused since \d\d:\d\d$/ }))?.props.color).toBe('warning')
+    expect((await band.find({ type: 'Text', text: /^paused since \d\d:\d\d$/ }))?.props).toMatchObject({ color: 'text', weight: 'semibold' })
     expect((await band.find({ key: 'band-open' }))?.props.label).toBe('Open')
     await band.unmount()
   }
@@ -100,7 +100,7 @@ test('not allowed: the band says Claude Code refused, and Open opens the pane, w
   await terylon.clock.settle()
 
   const band = await $.ui.mount(bandOn('desktop'))
-  expect((await band.find({ type: 'Text', text: exact("Claude Code refused the pane's call") }))?.props.color).toBe('warning')
+  expect((await band.find({ type: 'Text', text: exact("Claude Code refused the pane's call") }))?.props.color).toBe('error')
   expect(await band.find({ type: 'Text', text: exact(' · allow rules missing') })).toBeDefined()
   expect((await band.find({ key: 'band-open' }))?.props.label).toBe('Open')
 
@@ -115,7 +115,7 @@ test('not allowed: the band says Claude Code refused, and Open opens the pane, w
   expect(await pane.find({ type: 'Text', text: /^Reason: / })).toBeDefined()
 })
 
-test('unreachable: since when in warning, the last numbers kept and calm, retrying each minute, and Open', async ($, on) => {
+test('unreachable: since when in error, the last numbers kept and calm, retrying each minute, and Open', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -124,7 +124,7 @@ test('unreachable: since when in warning, the last numbers kept and calm, retryi
 
   for (const surface of SURFACES) {
     const band = await $.ui.mount(bandOn(surface))
-    expect((await band.find({ type: 'Text', text: /^not answering since \d\d:\d\d$/ }))?.props.color).toBe('warning')
+    expect((await band.find({ type: 'Text', text: /^not answering since \d\d:\d\d$/ }))?.props.color).toBe('error')
     expect((await band.find({ type: 'Text', text: exact('3') }))?.props.color).toBe('inactive')
     expect(await band.find({ type: 'Text', text: exact(' · retrying every minute') })).toBeDefined()
     expect((await band.find({ key: 'band-open' }))?.props.label).toBe('Open')
