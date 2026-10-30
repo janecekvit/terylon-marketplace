@@ -127,7 +127,7 @@ test('a verified story shows its environment, verdict, overrun and criteria; mer
   expect(await ui.find({ type: 'Text', text: exact('commit 4be21c0') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('✓ dotnet test') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('412 / 412') })).toBeDefined()
-  expect((await ui.find({ type: 'Text', text: exact('! files outside the declaration ') }))?.props.color).toBe('warning')
+  expect((await ui.find({ type: 'Text', text: exact('! files outside the declaration ') }))?.props.color).toBe('error')
   expect(await ui.find({ type: 'Text', text: exact('· a gap in the window answers gap=true') })).toBeDefined()
   expect((await ui.find({ key: 'criteria-more' }))?.props.label).toBe('2 more ▾')
   expect((await pictures(ui))[0]?.alt).toBe('Admitted, Plan, Develop, Review, Tests, Pull req., Verified done; Merge now')
@@ -150,7 +150,7 @@ test('a question is answered from the pane: a choice pressed, question_answer se
   await ui.press({ key: 'question-606' })
   await ui.press({ key: 'answer-606' })
 
-  expect((await ui.find({ type: 'Text', text: exact('question 2 of 2') }))?.props.color).toBe('warning')
+  expect((await ui.find({ type: 'Text', text: exact('question 2 of 2') }))?.props).toMatchObject({ color: 'text', weight: 'semibold' })
   expect((await ui.find({ type: 'Text', text: /^Test z telefonu · goal 11 · asked by the leader · \d\d:\d\d$/ }))?.props.size).toBe('caption')
   // THE QUESTION AS MARKDOWN (S32), and each choice a Button with its letter and its words.
   expect(await ui.find({ type: 'Markdown', text: /^Co přesně se má testovat\?/ })).toBeDefined()
@@ -240,7 +240,7 @@ test('the goals tab: open goals by priority with their questions, the closed one
   // THE PRIORITY AS A CHIP (S32): P1 in warning, the others inactive.
   expect((await chipOf(ui, 'goal-3'))?.dot).toBe('warning')
   expect((await chipOf(ui, 'goal-11'))?.dot).toBe('inactive')
-  expect((await ui.find({ type: 'Text', text: exact('1 question') }))?.props.color).toBe('warning')
+  expect((await ui.find({ type: 'Text', text: exact('1 question') }))?.props).toMatchObject({ color: 'text', weight: 'semibold' })
   expect(await ui.find({ key: 'goal-1' })).toBeUndefined()
 
   await ui.press({ key: 'goals-show-closed' })

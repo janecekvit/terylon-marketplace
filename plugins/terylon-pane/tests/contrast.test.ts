@@ -10,7 +10,7 @@ import { CHIP_BACKGROUND, CHIP_WORD } from '../hooks/drawing'
 
 import { MARK_RATIO, PALETTE, TEXT_RATIO, contrast, inks, strokedCards } from './contrast'
 import type { Ink, Theme } from './contrast'
-import { BRIEFING, FLIGHT, GOAL_QUESTION, MEMORY, PANE_PROPS, SESSION, refusal, world } from './fixtures'
+import { BRIEFING, FLIGHT, GOAL_QUESTION, MEMORY, NARROW_PANE_PROPS, PANE_PROPS, SESSION, bandProps, refusal, world } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -157,4 +157,160 @@ for (const surface of ['desktop', 'terminal'] as const) {
     expect(unreadable(seen)).toEqual([])
     await ui.unmount()
   })
+}
+
+// NO WORD IS AMBER, ON ANY SURFACE: the host draws `warning` #b56d00 in the light theme, 4.08:1 on white. Every state
+// that once drew a word in it is walked here on the desktop, the narrow dock and the terminal, the band and every tab
+// with the screens they open, and every word and link drawn anywhere is held to 4.5:1 (3:1 for a mark such as ⚠ or a
+// chip's dot) in both themes. Amber stays a stroke or a mark. The status line is one plain string, with no colour.
+const PAUSED = { at: '2026-10-11T14:05:00Z', source: 'cockpit', reason: null }
+
+const REPEATING_GOAL = {
+  id: 12,
+  title: 'Daily forex statistics',
+  priority: 2,
+  state: 'active',
+  storyList: [{ id: 88, title: 'Run 15', state: 'accepted', source: 'routine' }],
+  repeating: {
+    approved: { version: 1, title: 'Daily forex statistics', runBudgetUsd: 0.5, autoAccept: true },
+    waiting: null,
+    paused: null,
+    runs: [
+      { story: 86, run: 'r13', state: 'blocked', startedAt: '2026-10-11T05:00:00Z', costUsd: 0.5, files: [] },
+      { story: 85, run: 'r12', state: 'verified', startedAt: '2026-10-10T05:00:00Z', costUsd: 0.2, files: [] },
+      { story: 84, run: 'r11', state: 'blocked', startedAt: '2026-10-09T05:00:00Z', costUsd: 0.5, files: [] },
+    ],
+  },
+}
+
+type Walked = {
+  name: string
+  set: (terylon: ReturnType<typeof world>) => void
+  after?: (terylon: ReturnType<typeof world>) => Promise<void>
+  paths: string[][]
+  typed?: { key: string; text: string }
+  words: RegExp[]
+  // Words a row's detail carries, which the narrow dock drops.
+  details?: RegExp[]
+}
+
+const WALKS: Walked[] = [
+  {
+    name: 'something waits: a stuck story, a held one, questions, a proposed plan, a verified story with its overrun',
+    set: terylon => {
+      terylon.answers.briefing = { ...BRIEFING, questionsOpen: [...BRIEFING.questionsOpen, GOAL_QUESTION], unhandledNotices: 2 }
+      terylon.answers.work_in_flight = { ...FLIGHT, stories: FLIGHT.stories.map(story => (story.id === 333 ? { ...story, stuck: { since: '2026-10-11T15:20:00Z', reason: 'no progress' } } : story)) }
+    },
+    paths: [['tab-queue', 'question-9'], ['tab-queue', 'story-333'], ['tab-queue', 'merge-327', 'open-story-327'], ['tab-queue', 'question-606', 'answer-606'], ['tab-goals', 'goal-3'], ['tab-bell'], ['tab-memory'], ['tab-status']],
+    words: [/^\(1 stuck\)$/, /^question 2 of 2$/, /^! files outside the declaration$/],
+    details: [/^tvoje volba$/, /^1 question$/],
+  },
+  {
+    name: 'the leader paused',
+    set: terylon => {
+      terylon.answers.briefing = { ...BRIEFING, leader: { paused: PAUSED } }
+      terylon.answers.leader_status = { paused: PAUSED }
+    },
+    paths: [['tab-queue'], ['tab-bell'], ['tab-status']],
+    words: [/^paused since \d\d:\d\d$/, /^paused$/],
+  },
+  {
+    name: 'an alert',
+    set: terylon => {
+      terylon.answers.notices_list = { unhandled: 1, notices: [GATUS] }
+      terylon.answers.briefing = { ...BRIEFING, unhandledNotices: 1 }
+    },
+    paths: [['tab-bell'], ['tab-status']],
+    words: [/^· 1 alert$/, /^1 alert$/],
+  },
+  {
+    name: 'not allowed',
+    set: terylon => {
+      terylon.mode.server = 'unclassified'
+    },
+    paths: [['tab-queue'], ['tab-status']],
+    words: [/^Claude Code refused the pane's call$/, /^not allowed$/],
+  },
+  {
+    name: 'no server',
+    set: terylon => {
+      terylon.mode.server = 'missing'
+    },
+    paths: [['tab-queue'], ['tab-status']],
+    words: [/^no terylon server$/, /^no server$/],
+  },
+  {
+    name: 'not answering',
+    set: () => undefined,
+    after: async terylon => {
+      terylon.mode.server = 'down'
+      await terylon.clock.advance(30000)
+    },
+    paths: [['tab-queue'], ['tab-status']],
+    words: [/^not answering since \d\d:\d\d$/, /^not answering$/],
+  },
+  {
+    name: "a repeating task's runs that wait for the owner",
+    set: terylon => {
+      terylon.answers.goals_list = { goals: [{ id: 12, title: 'Daily forex statistics', priority: 2, state: 'active', stories: { accepted: 1 } }], closedCount: 0 }
+      terylon.answers.goal_get = (args: Record<string, unknown>) => (args.goal === 12 ? REPEATING_GOAL : { id: args.goal, title: 'Other', priority: 2, state: 'open', storyList: [] })
+    },
+    paths: [['tab-goals', 'goal-12']],
+    words: [/^(· )?red · waits for you$/, /^(· )?green · waits for you$/],
+  },
+  {
+    name: 'a new task with no open goal to add it to',
+    set: terylon => {
+      terylon.answers.goals_list = { goals: [], closedCount: 0 }
+    },
+    paths: [['tab-queue']],
+    typed: { key: 'quick-add', text: 'Konzole: tlačítko Check now u Health' },
+    words: [/^No open goal: add a goal on the Goals tab, then the task\.$/],
+  },
+]
+
+for (const [surface, props] of [['desktop', PANE_PROPS], ['narrow dock', NARROW_PANE_PROPS], ['terminal', PANE_PROPS]] as const) {
+  for (const walk of WALKS) {
+    test(`${surface}: no word is amber, and every word reads in both themes: ${walk.name}`, async ($, on) => {
+      const terylon = world(on)
+      walk.set(terylon)
+      await $.session.start(SESSION)
+      await terylon.clock.settle()
+      await walk.after?.(terylon)
+
+      const drawnOn = surface === 'terminal' ? 'terminal' : 'desktop'
+      const band = await $.ui.mount({ plugin: 'terylon-pane', surface: drawnOn, component: 'AbovePrompt', props: bandProps() })
+      const seen: Ink[] = inks(await band.drawn())
+      await band.unmount()
+
+      const ui = await $.ui.mount({ ...PANE, props, surface: drawnOn })
+      seen.push(...inks(await ui.drawn()))
+
+      for (const path of walk.paths) {
+        // A subject's screen draws ‹ back in place of the tabs: walk back to them before the next path.
+        while ((await ui.find({ key: 'tab-queue' })) === undefined && (await ui.find({ key: 'back' })) !== undefined) {
+          await ui.press({ key: 'back' })
+        }
+
+        for (const key of path) {
+          await ui.press({ key })
+          seen.push(...inks(await ui.drawn()))
+        }
+      }
+
+      if (walk.typed !== undefined) {
+        await ui.input(walk.typed)
+        seen.push(...inks(await ui.drawn()))
+      }
+
+      await ui.unmount()
+
+      // Each state drew what it is walked for, so the check below saw it.
+      expect([...walk.words, ...(surface === 'narrow dock' ? [] : walk.details ?? [])].filter(word => !seen.some(ink => word.test(ink.text))).map(String)).toEqual([])
+
+      expect(seen.filter(ink => ink.color === 'warning' && !ink.isMark).map(ink => ink.text)).toEqual([])
+      expect(unreadable(seen)).toEqual([])
+      expect(terylon.statuses.every(status => typeof status === 'string')).toBe(true)
+    })
+  }
 }

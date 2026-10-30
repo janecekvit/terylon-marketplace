@@ -41,7 +41,7 @@ test('frame G: unreachable keeps the last state, says it is stale and why, and r
   expect((await ui.find({ type: 'Text', text: /Reason: .*fetch failed: connect ETIMEDOUT/ }))?.props.color).toBe('subtle')
   expect(await ui.find({ type: 'Text', text: /tailscale status and TERYLON_URL/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('Running · 2 (stale)') })).toBeDefined()
-  expect((await ui.find({ type: 'Text', text: /^not answering since / }))?.props.color).toBe('warning')
+  expect((await ui.find({ type: 'Text', text: /^not answering since / }))?.props.color).toBe('error')
   expect(await ui.find({ type: 'Text', text: exact('Adding a task waits for the connection; what you typed stays.') })).toBeDefined()
   expect(await ui.find({ key: 'quick-add' })).toBeUndefined()
 
