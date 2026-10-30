@@ -235,7 +235,7 @@ for (const shape of ['before S44', 'after S44'] as const) {
     terylon.answers.goals_list = shape === 'after S44' ? s44(2) : { goals: [...OPEN_GOALS, ...CLOSED_GOALS] }
     terylon.answers.plans_list = { plans: [
       ...PLANS.plans,
-      { id: 144, goal: 8, goalTitle: 'TEST: earlier output', state: 'approved', estimateUsd: 4, comment: null, stories: [] },
+      { id: 144, goal: 8, goalTitle: 'TEST: earlier output', state: 'approved', estimateUsd: 4, comment: null, stories: [{ id: 901, title: 'Write the output', size: 'M', criteria: [] }] },
       { id: 145, goal: 5, goalTitle: 'Merge proof', state: 'proposed', estimateUsd: 2, comment: null, stories: [] },
     ] }
     await $.session.start(SESSION)

@@ -669,7 +669,7 @@ const MUTATIONS = [
     {
         name: "the watchdog on events_since is removed",
         file: "hooks/register.tsx",
-        find: "  $.clock.every(WATCH_MILLISECONDS, () => watchEvents($))\n",
+        find: "  pollTimers.push($.clock.every(WATCH_MILLISECONDS, () => watchEvents($)))\n",
         replace: "",
     },
     {
@@ -687,8 +687,8 @@ const MUTATIONS = [
     {
         name: "a withdrawn plan stays on the Goals tab",
         file: "hooks/register.tsx",
-        find: "const tabPlans = goalsState.plans.filter(plan => plan.state !== 'withdrawn')",
-        replace: "const tabPlans = goalsState.plans",
+        find: "const tabPlans = goalsState.plans.filter(plan => plan.state !== 'withdrawn' && (",
+        replace: "const tabPlans = goalsState.plans.filter(plan => (",
     },
     {
         name: "the closed goals are read on every poll of the goals",
@@ -1020,7 +1020,7 @@ const MUTATIONS = [
     {
         name: "a session no person is at posts the done-signal",
         file: "hooks/register.tsx",
-        find: "  if (isUnattended && !isOwners) {\n",
+        find: "  if (isUnattended && !isOwners && !isMine) {\n",
         replace: "  if (false) {\n",
     },
     {
@@ -1182,8 +1182,38 @@ const MUTATIONS = [
     {
         name: "a module updated in place never starts its poll from the band",
         file: "hooks/register.tsx",
-        find: "    startLate($, 'the band')\n",
+        find: "    ensurePoll($, 'the band')\n",
         replace: "",
+    },
+    {
+        name: "the poll starts only from session.start, never from another hook",
+        file: "hooks/register.tsx",
+        find: "function ensurePoll($: EngineInterface, hook: string): void {\n",
+        replace: "function ensurePoll($: EngineInterface, hook: string): void {\n  return\n",
+    },
+    {
+        name: "a poll the host stopped is never started again by a hook",
+        file: "hooks/register.tsx",
+        find: "    if (now - tickedAt > POLL_STALLED_MILLISECONDS) {\n",
+        replace: "    if (false) {\n",
+    },
+    {
+        name: "a session taken for unattended no longer renews a lease that names it",
+        file: "hooks/register.tsx",
+        find: "  if (isUnattended && !isOwners && !isMine) {\n",
+        replace: "  if (isUnattended && !isOwners) {\n",
+    },
+    {
+        name: "a session that takes the lease no longer reads back what the last holder held",
+        file: "hooks/register.tsx",
+        find: "    isHeldRestored = false\n",
+        replace: "",
+    },
+    {
+        name: "a settled version plan of a repeating task is listed on the Goals tab again",
+        file: "hooks/register.tsx",
+        find: "plan.state !== 'withdrawn' && (plan.taskVersion == null || plan.isProposed))",
+        replace: "plan.state !== 'withdrawn')",
     },
     {
         name: "a word is drawn amber again, under 4.5:1 in the light theme",

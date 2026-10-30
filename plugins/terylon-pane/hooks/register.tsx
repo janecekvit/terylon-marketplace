@@ -118,7 +118,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.13.7'
+export const MOD_VERSION = '1.14.3'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -1052,16 +1052,9 @@ function shortId(id: string): string {
 
 // WHETHER THIS SESSION POSTS THE DONE-SIGNAL. A machine with no live lease always gets one: any attended session takes
 // an empty or lapsed lease, and the one whose write is read back holds it. The owner's typing, or a band drawn where the
-// holder's never was, moves it; a session nobody is at never takes it.
+// holder's never was, moves it; a session nobody is at never takes it, and a lease naming this session is always renewed.
 async function isSignaller($: EngineInterface, now: number): Promise<boolean> {
   const isOwners = isSeen || typedAt !== null
-
-  if (isUnattended && !isOwners) {
-    await showSignaller($, 'none', null)
-
-    return false
-  }
-
   const answered = await storeCall($, () => $.store.get(STORE_SIGNALLER))
 
   // A STORE THAT REFUSES keeps no lease: only a session the owner sees or types in posts.
@@ -1075,6 +1068,15 @@ async function isSignaller($: EngineInterface, now: number): Promise<boolean> {
 
   const lease = leaseOf(answered.value)
   const isMine = lease !== null && lease.session === sessionId
+
+  // A SESSION TAKEN FOR UNATTENDED takes no lease, but renews its own: a module reloaded in place may hear a
+  // session.start that says nobody is at the session that held it.
+  if (isUnattended && !isOwners && !isMine) {
+    await showSignaller($, 'none', null)
+
+    return false
+  }
+
   const isLive = lease !== null && lease.until > now
   const isTyped = typedAt !== null && lease !== null && typedAt > lease.since
   const mayTake = isMine || !isLive || isTyped || (isOwners && lease !== null && !lease.seen)
@@ -1106,6 +1108,8 @@ async function isSignaller($: EngineInterface, now: number): Promise<boolean> {
 
   if (!isMine) {
     debug($, `this session takes the signaller lease${lease === null ? '' : ` from ${lease.session}`}`)
+    // WHAT THE LAST HOLDER HELD is read back at this tick, and posted at it unless a turn runs here.
+    isHeldRestored = false
     // THE WATCHDOG STARTS AGAIN with the lease: an answer this session had before it is no clock of today's.
     await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, eventsAnsweredAt: null, eventsWatchedSince: now, eventsSilentSince: null }))
   }
@@ -1140,6 +1144,11 @@ async function sessionIdOf($: EngineInterface, cwd: string): Promise<{ id: strin
 // session that hears no session.start, by the first band, pane, prompt or turn it sees. Without it no session ticks,
 // renews its lease or reads the events until one starts again.
 let isStarted = false
+// THE POLL'S OWN TIMERS, and when a tick last ran: a timer the host refused once never fires again, so a hook that
+// finds no tick for longer than this starts the poll afresh, the old timers cancelled.
+const pollTimers: { cancel?: () => void }[] = []
+let tickedAt = 0
+export const POLL_STALLED_MILLISECONDS = 2 * POLL_MS
 
 async function start($: EngineInterface, cwd: string): Promise<void> {
   if (isStarted) {
@@ -1154,27 +1163,46 @@ async function start($: EngineInterface, cwd: string): Promise<void> {
   const startedAt = await $.clock.now()
   await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, eventsWatchedSince: startedAt }))
   await showHealth($)
+  tickedAt = startedAt
   $.clock.after(0, () => tick($, true))
-  $.clock.every(POLL_MS, () => tick($, false))
-  $.clock.every(WATCH_MILLISECONDS, () => watchEvents($))
+  startPoll($)
 }
 
-// A hook of a module that never heard session.start starts the poll itself, after it answers.
-function startLate($: EngineInterface, hook: string): void {
-  if (isStarted) {
-    return
+function startPoll($: EngineInterface): void {
+  for (const timer of pollTimers.splice(0)) {
+    timer.cancel?.()
   }
 
+  pollTimers.push($.clock.every(POLL_MS, () => tick($, false)))
+  pollTimers.push($.clock.every(WATCH_MILLISECONDS, () => watchEvents($)))
+}
+
+// EVERY HOOK KEEPS THE POLL GOING, after it answers: a module that never heard session.start starts it, and one whose
+// poll has not ticked for longer than two polls starts it again and ticks at once.
+function ensurePoll($: EngineInterface, hook: string): void {
   $.clock.after(0, async () => {
     if (!isStarted) {
       debug($, `the poll starts on ${hook}: this load of the module heard no session.start`)
       await start($, '')
+
+      return
+    }
+
+    const now = await $.clock.now()
+
+    if (now - tickedAt > POLL_STALLED_MILLISECONDS) {
+      debug($, `the poll had not ticked for ${Math.round((now - tickedAt) / 1000)} s; ${hook} starts it again`)
+      tickedAt = now
+      startPoll($)
+      await tick($, false)
     }
   })
 }
 
 // One tick: the queue, then what moved since the last look.
 async function tick($: EngineInterface, isStart: boolean): Promise<void> {
+  tickedAt = await $.clock.now()
+
   if (isPolling) {
     return
   }
@@ -1202,7 +1230,8 @@ async function tick($: EngineInterface, isStart: boolean): Promise<void> {
       debug($, `the main loop's turn has not ended in ${TURN_LONGEST_MILLISECONDS / 60000} min; taken as ended, what it held is posted`)
     }
 
-    // WHAT AN EARLIER SESSION HELD, read back once: it posts here, re-read like any signal, unless a turn runs here too.
+    // WHAT AN EARLIER SESSION HELD, read back when this one takes the lease: it posts here, re-read like any signal,
+    // unless a turn runs here too.
     if (!isHeldRestored) {
       isHeldRestored = true
       held.push(...heldOf(await kept($, STORE_HELD), held))
@@ -2402,13 +2431,14 @@ export const register: Register = on => {
     isUnattended = e.isInteractive === false && (e.surface === null || e.surface === undefined)
     debug($, `this session starts with isInteractive ${String(e.isInteractive)}, surface ${String(e.surface)}: ${isUnattended ? 'nobody is at it' : 'someone is at it'}`)
     await start($, e.cwd)
+    ensurePoll($, 'session.start')
 
     return next(e)
   })
 
   // THE OWNER'S OWN TYPING, at the prompt or through Remote Control, moves the signaller lease to this session.
   on('prompt.submit', async ($, e, next) => {
-    startLate($, 'prompt.submit')
+    ensurePoll($, 'prompt.submit')
     const result = await next(e)
 
     if (e.origin?.kind === 'composer' || e.origin?.kind === 'bridge') {
@@ -2419,7 +2449,7 @@ export const register: Register = on => {
   })
 
   on('turn.start', async ($, e, next) => {
-    startLate($, 'turn.start')
+    ensurePoll($, 'turn.start')
 
     if (e.agentId === undefined) {
       isTurnRunning = true
@@ -2430,6 +2460,7 @@ export const register: Register = on => {
   })
 
   on('turn.complete', async ($, e, next) => {
+    ensurePoll($, 'turn.complete')
     const result = await next(e)
 
     if (e.agentId === undefined) {
@@ -2469,7 +2500,7 @@ export const register: Register = on => {
   // spend are the status line's, never repeated here.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     isSeen = true
-    startLate($, 'the band')
+    ensurePoll($, 'the band')
 
     if (e.props.hasSurvey) {
       return next(e)
@@ -2568,7 +2599,7 @@ export const register: Register = on => {
   // THE PANE: tabs, then the screen on top of the stack.
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     isSeen = true
-    startLate($, 'the pane')
+    ensurePoll($, 'the pane')
     const elements = $.ui.resolve(e)
     const { Box, Text, Button, Link, Markdown, Code } = elements
     const hasInput = e.surface !== 'mobile' && 'Input' in elements
@@ -3882,8 +3913,9 @@ export const register: Register = on => {
     // THE GOALS TAB: open goals by priority, the plans, and a new goal with its priority and target.
     if (screen.screen === 'goals') {
       const isClosedShown = goalsState.showing === 'closed'
-      // A WITHDRAWN PLAN (plans_list's `state: 'withdrawn'`) LEAVES THE TAB: it waits on nothing, and stays on its goal's screen.
-      const tabPlans = goalsState.plans.filter(plan => plan.state !== 'withdrawn')
+      // A WITHDRAWN PLAN (plans_list's `state: 'withdrawn'`) LEAVES THE TAB, and so does a repeating task's version plan
+      // once settled: each waits on nothing, and stays on its goal's screen. A version that waits stays, as an act.
+      const tabPlans = goalsState.plans.filter(plan => plan.state !== 'withdrawn' && (plan.taskVersion == null || plan.isProposed))
       // A CLOSED GOAL'S PLANS LEAVE THE OPEN LIST: they stay on the goal's own screen. After
       // S44 the tab knows the open goals alone, so a plan stays only under one of them.
       const openPlans = tabPlans.filter(plan => (goalsState.closedFrom === 'terylon'
