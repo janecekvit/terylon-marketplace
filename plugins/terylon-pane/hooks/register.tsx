@@ -116,7 +116,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.13.1'
+export const MOD_VERSION = '1.13.2'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -146,8 +146,14 @@ const PROMPT_REPEAT_MILLISECONDS = 60000
 
 // What the store keeps across sessions: where the pane last read the events, when, and what it signalled.
 const STORE_LAST_SEQ = 'lastSeq'
+// THE EVENT LOG'S IDENTITY, kept beside lastSeq: a sequence means something only within its epoch.
+const STORE_EPOCH = 'epoch'
 const STORE_LAST_SEEN_AT = 'lastSeenAt'
 const STORE_SIGNALLED = 'signalled'
+// ONE SIGNALLER PER MACHINE: every open session runs the mod, and only the session holding this lease reads the events,
+// posts and toasts. Its holder renews it every tick; one not renewed for three ticks has lapsed.
+const STORE_SIGNALLER = 'signaller'
+const LEASE_MILLISECONDS = 3 * POLL_MS
 
 // HOW LONG ONE $.store CALL MAY TAKE before the pane goes on with what it keeps in memory: a store that never answers
 // must not hold the poll, which waits for its last tick to end.
@@ -178,6 +184,11 @@ const EMPTY_SNAPSHOT: PaneSnapshot = {
   eventsAnsweredAt: null,
   eventsWatchedSince: null,
   eventsSilentSince: null,
+  signaller: 'none',
+  signallerSince: null,
+  signallerMissingSince: null,
+  signallerHolder: null,
+  sessionIdSource: 'fallback',
 }
 
 const QUEUE: PaneScreen = { screen: 'queue' }
@@ -221,6 +232,20 @@ let lastStories: Json[] = []
 let policy: Json | null = null
 let lastAttemptAt = 0
 let isPolling = false
+
+// THIS SESSION, as the lease names it: its id, whether nobody is at it, whether its band or pane was drawn, and when
+// the owner last typed in it.
+let sessionId = ''
+let isUnattended = false
+let isSeen = false
+let typedAt: number | null = null
+
+// WHETHER THE MAIN LOOP'S TURN RUNS, from turn.start and turn.complete: a prompt submitted meanwhile waits for its end.
+let isTurnRunning = false
+// The done-signal's candidates found while a turn ran, and the keys already toasted for them; bounded.
+const HELD_MOST = 200
+const held: Candidate[] = []
+const heldToasted: string[] = []
 let answeringServer: string | null = null
 
 // WHAT AN ACT JUST CHANGED, drawn at once and kept until Terylon's own answer shows the subject moved (the owner's walk
@@ -407,7 +432,7 @@ function hasProblem(current: PaneSnapshot, off: ReadonlySet<StatusPart> = new Se
     return false
   }
 
-  return (current.connection !== 'ok' && current.connection !== 'connecting') || current.paused !== null || (!off.has('alerts') && current.alerts > 0) || (!off.has('events') && (current.events !== null || isEventsSilent(current)))
+  return (current.connection !== 'ok' && current.connection !== 'connecting') || current.paused !== null || (!off.has('alerts') && current.alerts > 0) || (!off.has('events') && (current.events !== null || isEventsSilent(current) || current.signallerMissingSince !== null))
 }
 
 // The watchdog's finding, said while the queue reads and no failure of events_since says why already.
@@ -421,9 +446,12 @@ async function watchEvents($: EngineInterface): Promise<void> {
 
   await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => {
     const since = current.eventsAnsweredAt ?? current.eventsWatchedSince
-    const silentSince = since !== null && now - since > EVENTS_SILENT_MILLISECONDS ? since : null
+    // ANOTHER SESSION READS THE EVENTS while this one does not hold the lease: its silence is no problem.
+    const silentSince = current.signaller === 'this' && since !== null && now - since > EVENTS_SILENT_MILLISECONDS ? since : null
+    // NO SESSION POSTS THE DONE-SIGNAL for longer than a lease: a problem, never a quiet "none".
+    const missingSince = current.signaller === 'none' && current.signallerSince !== null && now - current.signallerSince > LEASE_MILLISECONDS ? current.signallerSince : null
 
-    return silentSince === current.eventsSilentSince ? current : { ...EMPTY_SNAPSHOT, ...current, eventsSilentSince: silentSince }
+    return silentSince === current.eventsSilentSince && missingSince === current.signallerMissingSince ? current : { ...EMPTY_SNAPSHOT, ...current, eventsSilentSince: silentSince, signallerMissingSince: missingSince }
   })
 }
 
@@ -536,6 +564,11 @@ async function refresh($: EngineInterface): Promise<boolean> {
     eventsAnsweredAt: current.eventsAnsweredAt ?? null,
     eventsWatchedSince: current.eventsWatchedSince ?? null,
     eventsSilentSince: current.eventsSilentSince ?? null,
+    signaller: current.signaller ?? 'none',
+    signallerSince: current.signallerSince ?? null,
+    signallerMissingSince: current.signallerMissingSince ?? null,
+    signallerHolder: current.signallerHolder ?? null,
+    sessionIdSource: current.sessionIdSource ?? 'fallback',
     questions: questionItems(lastBriefing),
   }))
   await showHealth($)
@@ -663,6 +696,25 @@ async function keep($: EngineInterface, key: string, value: unknown): Promise<vo
   }
 }
 
+// AN EPOCH IS WRITTEN ONLY ONCE ONE IS KNOWN: a blank or a value of another type reads as none, never as an epoch.
+async function keepEpoch($: EngineInterface, epoch: string | null): Promise<void> {
+  if (epoch !== null) {
+    await keep($, STORE_EPOCH, epoch)
+  }
+}
+
+// A BLANK EPOCH AN EARLIER VERSION WROTE is taken out of the store, so an unknown epoch is an absent key.
+async function forgetEpoch($: EngineInterface): Promise<void> {
+  keptInMemory.delete(STORE_EPOCH)
+
+  const answered = await storeCall($, () => $.store.delete(STORE_EPOCH))
+
+  if ('error' in answered) {
+    storeRefusals += 1
+    await eventsFailed($, 'store', COPY.storeWriteFailed(STORE_EPOCH, answered.error))
+  }
+}
+
 async function signalled($: EngineInterface): Promise<string[]> {
   const value = await kept($, STORE_SIGNALLED)
 
@@ -750,14 +802,33 @@ async function forgetGoals($: EngineInterface, ids: readonly number[]): Promise<
   }
 }
 
-// Reads events_since from the stored sequence, page by page, up to `most` events.
-async function readEvents($: EngineInterface, since: number, most: number): Promise<{ events: Json[]; last: number; isWhole: boolean } | null> {
+// WHETHER AN ANSWER OF events_since MEANS TERYLON'S HISTORY WAS RESET, in this order: it says so; its epoch is known
+// and not the pane's; or, from a server that names no epoch, its head is below the since asked.
+function isReset(page: Json, since: number, epoch: string | null): boolean {
+  if (page.reset === true) {
+    return true
+  }
+
+  const answered = text(page.epoch)
+
+  if (epoch !== null && answered !== null && answered !== epoch) {
+    return true
+  }
+
+  const head = number(page.head)
+
+  return head !== null && head < since
+}
+
+// Reads events_since from the stored position, page by page, up to `most` events; its epoch is sent once known.
+async function readEvents($: EngineInterface, since: number, epoch: string | null, most: number): Promise<{ events: Json[]; last: number; epoch: string | null; isWhole: boolean; reset: { from: number; head: number } | null } | null> {
   const events: Json[] = []
   let from = since
+  let known = epoch
 
   for (;;) {
-    debug($, `calling events_since since ${from}`)
-    const answered = await callTerylon($, 'events_since', { since: from, limit: EVENTS_PAGE })
+    debug($, `calling events_since since ${from}${known === null ? '' : ` in epoch ${known}`}`)
+    const answered = await callTerylon($, 'events_since', known === null ? { since: from, limit: EVENTS_PAGE } : { since: from, epoch: known, limit: EVENTS_PAGE })
 
     if (answered.kind !== 'ok') {
       await eventsRefused($, answered)
@@ -768,24 +839,30 @@ async function readEvents($: EngineInterface, since: number, most: number): Prom
     await eventsAnswered($)
 
     const page = answered.value
+    const head = number(page.head)
+
+    // A RESET WINS OVER A GAP: the old history is gone, so nothing of it is summed up.
+    if (isReset(page, from, known)) {
+      return { events: [], last: head ?? number(page.last) ?? 0, epoch: text(page.epoch), isWhole: true, reset: { from, head: head ?? number(page.last) ?? 0 } }
+    }
+
+    known = text(page.epoch) ?? known
     events.push(...list(page.events))
     from = number(page.last) ?? from
     debug($, `events_since answered ${list(page.events).length} events, last ${from}${page.more === true ? ', more' : ''}${page.gap === true ? ', a gap' : ''}`)
 
     if (page.gap === true || events.length > most) {
-      return { events, last: number(page.head) ?? from, isWhole: false }
+      return { events, last: head ?? from, epoch: known, isWhole: false, reset: null }
     }
 
     if (page.more !== true) {
-      return { events, last: from, isWhole: true }
+      return { events, last: from, epoch: known, isWhole: true, reset: null }
     }
   }
 }
 
-// THE DONE-SIGNAL: once per story and verdict commit. Each story's latest move alone, read again with story_get right
-// before the post, so that nothing asks for what has already happened; several are one summary, one turn.
-async function postSignals($: EngineInterface, candidates: Candidate[]): Promise<void> {
-  const done = await signalled($)
+// Each story's latest move alone, read again with story_get, and only what no earlier signal told.
+async function settleSignals($: EngineInterface, candidates: Candidate[], done: string[]): Promise<Signal[]> {
   const signals: Signal[] = []
   const now = await $.clock.now()
 
@@ -826,15 +903,91 @@ async function postSignals($: EngineInterface, candidates: Candidate[]): Promise
     signals.push(signalFor(settled_, verdict))
   }
 
+  return signals
+}
+
+function toastOf(signals: Signal[]): string {
+  return signals.length === 1 ? signals[0]?.toast ?? '' : signalsSummary(signals).toast
+}
+
+// THE DONE-SIGNAL: once per story and verdict commit, several in one summary, one turn. A PROMPT WAITS FOR THE RUNNING
+// TURN, so one found while a turn runs is held: its toast goes now, and its prompt only at the turn's end, read again.
+async function postSignals($: EngineInterface, candidates: Candidate[]): Promise<void> {
+  const done = await signalled($)
+
+  if (isTurnRunning) {
+    const signals = await settleSignals($, candidates, [...done, ...heldToasted])
+    held.push(...candidates)
+    held.splice(0, Math.max(0, held.length - HELD_MOST))
+
+    if (signals.length > 0) {
+      heldToasted.push(...signals.map(signal => signal.key))
+      debug($, `holding the done-signal ${signals.map(signal => signal.key).join(', ')} until the turn ends`)
+      $.ui.toast(toastOf(signals))
+    }
+
+    return
+  }
+
+  const toasted = heldToasted.splice(0)
+  const read_ = [...held.splice(0), ...candidates]
+  const signals = await settleSignals($, read_, done)
+
   if (signals.length === 0) {
     return
   }
 
-  await keep($, STORE_SIGNALLED, done.slice(-SIGNALS_KEPT))
   const posted = signals.length === 1 ? { prompt: signals[0]?.prompt ?? '', toast: signals[0]?.toast ?? '' } : signalsSummary(signals)
-  debug($, `posting the done-signal ${signals.map(signal => signal.key).join(', ')}`)
-  await $.prompt.submit({ text: posted.prompt })
-  $.ui.toast(posted.toast)
+  const keys = signals.map(signal => signal.key).join(', ')
+  debug($, `posting the done-signal ${keys}`)
+  const entered = await submitted($, posted.prompt)
+
+  // A KEY IS RECORDED ONLY ONCE ITS PROMPT ENTERED: one dropped or refused is held, read again and posted next time.
+  if (entered !== true) {
+    held.push(...read_)
+    debug($, `the done-signal ${keys} did not enter the session (${entered}); it is told on the next read`)
+
+    return
+  }
+
+  await keep($, STORE_SIGNALLED, done.slice(-SIGNALS_KEPT))
+
+  if (signals.some(signal => !toasted.includes(signal.key))) {
+    $.ui.toast(posted.toast)
+  }
+}
+
+// Whether a prompt entered the session: true, or why not, a hook's drop or the engine's refusal.
+async function submitted($: EngineInterface, text: string): Promise<true | string> {
+  try {
+    const result: unknown = await $.prompt.submit({ text })
+
+    if (result !== null && typeof result === 'object' && 'drop' in result) {
+      return `dropped: ${String((result as { drop: unknown }).drop)}`
+    }
+
+    return true
+  } catch (error) {
+    // A refused submit is said and retried, never taken for a post.
+    return `refused: ${messageOf(error)}`
+  }
+}
+
+// The turn ended: what was held is read again and posted, unless a tick is reading the events, which posts it itself.
+async function flushHeld($: EngineInterface): Promise<void> {
+  if (isPolling || isTurnRunning || held.length === 0) {
+    return
+  }
+
+  isPolling = true
+
+  try {
+    await postSignals($, [])
+  } catch (error) {
+    await eventsFailed($, 'failed', messageOf(error))
+  } finally {
+    isPolling = false
+  }
 }
 
 async function markSignalled($: EngineInterface, candidates: Candidate[]): Promise<void> {
@@ -845,6 +998,121 @@ async function markSignalled($: EngineInterface, candidates: Candidate[]): Promi
   }
 
   await keep($, STORE_SIGNALLED, done.slice(-SIGNALS_KEPT))
+}
+
+type Lease = { session: string; since: number; until: number; seen: boolean }
+
+function leaseOf(value: unknown): Lease | null {
+  if (value === null || typeof value !== 'object') {
+    return null
+  }
+
+  const lease = value as Partial<Lease>
+
+  return typeof lease.session === 'string' && typeof lease.since === 'number' && typeof lease.until === 'number' ? { session: lease.session, since: lease.since, until: lease.until, seen: lease.seen === true } : null
+}
+
+// Who signals, its id shortened, and since when; for none, since when this session has seen no signaller at all.
+async function showSignaller($: EngineInterface, who: PaneSnapshot['signaller'], since: number | null, holder: string | null = null): Promise<void> {
+  const now = await $.clock.now()
+  const short = holder === null ? null : shortId(holder)
+
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => {
+    const at = who === 'none' ? (current.signaller === 'none' ? current.signallerSince ?? now : now) : since
+
+    return current.signaller === who && current.signallerSince === at && current.signallerHolder === short ? current : { ...EMPTY_SNAPSHOT, ...current, signaller: who, signallerSince: at, signallerHolder: short }
+  })
+}
+
+// An id as Diagnostics names it: its last eight characters, where a made one carries its nonce.
+function shortId(id: string): string {
+  return id.slice(-8)
+}
+
+// WHETHER THIS SESSION POSTS THE DONE-SIGNAL. A machine with no live lease always gets one: any attended session takes
+// an empty or lapsed lease, and the one whose write is read back holds it. The owner's typing, or a band drawn where the
+// holder's never was, moves it; a session nobody is at never takes it.
+async function isSignaller($: EngineInterface, now: number): Promise<boolean> {
+  const isOwners = isSeen || typedAt !== null
+
+  if (isUnattended && !isOwners) {
+    await showSignaller($, 'none', null)
+
+    return false
+  }
+
+  const answered = await storeCall($, () => $.store.get(STORE_SIGNALLER))
+
+  // A STORE THAT REFUSES keeps no lease: only a session the owner sees or types in posts.
+  if ('error' in answered) {
+    storeRefusals += 1
+    await eventsFailed($, 'store', COPY.storeReadFailed(STORE_SIGNALLER, answered.error))
+    await showSignaller($, isOwners ? 'this' : 'none', null)
+
+    return isOwners
+  }
+
+  const lease = leaseOf(answered.value)
+  const isMine = lease !== null && lease.session === sessionId
+  const isLive = lease !== null && lease.until > now
+  const isTyped = typedAt !== null && lease !== null && typedAt > lease.since
+  const mayTake = isMine || !isLive || isTyped || (isOwners && lease !== null && !lease.seen)
+
+  if (!mayTake && lease !== null) {
+    await showSignaller($, 'another', lease.since, lease.session)
+
+    return false
+  }
+
+  const since = isMine && lease !== null ? lease.since : now
+  const written = await storeCall($, () => $.store.set(STORE_SIGNALLER, { session: sessionId, since, until: now + LEASE_MILLISECONDS, seen: isOwners }))
+
+  if ('error' in written) {
+    await showSignaller($, isOwners ? 'this' : 'none', null)
+
+    return isOwners
+  }
+
+  // COMPARE AND SET: two sessions that took an empty lease in one tick read it back, and only the last write holds it.
+  const back = await storeCall($, () => $.store.get(STORE_SIGNALLER))
+  const holder = 'error' in back ? null : leaseOf(back.value)
+
+  if (holder !== null && holder.session !== sessionId) {
+    await showSignaller($, 'another', holder.since, holder.session)
+
+    return false
+  }
+
+  if (!isMine) {
+    debug($, `this session takes the signaller lease${lease === null ? '' : ` from ${lease.session}`}`)
+    // THE WATCHDOG STARTS AGAIN with the lease: an answer this session had before it is no clock of today's.
+    await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, eventsAnsweredAt: null, eventsWatchedSince: now, eventsSilentSince: null }))
+  }
+
+  await showSignaller($, 'this', since, sessionId)
+
+  return true
+}
+
+// A NONCE MADE ONCE PER LOAD OF THE MODULE: sessions Desktop restores together start in one second, often in one
+// directory, so their start and directory alone would name two sessions alike.
+const MODULE_NONCE = moduleNonce()
+
+function moduleNonce(): string {
+  const random = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto
+
+  return typeof random?.randomUUID === 'function' ? random.randomUUID() : `${Date.now().toString(36)}${String(Object.keys(globalThis).length)}`
+}
+
+// This session's id for the lease, and where it came from: the engine's session.id, or made here from the start,
+// the directory and this load's nonce.
+async function sessionIdOf($: EngineInterface, cwd: string): Promise<{ id: string; source: PaneSnapshot['sessionIdSource'] }> {
+  try {
+    return { id: await $.session.id(), source: 'session.id' }
+  } catch {
+    // An engine without session.id still needs a name: it is no secret, only told apart from another session's.
+    return { id: `session-${await $.clock.now()}-${cwd}-${MODULE_NONCE}`, source: 'fallback' }
+  }
 }
 
 // One tick: the queue, then what moved since the last look.
@@ -867,12 +1135,21 @@ async function tick($: EngineInterface, isStart: boolean): Promise<void> {
       return
     }
 
+    if (!(await isSignaller($, now))) {
+      return
+    }
+
     await readMoved($, isStart, now)
   } catch (error) {
     // NOTHING OF A TICK IS LOST UNSAID: a timer drops what its callback rejects with, so it is said here instead.
     await eventsFailed($, 'failed', messageOf(error))
   } finally {
     isPolling = false
+
+    // A TURN THAT ENDED WHILE THIS TICK RAN found it polling: what it held is posted now, not a tick later.
+    if (!isTurnRunning && held.length > 0) {
+      $.clock.after(0, () => flushHeld($))
+    }
   }
 }
 
@@ -881,6 +1158,12 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
   storeRefusals = 0
 
   const lastSeq = number(await kept($, STORE_LAST_SEQ))
+  const storedEpoch = await kept($, STORE_EPOCH)
+  const epoch = text(storedEpoch)
+
+  if (storedEpoch !== undefined && storedEpoch !== null && epoch === null) {
+    await forgetEpoch($)
+  }
   const lastSeenAt = number(await kept($, STORE_LAST_SEEN_AT))
   debug($, `the last look: sequence ${lastSeq ?? 'none'}, at ${lastSeenAt ?? 'never'}`)
 
@@ -898,6 +1181,7 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
     await eventsAnswered($)
 
     await keep($, STORE_LAST_SEQ, number(head.value.head) ?? number(head.value.last) ?? 0)
+    await keepEpoch($, text(head.value.epoch))
     await keep($, STORE_LAST_SEEN_AT, now)
     await eventsRead($)
 
@@ -906,9 +1190,15 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
 
   const awayMs = lastSeenAt === null ? 0 : now - lastSeenAt
   const isCatchUp = isStart && awayMs > CATCH_UP_AFTER_MS
-  const read_ = await readEvents($, lastSeq, CATCH_UP_MOST_EVENTS)
+  const read_ = await readEvents($, lastSeq, epoch, CATCH_UP_MOST_EVENTS)
 
   if (read_ === null) {
+    return
+  }
+
+  if (read_.reset !== null) {
+    await startOver($, read_.reset, read_.epoch, now)
+
     return
   }
 
@@ -937,7 +1227,26 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
   }
 
   await keep($, STORE_LAST_SEQ, read_.last)
+  await keepEpoch($, read_.epoch)
   await keep($, STORE_LAST_SEEN_AT, now)
+  await eventsRead($)
+}
+
+// TERYLON'S HISTORY WAS RESET: the pane goes on from the new epoch and head, tells nothing of the old history, and
+// forgets what it remembered of the stories in it. Said once, in the debug log and on the band.
+async function startOver($: EngineInterface, reset: { from: number; head: number }, epoch: string | null, now: number): Promise<void> {
+  debug($, `Terylon's history was reset (asked from ${reset.from}, its head is ${reset.head}); starting over`)
+  held.splice(0)
+  heldToasted.splice(0)
+  settled.clear()
+  storyTargets.clear()
+  await keep($, STORE_SIGNALLED, [])
+  await keep($, STORE_LAST_SEQ, reset.head)
+  await keepEpoch($, epoch)
+  await keep($, STORE_LAST_SEEN_AT, now)
+
+  const base = await baseUrl($)
+  await update($, band, (): PaneBand => ({ text: `${COPY.resetHeading} · ${COPY.resetBody(String(reset.head))}`, link: consoleLink(base, 'history'), isAlert: false }))
   await eventsRead($)
 }
 
@@ -969,6 +1278,11 @@ function snapshotOf(value: unknown): PaneSnapshot {
     eventsAnsweredAt: time(kept.eventsAnsweredAt),
     eventsWatchedSince: time(kept.eventsWatchedSince),
     eventsSilentSince: time(kept.eventsSilentSince),
+    signaller: kept.signaller === 'this' || kept.signaller === 'another' ? kept.signaller : 'none',
+    signallerSince: time(kept.signallerSince),
+    signallerMissingSince: time(kept.signallerMissingSince),
+    signallerHolder: typeof kept.signallerHolder === 'string' ? kept.signallerHolder : null,
+    sessionIdSource: kept.sessionIdSource === 'session.id' ? 'session.id' : 'fallback',
   }
 }
 
@@ -2000,6 +2314,14 @@ export const register: Register = on => {
     await $.command.register({ name: 'terylon', description: 'Opens the Terylon pane (the same as /terylon-pane)' })
     await $.command.register({ name: 'terylon-memory', description: "Opens the Terylon pane on the leader's memory; an edit is confirmed in the console" })
     storyTargets.clear()
+    // UNATTENDED ONLY WHEN THE ENGINE SAYS SO TWICE: no person at the prompt and nowhere to draw, a -p run or the SDK.
+    // An engine that names neither starts a session someone is at.
+    isUnattended = e.isInteractive === false && (e.surface === null || e.surface === undefined)
+    debug($, `this session starts with isInteractive ${String(e.isInteractive)}, surface ${String(e.surface)}: ${isUnattended ? 'nobody is at it' : 'someone is at it'}`)
+    const own = await sessionIdOf($, e.cwd)
+    sessionId = own.id
+    await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, sessionIdSource: own.source }))
+    debug($, `this session's id is ${shortId(own.id)}, from ${own.source}`)
     const startedAt = await $.clock.now()
     await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, eventsWatchedSince: startedAt }))
     await showHealth($)
@@ -2008,6 +2330,36 @@ export const register: Register = on => {
     $.clock.every(WATCH_MILLISECONDS, () => watchEvents($))
 
     return next(e)
+  })
+
+  // THE OWNER'S OWN TYPING, at the prompt or through Remote Control, moves the signaller lease to this session.
+  on('prompt.submit', async ($, e, next) => {
+    const result = await next(e)
+
+    if (e.origin?.kind === 'composer' || e.origin?.kind === 'bridge') {
+      typedAt = await $.clock.now()
+    }
+
+    return result
+  })
+
+  on('turn.start', async ($, e, next) => {
+    if (e.agentId === undefined) {
+      isTurnRunning = true
+    }
+
+    return next(e)
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    const result = await next(e)
+
+    if (e.agentId === undefined) {
+      isTurnRunning = false
+      $.clock.after(0, () => flushHeld($))
+    }
+
+    return result
   })
 
   on('command.run', { command: 'terylon-pane' }, async $ => {
@@ -2038,6 +2390,8 @@ export const register: Register = on => {
   // THE BAND: one row above the prompt, what calls for the owner, and the pane's entry point. The machine's health and
   // spend are the status line's, never repeated here.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    isSeen = true
+
     if (e.props.hasSurvey) {
       return next(e)
     }
@@ -2134,6 +2488,7 @@ export const register: Register = on => {
 
   // THE PANE: tabs, then the screen on top of the stack.
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    isSeen = true
     const elements = $.ui.resolve(e)
     const { Box, Text, Button, Link, Markdown, Code } = elements
     const hasInput = e.surface !== 'mobile' && 'Input' in elements
@@ -2457,6 +2812,13 @@ export const register: Register = on => {
                   <Link href={consoleLink(base, 'health')} label={COPY.health} />,
                   eventsRetry(),
                 ]))
+        const missingSince = current.signallerMissingSince
+        const signallerCard = await part('signaller', () => missingSince === null
+          ? null
+          : cardOf('problem-signaller', eventsTitle(COPY.signallerMissingTitle), COPY.statusSince(at(missingSince)), [
+              <Text color="inactive">{COPY.signallerMissingBody}</Text>,
+              steps(COPY.fixSignallerMissing),
+            ]))
         const isShown = (name: Parameters<typeof drawingAsked.off.has>[0]) => !drawingAsked.off.has(name)
         // THE DONE-SIGNAL'S STATE AS PLAIN TEXT, read as kept, each value with its type: a part that does draw says what
         // the events card would have drawn from.
@@ -2470,9 +2832,10 @@ export const register: Register = on => {
           COPY.diagnosticsEvents('watchedSince', typedLine(raw.eventsWatchedSince)),
           COPY.diagnosticsEvents('silentSince', typedLine(raw.eventsSilentSince)),
           COPY.diagnosticsEvents('store refusals', String(storeRefusals)),
+          COPY.diagnosticsEvents('signaller', current.signaller === 'this' ? COPY.signallerThis(current.signallerHolder ?? shortId(sessionId), current.sessionIdSource) : current.signaller === 'another' ? COPY.signallerAnother(current.signallerHolder ?? '?', at(current.signallerSince)) : COPY.signallerNone),
         ]
         note($, `terylon-pane: the Status tab's done-signal: ${eventsDiagnostics.join('; ')}`)
-        const problems = [problemCard, rulesCard, isShown('events') ? eventsCard : null, pausedCard, ...(isShown('alerts') ? (Array.isArray(alertCards) ? alertCards : [alertCards]) : [])].filter(item => item !== null)
+        const problems = [problemCard, rulesCard, isShown('events') ? eventsCard : null, isShown('events') ? signallerCard : null, pausedCard, ...(isShown('alerts') ? (Array.isArray(alertCards) ? alertCards : [alertCards]) : [])].filter(item => item !== null)
         const slotsCard = await part('slots', () => cardOf('status-slots', COPY.statusSlots, COPY.statusSlotsHint, [
           look.isGraphic ? picture(elements, slotsGauge(current.slotsUsed, current.slots, true)) : null,
           <Text tabular>{COPY.statusSlotsLine(current.slotsUsed, current.slots)}</Text>,

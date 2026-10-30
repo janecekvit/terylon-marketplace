@@ -83,6 +83,16 @@ export const COPY = {
   diagnosticsUrl: (url: string) => `TERYLON_URL ${url === '' ? '(not set)' : url}`,
   diagnosticsServer: (server: string | null) => `server ${server ?? '(none has answered yet)'}`,
   diagnosticsEvents: (name: string, value: string) => `${name}: ${value}`,
+  signallerThis: (id: string, source: string) => `this session (${id}, ${source})`,
+  signallerAnother: (id: string, since: string) => `another (${id}) since ${since}`,
+  signallerNone: 'none',
+  signallerMissingTitle: 'No session is posting the done-signal',
+  signallerMissingBody: 'No open session holds the lease that lets one read Terylon\'s events and post them, so nothing that moves is told here.',
+  fixSignallerMissing: [
+    'Type in the Claude session you work in, or open the Terylon pane there: that session takes the lease within a tick.',
+    'If it stays, check that this is not a claude -p run, and see Diagnostics under signaller and store refusals.',
+    'Then run claude --debug and read the lines under terylon-pane: events:',
+  ],
   diagnosticsDebug: 'Every failure is in claude --debug under terylon-pane:',
 
   // Tabs.
@@ -194,6 +204,8 @@ export const COPY = {
   health: 'Health ↗',
   tooFarHeading: 'Missed too much',
   tooFarBody: (count: string) => `over ${count} events since the last look; a summary would not be whole`,
+  resetHeading: 'Terylon started over',
+  resetBody: (head: string) => `its history was reset; the pane goes on from event ${head}, nothing before is caught up`,
 
   // THE DONE-SIGNAL STOPPED: events_since, or the store that keeps the pane's place, failed. Each kind says its fix.
   eventsNotAllowedTitle: "Claude Code refused the done-signal's call",

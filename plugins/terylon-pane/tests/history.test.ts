@@ -144,7 +144,8 @@ for (const [surface, props, drawnOn] of SURFACES) {
 test('GOALDELETED IN THE FEED: the goal and its plans leave every list, its story signals nothing, another goal\'s still does', async ($, on) => {
   const terylon = world(on)
   let moved: Record<string, unknown>[] = []
-  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), moved.filter(event => Number(event.seq) > Number(args.since)), 18100)
+  // The head moves with the events, as Terylon's does: a head below the since asked reads as a reset.
+  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), moved.filter(event => Number(event.seq) > Number(args.since)), Math.max(18100, ...moved.map(event => Number(event.seq))))
   // A list that lags: goals_list still names goal 8 among the closed, and plans_list its plan.
   terylon.answers.goals_list = s44(2)
   terylon.answers.plans_list = { plans: [...PLANS.plans, PLAN_144] }
@@ -190,7 +191,7 @@ test('GOALDELETED IN THE FEED: the goal and its plans leave every list, its stor
 test('GOALDELETED IN THE FEED, the goal open on screen: its screen says so quietly, with ‹ back', async ($, on) => {
   const terylon = world(on)
   let moved: Record<string, unknown>[] = []
-  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), moved.filter(event => Number(event.seq) > Number(args.since)), 18100)
+  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), moved.filter(event => Number(event.seq) > Number(args.since)), Math.max(18100, ...moved.map(event => Number(event.seq))))
   terylon.answers.goals_list = s44(2)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -213,7 +214,7 @@ test('GOALDELETED IN THE FEED, the goal open on screen: its screen says so quiet
 test('A PENDING SIGNAL OF A STORY DELETED WITH ITS GOAL does not post: story_get\'s sentence keeps it back', async ($, on) => {
   const terylon = world(on)
   let moved: Record<string, unknown>[] = []
-  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), moved.filter(event => Number(event.seq) > Number(args.since)), 18100)
+  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), moved.filter(event => Number(event.seq) > Number(args.since)), Math.max(18100, ...moved.map(event => Number(event.seq))))
   const storyGet = terylon.answers.story_get as (args: Record<string, unknown>) => unknown
   terylon.answers.story_get = (args: Record<string, unknown>) => (args.story === 401 ? refusal('Story 401 was deleted with its goal.', 404) : storyGet(args))
   await $.session.start(SESSION)
@@ -233,7 +234,7 @@ test('A PENDING SIGNAL OF A STORY DELETED WITH ITS GOAL does not post: story_get
 test('GOALDELETED, BEFORE S44: an open goal\'s plan leaves the Goals tab, though plans_list still names it', async ($, on) => {
   const terylon = world(on)
   let moved: Record<string, unknown>[] = []
-  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), moved.filter(event => Number(event.seq) > Number(args.since)), 18100)
+  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), moved.filter(event => Number(event.seq) > Number(args.since)), Math.max(18100, ...moved.map(event => Number(event.seq))))
   // The full list, no closedCount: a plan stays on the tab unless its goal is among the closed ones.
   terylon.answers.goals_list = { goals: [...OPEN_GOALS, { id: 12, title: 'Household budget', priority: 2, state: 'open', stories: {} }] }
   terylon.answers.plans_list = { plans: [...PLANS.plans, { ...PLAN_144, id: 150, goal: 12, goalTitle: 'Household budget' }] }
