@@ -1,14 +1,16 @@
-// The mutation suite's shards (#42): every mutation runs in exactly one shard, so four parallel jobs green means
+// The mutation suite's shards (#42): every mutation runs in exactly one shard, so the parallel jobs green means
 // every mutation was planted and caught, none twice and none skipped. Free, milliseconds; no claude needed.
 "use strict";
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const { MUTATIONS } = require("./mutations.js");
 const { parseShard, selectShard } = require("./shard.js");
 
-// The shard count CI's matrix runs; ci.yml's pane-mutations job names the same four.
-const CI_SHARD_COUNT = 4;
+// The shard count CI's matrix runs; ci.yml's pane-mutations job names the same eight, which a test below holds.
+const CI_SHARD_COUNT = 8;
 
 function shardsOf(items, count)
 {
@@ -22,7 +24,7 @@ function shardsOf(items, count)
     return shards;
 }
 
-test("4 shards cover every mutation exactly once", () =>
+test(`${CI_SHARD_COUNT} shards cover every mutation exactly once`, () =>
 {
     const shards = shardsOf(MUTATIONS, CI_SHARD_COUNT);
     const seen = new Map();
@@ -42,6 +44,17 @@ test("4 shards cover every mutation exactly once", () =>
     {
         assert.ok(seen.has(mutation), `"${mutation.name}" lands in no shard`);
     }
+});
+
+test("ci.yml's matrix runs exactly the shards this suite proves, and each fits its limit", () =>
+{
+    const workflow = fs.readFileSync(path.join(__dirname, "..", "..", ".github", "workflows", "ci.yml"), "utf8");
+    const shards = Array.from({ length: CI_SHARD_COUNT }, (_, index) => index + 1).join(", ");
+
+    assert.ok(workflow.includes(`shard: [${shards}]`), `ci.yml's matrix is not shard: [${shards}]`);
+    assert.ok(workflow.includes(`MUTATION_SHARD: \${{ matrix.shard }}/${CI_SHARD_COUNT}`), `ci.yml does not pass MUTATION_SHARD as <shard>/${CI_SHARD_COUNT}`);
+    // About half a minute per run of plugin test, a runner twice as slow, and the job's 30 minutes.
+    assert.ok(Math.ceil(MUTATIONS.length / CI_SHARD_COUNT) + 1 <= 28, `${Math.ceil(MUTATIONS.length / CI_SHARD_COUNT)} mutations a shard will not fit a 30-minute job: raise the shard count`);
 });
 
 test("every mutation has a name of its own, so a shard's log names what it ran", () =>
