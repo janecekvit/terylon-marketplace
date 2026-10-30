@@ -255,3 +255,47 @@ test('GOALDELETED, BEFORE S44: an open goal\'s plan leaves the Goals tab, though
   expect(await ui.find({ key: 'plan-150' })).toBeUndefined()
   expect(await ui.find({ key: 'plan-41' })).toBeDefined()
 })
+
+test('AFTER A RESET, a goal deleted in the old history hides nothing: a new goal 8 is listed and its story signals', async ($, on) => {
+  const terylon = world(on)
+  let moved: Record<string, unknown>[] = []
+  let isReset = false
+  terylon.answers.events_since = (args: Record<string, unknown>) => {
+    const since = Number(args.since)
+
+    // Reset to factory defaults: a new epoch whose sequence begins again from 1.
+    if (isReset) {
+      return since > 5 && args.epoch === undefined
+        ? { epoch: 'new', events: [], since, last: 5, more: false, head: 5, gap: true, reset: true }
+        : { ...events(since, moved.filter(event => Number(event.seq) > since), Math.max(5, ...moved.map(event => Number(event.seq)))), epoch: 'new' }
+    }
+
+    return events(since, moved.filter(event => Number(event.seq) > since), Math.max(18100, ...moved.map(event => Number(event.seq))))
+  }
+  terylon.answers.goals_list = s44(2)
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  moved = [goalDeleted(18101, 8)]
+  await terylon.clock.advance(30000)
+  await terylon.clock.settle()
+
+  isReset = true
+  moved = []
+  terylon.answers.goals_list = { goals: [...OPEN_GOALS, { id: 8, title: 'New budget', priority: 2, state: 'open', stories: {} }], closedCount: 0 }
+  const storyGet = terylon.answers.story_get as (args: Record<string, unknown>) => unknown
+  terylon.answers.story_get = (args: Record<string, unknown>) => (args.story === 4 ? { id: 4, goal: 8, title: 'First of the new', state: 'verified', pullRequest: null, timeline: [] } : storyGet(args))
+  await terylon.clock.advance(30000)
+  await terylon.clock.settle()
+  expect(terylon.logs.some(log => log.to === 'debug' && log.text.includes('was reset'))).toBe(true)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'tab-goals' })
+  expect((await ui.find({ key: 'goal-8' }))?.text).toContain('New budget')
+
+  moved = [{ ...storyMoved(6, 4, 'First of the new', 'verified'), goal: 8 }]
+  await terylon.clock.advance(30000)
+  await terylon.clock.settle()
+  expect(terylon.prompts).toHaveLength(1)
+  expect(terylon.prompts[0]).toStartWith('Story #4')
+})

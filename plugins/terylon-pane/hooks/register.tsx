@@ -116,7 +116,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.13.2'
+export const MOD_VERSION = '1.13.3'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -1240,6 +1240,9 @@ async function startOver($: EngineInterface, reset: { from: number; head: number
   heldToasted.splice(0)
   settled.clear()
   storyTargets.clear()
+  // THE NEW HISTORY NUMBERS ITS GOALS AFRESH: a goal deleted in the old one names nothing in it.
+  deletedGoals.clear()
+  deletedStories.clear()
   await keep($, STORE_SIGNALLED, [])
   await keep($, STORE_LAST_SEQ, reset.head)
   await keepEpoch($, epoch)

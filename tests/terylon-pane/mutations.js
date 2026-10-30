@@ -1149,6 +1149,12 @@ const MUTATIONS = [
         find: "  sizes: ['S', 'M', 'L', 'XL'] as readonly string[],\n",
         replace: "  sizes: ['M', 'L', 'XL'] as readonly string[],\n",
     },
+    {
+        name: "a goal deleted before a reset stays hidden after it",
+        file: "hooks/register.tsx",
+        find: "  deletedGoals.clear()\n  deletedStories.clear()\n",
+        replace: "",
+    },
 ];
 
 module.exports = { MUTATIONS };
