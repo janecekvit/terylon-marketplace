@@ -188,3 +188,108 @@ test('A TURN THAT ENDS WHILE A TICK RUNS loses nothing: what the tick held is po
   expect(terylon.prompts).toHaveLength(1)
   expect(terylon.prompts[0]).toStartWith('Story #327')
 })
+
+// STORY 172 as it happened: verified, then abandoned by its goal's drop, both in one page while a turn ran.
+const VERIFIED_172 = { id: 172, goal: 52, title: 'Test S', state: 'verified', target: 'list', pullRequest: null, timeline: [] }
+const ABANDONED_172 = { ...VERIFIED_172, state: 'abandoned', goalState: 'dropped' }
+
+test('STORY 172: verified then abandoned in one page during a turn, under a dropped goal: the abandon is told at its end', async ($, on) => {
+  turns(on)
+  const kept = storeOf(on, SEEN)
+  const terylon = world(on, { store: null })
+  let moved: Record<string, unknown>[] = []
+  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), moved.filter(event => Number(event.seq) > Number(args.since)))
+  terylon.answers.story_get = ABANDONED_172
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  await $.turn.start({ text: 'something else', turnId: 't1' })
+  moved = [{ ...storyMoved(18101, 172, 'Test S', 'verified'), pullRequest: null }, { ...storyMoved(18104, 172, 'Test S', 'abandoned', 'abandoned'), pullRequest: null }]
+  await terylon.clock.advance(30000)
+  expect(terylon.prompts).toEqual([])
+  expect(terylon.toasts).toEqual(['Terylon: #172 abandoned'])
+
+  // An abandon under a dropped goal asks nothing, and is still told: only verified, blocked and stuck are silenced there.
+  await $.turn.complete({ ...END, turnId: 't1' })
+  await terylon.clock.settle()
+  expect(terylon.prompts).toEqual(['Story #172 „Test S“ je opuštěná. Shrň mi proč a co z ní zůstalo.'])
+  expect(told(kept)).toEqual(['172:abandoned:18104'])
+  expect(kept.get('held')).toEqual([])
+})
+
+test('A HELD SIGNAL SURVIVES A RESTART: kept in the store before lastSeq moves past it, and posted once by the next session', async ($, on) => {
+  turns(on)
+  const kept = storeOf(on, SEEN)
+  const terylon = world(on, { store: null })
+  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), Number(args.since) >= 18101 ? [] : [storyMoved(18101, 327, 'Events since the last look', 'verified')])
+  await $.session.start(SESSION)
+  await $.turn.start({ text: 'something else', turnId: 't1' })
+  await terylon.clock.settle()
+
+  // Held while the turn runs: in the store as well as in memory, and the position already past its event.
+  expect(terylon.prompts).toEqual([])
+  expect(kept.get('lastSeq')).toBe(18101)
+  expect(kept.get('held')).toEqual([{ story: 327, kind: 'verified', seq: 18101, title: 'Events since the last look', pullRequest: 196, reason: null }])
+  expect(told(kept)).toEqual([])
+})
+
+test('A HELD SIGNAL AN EARLIER SESSION KEPT is posted once by the session that takes the lease, and leaves the store', async ($, on) => {
+  const kept = storeOf(on, { ...SEEN, lastSeq: 18101, held: [{ story: 327, kind: 'verified', seq: 18101, title: 'Events since the last look', pullRequest: 196, reason: null }, { story: 'x' }] })
+  const terylon = world(on, { store: null })
+  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), [])
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  expect(terylon.prompts).toHaveLength(1)
+  expect(terylon.prompts[0]).toStartWith('Story #327')
+  expect(told(kept)).toEqual(['327:verified:4be21c0aaaa'])
+  expect(kept.get('held')).toEqual([])
+
+  await terylon.clock.advance(30000)
+  await terylon.clock.advance(30000)
+  expect(terylon.prompts).toHaveLength(1)
+})
+
+test('A TURN WHOSE END IS NEVER HEARD holds nothing for good: after 30 min it is taken as ended, and the signal is posted', async ($, on) => {
+  turns(on)
+  const terylon = world(on, { store: SEEN })
+  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), Number(args.since) >= 18101 ? [] : [storyMoved(18101, 327, 'Events since the last look', 'verified')])
+  await $.session.start(SESSION)
+  await $.turn.start({ text: 'something else', turnId: 't1' })
+  await terylon.clock.settle()
+  expect(terylon.prompts).toEqual([])
+
+  await terylon.clock.advance(29 * 60000)
+  expect(terylon.prompts).toEqual([])
+
+  await terylon.clock.advance(2 * 60000)
+  expect(terylon.prompts).toHaveLength(1)
+  expect(terylon.prompts[0]).toStartWith('Story #327')
+})
+
+test('A MODULE UPDATED IN PLACE, which hears no session.start, starts its poll from the band it draws: it renews its own lease and reads the events', async ($, on) => {
+  const kept = storeOf(on, { ...SEEN, signaller: { session: 'dev-session', since: Date.parse('2026-10-11T08:00:00Z'), until: Date.parse('2026-10-11T21:58:00Z'), seen: true } })
+  const terylon = world(on, { store: null })
+  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), Number(args.since) >= 18101 ? [] : [storyMoved(18101, 327, 'Events since the last look', 'verified')])
+  on('session.id', async () => ({ value: 'dev-session' }) as never)
+
+  // No $.session.start: the update reached a session already running.
+  await terylon.clock.advance(60000)
+  expect(terylon.calls.filter(call => call.tool === 'events_since')).toEqual([])
+
+  const band = await $.ui.mount({ plugin: 'terylon-pane', surface: 'desktop', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 3, bodyColumns: 80, scroll: { top: 0, bodyRows: 3 }, view: {} } as never })
+  await terylon.clock.settle()
+  await band.unmount()
+
+  expect(terylon.calls.some(call => call.tool === 'events_since')).toBe(true)
+  expect(terylon.prompts).toHaveLength(1)
+  expect(terylon.prompts[0]).toStartWith('Story #327')
+  // ITS OWN LEASE, renewed, since kept: the reloaded module is the same session.
+  expect((kept.get('signaller') as { session: string; since: number }).session).toBe('dev-session')
+  expect((kept.get('signaller') as { since: number }).since).toBe(Date.parse('2026-10-11T08:00:00Z'))
+
+  // And it keeps polling.
+  const before = terylon.calls.filter(call => call.tool === 'events_since').length
+  await terylon.clock.advance(30000)
+  expect(terylon.calls.filter(call => call.tool === 'events_since').length).toBeGreaterThan(before)
+})

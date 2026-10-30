@@ -125,7 +125,8 @@ export type PaneEvent = { time: string; actor: string; summary: string }
 
 export type PaneStory = {
   story: number
-  phase: 'loading' | 'ok' | 'error'
+  // 'deleted': story_get said the story was deleted with its goal; its sentence is drawn quietly, never as a failure.
+  phase: 'loading' | 'ok' | 'error' | 'deleted'
   sentence: string | null
   title: string
   meta: string
@@ -232,7 +233,8 @@ export type PaneGoals = {
   targets: PaneChoice[]
   adding: 'idle' | 'sending' | 'added' | 'refused'
   addSentence: string | null
-  // OPEN AND CLOSED, TWO BUTTONS: which list the tab shows, Open by default, and the closed goals' count.
+  // OPEN AND HISTORY, TWO BUTTONS: which list the tab shows, Open by default, and the closed goals' count. History is
+  // the closed goals; `closed` keeps its name so a value an older version stored still reads.
   showing: 'open' | 'closed'
   closedCount: number
   // Where the closed goals come from: the full list before Terylon S44, goals_list {closed: true} after it. The second
@@ -244,7 +246,8 @@ export type PaneGoals = {
 
 export type PaneGoal = {
   goal: number
-  phase: 'loading' | 'ok' | 'error'
+  // 'deleted': goal_get said the goal was deleted for good; its sentence is drawn quietly, never as a failure.
+  phase: 'loading' | 'ok' | 'error' | 'deleted'
   sentence: string | null
   title: string
   meta: string

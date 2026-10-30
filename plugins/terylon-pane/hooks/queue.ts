@@ -163,6 +163,12 @@ export function consoleLink(base: string, query: string): string {
   return `${base}/?cockpit=${query}`
 }
 
+// WHERE A GOAL IN HISTORY IS DELETED: the console's Goals on History, the goal's row and its Delete… sheet, where the
+// owner still types the number. A console without the route ignores what it does not know and lands on Goals.
+export function deleteLink(base: string, goal: number): string {
+  return consoleLink(base, `goals&tab=history&goal=${encodeURIComponent(String(goal))}&sheet=delete`)
+}
+
 // "alice-host" from https://alice-host.example.ts.net: the name the owner knows the machine by.
 export function hostName(base: string): string {
   const match = /^[a-z]+:\/\/([^./:]+)/i.exec(base)

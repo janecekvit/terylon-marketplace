@@ -44,6 +44,45 @@ function pullRequestOf(value: unknown): number | null {
   return number((value as Json | null)?.id)
 }
 
+// What goal_get and story_get answer for a goal deleted for good, and for a story deleted with it (Terylon S47).
+const DELETED_SENTENCE = /^(Goal \d+ was deleted\.|Story \d+ was deleted with its goal\.)/
+
+export function isDeletedSentence(sentence: string | null | undefined): boolean {
+  return typeof sentence === 'string' && DELETED_SENTENCE.test(sentence.trim())
+}
+
+// The goals the feed says were deleted: one GoalDeleted each, its earlier transitions gone, its title null. Read
+// tolerantly: the goal by `goal`, else by `subject` "goal/N".
+export function deletedGoalsOf(events: Json[]): number[] {
+  const found: number[] = []
+
+  for (const event of events) {
+    const isDeleted = event.type === 'GoalDeleted' || (event.about === 'goal' && event.state === 'deleted')
+    const subject = /^goal\/(\d+)$/.exec(String(event.subject ?? ''))?.[1]
+    const goal = number(event.goal) ?? (subject === undefined ? null : Number(subject))
+
+    if (isDeleted && goal !== null && !found.includes(goal)) {
+      found.push(goal)
+    }
+  }
+
+  return found
+}
+
+// The goal a story belongs to, where an event or a story_get answer names it: a number, or an object with its id.
+export function goalOfStory(value: Json): number | null {
+  return number(value.goal) ?? number((value.goal as Json | null)?.id) ?? number(value.goalId)
+}
+
+// A feed with nothing of a deleted goal's stories left in it: their moves tell nothing any more.
+export function withoutDeletedGoals(events: Json[], deleted: ReadonlySet<number>): Json[] {
+  return events.filter(event => {
+    const goal = goalOfStory(event)
+
+    return goal === null || !deleted.has(goal)
+  })
+}
+
 export function candidatesFromEvents(events: Json[]): Candidate[] {
   const found: Candidate[] = []
 
@@ -91,6 +130,34 @@ export function candidatesFromFlight(flight: Json): Candidate[] {
         reason: text(stuck.reason),
       }
     })
+}
+
+const SIGNAL_KINDS: readonly string[] = ['verified', 'merged', 'accepted', 'abandoned', 'blocked', 'stuck']
+
+// THE HELD CANDIDATES AS THE STORE KEPT THEM, read by their types: what is not a candidate is dropped, and one already
+// in `into` is not added twice.
+export function heldOf(value: unknown, into: readonly Candidate[] = []): Candidate[] {
+  const read: Candidate[] = []
+
+  for (const item of Array.isArray(value) ? value : []) {
+    const json = (item ?? {}) as Json
+    const story = number(json.story)
+    const seq = number(json.seq)
+    const kind = typeof json.kind === 'string' && SIGNAL_KINDS.includes(json.kind) ? (json.kind as SignalKind) : null
+
+    if (story === null || seq === null || kind === null) {
+      continue
+    }
+
+    const candidate: Candidate = { story, kind, seq, title: text(json.title) ?? '', pullRequest: number(json.pullRequest), reason: text(json.reason) }
+    const isKnown = [...into, ...read].some(other => other.story === story && other.kind === kind && other.seq === seq)
+
+    if (!isKnown) {
+      read.push(candidate)
+    }
+  }
+
+  return read
 }
 
 export function signalKey(candidate: Candidate, verdict: Verdict | null): string {

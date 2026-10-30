@@ -56,6 +56,7 @@ import {
   bellView,
   clock,
   consoleLink,
+  deleteLink,
   dayBudget,
   doneTodayItems,
   filesOf,
@@ -98,11 +99,16 @@ import {
   candidatesFromFlight,
   catchUpSummary,
   coalesce,
+  deletedGoalsOf,
+  goalOfStory,
+  heldOf,
+  isDeletedSentence,
   settleCandidate,
   signalFor,
   signalKey,
   signalsSummary,
   verdictOf,
+  withoutDeletedGoals,
 } from './signals'
 import type { Candidate, Signal, Verdict } from './signals'
 
@@ -112,7 +118,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.11.10'
+export const MOD_VERSION = '1.13.6'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -146,6 +152,9 @@ const STORE_LAST_SEQ = 'lastSeq'
 const STORE_EPOCH = 'epoch'
 const STORE_LAST_SEEN_AT = 'lastSeenAt'
 const STORE_SIGNALLED = 'signalled'
+// THE SIGNALS HELD FOR A TURN'S END, kept before lastSeq moves past their events: a restart before the turn ends, or a
+// prompt that did not enter, loses none of them, and the next signaller posts them once.
+const STORE_HELD = 'held'
 // ONE SIGNALLER PER MACHINE: every open session runs the mod, and only the session holding this lease reads the events,
 // posts and toasts. Its holder renews it every tick; one not renewed for three ticks has lapsed.
 const STORE_SIGNALLER = 'signaller'
@@ -242,6 +251,11 @@ let isTurnRunning = false
 const HELD_MOST = 200
 const held: Candidate[] = []
 const heldToasted: string[] = []
+// Whether this session has read back what an earlier one held: once, on its first read of the events as the signaller.
+let isHeldRestored = false
+// A TURN THAT NEVER ENDS, its turn.complete never heard, would hold every signal for good: past this it is taken as ended.
+const TURN_LONGEST_MILLISECONDS = 30 * 60 * 1000
+let turnStartedAt = 0
 let answeringServer: string | null = null
 
 // WHAT AN ACT JUST CHANGED, drawn at once and kept until Terylon's own answer shows the subject moved (the owner's walk
@@ -258,6 +272,10 @@ const OPEN_STORY_STATES: readonly string[] = ['approved', 'dispatched', 'running
 const settled = new Map<string, { from: readonly string[]; to: string; until: number }>()
 // Where each verified story is kept, as story_get said it: `list`, or its repository's target.
 const storyTargets = new Map<number, string>()
+// THE GOALS DELETED FOR GOOD, and the stories deleted with them, as the feed or Terylon's answers said it this session:
+// nothing of them is listed, opened as a failure or signalled again.
+const deletedGoals = new Set<number>()
+const deletedStories = new Set<number>()
 
 // WHAT THE PANE KEEPS IN $.store, mirrored here: where a store refuses, the session still reads from its last place and
 // signals each story once, and only a return after Desktop was closed is lost.
@@ -737,6 +755,63 @@ async function eventsRefused($: EngineInterface, answered: TerylonAnswer): Promi
   await eventsFailed($, kind, why(answered) || COPY.noServerTitle)
 }
 
+// GOALS DELETED FOR GOOD: dropped from the Goals tab, its plans, the queue's questions and every settled act; an open
+// goal screen of one says so quietly. The stories known under them are dropped with them.
+async function forgetGoals($: EngineInterface, ids: readonly number[]): Promise<void> {
+  if (ids.length === 0) {
+    return
+  }
+
+  const gone = new Set(ids)
+  const goalsNow = await readGoals($)
+  const shownGoal = await read($, goal)
+  const stories = [
+    ...goalsNow.plans.filter(plan => gone.has(plan.goal)).flatMap(plan => plan.stories.map(item => item.id)),
+    ...(shownGoal !== null && gone.has(shownGoal.goal) ? shownGoal.stories.map(item => item.id) : []),
+  ]
+
+  for (const id of ids) {
+    deletedGoals.add(id)
+    settled.delete(`goal-${id}`)
+  }
+
+  for (const id of stories) {
+    deletedStories.add(id)
+    settled.delete(`story-${id}`)
+    storyTargets.delete(id)
+  }
+
+  debug($, `goals deleted: ${ids.join(', ')}; dropped with ${stories.length} of their stories`)
+  await update($, goals, (current: PaneGoals): PaneGoals => {
+    const closed = current.closed.filter(item => !gone.has(item.id))
+
+    return {
+      ...current,
+      open: current.open.filter(item => !gone.has(item.id)),
+      closed,
+      // A DELETED GOAL READ IN HISTORY leaves its count too; one never read there is counted again by the next poll.
+      closedCount: Math.max(0, current.closedCount - (current.closed.length - closed.length)),
+      plans: current.plans.filter(plan => !gone.has(plan.goal)),
+    }
+  })
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({
+    ...EMPTY_SNAPSHOT,
+    ...current,
+    questions: (current.questions ?? []).filter(item => !ids.some(id => item.subject === `goal/${id}`)),
+  }))
+
+  const shownStory = await read($, story)
+
+  if (shownStory !== null && shownStory.goal !== null && gone.has(shownStory.goal)) {
+    deletedStories.add(shownStory.story)
+    await update($, story, (current: PaneStory | null): PaneStory | null => (current === null || current.story !== shownStory.story ? current : { ...current, phase: 'deleted', sentence: COPY.storyDeleted(shownStory.story) }))
+  }
+
+  if (shownGoal !== null && gone.has(shownGoal.goal)) {
+    await update($, goal, (current: PaneGoal | null): PaneGoal | null => (current === null || current.goal !== shownGoal.goal ? current : { ...current, phase: 'deleted', sentence: COPY.goalDeleted(shownGoal.goal) }))
+  }
+}
+
 // WHETHER AN ANSWER OF events_since MEANS TERYLON'S HISTORY WAS RESET, in this order: it says so; its epoch is known
 // and not the pane's; or, from a server that names no epoch, its head is below the since asked.
 function isReset(page: Json, since: number, epoch: string | null): boolean {
@@ -802,7 +877,20 @@ async function settleSignals($: EngineInterface, candidates: Candidate[], done: 
   const now = await $.clock.now()
 
   for (const candidate of coalesce(candidates)) {
+    if (deletedStories.has(candidate.story)) {
+      debug($, `not posting ${candidate.story}:${candidate.kind}: the story was deleted with its goal`)
+      continue
+    }
+
     const answered = await callTerylon($, 'story_get', { story: candidate.story })
+
+    // A STORY DELETED WITH ITS GOAL asks nothing: story_get says so in a sentence, or names a goal the feed deleted.
+    if ((answered.kind === 'refused' && isDeletedSentence(answered.sentence)) || (answered.kind === 'ok' && deletedGoals.has(goalOfStory(answered.value) ?? -1))) {
+      deletedStories.add(candidate.story)
+      debug($, `not posting ${candidate.story}:${candidate.kind}: the story was deleted with its goal`)
+      continue
+    }
+
     // AN ACCEPT PRESSED IN THE PANE stands over a story_get that lags, or that did not answer.
     const story = answered.kind === 'ok'
       ? settledStory(answered.value, candidate.story, now)
@@ -841,6 +929,7 @@ async function postSignals($: EngineInterface, candidates: Candidate[]): Promise
     const signals = await settleSignals($, candidates, [...done, ...heldToasted])
     held.push(...candidates)
     held.splice(0, Math.max(0, held.length - HELD_MOST))
+    await keepHeld($)
 
     if (signals.length > 0) {
       heldToasted.push(...signals.map(signal => signal.key))
@@ -856,6 +945,10 @@ async function postSignals($: EngineInterface, candidates: Candidate[]): Promise
   const signals = await settleSignals($, read_, done)
 
   if (signals.length === 0) {
+    if (read_.length > 0) {
+      await keepHeld($)
+    }
+
     return
   }
 
@@ -867,16 +960,22 @@ async function postSignals($: EngineInterface, candidates: Candidate[]): Promise
   // A KEY IS RECORDED ONLY ONCE ITS PROMPT ENTERED: one dropped or refused is held, read again and posted next time.
   if (entered !== true) {
     held.push(...read_)
+    await keepHeld($)
     debug($, `the done-signal ${keys} did not enter the session (${entered}); it is told on the next read`)
 
     return
   }
 
   await keep($, STORE_SIGNALLED, done.slice(-SIGNALS_KEPT))
+  await keepHeld($)
 
   if (signals.some(signal => !toasted.includes(signal.key))) {
     $.ui.toast(posted.toast)
   }
+}
+
+async function keepHeld($: EngineInterface): Promise<void> {
+  await keep($, STORE_HELD, held.map(candidate => ({ ...candidate })))
 }
 
 // Whether a prompt entered the session: true, or why not, a hook's drop or the engine's refusal.
@@ -1037,6 +1136,43 @@ async function sessionIdOf($: EngineInterface, cwd: string): Promise<{ id: strin
   }
 }
 
+// THE POLL, STARTED ONCE PER LOAD OF THE MODULE: by session.start, or, for a module updated in place in a running
+// session that hears no session.start, by the first band, pane, prompt or turn it sees. Without it no session ticks,
+// renews its lease or reads the events until one starts again.
+let isStarted = false
+
+async function start($: EngineInterface, cwd: string): Promise<void> {
+  if (isStarted) {
+    return
+  }
+
+  isStarted = true
+  const own = await sessionIdOf($, cwd)
+  sessionId = own.id
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, sessionIdSource: own.source }))
+  debug($, `this session's id is ${shortId(own.id)}, from ${own.source}`)
+  const startedAt = await $.clock.now()
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, eventsWatchedSince: startedAt }))
+  await showHealth($)
+  $.clock.after(0, () => tick($, true))
+  $.clock.every(POLL_MS, () => tick($, false))
+  $.clock.every(WATCH_MILLISECONDS, () => watchEvents($))
+}
+
+// A hook of a module that never heard session.start starts the poll itself, after it answers.
+function startLate($: EngineInterface, hook: string): void {
+  if (isStarted) {
+    return
+  }
+
+  $.clock.after(0, async () => {
+    if (!isStarted) {
+      debug($, `the poll starts on ${hook}: this load of the module heard no session.start`)
+      await start($, '')
+    }
+  })
+}
+
 // One tick: the queue, then what moved since the last look.
 async function tick($: EngineInterface, isStart: boolean): Promise<void> {
   if (isPolling) {
@@ -1059,6 +1195,17 @@ async function tick($: EngineInterface, isStart: boolean): Promise<void> {
 
     if (!(await isSignaller($, now))) {
       return
+    }
+
+    if (isTurnRunning && now - turnStartedAt > TURN_LONGEST_MILLISECONDS) {
+      isTurnRunning = false
+      debug($, `the main loop's turn has not ended in ${TURN_LONGEST_MILLISECONDS / 60000} min; taken as ended, what it held is posted`)
+    }
+
+    // WHAT AN EARLIER SESSION HELD, read back once: it posts here, re-read like any signal, unless a turn runs here too.
+    if (!isHeldRestored) {
+      isHeldRestored = true
+      held.push(...heldOf(await kept($, STORE_HELD), held))
     }
 
     await readMoved($, isStart, now)
@@ -1125,7 +1272,13 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
   }
 
   const base = await baseUrl($)
-  const candidates = [...candidatesFromEvents(read_.events), ...candidatesFromFlight(lastFlight)]
+  // A GOALDELETED IN THE FEED drops its goal everywhere, before anything of its stories could be told.
+  await forgetGoals($, deletedGoalsOf(read_.events))
+  const events = withoutDeletedGoals(read_.events, deletedGoals)
+  const candidates = [
+    ...candidatesFromEvents(events),
+    ...candidatesFromFlight(lastFlight).filter(candidate => !deletedStories.has(candidate.story)),
+  ]
 
   if (!read_.isWhole) {
     // Too far behind for a whole summary: say so, link the console, tell nothing piecemeal.
@@ -1133,7 +1286,7 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
     await update($, band, (): PaneBand => ({ text: `${COPY.tooFarHeading} · ${COPY.tooFarBody(String(CATCH_UP_MOST_EVENTS))}`, link: consoleLink(base, 'history'), isAlert: true }))
   } else if (isCatchUp) {
     // Back after a long time away: ONE summary, the gap's signals inside it.
-    const summary = catchUpSummary({ awayMs, events: read_.events, briefing: lastBriefing, flight: lastFlight, policy })
+    const summary = catchUpSummary({ awayMs, events, briefing: lastBriefing, flight: lastFlight, policy })
     await markSignalled($, candidates)
     debug($, `posting the catch-up summary of ${read_.events.length} events`)
     await $.prompt.submit({ text: summary.prompt })
@@ -1154,8 +1307,12 @@ async function startOver($: EngineInterface, reset: { from: number; head: number
   debug($, `Terylon's history was reset (asked from ${reset.from}, its head is ${reset.head}); starting over`)
   held.splice(0)
   heldToasted.splice(0)
+  await keep($, STORE_HELD, [])
   settled.clear()
   storyTargets.clear()
+  // THE NEW HISTORY NUMBERS ITS GOALS AFRESH: a goal deleted in the old one names nothing in it.
+  deletedGoals.clear()
+  deletedStories.clear()
   await keep($, STORE_SIGNALLED, [])
   await keep($, STORE_LAST_SEQ, reset.head)
   await keepEpoch($, epoch)
@@ -1336,6 +1493,15 @@ async function openStory($: EngineInterface, id: number): Promise<void> {
   const inFlight = settledStory(list(lastFlight.stories).find(item => number(item.id) === id) ?? {}, id, now)
   const question = (await readSnapshot($)).questions.find(item => item.subject === `story/${id}`) ?? null
 
+  // A STORY DELETED WITH ITS GOAL: Terylon's sentence, quietly; nothing of it is signalled or settled any more.
+  if (answered.kind === 'refused' && isDeletedSentence(answered.sentence)) {
+    deletedStories.add(id)
+    settled.delete(`story-${id}`)
+    storyTargets.delete(id)
+    await update($, story, (): PaneStory | null => ({ ...storyView(id, {}, {}, null, now, zoneOffset), phase: 'deleted', sentence: answered.sentence }))
+    return
+  }
+
   if (answered.kind !== 'ok' && Object.keys(inFlight).length === 0) {
     await update($, story, (): PaneStory | null => ({ ...storyView(id, {}, {}, null, now, zoneOffset), phase: 'error', sentence: why(answered) }))
     return
@@ -1446,7 +1612,7 @@ async function loadGoals($: EngineInterface): Promise<void> {
     target: typeof current?.target === 'string' ? current.target : OWN_LIST,
     adding: current?.adding ?? 'idle',
     addSentence: typeof current?.addSentence === 'string' ? current.addSentence : null,
-    // THE CLOSED GOALS ALREADY READ stay until the next press of Closed, or a closedCount that changed.
+    // THE CLOSED GOALS ALREADY READ stay until the next press of History, or a closedCount that changed.
     showing: current?.showing === 'closed' ? 'closed' : 'open',
     closed: Array.isArray(current?.closed) ? current.closed : [],
     closedCount: typeof current?.closedCount === 'number' ? current.closedCount : 0,
@@ -1470,8 +1636,9 @@ async function readGoalsFromTerylon($: EngineInterface): Promise<void> {
 
   // WHAT AN ACT JUST CHANGED, over what the two lists still answer (#35).
   const now = await $.clock.now()
-  const goalsNow = { ...goalsAnswer.value, goals: list(goalsAnswer.value.goals).map(item => ({ ...item, state: settledState(`goal-${number(item.id) ?? 0}`, String(item.state ?? ''), now) })) }
-  const plansNow = plansAnswer.kind === 'ok' ? { ...plansAnswer.value, plans: list(plansAnswer.value.plans).map(item => ({ ...item, state: settledState(`plan-${number(item.id) ?? 0}`, String(item.state ?? ''), now) })) } : {}
+  // A GOAL DELETED FOR GOOD stays gone, its plans with it, where a list read right after the deletion still names it.
+  const goalsNow = { ...goalsAnswer.value, goals: list(goalsAnswer.value.goals).filter(item => !deletedGoals.has(number(item.id) ?? -1)).map(item => ({ ...item, state: settledState(`goal-${number(item.id) ?? 0}`, String(item.state ?? ''), now) })) }
+  const plansNow = plansAnswer.kind === 'ok' ? { ...plansAnswer.value, plans: list(plansAnswer.value.plans).filter(item => !deletedGoals.has(number(item.goal) ?? -1)).map(item => ({ ...item, state: settledState(`plan-${number(item.id) ?? 0}`, String(item.state ?? ''), now) })) } : {}
   const items = goalItems(goalsNow, questions)
   const plans = plansAnswer.kind === 'ok' ? planItems(plansNow, base) : []
   const targets = targetsOf(goalsAnswer.value)
@@ -1486,7 +1653,7 @@ async function readGoalsFromTerylon($: EngineInterface): Promise<void> {
       return { ...read_, closed: items.closed, closedCount: items.closed.length, closedFrom: 'list', closedPhase: 'ok', closedSentence: null }
     }
 
-    // AFTER S44: what a press of Closed read is kept while closedCount says the same; never read again from here.
+    // AFTER S44: what a press of History read is kept while closedCount says the same; never read again from here.
     const isKept = current.closedFrom === 'terylon' && current.closedCount === closedCount && current.closedPhase !== 'idle'
 
     return isKept
@@ -1495,7 +1662,7 @@ async function readGoalsFromTerylon($: EngineInterface): Promise<void> {
   })
 }
 
-// OPEN OR CLOSED, PRESSED. With S44 a press of Closed reads the closed goals, and nothing else ever does.
+// OPEN OR HISTORY, PRESSED. With S44 a press of History reads the closed goals, and nothing else ever does.
 async function showGoals($: EngineInterface, showing: 'open' | 'closed'): Promise<void> {
   await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, showing }))
 
@@ -1525,7 +1692,7 @@ async function readClosedGoals($: EngineInterface): Promise<void> {
 
   const now = await $.clock.now()
   const questions = (await readSnapshot($)).questions
-  const closedNow = { ...answered.value, goals: list(answered.value.goals).map(item => ({ ...item, state: settledState(`goal-${number(item.id) ?? 0}`, String(item.state ?? ''), now) })) }
+  const closedNow = { ...answered.value, goals: list(answered.value.goals).filter(item => !deletedGoals.has(number(item.id) ?? -1)).map(item => ({ ...item, state: settledState(`goal-${number(item.id) ?? 0}`, String(item.state ?? ''), now) })) }
 
   await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, closed: goalItems(closedNow, questions).closed, closedPhase: 'ok', closedSentence: null }))
 }
@@ -1574,6 +1741,13 @@ async function openGoal($: EngineInterface, id: number): Promise<void> {
   await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'loading', sentence: null, title: '', meta: '', stories: [], isOpen: false, openStories: [], repeating: null }))
 
   const answered = await callTerylon($, 'goal_get', { goal: id })
+
+  // A GOAL DELETED FOR GOOD: Terylon's sentence, quietly, and the goal gone from every list.
+  if (answered.kind === 'refused' && isDeletedSentence(answered.sentence)) {
+    await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'deleted', sentence: answered.sentence, title: '', meta: '', stories: [], isOpen: false, openStories: [], repeating: null }))
+    await forgetGoals($, [id])
+    return
+  }
 
   if (answered.kind !== 'ok') {
     await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'error', sentence: why(answered), title: '', meta: '', stories: [], isOpen: false, openStories: [], repeating: null }))
@@ -2105,6 +2279,8 @@ type Row = {
   detailTone?: Tone
   // The console link the pointer reveals over the row's right edge (hover-reveal); without the proof it sits in the body.
   reveal?: { href: string; label: string } | null
+  // A console link that ends the row, always drawn beside the press: History's Delete….
+  trail?: { href: string; label: string } | null
   onPress: () => unknown
   body?: unknown
 }
@@ -2141,7 +2317,7 @@ function row(elements: Elements, look: Look, input: Row): unknown {
 
   return (
     <Box key={`row-${input.key}`} flexDirection="column" hover={isRevealed ? { backgroundColor: 'userMessageBackgroundHover' } : undefined}>
-      <Box flexDirection="row" minWidth={0} overflow="hidden" gap={isRevealed ? 'sm' : undefined}>
+      <Box flexDirection="row" minWidth={0} overflow="hidden" gap={isRevealed || (input.trail !== undefined && input.trail !== null) ? (look.isGraphic ? 'sm' : 1) : undefined}>
         <Button key={input.key} plain onPress={input.onPress}>
           {children}
         </Button>
@@ -2150,6 +2326,11 @@ function row(elements: Elements, look: Look, input: Row): unknown {
           // NO KEY ON THE REVEAL: a keyed Box is a hover scope of its own, and one drawn "none" is never under the pointer.
           <Box flexShrink={0} display="none" hover={{ display: 'flex' }}>
             <Link href={input.reveal.href} label={input.reveal.label} />
+          </Box>
+        )}
+        {input.trail !== undefined && input.trail !== null && (
+          <Box flexShrink={0}>
+            <Link href={input.trail.href} label={input.trail.label} />
           </Box>
         )}
       </Box>
@@ -2210,22 +2391,14 @@ export const register: Register = on => {
     // An engine that names neither starts a session someone is at.
     isUnattended = e.isInteractive === false && (e.surface === null || e.surface === undefined)
     debug($, `this session starts with isInteractive ${String(e.isInteractive)}, surface ${String(e.surface)}: ${isUnattended ? 'nobody is at it' : 'someone is at it'}`)
-    const own = await sessionIdOf($, e.cwd)
-    sessionId = own.id
-    await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, sessionIdSource: own.source }))
-    debug($, `this session's id is ${shortId(own.id)}, from ${own.source}`)
-    const startedAt = await $.clock.now()
-    await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, eventsWatchedSince: startedAt }))
-    await showHealth($)
-    $.clock.after(0, () => tick($, true))
-    $.clock.every(POLL_MS, () => tick($, false))
-    $.clock.every(WATCH_MILLISECONDS, () => watchEvents($))
+    await start($, e.cwd)
 
     return next(e)
   })
 
   // THE OWNER'S OWN TYPING, at the prompt or through Remote Control, moves the signaller lease to this session.
   on('prompt.submit', async ($, e, next) => {
+    startLate($, 'prompt.submit')
     const result = await next(e)
 
     if (e.origin?.kind === 'composer' || e.origin?.kind === 'bridge') {
@@ -2236,8 +2409,11 @@ export const register: Register = on => {
   })
 
   on('turn.start', async ($, e, next) => {
+    startLate($, 'turn.start')
+
     if (e.agentId === undefined) {
       isTurnRunning = true
+      turnStartedAt = await $.clock.now()
     }
 
     return next(e)
@@ -2283,6 +2459,7 @@ export const register: Register = on => {
   // spend are the status line's, never repeated here.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     isSeen = true
+    startLate($, 'the band')
 
     if (e.props.hasSurvey) {
       return next(e)
@@ -2381,6 +2558,7 @@ export const register: Register = on => {
   // THE PANE: tabs, then the screen on top of the stack.
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     isSeen = true
+    startLate($, 'the pane')
     const elements = $.ui.resolve(e)
     const { Box, Text, Button, Link, Markdown, Code } = elements
     const hasInput = e.surface !== 'mobile' && 'Input' in elements
@@ -2900,6 +3078,17 @@ export const register: Register = on => {
           <Box flexDirection="column" gap={1}>
             {backButton}
             {quiet(elements, COPY.storyLoading)}
+          </Box>
+        )
+      }
+
+      // DELETED WITH ITS GOAL: the sentence, quietly, and ‹ back; never a failure.
+      if (shownStory.phase === 'deleted') {
+        return (
+          <Box flexDirection="column" gap={1}>
+            {backButton}
+            {quiet(elements, shownStory.sentence ?? '')}
+            {footer}
           </Box>
         )
       }
@@ -3632,6 +3821,17 @@ export const register: Register = on => {
         )
       }
 
+      // DELETED FOR GOOD: the sentence, quietly, and ‹ back; never a failure.
+      if (shownGoal.phase === 'deleted') {
+        return (
+          <Box flexDirection="column" gap={1}>
+            {backButton}
+            {quiet(elements, shownGoal.sentence ?? COPY.goalDeleted(screen.goal))}
+            {footer}
+          </Box>
+        )
+      }
+
       return (
         <Box flexDirection="column" gap={1}>
           {backButton}
@@ -3679,9 +3879,10 @@ export const register: Register = on => {
       const openPlans = tabPlans.filter(plan => (goalsState.closedFrom === 'terylon'
         ? goalsState.open.some(item => item.id === plan.goal)
         : !goalsState.closed.some(item => item.id === plan.goal)))
-      // UNDER CLOSED, THE CLOSED GOALS' PLANS ALONE: each button draws its own goals' plans.
-      const shownPlans = isClosedShown ? tabPlans.filter(plan => goalsState.closed.some(item => item.id === plan.goal)) : openPlans
-      // OPEN · N AND CLOSED · M: the one selected filled, the other dim, as the tabs are.
+      // UNDER HISTORY, ONLY A CLOSED GOAL'S PLAN THAT STILL WAITS FOR THE OWNER: a settled one waits on nothing, and stays
+      // on its goal's own screen.
+      const shownPlans = isClosedShown ? tabPlans.filter(plan => plan.isProposed && goalsState.closed.some(item => item.id === plan.goal)) : openPlans
+      // OPEN · N AND HISTORY · M: the one selected filled, the other dim, as the tabs are. History is the closed goals.
       const switchButton = (key: string, name: string, count: number, isSelected: boolean, showing: 'open' | 'closed') => (
         <Button key={key} label={`${name}${COPY.count(count)}`} variant={isSelected ? 'primary' : undefined} dimColor={isSelected ? undefined : true} onPress={() => showGoals($, showing)}>
           {!look.isGraphic && isSelected ? '● ' : ''}
@@ -3693,7 +3894,7 @@ export const register: Register = on => {
       const goalSwitch = (
         <Box flexDirection="row" gap={look.isGraphic ? 'xs' : 1} flexWrap="wrap">
           {switchButton('goals-show-open', COPY.goalsOpen, goalsState.open.length, !isClosedShown, 'open')}
-          {switchButton('goals-show-closed', COPY.goalsClosed, goalsState.closedCount, isClosedShown, 'closed')}
+          {switchButton('goals-show-closed', COPY.goalsHistory, goalsState.closedCount, isClosedShown, 'closed')}
         </Box>
       )
       const closedRetry = (label: string) => <Button key="goals-closed-retry" label={label} onPress={() => showGoals($, 'closed')} />
@@ -3704,7 +3905,7 @@ export const register: Register = on => {
           ? [reason(goalsState.closedSentence), closedRetry(COPY.retry)]
           : goalsState.closedPhase === 'changed'
             ? [quiet(elements, COPY.closedChanged), closedRetry(COPY.closedReadAgain)]
-            : goalsState.closed.length === 0 ? [quiet(elements, COPY.noClosedGoals)] : null
+            : goalsState.closed.length === 0 ? [quiet(elements, COPY.historyEmpty)] : null
       const goalRows = isClosedShown ? goalsState.closed : goalsState.open
       const goalPickers = [
         'Select' in elements ? (
@@ -3735,6 +3936,8 @@ export const register: Register = on => {
                 title: item.title,
                 titleTone: isClosedShown ? 'subtle' : undefined,
                 isTitleDim: isClosedShown,
+                // DELETE… ENDS EACH HISTORY ROW: the console's Goals, where the owner deletes it; no tool of the pane deletes.
+                trail: isClosedShown ? { href: deleteLink(base, item.id), label: COPY.deleteInConsole } : null,
                 detail: item.questions > 0 ? COPY.goalQuestions(item.questions) : item.stories,
                 detailTone: item.questions > 0 ? 'warning' : 'subtle',
                 onPress: () => go({ screen: 'goal', goal: item.id }),

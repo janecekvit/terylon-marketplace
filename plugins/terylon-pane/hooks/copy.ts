@@ -337,13 +337,17 @@ export const COPY = {
   answerNote: 'An answer approves nothing, it completes the brief; a plan or a story is decided on its own card, and a merge in the console.',
 
   // Goals and plans.
-  // The Goals tab's two buttons, like Claude Desktop's Active and Archived sessions.
+  // The Goals tab's two buttons, like Claude Desktop's Active and Archived sessions; the closed goals are History.
   goalsOpen: 'Open',
-  goalsClosed: 'Closed',
+  goalsHistory: 'History',
   goalsHint: 'priority',
   goalQuestions: (count: number) => (count === 1 ? '1 question' : `${count} questions`),
   noOpenGoals: 'No open goals.',
-  noClosedGoals: 'No closed goals.',
+  historyEmpty: 'History is empty.',
+  // A goal in History is deleted for good in the console alone, under History › Delete…; the pane only links there.
+  deleteInConsole: 'Delete… ↗',
+  goalDeleted: (goal: number) => `Goal ${goal} was deleted.`,
+  storyDeleted: (story: number) => `Story ${story} was deleted with its goal.`,
   closedLoading: 'Loading the closed goals…',
   closedChanged: 'The closed goals changed since they were read.',
   closedReadAgain: 'Read them again',
@@ -442,7 +446,7 @@ export const COPY = {
   filesBlank: (line: number) => `Files: line ${line} is blank. Write one path per line, with no blank line between.`,
   filesTooMany: (count: number) => `Files: ${count} paths; a task declares at most 30.`,
   size: 'Size',
-  sizes: ['M', 'L', 'XL'] as readonly string[],
+  sizes: ['S', 'M', 'L', 'XL'] as readonly string[],
   goal: 'Goal',
   afterLabel: 'After',
   nothingBefore: '—',
