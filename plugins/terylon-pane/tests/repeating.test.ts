@@ -102,7 +102,7 @@ for (const [surface, props] of [['desktop', PANE_PROPS], ['terminal', PANE_PROPS
 
     // THE OLDER RUNS, a row each: the day the press, the state a Text of its own beside it, in its tone. Desktop draws a
     // Button's label in one colour, so the state is never inside it.
-    const olderRuns = [[87, '2026-10-27T05:00:00Z', 'green · accepted', 'subtle'], [86, '2026-10-26T05:00:00Z', 'red · waits for you', 'warning'], [85, '2026-10-25T05:00:00Z', 'green · waits for you', 'warning'], [84, '2026-10-24T05:00:00Z', 'abandoned', 'subtle']] as const
+    const olderRuns = [[87, '2026-10-27T05:00:00Z', 'green · accepted', 'subtle'], [86, '2026-10-26T05:00:00Z', 'red · waits for you', 'text'], [85, '2026-10-25T05:00:00Z', 'green · waits for you', 'text'], [84, '2026-10-24T05:00:00Z', 'abandoned', 'subtle']] as const
     for (const [index, [story, iso, state, tone]] of olderRuns.entries()) {
       const press = await ui.find({ key: `repeating-run-${story}` })
       expect(press?.type).toBe('Button')
@@ -113,11 +113,11 @@ for (const [surface, props] of [['desktop', PANE_PROPS], ['terminal', PANE_PROPS
       expect(words.map(word => word.props.color)).toContain(tone)
     }
 
-    // THE NEWEST RUN IN ITS COLOUR, an older one that went well quiet, one that waits amber. The narrow dock folds an
+    // THE NEWEST RUN IN ITS COLOUR, an older one that went well quiet, one that waits in semibold text, never amber. The narrow dock folds an
     // older run's state into its title instead.
     if (surface !== 'narrow dock') {
       expect((await ui.findAll({ type: 'Text', text: exact('green · accepted') })).map(node => node.props.color)).toEqual(['success', 'subtle'])
-      expect((await ui.find({ type: 'Text', text: exact('red · waits for you') }))?.props.color).toBe('warning')
+      expect((await ui.find({ type: 'Text', text: exact('red · waits for you') }))?.props).toMatchObject({ color: 'text', weight: 'semibold' })
     }
 
     expect(await ui.find({ type: 'Text', text: exact('Started by your routine; Terylon keeps no clock.') })).toBeDefined()

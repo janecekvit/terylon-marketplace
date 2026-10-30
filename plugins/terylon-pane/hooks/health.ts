@@ -187,30 +187,30 @@ export type Health = {
 }
 
 // The machine's state in one word, for the Status tab: the same order as the status line.
-export function stateWord(health: Health): { word: string; tone: 'success' | 'warning' | 'error' | 'subtle' } {
+export function stateWord(health: Health): { word: string; tone: 'success' | 'attention' | 'error' | 'subtle' } {
   switch (health.connection) {
     case 'connecting':
       return { word: 'connecting', tone: 'subtle' }
     case 'not-allowed':
-      return { word: 'not allowed', tone: 'warning' }
+      return { word: 'not allowed', tone: 'error' }
     case 'no-server':
-      return { word: 'no server', tone: 'warning' }
+      return { word: 'no server', tone: 'error' }
     case 'refused':
       return { word: 'refused', tone: 'error' }
     case 'error':
       return { word: 'error', tone: 'error' }
     case 'unreachable':
-      return { word: 'not answering', tone: 'warning' }
+      return { word: 'not answering', tone: 'error' }
     default:
       break
   }
 
   if (health.isPaused) {
-    return { word: 'paused', tone: 'warning' }
+    return { word: 'paused', tone: 'attention' }
   }
 
   if (health.alerts > 0) {
-    return { word: health.alerts === 1 ? '1 alert' : `${health.alerts} alerts`, tone: 'warning' }
+    return { word: health.alerts === 1 ? '1 alert' : `${health.alerts} alerts`, tone: 'error' }
   }
 
   return { word: 'ok', tone: 'success' }

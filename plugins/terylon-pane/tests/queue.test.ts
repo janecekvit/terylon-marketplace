@@ -60,7 +60,7 @@ test('the queue draws the four groups from Terylon as cards, each row one Button
 
     expect(await ui.find({ type: 'Text', text: exact('Queued · 2') })).toBeDefined()
     expect((await ui.find({ key: 'queued-328' }))?.text).toMatch(/^\s*(?:●\s+)?queued\s+#328 Owner's spec and plan\s+after #324$/)
-    expect((await ui.find({ type: 'Text', text: exact('tvoje volba') }))?.props.color).toBe('warning')
+    expect((await ui.find({ type: 'Text', text: exact('tvoje volba') }))?.props).toMatchObject({ color: 'text', weight: 'semibold' })
 
     expect(await ui.find({ type: 'Text', text: exact('Done today · 1') })).toBeDefined()
     expect((await chipOf(ui, 'done-341'))?.dot).toBe('merged')

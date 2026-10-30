@@ -276,7 +276,7 @@ test('the Status tab says the machine in one word, large, in its colour, its tim
 
     expect(word?.props).toMatchObject({ size: 'title', weight: 'semibold', color: 'success' })
     expect((await ui.find({ type: 'Text', text: /^\s*last answer at / }))?.props.tabular).toBe(true)
-    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.13.6') }))?.props.mono).toBe(true)
+    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.13.7') }))?.props.mono).toBe(true)
     await ui.unmount()
   }
 })
@@ -350,7 +350,7 @@ test('the tabs: a digit each while the pane holds the keyboard, the bell\'s coun
   expect((await Promise.all(keys.map(key => ui.find({ key })))).map(tab => tab?.props.hotkey)).toEqual(['1', '2', '3', '4', '5'])
   expect((await ui.find({ key: 'tab-bell' }))?.text).toBe('Bell 2')
   const count = await ui.find({ type: 'Text', text: exact('2') })
-  expect(count?.props).toMatchObject({ tabular: true, color: 'warning' })
+  expect(count?.props).toMatchObject({ tabular: true, color: 'text', weight: 'semibold' })
 })
 
 test('THE BAND IS UNCHANGED BUT FOR ITS DIGITS: the same words and colours, every number tabular, still one row', async ($, on) => {
@@ -364,7 +364,7 @@ test('THE BAND IS UNCHANGED BUT FOR ITS DIGITS: the same words and colours, ever
 
     expect(row?.props.wrap).toBe('truncate-end')
     const digits = await band.findAll({ type: 'Text', text: /^\d+$/ })
-    expect(digits.map(node => [node.text, node.props.color, node.props.tabular])).toEqual([['3', 'warning', true], ['2', 'suggestion', true], ['2', 'inactive', true], ['2', 'warning', true]])
+    expect(digits.map(node => [node.text, node.props.color, node.props.weight, node.props.tabular])).toEqual([['3', 'text', 'semibold', true], ['2', 'suggestion', undefined, true], ['2', 'inactive', undefined, true], ['2', 'text', 'semibold', true]])
     expect((await band.findAll({ type: 'Text' })).filter(node => !/^\d+$/.test(node.text) && node.props.tabular !== undefined)).toEqual([])
     expect(await band.find({ type: 'Svg' })).toBeUndefined()
     expect((await band.findAll({ type: 'Box' })).length).toBe(2)
