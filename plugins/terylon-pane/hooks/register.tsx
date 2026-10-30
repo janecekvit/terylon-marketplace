@@ -118,7 +118,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.13.5'
+export const MOD_VERSION = '1.13.6'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -1134,6 +1134,43 @@ async function sessionIdOf($: EngineInterface, cwd: string): Promise<{ id: strin
     // An engine without session.id still needs a name: it is no secret, only told apart from another session's.
     return { id: `session-${await $.clock.now()}-${cwd}-${MODULE_NONCE}`, source: 'fallback' }
   }
+}
+
+// THE POLL, STARTED ONCE PER LOAD OF THE MODULE: by session.start, or, for a module updated in place in a running
+// session that hears no session.start, by the first band, pane, prompt or turn it sees. Without it no session ticks,
+// renews its lease or reads the events until one starts again.
+let isStarted = false
+
+async function start($: EngineInterface, cwd: string): Promise<void> {
+  if (isStarted) {
+    return
+  }
+
+  isStarted = true
+  const own = await sessionIdOf($, cwd)
+  sessionId = own.id
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, sessionIdSource: own.source }))
+  debug($, `this session's id is ${shortId(own.id)}, from ${own.source}`)
+  const startedAt = await $.clock.now()
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, eventsWatchedSince: startedAt }))
+  await showHealth($)
+  $.clock.after(0, () => tick($, true))
+  $.clock.every(POLL_MS, () => tick($, false))
+  $.clock.every(WATCH_MILLISECONDS, () => watchEvents($))
+}
+
+// A hook of a module that never heard session.start starts the poll itself, after it answers.
+function startLate($: EngineInterface, hook: string): void {
+  if (isStarted) {
+    return
+  }
+
+  $.clock.after(0, async () => {
+    if (!isStarted) {
+      debug($, `the poll starts on ${hook}: this load of the module heard no session.start`)
+      await start($, '')
+    }
+  })
 }
 
 // One tick: the queue, then what moved since the last look.
@@ -2354,22 +2391,14 @@ export const register: Register = on => {
     // An engine that names neither starts a session someone is at.
     isUnattended = e.isInteractive === false && (e.surface === null || e.surface === undefined)
     debug($, `this session starts with isInteractive ${String(e.isInteractive)}, surface ${String(e.surface)}: ${isUnattended ? 'nobody is at it' : 'someone is at it'}`)
-    const own = await sessionIdOf($, e.cwd)
-    sessionId = own.id
-    await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, sessionIdSource: own.source }))
-    debug($, `this session's id is ${shortId(own.id)}, from ${own.source}`)
-    const startedAt = await $.clock.now()
-    await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, ...current, eventsWatchedSince: startedAt }))
-    await showHealth($)
-    $.clock.after(0, () => tick($, true))
-    $.clock.every(POLL_MS, () => tick($, false))
-    $.clock.every(WATCH_MILLISECONDS, () => watchEvents($))
+    await start($, e.cwd)
 
     return next(e)
   })
 
   // THE OWNER'S OWN TYPING, at the prompt or through Remote Control, moves the signaller lease to this session.
   on('prompt.submit', async ($, e, next) => {
+    startLate($, 'prompt.submit')
     const result = await next(e)
 
     if (e.origin?.kind === 'composer' || e.origin?.kind === 'bridge') {
@@ -2380,6 +2409,8 @@ export const register: Register = on => {
   })
 
   on('turn.start', async ($, e, next) => {
+    startLate($, 'turn.start')
+
     if (e.agentId === undefined) {
       isTurnRunning = true
       turnStartedAt = await $.clock.now()
@@ -2428,6 +2459,7 @@ export const register: Register = on => {
   // spend are the status line's, never repeated here.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     isSeen = true
+    startLate($, 'the band')
 
     if (e.props.hasSurvey) {
       return next(e)
@@ -2526,6 +2558,7 @@ export const register: Register = on => {
   // THE PANE: tabs, then the screen on top of the stack.
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     isSeen = true
+    startLate($, 'the pane')
     const elements = $.ui.resolve(e)
     const { Box, Text, Button, Link, Markdown, Code } = elements
     const hasInput = e.surface !== 'mobile' && 'Input' in elements

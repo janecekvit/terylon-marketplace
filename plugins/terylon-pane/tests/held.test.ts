@@ -266,3 +266,30 @@ test('A TURN WHOSE END IS NEVER HEARD holds nothing for good: after 30 min it is
   expect(terylon.prompts).toHaveLength(1)
   expect(terylon.prompts[0]).toStartWith('Story #327')
 })
+
+test('A MODULE UPDATED IN PLACE, which hears no session.start, starts its poll from the band it draws: it renews its own lease and reads the events', async ($, on) => {
+  const kept = storeOf(on, { ...SEEN, signaller: { session: 'dev-session', since: Date.parse('2026-10-11T08:00:00Z'), until: Date.parse('2026-10-11T21:58:00Z'), seen: true } })
+  const terylon = world(on, { store: null })
+  terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), Number(args.since) >= 18101 ? [] : [storyMoved(18101, 327, 'Events since the last look', 'verified')])
+  on('session.id', async () => ({ value: 'dev-session' }) as never)
+
+  // No $.session.start: the update reached a session already running.
+  await terylon.clock.advance(60000)
+  expect(terylon.calls.filter(call => call.tool === 'events_since')).toEqual([])
+
+  const band = await $.ui.mount({ plugin: 'terylon-pane', surface: 'desktop', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 3, bodyColumns: 80, scroll: { top: 0, bodyRows: 3 }, view: {} } as never })
+  await terylon.clock.settle()
+  await band.unmount()
+
+  expect(terylon.calls.some(call => call.tool === 'events_since')).toBe(true)
+  expect(terylon.prompts).toHaveLength(1)
+  expect(terylon.prompts[0]).toStartWith('Story #327')
+  // ITS OWN LEASE, renewed, since kept: the reloaded module is the same session.
+  expect((kept.get('signaller') as { session: string; since: number }).session).toBe('dev-session')
+  expect((kept.get('signaller') as { since: number }).since).toBe(Date.parse('2026-10-11T08:00:00Z'))
+
+  // And it keeps polling.
+  const before = terylon.calls.filter(call => call.tool === 'events_since').length
+  await terylon.clock.advance(30000)
+  expect(terylon.calls.filter(call => call.tool === 'events_since').length).toBeGreaterThan(before)
+})

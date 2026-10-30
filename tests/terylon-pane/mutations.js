@@ -62,8 +62,8 @@ const MUTATIONS = [
     {
         name: "the pane opens by itself at session start",
         file: "hooks/register.tsx",
-        find: "    $.clock.after(0, () => tick($, true))\n",
-        replace: "    void $.ui.open({ id: PANE, title: COPY.title })\n    $.clock.after(0, () => tick($, true))\n",
+        find: "  $.clock.after(0, () => tick($, true))\n",
+        replace: "  void $.ui.open({ id: PANE, title: COPY.title })\n  $.clock.after(0, () => tick($, true))\n",
     },
     {
         name: "the band draws a waiting count calm",
@@ -669,7 +669,7 @@ const MUTATIONS = [
     {
         name: "the watchdog on events_since is removed",
         file: "hooks/register.tsx",
-        find: "    $.clock.every(WATCH_MILLISECONDS, () => watchEvents($))\n",
+        find: "  $.clock.every(WATCH_MILLISECONDS, () => watchEvents($))\n",
         replace: "",
     },
     {
@@ -1178,6 +1178,12 @@ const MUTATIONS = [
         file: "hooks/register.tsx",
         find: "    if (isTurnRunning && now - turnStartedAt > TURN_LONGEST_MILLISECONDS) {\n",
         replace: "    if (false) {\n",
+    },
+    {
+        name: "a module updated in place never starts its poll from the band",
+        file: "hooks/register.tsx",
+        find: "    startLate($, 'the band')\n",
+        replace: "",
     },
 ];
 
