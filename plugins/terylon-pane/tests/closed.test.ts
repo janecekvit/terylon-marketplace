@@ -225,13 +225,19 @@ test('AFTER S44: a plan stays on the Goals tab only under an open goal, the clos
   expect(closedReads(terylon.calls)).toEqual([])
 })
 
-// EACH BUTTON DRAWS ITS OWN GOALS' PLANS: under Closed the closed goals' plans alone, under Open the open ones'.
+// EACH BUTTON DRAWS ITS OWN GOALS' PLANS: under History only a closed goal's plan that still waits for the owner, a
+// settled one staying on its goal's own screen; under Open the open goals' plans.
 for (const shape of ['before S44', 'after S44'] as const) {
-  test(`${shape.toUpperCase()}: Closed shows only the closed goals and their plans; Open only the open ones and theirs`, async ($, on) => {
+  test(`${shape.toUpperCase()}: History shows the closed goals and only a plan of theirs that waits; Open the open ones and theirs`, async ($, on) => {
     const terylon = world(on)
-    // Plan 41 is goal 3's, which is open; plan 144 is goal 8's, which is done.
+    // Plan 41 is goal 3's, which is open; plan 144 is goal 8's, which is done, and settled; plan 145 is goal 5's, which
+    // is dropped, and still proposed.
     terylon.answers.goals_list = shape === 'after S44' ? s44(2) : { goals: [...OPEN_GOALS, ...CLOSED_GOALS] }
-    terylon.answers.plans_list = { plans: [...PLANS.plans, { id: 144, goal: 8, goalTitle: 'TEST: earlier output', state: 'approved', estimateUsd: 4, comment: null, stories: [] }] }
+    terylon.answers.plans_list = { plans: [
+      ...PLANS.plans,
+      { id: 144, goal: 8, goalTitle: 'TEST: earlier output', state: 'approved', estimateUsd: 4, comment: null, stories: [] },
+      { id: 145, goal: 5, goalTitle: 'Merge proof', state: 'proposed', estimateUsd: 2, comment: null, stories: [] },
+    ] }
     await $.session.start(SESSION)
     await terylon.clock.settle()
 
@@ -243,12 +249,20 @@ for (const shape of ['before S44', 'after S44'] as const) {
     await ui.press({ key: 'goals-show-closed' })
     expect(await ui.find({ key: 'goal-8' })).toBeDefined()
     expect(await ui.find({ key: 'plan-41' })).toBeUndefined()
-    expect(await ui.find({ key: 'plan-144' })).toBeDefined()
-    // NO "No plan waits." under Closed: that card speaks of the open goals' plans.
+    // A SETTLED PLAN OF A CLOSED GOAL WAITS ON NOTHING: it stays on the goal's own screen, not under History.
+    expect(await ui.find({ key: 'plan-144' })).toBeUndefined()
+    expect(await ui.find({ key: 'plan-145' })).toBeDefined()
+    // NO "No plan waits." under History: that card speaks of the open goals' plans.
     expect(await ui.find({ type: 'Text', text: exact('No plan waits.') })).toBeUndefined()
 
     await ui.press({ key: 'goals-show-open' })
     expect(await ui.find({ key: 'plan-41' })).toBeDefined()
     expect(await ui.find({ key: 'plan-144' })).toBeUndefined()
+    expect(await ui.find({ key: 'plan-145' })).toBeUndefined()
+
+    // ITS GOAL'S OWN SCREEN still draws the settled plan.
+    await ui.press({ key: 'goals-show-closed' })
+    await ui.press({ key: 'goal-8' })
+    expect(await ui.find({ key: 'goal-plan-144' })).toBeDefined()
   })
 }

@@ -717,7 +717,7 @@ const MUTATIONS = [
     {
         name: "under Closed the open goals' plans are listed again",
         file: "hooks/register.tsx",
-        find: "      const shownPlans = isClosedShown ? tabPlans.filter(plan => goalsState.closed.some(item => item.id === plan.goal)) : openPlans\n",
+        find: "      const shownPlans = isClosedShown ? tabPlans.filter(plan => plan.isProposed && goalsState.closed.some(item => item.id === plan.goal)) : openPlans\n",
         replace: "      const shownPlans = openPlans\n",
     },
     {
@@ -1086,14 +1086,14 @@ const MUTATIONS = [
     {
         name: "a History row no longer ends with Delete…",
         file: "hooks/register.tsx",
-        find: "                trail: isClosedShown ? { href: consoleLink(base, 'goals'), label: COPY.deleteInConsole } : null,\n",
+        find: "                trail: isClosedShown ? { href: deleteLink(base, item.id), label: COPY.deleteInConsole } : null,\n",
         replace: "                trail: null,\n",
     },
     {
         name: "Delete… links elsewhere than the console's Goals",
-        file: "hooks/register.tsx",
-        find: "trail: isClosedShown ? { href: consoleLink(base, 'goals'),",
-        replace: "trail: isClosedShown ? { href: consoleLink(base, `goals&goal=${item.id}`),",
+        file: "hooks/queue.ts",
+        find: "  return consoleLink(base, 'goals')\n",
+        replace: "  return consoleLink(base, `goals&goal=${goal}`)\n",
     },
     {
         name: "a deleted goal's goal_get is drawn as a failure",
@@ -1154,6 +1154,30 @@ const MUTATIONS = [
         file: "hooks/register.tsx",
         find: "  deletedGoals.clear()\n  deletedStories.clear()\n",
         replace: "",
+    },
+    {
+        name: "under History a closed goal's settled plan is drawn again",
+        file: "hooks/register.tsx",
+        find: "tabPlans.filter(plan => plan.isProposed && goalsState.closed.some(",
+        replace: "tabPlans.filter(plan => goalsState.closed.some(",
+    },
+    {
+        name: "the held signals are not kept in the store",
+        file: "hooks/register.tsx",
+        find: "  await keep($, STORE_HELD, held.map(candidate => ({ ...candidate })))\n",
+        replace: "",
+    },
+    {
+        name: "the held signals an earlier session kept are not read back",
+        file: "hooks/register.tsx",
+        find: "      held.push(...heldOf(await kept($, STORE_HELD), held))\n",
+        replace: "",
+    },
+    {
+        name: "a turn that never ends holds the signals for good",
+        file: "hooks/register.tsx",
+        find: "    if (isTurnRunning && now - turnStartedAt > TURN_LONGEST_MILLISECONDS) {\n",
+        replace: "    if (false) {\n",
     },
 ];
 

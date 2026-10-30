@@ -132,6 +132,34 @@ export function candidatesFromFlight(flight: Json): Candidate[] {
     })
 }
 
+const SIGNAL_KINDS: readonly string[] = ['verified', 'merged', 'accepted', 'abandoned', 'blocked', 'stuck']
+
+// THE HELD CANDIDATES AS THE STORE KEPT THEM, read by their types: what is not a candidate is dropped, and one already
+// in `into` is not added twice.
+export function heldOf(value: unknown, into: readonly Candidate[] = []): Candidate[] {
+  const read: Candidate[] = []
+
+  for (const item of Array.isArray(value) ? value : []) {
+    const json = (item ?? {}) as Json
+    const story = number(json.story)
+    const seq = number(json.seq)
+    const kind = typeof json.kind === 'string' && SIGNAL_KINDS.includes(json.kind) ? (json.kind as SignalKind) : null
+
+    if (story === null || seq === null || kind === null) {
+      continue
+    }
+
+    const candidate: Candidate = { story, kind, seq, title: text(json.title) ?? '', pullRequest: number(json.pullRequest), reason: text(json.reason) }
+    const isKnown = [...into, ...read].some(other => other.story === story && other.kind === kind && other.seq === seq)
+
+    if (!isKnown) {
+      read.push(candidate)
+    }
+  }
+
+  return read
+}
+
 export function signalKey(candidate: Candidate, verdict: Verdict | null): string {
   const which = candidate.kind === 'verified' && verdict?.commit != null ? verdict.commit : String(candidate.seq)
 

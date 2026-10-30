@@ -163,6 +163,14 @@ export function consoleLink(base: string, query: string): string {
   return `${base}/?cockpit=${query}`
 }
 
+// WHERE A GOAL IN HISTORY IS DELETED: the console's Goals, the one route the pane knows that carries Delete…. The goal is
+// passed so that a route to its own row, once the console has one, is a change here alone.
+export function deleteLink(base: string, goal: number): string {
+  void goal
+
+  return consoleLink(base, 'goals')
+}
+
 // "alice-host" from https://alice-host.example.ts.net: the name the owner knows the machine by.
 export function hostName(base: string): string {
   const match = /^[a-z]+:\/\/([^./:]+)/i.exec(base)

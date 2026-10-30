@@ -22,8 +22,8 @@ const CLOSED_GOALS = [
   { id: 5, title: 'Merge proof', priority: 3, state: 'dropped', stories: { abandoned: 1 } },
 ]
 
-// Plan 144 is goal 8's: it leaves with its goal.
-const PLAN_144 = { id: 144, goal: 8, goalTitle: 'TEST: earlier output', state: 'approved', estimateUsd: 4, comment: null, stories: [{ id: 400, title: 'Old work', criteria: [], after: [], size: 'M', estimateUsd: 2 }] }
+// Plan 144 is goal 8's, still proposed, so History draws it: it leaves with its goal.
+const PLAN_144 = { id: 144, goal: 8, goalTitle: 'TEST: earlier output', state: 'proposed', estimateUsd: 4, comment: null, stories: [{ id: 400, title: 'Old work', criteria: [], after: [], size: 'M', estimateUsd: 2 }] }
 
 // The feed's one transition for a deleted goal, as Terylon S47 sends it: no title, none of its earlier transitions.
 function goalDeleted(seq: number, goal: number) {

@@ -56,6 +56,7 @@ import {
   bellView,
   clock,
   consoleLink,
+  deleteLink,
   dayBudget,
   doneTodayItems,
   filesOf,
@@ -100,6 +101,7 @@ import {
   coalesce,
   deletedGoalsOf,
   goalOfStory,
+  heldOf,
   isDeletedSentence,
   settleCandidate,
   signalFor,
@@ -116,7 +118,7 @@ type Json = Record<string, unknown>
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.13.3'
+export const MOD_VERSION = '1.13.4'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -150,6 +152,9 @@ const STORE_LAST_SEQ = 'lastSeq'
 const STORE_EPOCH = 'epoch'
 const STORE_LAST_SEEN_AT = 'lastSeenAt'
 const STORE_SIGNALLED = 'signalled'
+// THE SIGNALS HELD FOR A TURN'S END, kept before lastSeq moves past their events: a restart before the turn ends, or a
+// prompt that did not enter, loses none of them, and the next signaller posts them once.
+const STORE_HELD = 'held'
 // ONE SIGNALLER PER MACHINE: every open session runs the mod, and only the session holding this lease reads the events,
 // posts and toasts. Its holder renews it every tick; one not renewed for three ticks has lapsed.
 const STORE_SIGNALLER = 'signaller'
@@ -246,6 +251,11 @@ let isTurnRunning = false
 const HELD_MOST = 200
 const held: Candidate[] = []
 const heldToasted: string[] = []
+// Whether this session has read back what an earlier one held: once, on its first read of the events as the signaller.
+let isHeldRestored = false
+// A TURN THAT NEVER ENDS, its turn.complete never heard, would hold every signal for good: past this it is taken as ended.
+const TURN_LONGEST_MILLISECONDS = 30 * 60 * 1000
+let turnStartedAt = 0
 let answeringServer: string | null = null
 
 // WHAT AN ACT JUST CHANGED, drawn at once and kept until Terylon's own answer shows the subject moved (the owner's walk
@@ -919,6 +929,7 @@ async function postSignals($: EngineInterface, candidates: Candidate[]): Promise
     const signals = await settleSignals($, candidates, [...done, ...heldToasted])
     held.push(...candidates)
     held.splice(0, Math.max(0, held.length - HELD_MOST))
+    await keepHeld($)
 
     if (signals.length > 0) {
       heldToasted.push(...signals.map(signal => signal.key))
@@ -934,6 +945,10 @@ async function postSignals($: EngineInterface, candidates: Candidate[]): Promise
   const signals = await settleSignals($, read_, done)
 
   if (signals.length === 0) {
+    if (read_.length > 0) {
+      await keepHeld($)
+    }
+
     return
   }
 
@@ -945,16 +960,22 @@ async function postSignals($: EngineInterface, candidates: Candidate[]): Promise
   // A KEY IS RECORDED ONLY ONCE ITS PROMPT ENTERED: one dropped or refused is held, read again and posted next time.
   if (entered !== true) {
     held.push(...read_)
+    await keepHeld($)
     debug($, `the done-signal ${keys} did not enter the session (${entered}); it is told on the next read`)
 
     return
   }
 
   await keep($, STORE_SIGNALLED, done.slice(-SIGNALS_KEPT))
+  await keepHeld($)
 
   if (signals.some(signal => !toasted.includes(signal.key))) {
     $.ui.toast(posted.toast)
   }
+}
+
+async function keepHeld($: EngineInterface): Promise<void> {
+  await keep($, STORE_HELD, held.map(candidate => ({ ...candidate })))
 }
 
 // Whether a prompt entered the session: true, or why not, a hook's drop or the engine's refusal.
@@ -1139,6 +1160,17 @@ async function tick($: EngineInterface, isStart: boolean): Promise<void> {
       return
     }
 
+    if (isTurnRunning && now - turnStartedAt > TURN_LONGEST_MILLISECONDS) {
+      isTurnRunning = false
+      debug($, `the main loop's turn has not ended in ${TURN_LONGEST_MILLISECONDS / 60000} min; taken as ended, what it held is posted`)
+    }
+
+    // WHAT AN EARLIER SESSION HELD, read back once: it posts here, re-read like any signal, unless a turn runs here too.
+    if (!isHeldRestored) {
+      isHeldRestored = true
+      held.push(...heldOf(await kept($, STORE_HELD), held))
+    }
+
     await readMoved($, isStart, now)
   } catch (error) {
     // NOTHING OF A TICK IS LOST UNSAID: a timer drops what its callback rejects with, so it is said here instead.
@@ -1238,6 +1270,7 @@ async function startOver($: EngineInterface, reset: { from: number; head: number
   debug($, `Terylon's history was reset (asked from ${reset.from}, its head is ${reset.head}); starting over`)
   held.splice(0)
   heldToasted.splice(0)
+  await keep($, STORE_HELD, [])
   settled.clear()
   storyTargets.clear()
   // THE NEW HISTORY NUMBERS ITS GOALS AFRESH: a goal deleted in the old one names nothing in it.
@@ -2349,6 +2382,7 @@ export const register: Register = on => {
   on('turn.start', async ($, e, next) => {
     if (e.agentId === undefined) {
       isTurnRunning = true
+      turnStartedAt = await $.clock.now()
     }
 
     return next(e)
@@ -3812,8 +3846,9 @@ export const register: Register = on => {
       const openPlans = tabPlans.filter(plan => (goalsState.closedFrom === 'terylon'
         ? goalsState.open.some(item => item.id === plan.goal)
         : !goalsState.closed.some(item => item.id === plan.goal)))
-      // UNDER CLOSED, THE CLOSED GOALS' PLANS ALONE: each button draws its own goals' plans.
-      const shownPlans = isClosedShown ? tabPlans.filter(plan => goalsState.closed.some(item => item.id === plan.goal)) : openPlans
+      // UNDER HISTORY, ONLY A CLOSED GOAL'S PLAN THAT STILL WAITS FOR THE OWNER: a settled one waits on nothing, and stays
+      // on its goal's own screen.
+      const shownPlans = isClosedShown ? tabPlans.filter(plan => plan.isProposed && goalsState.closed.some(item => item.id === plan.goal)) : openPlans
       // OPEN · N AND HISTORY · M: the one selected filled, the other dim, as the tabs are. History is the closed goals.
       const switchButton = (key: string, name: string, count: number, isSelected: boolean, showing: 'open' | 'closed') => (
         <Button key={key} label={`${name}${COPY.count(count)}`} variant={isSelected ? 'primary' : undefined} dimColor={isSelected ? undefined : true} onPress={() => showGoals($, showing)}>
@@ -3869,7 +3904,7 @@ export const register: Register = on => {
                 titleTone: isClosedShown ? 'subtle' : undefined,
                 isTitleDim: isClosedShown,
                 // DELETE… ENDS EACH HISTORY ROW: the console's Goals, where the owner deletes it; no tool of the pane deletes.
-                trail: isClosedShown ? { href: consoleLink(base, 'goals'), label: COPY.deleteInConsole } : null,
+                trail: isClosedShown ? { href: deleteLink(base, item.id), label: COPY.deleteInConsole } : null,
                 detail: item.questions > 0 ? COPY.goalQuestions(item.questions) : item.stories,
                 detailTone: item.questions > 0 ? 'warning' : 'subtle',
                 onPress: () => go({ screen: 'goal', goal: item.id }),
