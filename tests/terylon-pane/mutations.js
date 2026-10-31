@@ -1239,6 +1239,30 @@ const MUTATIONS = [
         find: "    if (answered.kind === 'refused' && known !== null && (answered.status === 400 || answered.status === null) && EPOCH_REFUSAL.test(answered.sentence)) {\n",
         replace: "    if (false) {\n",
     },
+    {
+        name: "a new goal's specification is not sent with goal_add",
+        file: "hooks/register.tsx",
+        find: "    ...(specification.files.length === 0 ? {} : { specification: specification.files }),\n",
+        replace: "",
+    },
+    {
+        name: "a goal is re-planned when its notice is drawn, not when it is pressed",
+        file: "hooks/register.tsx",
+        find: "      const replan = specification === null ? null : specification.replan\n",
+        replace: "      const replan = specification === null ? null : specification.replan\n      if (replan !== null) { void takeAct($, specKey, 'goal_replan', screen.goal, '', { goal: screen.goal }) }\n",
+    },
+    {
+        name: "a revised specification is sent based on another version than the one shown",
+        file: "hooks/register.tsx",
+        find: "{ goal: form.goal, specification: specification.files, basedOn: form.basedOn }",
+        replace: "{ goal: form.goal, specification: specification.files, basedOn: form.basedOn + 1 }",
+    },
+    {
+        name: "Attach .md files in the session puts no request in the chat",
+        file: "hooks/register.tsx",
+        find: "  await postPrompt($, COPY.specPrompt(form.draft.trim(), form.ask.trim(), form.priority, form.target === '' ? OWN_LIST : form.target))\n",
+        replace: "",
+    },
 ];
 
 module.exports = { MUTATIONS };

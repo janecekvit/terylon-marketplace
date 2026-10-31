@@ -125,12 +125,13 @@ test('frame I: a call Claude Code did not allow is said as that, with the rules 
   expect(rules?.props.startLine).toBeUndefined()
   expect(String(rules?.text)).not.toContain('```')
 
-  for (const tool of ['briefing', 'work_in_flight', 'stories_list', 'events_since', 'story_get', 'policy_get', 'goals_list', 'goal_get', 'plans_list', 'notices_list', 'leader_status', 'metrics', 'memory_get', 'tasks_add', 'goal_add', 'question_answer', 'memory_propose', ...ACTS]) {
+  for (const tool of ['briefing', 'work_in_flight', 'stories_list', 'events_since', 'story_get', 'policy_get', 'goals_list', 'goal_get', 'plans_list', 'notices_list', 'leader_status', 'metrics', 'memory_get', 'tasks_add', 'goal_add', 'question_answer', 'memory_propose', 'spec_get', 'spec_revise', 'goal_replan', ...ACTS]) {
     expect(String(rules?.text)).toContain(`"mcp__plugin_terylon-os_terylon__${tool}"`)
   }
 
-  // Eighteen reads and writes that decide nothing, and the thirteen owner acts (S27): thirty-one, and never merge.
-  expect([...PANE_TOOLS]).toHaveLength(31)
+  // Eighteen reads and writes that decide nothing, a goal's specification read and revised and its re-plan (Terylon
+  // S53), and the thirteen owner acts (S27): thirty-four, and never merge.
+  expect([...PANE_TOOLS]).toHaveLength(34)
 
   for (const gate of GATES) {
     expect(String(rules?.text)).not.toContain(gate)
