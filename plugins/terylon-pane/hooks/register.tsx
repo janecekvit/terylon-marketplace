@@ -35,11 +35,15 @@ import type {
   PaneGoals,
   PaneRepeating,
   PaneRepeatingRun,
+  PaneRevise,
   PanePlan,
   PaneMemory,
   PanePolicyForm,
   PaneScreen,
   PaneSnapshot,
+  PaneSpecFile,
+  PaneSpecPicker,
+  PaneSpecView,
   PaneStory,
   PaneView,
 } from '../types'
@@ -82,6 +86,7 @@ import {
   questionItems,
   queuedItems,
   repeatingOf,
+  runDay,
   runningItems,
   spend,
   storyView,
@@ -111,6 +116,7 @@ import {
   withoutDeletedGoals,
 } from './signals'
 import type { Candidate, Signal, Verdict } from './signals'
+import { attach, bytesText, charactersText, markdownFilesOf, pathIn, specFilesOf, specificationOf, specificationProblem } from './specification'
 
 type Json = Record<string, unknown>
 
@@ -121,7 +127,7 @@ type Reset = { from: number; head: number | null; refused: string | null }
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.15.0'
+export const MOD_VERSION = '1.16.0'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -217,6 +223,14 @@ const OWN_LIST = 'list'
 
 const EMPTY_GOALS: PaneGoals = { phase: 'loading', sentence: null, open: [], closed: [], plans: [], draft: '', ask: '', priority: DEFAULT_PRIORITY, target: OWN_LIST, targets: [], adding: 'idle', addSentence: null, showing: 'open', closedCount: 0, closedFrom: 'list', closedPhase: 'idle', closedSentence: null }
 
+// THE FOLDER A SPECIFICATION IS PICKED FROM: the session's own, until the owner names another.
+const SESSION_FOLDER = '.'
+
+// A PATH THAT NEEDS NO FOLDER BEFORE IT: /x, \x or C:\x.
+const ABSOLUTE_PATH = /^([A-Za-z]:)?[\\/]/
+
+const EMPTY_PICKER: PaneSpecPicker = { folder: '', listedFolder: SESSION_FOLDER, phase: 'idle', sentence: null, listed: [], attached: [] }
+
 const EMPTY_BELL: PaneBell = { phase: 'loading', sentence: null, unhandledCount: 0, unhandled: [], handled: [], leader: { isPaused: false, text: '' }, metrics: [], handling: null, handleSentence: null }
 
 const snapshot = atom({ plugin: 'terylon-pane', key: 'snapshot' } as const, EMPTY_SNAPSHOT)
@@ -234,6 +248,10 @@ const open = atom({ plugin: 'terylon-pane', key: 'open' } as const, [] as string
 const acts = atom({ plugin: 'terylon-pane', key: 'acts' } as const, {} as Record<string, PaneAct>)
 const policyForm = atom({ plugin: 'terylon-pane', key: 'policyForm' } as const, EMPTY_POLICY_FORM)
 const rulesAsked = atom({ plugin: 'terylon-pane', key: 'rulesAsked' } as const, false)
+// A GOAL'S SPECIFICATION (Terylon S53): the new goal's files, a goal's revise form, and one version drawn read-only.
+const specPicker = atom({ plugin: 'terylon-pane', key: 'specPicker' } as const, EMPTY_PICKER)
+const revise = atom({ plugin: 'terylon-pane', key: 'revise' } as const, null as PaneRevise | null)
+const specView = atom({ plugin: 'terylon-pane', key: 'specView' } as const, null as PaneSpecView | null)
 
 // What the last answers were: the module's own, lost on a reload and refilled by the next poll.
 let lastFlight: Json = {}
@@ -247,6 +265,9 @@ let isPolling = false
 // the owner last typed in it.
 let sessionId = ''
 let isUnattended = false
+// THE SESSION'S WORKING DIRECTORY, as session.start names it: the folder a specification's files are listed from, and
+// the one a relative folder is read under. The engine's own until it is heard.
+let sessionFolder = SESSION_FOLDER
 let isSeen = false
 let typedAt: number | null = null
 
@@ -1502,6 +1523,8 @@ async function load($: EngineInterface, screen: PaneScreen): Promise<void> {
       return loadGoals($)
     case 'goal':
       return openGoal($, screen.goal)
+    case 'spec':
+      return openSpec($, screen.goal, screen.version, screen.file)
     case 'bell':
       return loadBell($)
     case 'memory':
@@ -1675,6 +1698,8 @@ async function loadGoals($: EngineInterface): Promise<void> {
     closedSentence: typeof current?.closedSentence === 'string' ? current.closedSentence : null,
   }))
   await bounded($, 'goals', () => readGoalsFromTerylon($), sentence => update($, goals, (current: PaneGoals): PaneGoals => ({ ...EMPTY_GOALS, ...current, phase: 'error', sentence })))
+  // THE NEW GOAL'S FOLDER, listed again with the tab: the one the owner listed last, the session's own at first.
+  await listFolder($, 'new', (await readPicker($)).listedFolder)
 }
 
 async function readGoalsFromTerylon($: EngineInterface): Promise<void> {
@@ -1772,6 +1797,16 @@ async function addGoal($: EngineInterface): Promise<void> {
     return
   }
 
+  // ITS SPECIFICATION, EACH FILE READ WHOLE ON THE PRESS: over a cap, a bad name or a file that cannot be read is the
+  // pane's own sentence, and nothing is sent.
+  const picked = await readPicker($)
+  const specification = await readSpecification($, [], picked.attached)
+
+  if ('problem' in specification) {
+    await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, adding: 'refused', addSentence: specification.problem }))
+    return
+  }
+
   await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, adding: 'sending', addSentence: null }))
 
   const priority = Number(form.priority)
@@ -1780,6 +1815,7 @@ async function addGoal($: EngineInterface): Promise<void> {
     ...(ask === '' ? {} : { ask }),
     priority: Number.isInteger(priority) && priority >= 1 && priority <= 4 ? priority : Number(DEFAULT_PRIORITY),
     target: form.target === '' ? OWN_LIST : form.target,
+    ...(specification.files.length === 0 ? {} : { specification: specification.files }),
   })
   const isAccepted = answered.kind === 'ok' && answered.value.accepted !== false
 
@@ -1794,8 +1830,184 @@ async function addGoal($: EngineInterface): Promise<void> {
   }))
 
   if (isAccepted) {
+    await update($, specPicker, (current: PaneSpecPicker): PaneSpecPicker => ({ ...EMPTY_PICKER, ...current, attached: [] }))
     await loadGoals($)
   }
+}
+
+// THE NEW GOAL'S FOLDER LIST, merged over its defaults: a value an older version stored has none of it.
+async function readPicker($: EngineInterface): Promise<PaneSpecPicker> {
+  const stored = await read($, specPicker)
+
+  return { ...EMPTY_PICKER, ...(stored ?? {}), attached: Array.isArray(stored?.attached) ? stored.attached : [], listed: Array.isArray(stored?.listed) ? stored.listed : [] }
+}
+
+// ONE FOLDER LIST, the new goal's or a revise form's: every change goes through here.
+async function changePicker($: EngineInterface, which: 'new' | 'revise', change: (current: PaneSpecPicker) => PaneSpecPicker): Promise<void> {
+  if (which === 'new') {
+    await update($, specPicker, (current: PaneSpecPicker): PaneSpecPicker => change({ ...EMPTY_PICKER, ...(current ?? {}) }))
+    return
+  }
+
+  await update($, revise, (current: PaneRevise | null): PaneRevise | null => (current === null ? null : { ...current, picker: change({ ...EMPTY_PICKER, ...current.picker }) }))
+}
+
+// WHERE A FOLDER THE OWNER NAMES IS: the session's own for none, an absolute one as typed, a relative one under the
+// session's.
+function folderPath(folder: string): string {
+  const asked = folder.trim()
+
+  if (asked === '' || asked === SESSION_FOLDER) {
+    return sessionFolder
+  }
+
+  return ABSOLUTE_PATH.test(asked) ? asked : pathIn(sessionFolder, asked)
+}
+
+// THE .md FILES OF A FOLDER, the session's own or one the owner names, relative or absolute: $.fs.list, bounded, its
+// failure said in the engine's words under the list.
+async function listFolder($: EngineInterface, which: 'new' | 'revise', folder: string): Promise<void> {
+  const asked = folder.trim() === '' ? SESSION_FOLDER : folder.trim()
+  const path = folderPath(asked)
+
+  await changePicker($, which, current => ({ ...current, listedFolder: asked, phase: 'loading', sentence: null }))
+  await bounded($, `the folder ${asked}`, async () => {
+    const entries: unknown = await $.fs.list(path)
+
+    await changePicker($, which, current => ({ ...current, listedFolder: asked, phase: 'ok', sentence: null, listed: markdownFilesOf(entries, path) }))
+  }, sentence => changePicker($, which, current => ({ ...current, phase: 'error', sentence: COPY.specListFailed(asked, sentence) })))
+}
+
+// A FILE PRESSED IN THE LIST is attached; one of the same name takes the place of the first, a kept one's included.
+async function attachFile($: EngineInterface, which: 'new' | 'revise', file: PaneSpecFile): Promise<void> {
+  await changePicker($, which, current => ({ ...current, attached: attach(current.attached, file) }))
+
+  if (which === 'revise') {
+    await update($, revise, (current: PaneRevise | null): PaneRevise | null => (current === null ? null : { ...current, kept: current.kept.filter(item => item.name !== file.name), problem: null }))
+  } else {
+    await update($, goals, (current: PaneGoals): PaneGoals => (current.adding === 'refused' ? { ...current, adding: 'idle', addSentence: null } : current))
+  }
+}
+
+async function removeFile($: EngineInterface, which: 'new' | 'revise', name: string): Promise<void> {
+  await changePicker($, which, current => ({ ...current, attached: current.attached.filter(item => item.name !== name) }))
+}
+
+// A SPECIFICATION WHOLE: the files kept as Terylon sent them, then each attached file read now, in full. Checked before
+// the reads and again after them; a file the engine cannot read names itself.
+async function readSpecification($: EngineInterface, kept: readonly { name: string; text: string }[], attached: readonly PaneSpecFile[]): Promise<{ files: { name: string; text: string }[] } | { problem: string }> {
+  const names = [...kept.map(item => item.name), ...attached.map(item => item.name)]
+  const named = specificationProblem(names)
+
+  if (named !== null) {
+    return { problem: named }
+  }
+
+  const files = [...kept]
+
+  for (const file of attached) {
+    try {
+      const value: unknown = await $.fs.read(file.path)
+
+      files.push({ name: file.name, text: typeof value === 'string' ? value : String(value ?? '') })
+    } catch (error) {
+      debug($, `reading ${file.path} failed: ${messageOf(error)}`)
+      return { problem: COPY.specUnread(file.name, messageOf(error)) }
+    }
+  }
+
+  const sized = specificationProblem(names, files.map(item => item.text))
+
+  return sized === null ? { files } : { problem: sized }
+}
+
+// B, THE FALLBACK: a request in this chat, in the owner's words, for Claude to add the goal with the .md files the owner
+// names or Claude wrote. The pane sends nothing to Terylon itself.
+async function specInSession($: EngineInterface): Promise<void> {
+  const form = await readGoals($)
+
+  await postPrompt($, COPY.specPrompt(form.draft.trim(), form.ask.trim(), form.priority, form.target === '' ? OWN_LIST : form.target))
+}
+
+// ONE VERSION OF A GOAL'S SPECIFICATION, READ-ONLY: spec_get {goal}, or {goal, version} for an older one.
+async function openSpec($: EngineInterface, id: number, version: number | null, file: string | null): Promise<void> {
+  await update($, specView, (): PaneSpecView | null => ({ goal: id, version, file, phase: 'loading', sentence: null, shown: null, revised: '', files: [] }))
+
+  const answered = await callTerylon($, 'spec_get', version === null ? { goal: id } : { goal: id, version })
+
+  if (answered.kind !== 'ok') {
+    await update($, specView, (): PaneSpecView | null => ({ goal: id, version, file, phase: 'error', sentence: why(answered), shown: null, revised: '', files: [] }))
+    return
+  }
+
+  const now = await $.clock.now()
+
+  await update($, specView, (): PaneSpecView | null => ({
+    goal: id,
+    version,
+    file,
+    phase: 'ok',
+    sentence: null,
+    shown: number(answered.value.version) ?? version,
+    revised: answered.value.at === undefined || answered.value.at === null ? '' : runDay(answered.value.at, now, zoneOffset),
+    files: specFilesOf(answered.value),
+  }))
+}
+
+// REVISE…: the form starts from the version shown, its files read whole and kept, and the session's folder listed.
+async function openRevise($: EngineInterface, id: number, version: number): Promise<void> {
+  await update($, revise, (): PaneRevise | null => ({ goal: id, basedOn: version, phase: 'loading', kept: [], picker: EMPTY_PICKER, problem: null, sentence: null }))
+
+  const answered = await callTerylon($, 'spec_get', { goal: id, version })
+
+  if (answered.kind !== 'ok') {
+    await update($, revise, (current: PaneRevise | null): PaneRevise | null => (current === null ? null : { ...current, phase: 'failed', problem: why(answered) }))
+    return
+  }
+
+  await update($, revise, (current: PaneRevise | null): PaneRevise | null => (current === null ? null : { ...current, phase: 'editing', kept: specFilesOf(answered.value) }))
+  await listFolder($, 'revise', SESSION_FOLDER)
+}
+
+async function dropKept($: EngineInterface, name: string): Promise<void> {
+  await update($, revise, (current: PaneRevise | null): PaneRevise | null => (current === null ? null : { ...current, kept: current.kept.filter(item => item.name !== name) }))
+}
+
+// SAVE AS VERSION N+1: spec_revise with every file whole and basedOn the version the form started from, so a version
+// saved meanwhile is refused rather than written over. Terylon's refusal is said word for word.
+async function saveRevise($: EngineInterface): Promise<void> {
+  const form = await read($, revise)
+
+  if (form === null || form.phase !== 'editing') {
+    return
+  }
+
+  if (form.kept.length + form.picker.attached.length === 0) {
+    await update($, revise, (current: PaneRevise | null): PaneRevise | null => (current === null ? null : { ...current, problem: COPY.specNoneKept }))
+    return
+  }
+
+  const specification = await readSpecification($, form.kept, form.picker.attached)
+
+  if ('problem' in specification) {
+    await update($, revise, (current: PaneRevise | null): PaneRevise | null => (current === null ? null : { ...current, problem: specification.problem }))
+    return
+  }
+
+  await update($, revise, (current: PaneRevise | null): PaneRevise | null => (current === null ? null : { ...current, phase: 'saving', problem: null }))
+
+  const answered = await callTerylon($, 'spec_revise', { goal: form.goal, specification: specification.files, basedOn: form.basedOn })
+  const isAccepted = answered.kind === 'ok' && answered.value.accepted === true
+
+  if (!isAccepted) {
+    const sentence = answered.kind === 'ok' && answered.value.accepted == null && text(answered.value.refused) === null ? COPY.timeout(text(answered.value.commandId)) : text(answered.kind === 'ok' ? answered.value.refused : null) ?? why(answered)
+
+    await update($, revise, (current: PaneRevise | null): PaneRevise | null => (current === null ? null : { ...current, phase: 'editing', problem: sentence }))
+    return
+  }
+
+  await openGoal($, form.goal)
+  await update($, revise, (current: PaneRevise | null): PaneRevise | null => (current === null ? null : { ...current, phase: 'saved', kept: [], picker: EMPTY_PICKER, problem: null, sentence: why(answered) }))
 }
 
 async function openGoal($: EngineInterface, id: number): Promise<void> {
@@ -1833,7 +2045,12 @@ async function openGoal($: EngineInterface, id: number): Promise<void> {
       .filter(item => OPEN_STORY_STATES.includes(String(item.state ?? '')))
       .map(item => ({ id: number(item.id) ?? 0, title: text(item.title) ?? '', isRunning: ['dispatched', 'running'].includes(String(item.state ?? '')) })),
     repeating,
+    // ITS SPECIFICATION (Terylon S53), with the owner's decisions on earlier plans; null where goal_get names none.
+    specification: specificationOf(document, now, zoneOffset),
   }))
+
+  // A REVISE FORM BELONGS TO ITS GOAL: another goal opened closes it.
+  await update($, revise, (current: PaneRevise | null): PaneRevise | null => (current !== null && current.goal !== id ? null : current))
 
   if ((await read($, goals)).phase !== 'ok') {
     await loadGoals($)
@@ -2012,7 +2229,7 @@ async function afterAct($: EngineInterface, tool: string, subject: number | null
     await openStory($, subject)
   } else if (tool.startsWith('plan_')) {
     await loadGoals($)
-  } else if (tool === 'goal_drop' && subject !== null) {
+  } else if ((tool === 'goal_drop' || tool === 'goal_replan') && subject !== null) {
     await openGoal($, subject)
     await loadGoals($)
   } else if (tool.startsWith('memory_')) {
@@ -2462,6 +2679,7 @@ export const register: Register = on => {
     // An engine that names neither starts a session someone is at.
     isUnattended = e.isInteractive === false && (e.surface === null || e.surface === undefined)
     debug($, `this session starts with isInteractive ${String(e.isInteractive)}, surface ${String(e.surface)}: ${isUnattended ? 'nobody is at it' : 'someone is at it'}`)
+    sessionFolder = typeof e.cwd === 'string' && e.cwd.trim() !== '' ? e.cwd : sessionFolder
     await start($, e.cwd)
     ensurePoll($, 'session.start')
 
@@ -3859,6 +4077,75 @@ export const register: Register = on => {
       ])
     }
 
+    // A SPECIFICATION'S FILES (Terylon S53): those kept and attached, each a row with Remove, then the folder's .md files
+    // to attach and another folder to list. A file of a name takes the place of the other, so each name keys one row.
+    const specPickerOf = (prefix: 'spec-new' | 'revise', picker: PaneSpecPicker, kept: readonly { name: string; text: string }[]) => {
+      const which = prefix === 'spec-new' ? 'new' : 'revise'
+      const offered = picker.listed.filter(file => !picker.attached.some(item => item.path === file.path))
+      const fileRow = (name: string, line: string, removeKey: string, onRemove: () => unknown) => (
+        <Box key={`${prefix}-row-${name}`} flexDirection="row" justifyContent="space-between" gap={1}>
+          <Text wrap="truncate-end">{line}</Text>
+          <Button key={removeKey} label={COPY.specRemove} dimColor onPress={onRemove} />
+        </Box>
+      )
+
+      return [
+        ...kept.map(file => fileRow(file.name, COPY.specAttached(file.name, charactersText(file.text.length)), `${prefix}-drop-${file.name}`, () => dropKept($, file.name))),
+        ...picker.attached.map(file => fileRow(file.name, COPY.specAttached(file.name, bytesText(file.bytes)), `${prefix}-remove-${file.name}`, () => removeFile($, which, file.name))),
+        picker.phase === 'loading' ? quiet(elements, COPY.specListing) : null,
+        picker.phase === 'error' ? <Text key={`${prefix}-list-error`} color="error">{picker.sentence ?? ''}</Text> : null,
+        picker.phase === 'ok' && picker.listed.length === 0 ? quiet(elements, COPY.specNoFiles(picker.listedFolder)) : null,
+        picker.phase === 'ok' && offered.length > 0 && picker.listedFolder !== SESSION_FOLDER ? <Text key={`${prefix}-listed-in`} color="subtle" size="footnote">{COPY.specListedIn(picker.listedFolder)}</Text> : null,
+        picker.phase === 'ok' && offered.length > 0 ? (
+          <Box key={`${prefix}-listed`} flexDirection={look.isNarrow ? 'column' : 'row'} flexWrap="wrap" gap={look.isGraphic ? 'xs' : 1}>
+            {offered.map(file => <Button key={`${prefix}-add-${file.name}`} label={COPY.specAttach(file.name, bytesText(file.bytes))} onPress={() => attachFile($, which, file)} />)}
+          </Box>
+        ) : null,
+        hasInput && 'Input' in elements ? (
+          <elements.Input key={`${prefix}-folder`} label={COPY.specFolderLabel} placeholder={COPY.specFolderPlaceholder} value={picker.folder} onInput={value => changePicker($, which, current => ({ ...current, folder: value }))} onSubmit={value => listFolder($, which, value)} />
+        ) : null,
+      ]
+    }
+
+    // ONE VERSION OF A GOAL'S SPECIFICATION, READ-ONLY (Terylon S53): its files as Markdown, or the one file pressed.
+    if (screen.screen === 'spec') {
+      const shownSpec = await read($, specView)
+      const isShown = shownSpec !== null && shownSpec.goal === screen.goal && shownSpec.version === screen.version && shownSpec.file === screen.file
+
+      if (shownSpec === null || !isShown || shownSpec.phase === 'loading') {
+        return (
+          <Box flexDirection="column" gap={1}>
+            {backButton}
+            {quiet(elements, COPY.specLoading)}
+          </Box>
+        )
+      }
+
+      const version = shownSpec.shown ?? screen.version ?? 0
+      const files = screen.file === null ? shownSpec.files : shownSpec.files.filter(file => file.name === screen.file)
+
+      return (
+        <Box flexDirection="column" gap={1}>
+          {backButton}
+          {shownSpec.phase === 'error'
+            ? cardOf('spec-error', warned(COPY.loadError(COPY.specOf(screen.goal))), null, [reason(shownSpec.sentence)], 'bad')
+            : (
+                <Box key="spec-head" flexDirection="column">
+                  <Text size="caption" color="subtle">{COPY.specOf(screen.goal).toUpperCase()}</Text>
+                  <Text size="title" weight="semibold">{screen.file ?? COPY.specVersionShown(version)}</Text>
+                  <Text color="subtle" size="footnote">{screen.file === null ? COPY.specReadOnly(shownSpec.revised) : `${COPY.specVersionShown(version)} · ${COPY.specReadOnly(shownSpec.revised)}`}</Text>
+                </Box>
+              )}
+          {shownSpec.phase === 'ok' && files.length === 0 ? quiet(elements, COPY.specFileMissing(screen.file ?? '', version)) : null}
+          {shownSpec.phase === 'ok' && files.map(file => cardOf(`spec-text-${file.name}`, file.name, charactersText(file.text.length), [
+            <Markdown key={`spec-markdown-${file.name}`} text={file.text} />,
+          ]))}
+          <Link key="spec-view-console" href={consoleLink(base, `goals&goal=${screen.goal}`)} label={COPY.specInConsole} />
+          {footer}
+        </Box>
+      )
+    }
+
     if (screen.screen === 'plan') {
       const plan = goalsState.plans.find(item => item.id === screen.plan) ?? null
 
@@ -3894,6 +4181,51 @@ export const register: Register = on => {
         )
       }
 
+      // ITS SPECIFICATION (Terylon S53): the version, each file opening read-only, the re-plan the leader offers, Revise…,
+      // the older versions, the console, and the owner's decisions on earlier plans. A goal with none draws nothing here.
+      const specification = shownGoal.phase === 'ok' ? shownGoal.specification ?? null : null
+      const specKey = `spec-${screen.goal}`
+      const replanState = actState(specKey)
+      const replan = specification === null ? null : specification.replan
+      const reviseForm = await read($, revise)
+      const isRevising = reviseForm !== null && reviseForm.goal === screen.goal && reviseForm.phase !== 'saved'
+      const specCard = specification === null ? null : cardOf('goal-spec', COPY.specTitle(specification.version), COPY.specRevised(specification.revised), [
+        <Box key="spec-files" flexDirection="column" gap={look.isGraphic ? 'xs' : 0}>
+          {specification.files.map(file => <Button key={`spec-file-${file.name}`} label={COPY.specFile(file.name, file.size)} plain onPress={() => go({ screen: 'spec', goal: screen.goal, version: null, file: file.name })} />)}
+        </Box>,
+        // THE RE-PLAN THE LEADER OFFERS, stroked amber as a card that waits, its words never amber: called on its press alone.
+        replan === null ? null : cardOf('spec-replan-notice', <Text weight="semibold">{COPY.specReplanNote(replan.from)}</Text>, null, [
+          <Box key="spec-replan-actions" flexDirection="row" gap={1} flexWrap="wrap">
+            <Button key="spec-replan" label={replanState.busy === 'goal_replan' ? COPY.actBusy.goal_replan ?? '' : COPY.specReplan(replan.to)} variant={replanState.busy === null ? 'primary' : undefined} dimColor={replanState.busy === null ? undefined : true} onPress={() => (replanState.busy === null ? takeAct($, specKey, 'goal_replan', screen.goal, '', { goal: screen.goal }) : undefined)} />
+          </Box>,
+        ], 'wait'),
+        reviseForm !== null && reviseForm.goal === screen.goal && reviseForm.phase === 'saved' ? <Text key="spec-saved" color="success">{COPY.specSaved(reviseForm.sentence ?? '')}</Text> : null,
+        <Box key="spec-actions" flexDirection="row" gap={1} flexWrap="wrap">
+          {isRevising ? null : <Button key="spec-revise" label={COPY.specRevise} onPress={() => openRevise($, screen.goal, specification.version)} />}
+          {specification.older.map(version => <Button key={`spec-version-${version}`} label={COPY.specVersion(version)} dimColor onPress={() => go({ screen: 'spec', goal: screen.goal, version, file: null })} />)}
+        </Box>,
+        <Link key="spec-console" href={consoleLink(base, `goals&goal=${screen.goal}`)} label={COPY.specInConsole} />,
+        specification.decisions.length === 0 ? null : (
+          <Box key="spec-decisions" flexDirection="column">
+            <Text size="caption" color="subtle">{COPY.specDecisions}</Text>
+            {specification.decisions.map((line, index) => <Text key={`spec-decision-${index}`} color="inactive">{line}</Text>)}
+          </Box>
+        ),
+      ])
+      // REVISE…: the files kept whole, replaced or added from a folder, removed; saved as the next version on its press.
+      const reviseCard = specification === null || reviseForm === null || !isRevising ? null : cardOf('spec-revise-form', COPY.specReviseTitle(reviseForm.basedOn), COPY.specReviseHint, [
+        reviseForm.phase === 'loading' ? quiet(elements, COPY.specLoading) : null,
+        ...(reviseForm.phase === 'editing' || reviseForm.phase === 'saving' ? specPickerOf('revise', reviseForm.picker, reviseForm.kept) : []),
+        reviseForm.phase === 'failed' ? null : <Text color="subtle" size="footnote">{COPY.specHelp}</Text>,
+        reviseForm.problem === null ? null : <Text key="revise-problem" color="error">{reviseForm.problem}</Text>,
+        <Box key="revise-actions" flexDirection="row" gap={1} flexWrap="wrap">
+          {reviseForm.phase === 'failed' || reviseForm.phase === 'loading' ? null : (
+            <Button key="revise-save" label={reviseForm.phase === 'saving' ? COPY.specSaving : COPY.specSave(reviseForm.basedOn + 1)} variant={reviseForm.phase === 'saving' ? undefined : 'primary'} dimColor={reviseForm.phase === 'saving' ? true : undefined} onPress={() => saveRevise($)} />
+          )}
+          <Button key="revise-cancel" label={COPY.specCancel} dimColor onPress={() => (reviseForm.phase === 'saving' ? undefined : update($, revise, (): PaneRevise | null => null))} />
+        </Box>,
+      ])
+
       // DELETED FOR GOOD: the sentence, quietly, and ‹ back; never a failure.
       if (shownGoal.phase === 'deleted') {
         return (
@@ -3917,6 +4249,9 @@ export const register: Register = on => {
                   <Text color="subtle" size="footnote">{shownGoal.meta}</Text>
                 </Box>
               )}
+          {specCard}
+          {reviseCard}
+          {specCard === null ? null : actOutcome(specKey, consoleLink(base, `goals&goal=${screen.goal}`), COPY.specInConsole)}
           {shownGoal.phase === 'ok' && repeating !== null && repeatingCard(repeating, settledVersions)}
           {shownGoal.phase === 'ok' && repeating === null && cardOf('goal-stories', COPY.goalStories, <Text color="subtle" size="footnote" tabular>{String(shownGoal.stories.length)}</Text>, [
             shownGoal.stories.length === 0 ? quiet(elements, COPY.noGoalStories) : null,
@@ -3945,6 +4280,7 @@ export const register: Register = on => {
     // THE GOALS TAB: open goals by priority, the plans, and a new goal with its priority and target.
     if (screen.screen === 'goals') {
       const isClosedShown = goalsState.showing === 'closed'
+      const newPicker = await readPicker($)
       // A WITHDRAWN PLAN (plans_list's `state: 'withdrawn'`) LEAVES THE TAB, and so does a repeating task's version plan
       // once settled: each waits on nothing, and stays on its goal's screen. A version that waits stays, as an act.
       const tabPlans = goalsState.plans.filter(plan => plan.state !== 'withdrawn' && (plan.taskVersion == null || plan.isProposed))
@@ -4027,6 +4363,17 @@ export const register: Register = on => {
             <Text color="subtle" size="footnote">{COPY.goalTitleHelp}</Text>,
             <elements.Input key="goal-ask" label={COPY.goalAskLabel} value={goalsState.ask} rows={look.proofs.inputRows ? 4 : undefined} onInput={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, ask: value }))} onSubmit={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, ask: value }))} />,
             <Text color="subtle" size="footnote">{COPY.goalAskHelp}</Text>,
+            // ITS SPECIFICATION (Terylon S53), optional: A, the .md files of a folder attached here and read on Add goal;
+            // B, a request in this chat for Claude to add the goal with the files the owner names or Claude wrote.
+            <Box key="spec-new-section" flexDirection="column" gap={look.isGraphic ? 'xs' : 0}>
+              <Text weight="semibold">{COPY.specSection}</Text>
+              {specPickerOf('spec-new', newPicker, [])}
+              <Text color="subtle" size="footnote">{COPY.specHelp}</Text>
+              <Box flexDirection="row" gap={1} flexWrap="wrap">
+                <Button key="spec-in-session" label={COPY.specInSession} dimColor onPress={() => specInSession($)} />
+              </Box>
+              <Text color="subtle" size="footnote">{COPY.specInSessionHelp}</Text>
+            </Box>,
             look.isGraphic && !look.isNarrow
               ? (
                   <Box key="goal-pickers" flexDirection="row" gap="sm">

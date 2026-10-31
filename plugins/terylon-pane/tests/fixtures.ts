@@ -66,6 +66,13 @@ export type World = {
   denied: Map<string, string>
   // Why a hook drops every submitted prompt, so that none enters the session, or null while prompts enter.
   prompt: { drop: string | null }
+  // THE SESSION'S FOLDER as $.fs sees it (Terylon S53): each path a file's text, relative to the session or absolute;
+  // a listing answers a folder's own files, and a folder that holds none is not there.
+  files: Record<string, string>
+  // Paths $.fs.read refuses, each with the engine's words; and every path listed and read, in order.
+  unreadable: Map<string, string>
+  listed: string[]
+  read: string[]
 }
 
 export const BRIEFING = {
@@ -264,6 +271,10 @@ export function world(on: On, options: { store?: Record<string, unknown> | null;
     hang: new Set<string>(),
     denied: new Map<string, string>(),
     prompt: { drop: null },
+    files: {},
+    unreadable: new Map<string, string>(),
+    listed: [],
+    read: [],
     held: [],
     answers: {
       briefing: BRIEFING,
@@ -312,6 +323,38 @@ export function world(on: On, options: { store?: Record<string, unknown> | null;
 
     state.prompts.push(e.text)
     return { text: e.text }
+  })
+  // $.fs.list and $.fs.read over `files`. The engine hands a hook the path it resolved, on Windows with a drive, so a
+  // path under the session's folder is read back relative to it: '.' is the folder itself.
+  const sessionRelative = (path: string): string => {
+    const plain = path.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '').replace(/\/+$/, '')
+
+    return plain === SESSION.cwd ? '.' : plain.startsWith(`${SESSION.cwd}/`) ? plain.slice(SESSION.cwd.length + 1) : plain
+  }
+  on('fs.list' as never, async ($: unknown, e: { path: string }) => {
+    const folder = sessionRelative(e.path)
+    state.listed.push(folder)
+    const prefix = folder === '.' ? '' : `${folder}/`
+    const names = Object.keys(state.files).filter(path => path.startsWith(prefix) && !path.slice(prefix.length).includes('/')).map(path => path.slice(prefix.length))
+
+    if (prefix !== '' && names.length === 0) {
+      return { deny: `ENOENT: no such file or directory, scandir '${e.path}'` } as never
+    }
+
+    return { value: names.sort().map(name => ({ name, kind: 'file', size: (state.files[`${prefix}${name}`] ?? '').length, mtimeMs: 0, isLink: false })) } as never
+  })
+  on('fs.read' as never, async ($: unknown, e: { path: string }) => {
+    const path = sessionRelative(e.path)
+    state.read.push(path)
+    const refused = state.unreadable.get(path)
+
+    if (refused !== undefined) {
+      return { deny: refused } as never
+    }
+
+    const found = state.files[path]
+
+    return (found === undefined ? { deny: `ENOENT: no such file or directory, open '${e.path}'` } : { value: found }) as never
   })
   on('mcp.call', async ($, e) => {
     state.calls.push({ server: e.server, tool: e.tool, args: e.args })
@@ -373,7 +416,7 @@ export function world(on: On, options: { store?: Record<string, unknown> | null;
     return { value: { content: [{ type: 'text', text: JSON.stringify(value) }], isError: false } } as never
   }
 
-  return { ...state, clock, calls: state.calls, prompts: state.prompts, toasts: state.toasts, statuses: state.statuses, logs: state.logs, opens: state.opens, answers: state.answers, mode: state.mode, hang: state.hang, held: state.held, denied: state.denied, prompt: state.prompt }
+  return { ...state, clock, calls: state.calls, prompts: state.prompts, toasts: state.toasts, statuses: state.statuses, logs: state.logs, opens: state.opens, answers: state.answers, mode: state.mode, hang: state.hang, held: state.held, denied: state.denied, prompt: state.prompt, files: state.files, unreadable: state.unreadable, listed: state.listed, read: state.read }
 }
 
 export const SESSION = { cwd: '/work', surface: 'desktop', isInteractive: true } as const

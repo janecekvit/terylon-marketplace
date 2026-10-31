@@ -30,7 +30,8 @@ export const OWNER_ACTS: readonly string[] = [
 
 // Every tool the pane may call: what it reads, the five writes that decide nothing — a task, a goal, an answer to
 // the leader's question, a memory edit proposed, a notice handled (the owner decided on 2026-10-12, #360, that
-// notice_handle is not a gate) — and the owner's acts above. Never the gate.
+// notice_handle is not a gate) — a goal's specification read and revised and its re-plan (Terylon S53; goal_replan
+// only on the owner's press, its plan waiting for approval), and the owner's acts above. Never the gate.
 export const PANE_TOOLS: ReadonlySet<string> = new Set([
   'briefing',
   'work_in_flight',
@@ -50,6 +51,9 @@ export const PANE_TOOLS: ReadonlySet<string> = new Set([
   'question_answer',
   'memory_propose',
   'notice_handle',
+  'spec_get',
+  'spec_revise',
+  'goal_replan',
   ...OWNER_ACTS,
 ])
 

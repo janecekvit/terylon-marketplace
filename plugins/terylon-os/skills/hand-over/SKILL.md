@@ -17,5 +17,6 @@ allowed-tools: mcp__plugin_terylon-os_terylon__* mcp__terylon__* Read Grep Glob
 ## What binds it
 
 - **`tasks_add` proposes; it approves nothing.** The leader turns the task into a plan that waits for the owner's approval, given in the pane, the console or this session. `plan_approve` is the owner's act, called only on the owner's word — never to finish the job. Nor is `story_merge`: merge is the one gate, confirmed with the passkey in the console.
+- **A new goal can carry its own specification** (Terylon S53): `newGoal` takes `specification`, the .md files I name or you wrote, `[{name, text}]`, each whole, 1 to 10 and at most 200,000 characters in all, or `specificationFrom`, an earlier goal's number, instead. Terylon refuses a file holding a secret: relay a refusal word for word.
 - **The spec is version 1 of the story's specification** (`spec`, markdown), and the plan travels with it (`plan`, the steps in order). A later change goes through `spec_revise`, never a second `tasks_add`.
 - **A write answers when the leader has decided, within 10 s.** An answer of `accepted: null` carries a `commandId`: ask `leader_answer` with it rather than sending the task again.

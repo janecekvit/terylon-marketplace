@@ -31,7 +31,7 @@ test('the guard refuses every one of the owner\'s gates, and allows no gate in i
   }
 
   expect([...GATE_TOOLS].sort()).toEqual([...GATES].sort())
-  expect(() => assertPaneTool('spec_revise')).toThrow(/never calls/)
+  expect(() => assertPaneTool('story_order')).toThrow(/never calls/)
   expect(() => assertPaneTool('work_in_flight')).not.toThrow()
   expect(() => assertPaneTool('question_answer')).not.toThrow()
   expect(() => assertPaneTool('goal_add')).not.toThrow()
