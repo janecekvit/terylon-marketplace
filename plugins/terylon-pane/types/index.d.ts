@@ -226,7 +226,9 @@ export type PaneGoals = {
   open: PaneGoalItem[]
   closed: PaneGoalItem[]
   plans: PanePlan[]
+  // The new goal's title, short, and its ask, the request in the owner's own words, as goal_add takes them.
   draft: string
+  ask: string
   // The new goal's priority (1–4) and target, as goal_add takes them (S32).
   priority: string
   target: string

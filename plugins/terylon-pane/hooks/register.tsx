@@ -114,11 +114,14 @@ import type { Candidate, Signal, Verdict } from './signals'
 
 type Json = Record<string, unknown>
 
+// WHY THE PANE STARTS OVER: the head Terylon's reset answered with, or none where the epoch it sent was refused.
+type Reset = { from: number; head: number | null; refused: string | null }
+
 // The pane's id: ONE pane, the memory one of its tabs. No command the mod registers shares a skill's name: the skill would win (a node test holds it).
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.14.3'
+export const MOD_VERSION = '1.15.0'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -150,6 +153,8 @@ const PROMPT_REPEAT_MILLISECONDS = 60000
 const STORE_LAST_SEQ = 'lastSeq'
 // THE EVENT LOG'S IDENTITY, kept beside lastSeq: a sequence means something only within its epoch.
 const STORE_EPOCH = 'epoch'
+// HOW events_since REFUSES AN EPOCH IT CANNOT READ (a 400): the pane forgets the one it sent and starts over.
+const EPOCH_REFUSAL = /'epoch' is the log's identity as an earlier answer gave it/
 const STORE_LAST_SEEN_AT = 'lastSeenAt'
 const STORE_SIGNALLED = 'signalled'
 // THE SIGNALS HELD FOR A TURN'S END, kept before lastSeq moves past their events: a restart before the turn ends, or a
@@ -210,7 +215,7 @@ const EMPTY_POLICY_FORM: PanePolicyForm = { isEditing: false, values: {} }
 const DEFAULT_PRIORITY = '2'
 const OWN_LIST = 'list'
 
-const EMPTY_GOALS: PaneGoals = { phase: 'loading', sentence: null, open: [], closed: [], plans: [], draft: '', priority: DEFAULT_PRIORITY, target: OWN_LIST, targets: [], adding: 'idle', addSentence: null, showing: 'open', closedCount: 0, closedFrom: 'list', closedPhase: 'idle', closedSentence: null }
+const EMPTY_GOALS: PaneGoals = { phase: 'loading', sentence: null, open: [], closed: [], plans: [], draft: '', ask: '', priority: DEFAULT_PRIORITY, target: OWN_LIST, targets: [], adding: 'idle', addSentence: null, showing: 'open', closedCount: 0, closedFrom: 'list', closedPhase: 'idle', closedSentence: null }
 
 const EMPTY_BELL: PaneBell = { phase: 'loading', sentence: null, unhandledCount: 0, unhandled: [], handled: [], leader: { isPaused: false, text: '' }, metrics: [], handling: null, handleSentence: null }
 
@@ -713,15 +718,16 @@ async function keepEpoch($: EngineInterface, epoch: string | null): Promise<void
   }
 }
 
-// A BLANK EPOCH AN EARLIER VERSION WROTE is taken out of the store, so an unknown epoch is an absent key.
-async function forgetEpoch($: EngineInterface): Promise<void> {
-  keptInMemory.delete(STORE_EPOCH)
+// A KEY TAKEN OUT OF THE STORE: a blank epoch an earlier version wrote, so an unknown epoch is an absent key, or the
+// epoch and position a start over leaves behind.
+async function forget($: EngineInterface, key: string): Promise<void> {
+  keptInMemory.delete(key)
 
-  const answered = await storeCall($, () => $.store.delete(STORE_EPOCH))
+  const answered = await storeCall($, () => $.store.delete(key))
 
   if ('error' in answered) {
     storeRefusals += 1
-    await eventsFailed($, 'store', COPY.storeWriteFailed(STORE_EPOCH, answered.error))
+    await eventsFailed($, 'store', COPY.storeWriteFailed(key, answered.error))
   }
 }
 
@@ -831,7 +837,7 @@ function isReset(page: Json, since: number, epoch: string | null): boolean {
 }
 
 // Reads events_since from the stored position, page by page, up to `most` events; its epoch is sent once known.
-async function readEvents($: EngineInterface, since: number, epoch: string | null, most: number): Promise<{ events: Json[]; last: number; epoch: string | null; isWhole: boolean; reset: { from: number; head: number } | null } | null> {
+async function readEvents($: EngineInterface, since: number, epoch: string | null, most: number): Promise<{ events: Json[]; last: number; epoch: string | null; isWhole: boolean; reset: Reset | null } | null> {
   const events: Json[] = []
   let from = since
   let known = epoch
@@ -839,6 +845,13 @@ async function readEvents($: EngineInterface, since: number, epoch: string | nul
   for (;;) {
     debug($, `calling events_since since ${from}${known === null ? '' : ` in epoch ${known}`}`)
     const answered = await callTerylon($, 'events_since', known === null ? { since: from, limit: EVENTS_PAGE } : { since: from, epoch: known, limit: EVENTS_PAGE })
+
+    // AN EPOCH TERYLON CANNOT READ, refused every tick it is sent: forgotten, and the pane starts over from the head.
+    if (answered.kind === 'refused' && known !== null && (answered.status === 400 || answered.status === null) && EPOCH_REFUSAL.test(answered.sentence)) {
+      await eventsAnswered($)
+
+      return { events: [], last: from, epoch: null, isWhole: true, reset: { from, head: null, refused: known } }
+    }
 
     if (answered.kind !== 'ok') {
       await eventsRefused($, answered)
@@ -853,7 +866,7 @@ async function readEvents($: EngineInterface, since: number, epoch: string | nul
 
     // A RESET WINS OVER A GAP: the old history is gone, so nothing of it is summed up.
     if (isReset(page, from, known)) {
-      return { events: [], last: head ?? number(page.last) ?? 0, epoch: text(page.epoch), isWhole: true, reset: { from, head: head ?? number(page.last) ?? 0 } }
+      return { events: [], last: head ?? number(page.last) ?? 0, epoch: text(page.epoch), isWhole: true, reset: { from, head: head ?? number(page.last) ?? 0, refused: null } }
     }
 
     known = text(page.epoch) ?? known
@@ -1260,7 +1273,7 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
   const epoch = text(storedEpoch)
 
   if (storedEpoch !== undefined && storedEpoch !== null && epoch === null) {
-    await forgetEpoch($)
+    await forget($, STORE_EPOCH)
   }
   const lastSeenAt = number(await kept($, STORE_LAST_SEEN_AT))
   debug($, `the last look: sequence ${lastSeq ?? 'none'}, at ${lastSeenAt ?? 'never'}`)
@@ -1330,10 +1343,14 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
   await eventsRead($)
 }
 
-// TERYLON'S HISTORY WAS RESET: the pane goes on from the new epoch and head, tells nothing of the old history, and
-// forgets what it remembered of the stories in it. Said once, in the debug log and on the band.
-async function startOver($: EngineInterface, reset: { from: number; head: number }, epoch: string | null, now: number): Promise<void> {
-  debug($, `Terylon's history was reset (asked from ${reset.from}, its head is ${reset.head}); starting over`)
+// TERYLON'S HISTORY WAS RESET, or its epoch the pane kept was refused: the pane goes on from the new epoch and head,
+// tells nothing of the old history, and forgets what it remembered of the stories in it. Said once, in the debug log
+// and on the band. A refused epoch names no head: the epoch and the position are forgotten, and the next tick reads
+// the head without an epoch, as a first look does, and keeps the epoch it answers.
+async function startOver($: EngineInterface, reset: Reset, epoch: string | null, now: number): Promise<void> {
+  debug($, reset.head === null
+    ? `Terylon refused the epoch ${reset.refused ?? ''} (asked from ${reset.from}); starting over from its head`
+    : `Terylon's history was reset (asked from ${reset.from}, its head is ${reset.head}); starting over`)
   held.splice(0)
   heldToasted.splice(0)
   await keep($, STORE_HELD, [])
@@ -1343,12 +1360,19 @@ async function startOver($: EngineInterface, reset: { from: number; head: number
   deletedGoals.clear()
   deletedStories.clear()
   await keep($, STORE_SIGNALLED, [])
-  await keep($, STORE_LAST_SEQ, reset.head)
-  await keepEpoch($, epoch)
+
+  if (reset.head === null) {
+    await forget($, STORE_EPOCH)
+    await forget($, STORE_LAST_SEQ)
+  } else {
+    await keep($, STORE_LAST_SEQ, reset.head)
+    await keepEpoch($, epoch)
+  }
+
   await keep($, STORE_LAST_SEEN_AT, now)
 
   const base = await baseUrl($)
-  await update($, band, (): PaneBand => ({ text: `${COPY.resetHeading} · ${COPY.resetBody(String(reset.head))}`, link: consoleLink(base, 'history'), isAlert: false }))
+  await update($, band, (): PaneBand => ({ text: `${COPY.resetHeading} · ${reset.head === null ? COPY.resetRefusedBody : COPY.resetBody(String(reset.head))}`, link: consoleLink(base, 'history'), isAlert: false }))
   await eventsRead($)
 }
 
@@ -1637,6 +1661,7 @@ async function loadGoals($: EngineInterface): Promise<void> {
   await update($, goals, (current: PaneGoals): PaneGoals => ({
     ...EMPTY_GOALS,
     draft: typeof current?.draft === 'string' ? current.draft : '',
+    ask: typeof current?.ask === 'string' ? current.ask : '',
     priority: typeof current?.priority === 'string' ? current.priority : DEFAULT_PRIORITY,
     target: typeof current?.target === 'string' ? current.target : OWN_LIST,
     adding: current?.adding ?? 'idle',
@@ -1736,11 +1761,12 @@ function targetsOf(answer: Json): { value: string; label: string }[] {
   return [{ value: OWN_LIST, label: COPY.ownList }, ...[...new Set(named)].map(target => ({ value: target, label: target }))]
 }
 
-// A NEW GOAL: goal_add with its priority and target; the leader breaks it into a plan that waits for the owner in
-// the console.
+// A NEW GOAL: goal_add with its short title, its ask, its priority and target; the leader breaks it into a plan that
+// waits for the owner in the console. A blank ask is left out, never sent empty; Terylon checks both lengths.
 async function addGoal($: EngineInterface): Promise<void> {
   const form = await readGoals($)
   const title = form.draft.trim()
+  const ask = (typeof form.ask === 'string' ? form.ask : '').trim()
 
   if (title === '') {
     return
@@ -1749,7 +1775,12 @@ async function addGoal($: EngineInterface): Promise<void> {
   await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, adding: 'sending', addSentence: null }))
 
   const priority = Number(form.priority)
-  const answered = await callTerylon($, 'goal_add', { title, priority: Number.isInteger(priority) && priority >= 1 && priority <= 4 ? priority : Number(DEFAULT_PRIORITY), target: form.target === '' ? OWN_LIST : form.target })
+  const answered = await callTerylon($, 'goal_add', {
+    title,
+    ...(ask === '' ? {} : { ask }),
+    priority: Number.isInteger(priority) && priority >= 1 && priority <= 4 ? priority : Number(DEFAULT_PRIORITY),
+    target: form.target === '' ? OWN_LIST : form.target,
+  })
   const isAccepted = answered.kind === 'ok' && answered.value.accepted !== false
 
   await update($, goals, (current: PaneGoals): PaneGoals => ({
@@ -1759,6 +1790,7 @@ async function addGoal($: EngineInterface): Promise<void> {
       ? COPY.timeout(text(answered.value.commandId))
       : isAccepted ? COPY.goalAdded(why(answered)) : why(answered),
     draft: isAccepted ? '' : current.draft,
+    ask: isAccepted ? '' : current.ask,
   }))
 
   if (isAccepted) {
@@ -3989,7 +4021,12 @@ export const register: Register = on => {
           {shownPlans.map(plan => planCard(plan))}
           {goalsState.sentence !== null && goalsState.phase === 'ok' && reason(goalsState.sentence)}
           {hasInput && 'Input' in elements && cardOf('goal-new', COPY.newGoal, null, [
-            <elements.Input key="goal-draft" placeholder={COPY.newGoalPlaceholder} value={goalsState.draft} onInput={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, draft: value }))} onSubmit={() => addGoal($)} />,
+            // A SHORT TITLE, AND THE ASK IN THE OWNER'S OWN WORDS, as long as it needs: in rows where Desktop has proven a
+            // multi-line field (input-rows). Each with its helper line under it.
+            <elements.Input key="goal-draft" label={COPY.goalTitleLabel} value={goalsState.draft} onInput={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, draft: value }))} onSubmit={() => addGoal($)} />,
+            <Text color="subtle" size="footnote">{COPY.goalTitleHelp}</Text>,
+            <elements.Input key="goal-ask" label={COPY.goalAskLabel} value={goalsState.ask} rows={look.proofs.inputRows ? 4 : undefined} onInput={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, ask: value }))} onSubmit={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, ask: value }))} />,
+            <Text color="subtle" size="footnote">{COPY.goalAskHelp}</Text>,
             look.isGraphic && !look.isNarrow
               ? (
                   <Box key="goal-pickers" flexDirection="row" gap="sm">

@@ -206,6 +206,7 @@ export const COPY = {
   tooFarBody: (count: string) => `over ${count} events since the last look; a summary would not be whole`,
   resetHeading: 'Terylon started over',
   resetBody: (head: string) => `its history was reset; the pane goes on from event ${head}, nothing before is caught up`,
+  resetRefusedBody: "it refused the epoch the pane kept; the pane goes on from Terylon's head, nothing before is caught up",
 
   // THE DONE-SIGNAL STOPPED: events_since, or the store that keeps the pane's place, failed. Each kind says its fix.
   eventsNotAllowedTitle: "Claude Code refused the done-signal's call",
@@ -362,7 +363,11 @@ export const COPY = {
   noPlans: 'No plan waits.',
   plans: 'Plans',
   newGoal: 'New goal',
-  newGoalPlaceholder: 'What you want done…',
+  // The new goal's two fields: a short title, at most 200 characters, and its ask, at most 4000 (goal_add).
+  goalTitleLabel: 'Title',
+  goalTitleHelp: 'A short name: up to 200 characters.',
+  goalAskLabel: 'What should it do?',
+  goalAskHelp: 'In your own words, as long as you need. The leader plans from it and asks if anything is unclear.',
   addGoal: 'Add goal',
   // The new goal's pickers (S32), over goal_add's priority (1–4, 2 when none is given) and target.
   priority: 'Priority',
