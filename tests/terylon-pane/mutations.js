@@ -996,8 +996,8 @@ const MUTATIONS = [
     {
         name: "a blank epoch an earlier version wrote is left in the store",
         file: "hooks/register.tsx",
-        find: "    await forgetEpoch($)\n",
-        replace: "",
+        find: "  if (storedEpoch !== undefined && storedEpoch !== null && epoch === null) {\n    await forget($, STORE_EPOCH)\n",
+        replace: "  if (storedEpoch !== undefined && storedEpoch !== null && epoch === null) {\n",
     },
     {
         name: "a done-signal's key is recorded though its prompt did not enter the session",
@@ -1220,6 +1220,24 @@ const MUTATIONS = [
         file: "hooks/register.tsx",
         find: "<Text color=\"text\" weight=\"semibold\">{COPY.noGoal}</Text>",
         replace: "<Text color=\"warning\">{COPY.noGoal}</Text>",
+    },
+    {
+        name: "a goal's ask is not sent with goal_add",
+        file: "hooks/register.tsx",
+        find: "    ...(ask === '' ? {} : { ask }),\n",
+        replace: "",
+    },
+    {
+        name: "the new goal's ask loses its helper line",
+        file: "hooks/register.tsx",
+        find: "            <Text color=\"subtle\" size=\"footnote\">{COPY.goalAskHelp}</Text>,\n",
+        replace: "",
+    },
+    {
+        name: "an epoch events_since refused no longer starts the pane over",
+        file: "hooks/register.tsx",
+        find: "    if (answered.kind === 'refused' && known !== null && (answered.status === 400 || answered.status === null) && EPOCH_REFUSAL.test(answered.sentence)) {\n",
+        replace: "    if (false) {\n",
     },
 ];
 

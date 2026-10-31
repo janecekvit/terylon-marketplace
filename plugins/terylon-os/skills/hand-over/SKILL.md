@@ -12,7 +12,7 @@ allowed-tools: mcp__plugin_terylon-os_terylon__* mcp__terylon__* Read Grep Glob
 
 > Take this story from me to the leader: {the story, as the owner said it}
 >
-> First write its specification with me, as markdown: the problem, what changes, the acceptance criteria one per line, the files it touches, and what is out of scope. Read the code for what you can; ask me, one question at a time, for what you cannot. Then write the plan: its steps, in order. Show me both and wait for my word. Then hand it over with tasks_add — one task with the title, a brief, the criteria, the files, the size (S, M, L or XL), the spec and the plan, under the goal I name (goals_list) or a new one, after the stories it must wait for. Tell me the leader's answer and that its plan waits in plans_list for me to approve in the console.
+> First write its specification with me, as markdown: the problem, what changes, the acceptance criteria one per line, the files it touches, and what is out of scope. Read the code for what you can; ask me, one question at a time, for what you cannot. Then write the plan: its steps, in order. Show me both and wait for my word. Then hand it over with tasks_add — one task with the title, a brief, the criteria, the files, the size (S, M, L or XL), the spec and the plan, under the goal I name (goals_list) or a new one — `newGoal` with a short title, at most 200 characters, and its `ask`, the request in my words, at most 4000 — after the stories it must wait for. Tell me the leader's answer and that its plan waits in plans_list for me to approve in the console.
 
 ## What binds it
 

@@ -19,7 +19,7 @@ The owner of a Terylon, in any Claude Code session that can reach it over the ta
 | `briefing` | `briefing` | what waits on the owner |
 | `hand-over` | `hand-over` | a story from a rough idea to a specification, a plan, and `tasks_add` |
 | `merge-gate` | `merge-gate` | a verified story's evidence, then merge or return |
-| `add-goal` | `goal` | a goal in one sentence — a general direction, a concrete ask steered to a task under a goal — to `goal_add` |
+| `add-goal` | `goal` | a goal in one sentence — a general direction, a concrete ask steered to a task under a goal — to `goal_add`, a short title and the request whole as `ask` |
 | `review-plan` | `plan-review` | a plan at the plan gate |
 | `show-story` | `story` | one story in flight |
 

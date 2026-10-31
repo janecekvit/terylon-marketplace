@@ -5,7 +5,7 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { HOUR, SESSION, events, storyMoved, world } from './fixtures'
+import { HOUR, PANE_PROPS, SESSION, events, exact, refusal, storyMoved, world } from './fixtures'
 
 const OLD_SEQ = 2483
 const NEW_HEAD = 5
@@ -256,5 +256,78 @@ for (const stored of [undefined, '']) {
     expect(written.filter(entry => entry.key === 'epoch')).toEqual([])
     expect(kept.has('epoch')).toBe(false)
     expect(resetLines(terylon)).toEqual([])
+  })
+}
+
+// AN EPOCH TERYLON CANNOT READ: events_since refuses it with a 400 on every tick it is sent, so the pane forgets it
+// and starts over as on a reset; any other refusal keeps the epoch and says what failed.
+const EPOCH_REFUSED = "'epoch' is the log's identity as an earlier answer gave it."
+const BAD_EPOCH = 'not-a-guid'
+const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
+
+function refusing(terylon: ReturnType<typeof world>, other: Record<string, unknown> | null, log: { head: number; moved: Record<string, unknown>[] }): void {
+  terylon.answers.events_since = (args: Record<string, unknown>) => {
+    if (args.epoch === BAD_EPOCH) {
+      return other ?? refusal(EPOCH_REFUSED, 400)
+    }
+
+    const since = Number(args.since)
+
+    return { ...events(since, log.moved.filter(event => Number(event.seq) > since), log.head), epoch: NEW_EPOCH }
+  }
+}
+
+test('A REFUSED EPOCH is forgotten: the pane starts over, the next tick asks for the head with no epoch, and the done-signal works again', async ($, on) => {
+  const terylon = world(on, { store: { lastSeq: 18100, epoch: BAD_EPOCH, signalled: [OLD_SIGNAL], lastSeenAt: Date.parse('2026-10-11T21:59:00Z') } })
+  const log = { head: 18120, moved: [] as Record<string, unknown>[] }
+  refusing(terylon, null, log)
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  expect(eventsCalls(terylon)).toEqual([{ since: 18100, epoch: BAD_EPOCH, limit: 500 }])
+  expect(terylon.prompts).toEqual([])
+  expect(terylon.toasts).toEqual([])
+  expect(terylon.logs.filter(entry => entry.to === 'debug' && entry.text.includes('refused the epoch')).map(entry => entry.text)).toEqual([`terylon-pane: events: Terylon refused the epoch ${BAD_EPOCH} (asked from 18100); starting over from its head`])
+  expect(await bandText($)).toBe("Terylon started over · it refused the epoch the pane kept; the pane goes on from Terylon's head, nothing before is caught up")
+
+  // A start over, not a failure: the Status tab names no stopped done-signal.
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'tab-status' })
+  expect(await ui.find({ type: 'Text', text: exact('⚠ The done-signal stopped') })).toBeUndefined()
+  await ui.unmount()
+
+  // The next tick reads the head with no epoch and tells nothing; the one after sends the epoch it was told.
+  log.moved = [storyMoved(18110, 341, 'S10a cleanup', 'merged', 'merged')]
+  await terylon.clock.advance(30000)
+  expect(eventsCalls(terylon).at(-1)).toEqual({ since: 0, limit: 1 })
+  expect(terylon.prompts).toEqual([])
+  await terylon.clock.advance(30000)
+  expect(eventsCalls(terylon).at(-1)).toEqual({ since: 18120, epoch: NEW_EPOCH, limit: 500 })
+
+  // Story 327 at the commit told before: the signals told before were forgotten, so it is told again, once.
+  log.moved = [storyMoved(18121, 327, 'Events since the last look', 'verified')]
+  log.head = 18121
+  await terylon.clock.advance(30000)
+  expect(terylon.prompts).toHaveLength(1)
+  expect(terylon.prompts[0]).toStartWith('Story #327')
+  await terylon.clock.advance(30000)
+  expect(terylon.prompts).toHaveLength(1)
+})
+
+for (const other of [refusal('The leader is not answering.', 503), refusal("'limit' is 1 to 500.", 400)]) {
+  test(`ANY OTHER REFUSAL of events_since (${String(other.refused)}) keeps the epoch and says the done-signal stopped`, async ($, on) => {
+    const terylon = world(on, { store: { lastSeq: 18100, epoch: BAD_EPOCH, lastSeenAt: Date.parse('2026-10-11T21:59:00Z') } })
+    refusing(terylon, other, { head: 18120, moved: [] })
+    await $.session.start(SESSION)
+    await terylon.clock.settle()
+    await terylon.clock.advance(30000)
+
+    expect(eventsCalls(terylon)).toEqual([{ since: 18100, epoch: BAD_EPOCH, limit: 500 }, { since: 18100, epoch: BAD_EPOCH, limit: 500 }])
+    expect(await bandText($)).toBeUndefined()
+
+    const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    await ui.press({ key: 'tab-status' })
+    expect(await ui.find({ type: 'Text', text: exact('⚠ The done-signal stopped') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact(`Reason: ${String(other.refused)}`) })).toBeDefined()
   })
 }
