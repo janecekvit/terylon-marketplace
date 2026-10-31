@@ -101,6 +101,9 @@ export type PaneScreen =
   | { screen: 'question'; question: number }
   | { screen: 'plan'; plan: number }
   | { screen: 'goal'; goal: number }
+  // ONE VERSION OF A GOAL'S SPECIFICATION, read-only (Terylon S53): the latest when `version` is null, one file of it
+  // when `file` names one.
+  | { screen: 'spec'; goal: number; version: number | null; file: string | null }
 
 // Where the pane is, and the way back: the last entry is drawn, ‹ pops it, a tab starts the stack over.
 export type PaneView = { stack: PaneScreen[] }
@@ -260,6 +263,56 @@ export type PaneGoal = {
   openStories: { id: number; title: string; isRunning: boolean }[]
   // A REPEATING TASK'S GOAL (Terylon S43): its card replaces the stories card. Absent in a value an older version stored.
   repeating?: PaneRepeating | null
+  // ITS SPECIFICATION (Terylon S53), from goal_get: null where it has none. Absent in a value an older version stored.
+  specification?: PaneSpecification | null
+}
+
+// A goal's specification as goal_get answers it, shaped for its card: the latest version, its files with their sizes,
+// the older versions, the re-plan the leader offers, and the owner's decisions on earlier plans, one line each.
+export type PaneSpecification = {
+  version: number
+  revised: string
+  files: { name: string; size: string }[]
+  older: number[]
+  replan: { from: number; to: number } | null
+  decisions: string[]
+}
+
+// A .md file the owner can attach, as $.fs.list answered it: its name, the path it is read from, its size in bytes.
+export type PaneSpecFile = { name: string; path: string; bytes: number }
+
+// The folder list a specification is picked from: the folder typed, the one listed, its .md files, and those attached.
+export type PaneSpecPicker = {
+  folder: string
+  listedFolder: string
+  phase: 'idle' | 'loading' | 'ok' | 'error'
+  sentence: string | null
+  listed: PaneSpecFile[]
+  attached: PaneSpecFile[]
+}
+
+// REVISING A GOAL'S SPECIFICATION: the version it is based on, its files kept whole, and the files added from a folder.
+// `problem` is the pane's own sentence or Terylon's refusal; `sentence` Terylon's answer once the version is saved.
+export type PaneRevise = {
+  goal: number
+  basedOn: number
+  phase: 'loading' | 'failed' | 'editing' | 'saving' | 'saved'
+  kept: { name: string; text: string }[]
+  picker: PaneSpecPicker
+  problem: string | null
+  sentence: string | null
+}
+
+// ONE VERSION OF A SPECIFICATION, read with spec_get to be drawn read-only.
+export type PaneSpecView = {
+  goal: number
+  version: number | null
+  file: string | null
+  phase: 'loading' | 'ok' | 'error'
+  sentence: string | null
+  shown: number | null
+  revised: string
+  files: { name: string; text: string }[]
 }
 
 // One run of a repeating task, newest first: its day in the host's time zone, its state in words and that state's tone,
@@ -343,6 +396,9 @@ declare module 'claude-code' {
       acts: Record<string, PaneAct>
       policyForm: PanePolicyForm
       rulesAsked: boolean
+      specPicker: PaneSpecPicker
+      revise: PaneRevise | null
+      specView: PaneSpecView | null
     }
   }
 }

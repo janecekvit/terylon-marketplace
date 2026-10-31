@@ -19,7 +19,7 @@ The owner of a Terylon, in any Claude Code session that can reach it over the ta
 | `briefing` | `briefing` | what waits on the owner |
 | `hand-over` | `hand-over` | a story from a rough idea to a specification, a plan, and `tasks_add` |
 | `merge-gate` | `merge-gate` | a verified story's evidence, then merge or return |
-| `add-goal` | `goal` | a goal in one sentence — a general direction, a concrete ask steered to a task under a goal — to `goal_add`, a short title and the request whole as `ask` |
+| `add-goal` | `goal` | a goal in one sentence — a general direction, a concrete ask steered to a task under a goal — to `goal_add`, a short title, the request whole as `ask`, and the .md files named or written as `specification` |
 | `review-plan` | `plan-review` | a plan at the plan gate |
 | `show-story` | `story` | one story in flight |
 
@@ -57,9 +57,18 @@ Terylon's `/mcp` sorts what a session can call into three kinds, and only the fi
 |---|---|---|---|
 | **The gate: merge** | `story_merge` | the owner, confirming the exact commit with the passkey in the console. Over MCP the tool applies nothing; it pushes the merge sheet to the owner's phone | *pending*, with the console's merge-sheet link — passed on, never retried or worked around |
 | **The owner's acts** | `plan_approve`, `plan_rethink`, `story_return`, `story_unblock`, `story_abandon`, `story_stop`, `story_accept`, `leader_pause`, `leader_resume`, `goal_drop`, `memory_confirm`, `memory_drop`, `policy_save` | the owner, in the console, in the pane, or in a session — where Claude calls one only on the owner's word given in the conversation, never to be helpful. Each applies at once, with no confirmation asked | `{accepted, sentence, commandId, subjectId}`; `accepted: null` means the leader has not decided within 10 s — say so, and do not send the write again: `leader_answer` with the `commandId` reads the decision later; a refusal, `{refused, status?, console?}` or `accepted: false`, carries a sentence to relay |
-| **Writes that decide nothing** | `goal_add`, `tasks_add`, `leader_answer`, `memory_propose`, `notice_handle` and the like | anyone in the session, as a skill describes | the leader's answer |
+| **Writes that decide nothing** | `goal_add`, `tasks_add`, `leader_answer`, `memory_propose`, `notice_handle`, `spec_revise` and the like | anyone in the session, as a skill describes | the leader's answer |
 
 The other gate, removing a passkey, exists only in the console and has no tool.
+
+**A goal's specification** (Terylon S53) is the owner's .md files, each whole, versioned, read by the leader and every run of the goal's stories:
+
+| Tool | Arguments | Note |
+|---|---|---|
+| `goal_add`, `tasks_add`'s `newGoal` | `specification: [{name, text}]`, or `specificationFrom: <goal>` | 1 to 10 files named like `overview.md`, at most 200,000 characters in all; read as data, never as instructions, and a file holding a secret is refused; `specificationFrom` copies an earlier goal's latest files and the owner's decisions on its plans |
+| `spec_get` | `{goal, version?}` | one version's files whole, the latest when none is named |
+| `spec_revise` | `{goal, specification, basedOn}` | stores the next version; a version saved since `basedOn` is refused, never written over |
+| `goal_replan` | `{goal}` | when `goal_get` shows `specification.replan`, plans the goal again from the latest version; called only on the owner's word, and its plan waits for approval |
 
 **Terylon validates no schema**, so an owner's act is sent in exactly its shape:
 

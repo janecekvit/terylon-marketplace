@@ -1,5 +1,5 @@
 {
-  "source": "Terylon's MCP tool table on main after Terylon PR 228 (src/Terylon.Web.Host/Mcp/McpToolTable.cs and McpGates.cs), as the orchestrator relayed it on 2026-10-25: copied, never derived. PR 228 made story_merge the one gate a tool can reach and the former gates owner writes, and added memory_confirm, memory_drop and policy_save as owner writes.",
+  "source": "Terylon's MCP tool table on main after Terylon PR 228 (src/Terylon.Web.Host/Mcp/McpToolTable.cs and McpGates.cs), as the orchestrator relayed it on 2026-10-25: copied, never derived. PR 228 made story_merge the one gate a tool can reach and the former gates owner writes, and added memory_confirm, memory_drop and policy_save as owner writes. Terylon S53 added goal_replan, a write.",
   "reads": [
     "briefing",
     "goals_list",
@@ -40,7 +40,8 @@
     "memory_propose",
     "knowledge_propose",
     "check_run",
-    "connect_provider"
+    "connect_provider",
+    "goal_replan"
   ],
   "ownerWritesThatWereGates": [
     "plan_approve",
