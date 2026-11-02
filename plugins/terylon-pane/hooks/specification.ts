@@ -130,7 +130,7 @@ export function specificationOf(goal: Json, now: number, zone: Zone = 0): PaneSp
       .map(file => ({ name: file.name, size: file.characters === null ? '?' : charactersText(file.characters) })),
     older: [...new Set(older)].sort((first, second) => second - first),
     replan: from === null || to === null ? null : { from, to },
-    decisions: list(goal.decisions).map(decision => COPY.specDecision(number(decision.plan) ?? 0, dayOf(decision.at, now, zone), text(decision.comment))),
+    decisions: list(goal.decisions).map(decision => COPY.specDecision(text(decision.planRef) ?? String(number(decision.plan) ?? 0), dayOf(decision.at, now, zone), text(decision.comment))),
   }
 }
 

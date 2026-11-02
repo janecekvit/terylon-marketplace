@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
-import { GATES, PANE_PROPS, SESSION, exact, world } from './fixtures'
+import { GATES, PANE_PROPS, SESSION, exact, openMemoryTab, world } from './fixtures'
 
 const MEMORY_MOUNT = { plugin: 'terylon-pane', surface: 'desktop', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -24,10 +24,10 @@ test("the Memory tab shows the leader's memory as stored, a card per file, and t
   expect((await memory.find({ type: 'Text', text: exact('+ Merge zůstává za passkey.') }))?.props.color).toBe('success')
   expect((await memory.find({ key: 'act-proposal-5-confirm' }))?.props.label).toBe('Confirm')
   expect(await memory.find({ type: 'Link', text: 'Confirm in the console ↗' })).toBeUndefined()
-  expect((await memory.find({ type: 'Link', text: "Versions, roll-back and dropped proposals stay in the console's memory browser ↗" }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=memory')
+  expect((await memory.find({ type: 'Link', text: "Versions, roll-back and dropped proposals stay in the console's memory browser ↗" }))?.props.href).toBe('https://terylon.example.ts.net/?view=memory')
   expect(await memory.find({ type: 'Text', text: exact('Proposed in this session') })).toBeDefined()
   expect(await memory.find({ type: 'Text', text: exact('Nothing yet.') })).toBeDefined()
-  expect(await memory.find({ type: 'Text', text: exact('/terylon-pane · /terylon-memory') })).toBeDefined()
+  expect(await memory.find({ type: 'Text', text: exact('/terylon-cockpit') })).toBeDefined()
 
   const cards = (await memory.findAll({ type: 'Box' })).filter(box => box.props.borderStyle === 'round')
   expect(cards.length).toBeGreaterThanOrEqual(3)
@@ -38,7 +38,7 @@ test('memory entries stay in the language they were stored in, English included'
   terylon.answers.memory_get = { files: [{ file: 'owner', kind: 'owner', entries: ['Writes Czech; code in English.'] }], proposals: [] }
   await $.session.start(SESSION)
   await terylon.clock.settle()
-  await $.command.run({ command: 'terylon-memory', args: '' } as never).catch(() => undefined)
+  await openMemoryTab($ as never)
 
   const memory = await $.ui.mount(MEMORY_MOUNT)
   expect(await memory.find({ type: 'Text', text: exact('Writes Czech; code in English.') })).toBeDefined()
@@ -50,7 +50,7 @@ test('a topic opens in place; its first line until pressed', async ($, on) => {
   terylon.answers.memory_get = { files: [{ file: 'topic:terylon/deploy', kind: 'topic', text: 'First line.\nSecond line.' }], proposals: [] }
   await $.session.start(SESSION)
   await terylon.clock.settle()
-  await $.command.run({ command: 'terylon-memory', args: '' } as never).catch(() => undefined)
+  await openMemoryTab($ as never)
 
   const memory = await $.ui.mount(MEMORY_MOUNT)
   expect(await memory.find({ type: 'Text', text: exact('First line.') })).toBeDefined()
@@ -62,7 +62,7 @@ test('an edit is a proposal: memory_propose with the old and new text and why, t
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
-  await $.command.run({ command: 'terylon-memory', args: '' } as never).catch(() => undefined)
+  await openMemoryTab($ as never)
 
   const memory = await $.ui.mount(MEMORY_MOUNT)
   await memory.press({ key: 'mem-edit-0-0' })
@@ -92,7 +92,7 @@ test('a removal proposes remove with the old text; a refusal is shown in the gat
   terylon.answers.memory_propose = undefined
   await $.session.start(SESSION)
   await terylon.clock.settle()
-  await $.command.run({ command: 'terylon-memory', args: '' } as never).catch(() => undefined)
+  await openMemoryTab($ as never)
 
   const memory = await $.ui.mount(MEMORY_MOUNT)
   await memory.press({ key: 'mem-remove-0-1' })
@@ -115,7 +115,7 @@ test('the rules the machine enforces: each one line with who enforces it, presse
   }
   await $.session.start(SESSION)
   await terylon.clock.settle()
-  await $.command.run({ command: 'terylon-memory', args: '' } as never)
+  await openMemoryTab($ as never)
 
   for (const surface of ['desktop', 'terminal'] as const) {
     const memory = await $.ui.mount({ ...MEMORY_MOUNT, surface })

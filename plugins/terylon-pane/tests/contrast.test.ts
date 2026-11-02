@@ -7,16 +7,19 @@
 import { test, expect } from 'claude-code/testing'
 
 import { CHIP_BACKGROUND, CHIP_WORD } from '../hooks/drawing'
+import { KIND_TONES, TONE_KEYS, WARNING_LIGHT, markOf, wordOf } from '../hooks/tones'
+import type { WordTone } from '../hooks/tones'
 
 import { MARK_RATIO, PALETTE, TEXT_RATIO, contrast, inks, strokedCards } from './contrast'
 import type { Ink, Theme } from './contrast'
 import { BRIEFING, FLIGHT, GOAL_QUESTION, MEMORY, NARROW_PANE_PROPS, PANE_PROPS, SESSION, bandProps, refusal, world } from './fixtures'
+import { SETUP_BRIEFING, SETUP_FLIGHT, SETUP_STORIES } from './shapes'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
 const THEMES: Theme[] = ['dark', 'light']
 
-const GATUS = { id: 117, source: 'gatus', title: 'the page is not well', body: 'gatus says it stopped answering; check the container.', key: 'gatus:answering/the-page', link: '/?cockpit=bell', raisedAt: '2026-10-11T07:26:21Z', handledAt: null }
+const GATUS = { id: 117, source: 'gatus', title: 'the page is not well', body: 'gatus says it stopped answering; check the container.', key: 'gatus:answering/the-page', link: '/?view=waiting&notices=open', raisedAt: '2026-10-11T07:26:21Z', handledAt: null }
 
 // What reads below its threshold, in which theme: empty when every word and mark on these cards reads.
 function unreadable(found: readonly Ink[]): string[] {
@@ -42,6 +45,32 @@ test('the palette: a chip\'s word reads on the chip grey in both themes; amber t
   // Why no word on a card that waits is amber: the canvas's own light amber reads 4.08:1 on white.
   expect(contrast('warning', 'background', 'light')).toBeLessThan(TEXT_RATIO)
   expect(Object.keys(PALETTE.dark).sort()).toEqual(Object.keys(PALETTE.light).sort())
+})
+
+// THE TONES (Terylon S68; Design · Tokens, 3.1): each tone of Terylon's glossary is one theme key of the host's. Purple is
+// the gate, green is done; amber is only ever a mark or a stroke, its word ink at semibold. Every tone's mark reads at
+// 3:1 on the pane and on a chip, every tone's word at 4.5:1, in both themes.
+const TONES: WordTone[] = ['ok', 'wait', 'bad', 'run', 'gate', 'quiet']
+
+test('the tones: the gate purple, done green, a warning a mark alone at #b56d00, every word and mark readable', () => {
+  expect(TONE_KEYS).toEqual({ ok: 'success', wait: 'warning', bad: 'error', run: 'suggestion', gate: 'merged', quiet: 'subtle' })
+  expect(WARNING_LIGHT).toBe('#b56d00')
+  expect(PALETTE.light.warning).toBe(WARNING_LIGHT)
+  expect(wordOf('wait')).toEqual({ color: 'text', weight: 'semibold' })
+  expect(TONES.map(tone => wordOf(tone).color)).not.toContain('warning')
+
+  // WHAT WAITS ON THE OWNER'S MERGE, ACCEPTANCE OR APPROVAL IS THE GATE; WHAT ENDED WELL IS DONE.
+  expect([KIND_TONES.merge, KIND_TONES.accept, KIND_TONES.plan]).toEqual(['gate', 'gate', 'gate'])
+  expect([KIND_TONES.merged, KIND_TONES.accepted]).toEqual(['ok', 'ok'])
+  expect(KIND_TONES.question).toBe('wait')
+
+  for (const theme of THEMES) {
+    for (const tone of TONES) {
+      expect(contrast(markOf(tone), 'background', theme)).toBeGreaterThanOrEqual(MARK_RATIO)
+      expect(contrast(markOf(tone), CHIP_BACKGROUND, theme)).toBeGreaterThanOrEqual(MARK_RATIO)
+      expect(contrast(wordOf(tone).color, 'background', theme)).toBeGreaterThanOrEqual(TEXT_RATIO)
+    }
+  }
 })
 
 for (const surface of ['desktop', 'terminal'] as const) {
@@ -91,7 +120,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
     await ui.press({ key: 'story-333' })
     await look()
 
-    expect(seen.map(ink => ink.text)).toEqual(expect.arrayContaining(['the page is not well', 'Bell in the console ↗', 'Approve starts both stories as the plan orders them.', 'Edit criteria or pick stories in the console ↗', 'notices_list', 'Question from the run', 'Answer in the console ↗']))
+    expect(seen.map(ink => ink.text)).toEqual(expect.arrayContaining(['the page is not well', 'Notices in the console ↗', 'Approve starts both stories as the plan orders them.', 'Edit criteria or pick stories in the console ↗', 'notices_list', 'Question from the run', 'Answer in the console ↗']))
     // The alert's title on its problem card in `error`; as a row on the Bell, a title in `text`.
     expect(seen.filter(ink => ink.text === 'the page is not well').map(ink => ink.color)).toEqual(['error', 'text'])
     expect(unreadable(seen)).toEqual([])
@@ -148,7 +177,8 @@ for (const surface of ['desktop', 'terminal'] as const) {
     await ui.press({ key: 'act-story-329-unblock' })
     terylon.mode.server = 'up'
     await look()
-    await $.command.run({ command: 'terylon-memory', args: '' } as never)
+    await ui.press({ key: 'back' })
+    await ui.press({ key: 'tab-memory' })
     await look()
 
     expect(seen.map(ink => ink.text)).toEqual(expect.arrayContaining(['Blocked', 'Abandon…', '✗ Refused (409)', 'Story 329 is running; only a blocked story is unblocked.', '⚠', "Claude Code refused the pane's call to story_unblock", 'Old text.', 'New text.']))
@@ -257,6 +287,16 @@ const WALKS: Walked[] = [
     },
     paths: [['tab-goals', 'goal-12']],
     words: [/^(· )?red · waits for you$/, /^(· )?green · waits for you$/],
+  },
+  {
+    name: 'the setup token: its tokens and the phrase, on Waiting, a story and Health',
+    set: terylon => {
+      terylon.answers.briefing = SETUP_BRIEFING
+      terylon.answers.work_in_flight = SETUP_FLIGHT
+      terylon.answers.stories_list = SETUP_STORIES
+    },
+    paths: [['tab-queue', 'story-333'], ['tab-status']],
+    words: [/cost not known/],
   },
   {
     name: 'a new task with no open goal to add it to',

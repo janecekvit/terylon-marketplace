@@ -147,10 +147,10 @@ const MUTATIONS = [
         replace: "onPress={() => openPane($, QUEUE)} />",
     },
     {
-        name: "/terylon-memory opens a second pane",
+        name: "/terylon-cockpit opens a second pane",
         file: "hooks/register.tsx",
-        find: "    await openPane($, { screen: 'memory' })\n",
-        replace: "    await $.ui.open({ id: 'terylon-memory', title: 'Memory' })\n",
+        find: "    await openPane($, QUEUE)\n\n    return { text: 'Terylon Cockpit is open.' }\n",
+        replace: "    await $.ui.open({ id: 'terylon-cockpit', title: 'Terylon Cockpit' })\n\n    return { text: 'Terylon Cockpit is open.' }\n",
     },
     // S24 (#360): the live run, the bell handled from the pane, and its count on the band.
     {
@@ -168,7 +168,7 @@ const MUTATIONS = [
     {
         name: "the band drops the bell's count",
         file: "hooks/register.tsx",
-        find: "              ...pair(COPY.bandBell, String(current.notices), current.notices > 0 ? 'attention' : 'inactive'),\n              ...(current.alerts",
+        find: "              ...pair(COPY.bandNotices, String(current.notices), current.notices > 0 ? 'attention' : 'inactive'),\n              ...(current.alerts",
         replace: "              ...(current.alerts",
     },
     {
@@ -211,7 +211,7 @@ const MUTATIONS = [
     {
         name: "a verified story's merge becomes a button",
         file: "hooks/register.tsx",
-        find: "            {shownStory.isVerified && !shownStory.isList && <Link href={consoleLink(base, `merge&story=${shownStory.story}`)} label={COPY.mergeInConsole} />}\n",
+        find: "            {shownStory.isVerified && !shownStory.isList && <Link href={storyLink(base, 'merge', storyRef, shownStory.story)} label={COPY.mergeInConsole} />}\n",
         replace: "            {shownStory.isVerified && !shownStory.isList && <Button key=\"act-story-merge\" label=\"Merge\" onPress={() => undefined} />}\n",
     },
     {
@@ -367,7 +367,7 @@ const MUTATIONS = [
     {
         name: "a card that waits for the owner loses its coloured stroke",
         file: "hooks/register.tsx",
-        find: "  const toneKey = tone === 'wait' ? 'warning' : tone === 'bad' ? 'error' : 'subtle'\n",
+        find: "  const toneKey = CARD_STROKES[tone]\n",
         replace: "  const toneKey = 'subtle'\n",
     },
     {
@@ -765,8 +765,8 @@ const MUTATIONS = [
     {
         name: "the Status tab no longer says in the debug log what it draws",
         file: "hooks/register.tsx",
-        find: "        note($, `terylon-pane: the Status tab draws ",
-        replace: "        void (`terylon-pane: the Status tab draws ",
+        find: "        note($, `terylon-pane: Health draws ",
+        replace: "        void (`terylon-pane: Health draws ",
     },
     {
         name: "the pane's own log is no longer drawn on the Queue tab",
@@ -783,8 +783,8 @@ const MUTATIONS = [
     {
         name: "the Status tab no longer says in its log that a draw began",
         file: "hooks/register.tsx",
-        find: "      note($, `terylon-pane: the Status tab begins on ",
-        replace: "      void (`terylon-pane: the Status tab begins on ",
+        find: "      note($, `terylon-pane: Health begins on ",
+        replace: "      void (`terylon-pane: Health begins on ",
     },
     {
         name: "a reason is drawn with its control characters again",
@@ -903,8 +903,8 @@ const MUTATIONS = [
     {
         name: "one offset for every run: a run is drawn in today's offset",
         file: "hooks/queue.ts",
-        find: "  // EACH MOMENT IN ITS OWN OFFSET: a run from before a change of clocks keeps its hour, and today is today's.\n  const local = new Date(at - offsetAt(zone, at) * 60000)\n",
-        replace: "  // EACH MOMENT IN ITS OWN OFFSET: a run from before a change of clocks keeps its hour, and today is today's.\n  const local = new Date(at - offsetAt(zone, now) * 60000)\n",
+        find: "  return `${words.date(at, zone).replace(/ \\d{4}$/, '')} ${words.clock(at, zone)}`\n",
+        replace: "  return `${words.date(at, zone).replace(/ \\d{4}$/, '')} ${words.clock(at, offsetAt(zone, now))}`\n",
     },
     {
         name: "one offset for every time: clock draws a moment in the offset of no moment of its own",
@@ -915,8 +915,8 @@ const MUTATIONS = [
     {
         name: "a version plan waits on the Queue as 0 stories again",
         file: "hooks/queue.ts",
-        find: "    const taskVersion = taskVersionOf(plan)\n    items.push({\n",
-        replace: "    const taskVersion = null as { version: string | null } | null\n    items.push({\n",
+        find: "    const taskVersion = taskVersionOf(plan)\n    const label = text(plan.ref) ?? String(id)\n",
+        replace: "    const taskVersion = null as { version: string | null; title: string | null; terms: string | null } | null\n    const label = text(plan.ref) ?? String(id)\n",
     },
     {
         name: "a version plan's card says it starts all 0 stories again",
@@ -1086,14 +1086,14 @@ const MUTATIONS = [
     {
         name: "a History row no longer ends with Delete…",
         file: "hooks/register.tsx",
-        find: "                trail: isClosedShown ? { href: deleteLink(base, item.id), label: COPY.deleteInConsole } : null,\n",
+        find: "                trail: isClosedShown ? { href: deleteLink(base, item.id, item.ref ?? null), label: COPY.deleteInConsole } : null,\n",
         replace: "                trail: null,\n",
     },
     {
         name: "Delete… no longer opens the goal's Delete… sheet in History",
         file: "hooks/queue.ts",
-        find: "  return consoleLink(base, `goals&tab=history&goal=${encodeURIComponent(String(goal))}&sheet=delete`)\n",
-        replace: "  return consoleLink(base, `goals&tab=history&goal=${encodeURIComponent(String(goal))}`)\n",
+        find: "  return consoleLink(base, `goals&tab=history&goal=${encodeURIComponent(ref ?? String(goal))}&sheet=delete`)\n",
+        replace: "  return consoleLink(base, `goals&tab=history&goal=${encodeURIComponent(ref ?? String(goal))}`)\n",
     },
     {
         name: "a deleted goal's goal_get is drawn as a failure",
@@ -1262,6 +1262,40 @@ const MUTATIONS = [
         file: "hooks/register.tsx",
         find: "  await postPrompt($, COPY.specPrompt(form.draft.trim(), form.ask.trim(), form.priority, form.target === '' ? OWN_LIST : form.target))\n",
         replace: "",
+    },
+    // TERYLON COCKPIT (Terylon S68): its words, the setup token's cost, its refs, and a host proof told nowhere.
+    {
+        name: "an old tab name comes back: Queue in place of Waiting",
+        file: "hooks/copy.ts",
+        find: "  tabQueue: 'Waiting',\n",
+        replace: "  tabQueue: 'Queue',\n",
+    },
+    {
+        name: "a $0.00 comes back on the setup token: a cost not known is said as known",
+        edits: [
+            {
+                file: "hooks/queue.ts",
+                find: "isKnown: item.costKnown !== false && basis !== words.SETUP_TOKEN }\n",
+                replace: "isKnown: true }\n",
+            },
+            {
+                file: "hooks/queue.ts",
+                find: "    isKnown: basis !== words.SETUP_TOKEN && all.every(item => item.isKnown),\n",
+                replace: "    isKnown: true,\n",
+            },
+        ],
+    },
+    {
+        name: "a #id comes back where a ref exists",
+        file: "hooks/words.ts",
+        find: "  return item !== null && item !== undefined && typeof item.ref === 'string' && item.ref.trim() !== '' ? item.ref : `#${String(id ?? '')}`\n",
+        replace: "  return `#${String(id ?? '')}`\n",
+    },
+    {
+        name: "a host proof's story is signalled again",
+        file: "hooks/queue.ts",
+        find: "  return item !== null && typeof item === 'object' && (item as Json).source === HOST_PROOF\n",
+        replace: "  return item === undefined\n",
     },
 ];
 

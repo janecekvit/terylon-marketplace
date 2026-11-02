@@ -127,7 +127,7 @@ test('hover-reveal, PROVEN AND ON: a waiting row lights and shows its console li
   expect(hovered.filter(node => node.key === undefined).map(node => node.hover)).toEqual([{ display: 'flex' }, { display: 'flex' }])
   expect((await ui.findAll({ type: 'Link' })).map(link => link.text)).toEqual(expect.arrayContaining(['Answer in the console ↗', 'Merge in the console ↗']))
   expect((await ui.findAll({ type: 'Link' })).map(link => link.text)).not.toContain('Approve in the console ↗')
-  expect((await ui.find({ type: 'Link', text: 'Merge in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=merge&story=327')
+  expect((await ui.find({ type: 'Link', text: 'Merge in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=merge&story=327')
   expect(await ui.find({ type: 'Button', text: /Merge|Approve/ })).toBeUndefined()
 
   // NO REVEAL OVER AN OPEN ROW (the owner's walk of 1.2.0): it covered the question; the body carries the link.
@@ -272,11 +272,11 @@ test('the Status tab says the machine in one word, large, in its colour, its tim
   for (const surface of ['desktop', 'terminal'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     await ui.press({ key: 'tab-status' })
-    const word = await ui.find({ type: 'Text', text: exact('ok') })
+    const word = await ui.find({ type: 'Text', text: exact('all well') })
 
     expect(word?.props).toMatchObject({ size: 'title', weight: 'semibold', color: 'success' })
     expect((await ui.find({ type: 'Text', text: /^\s*last answer at / }))?.props.tabular).toBe(true)
-    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.16.0') }))?.props.mono).toBe(true)
+    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.17.0') }))?.props.mono).toBe(true)
     await ui.unmount()
   }
 })
@@ -329,7 +329,7 @@ test('THE S27 SLOTS (#27) ARE FILLED: the story\'s acts and its links on one pla
     expect(slot?.props.borderStyle).toBeUndefined()
     expect((await ui.findAll({ type: 'Button' })).map(button => button.key).filter(key => key === 'act-story-333-stop' || key === 'summarise' || key === 'story-goal')).toEqual(['act-story-333-stop', 'summarise', 'story-goal'])
     expect(await ui.find({ type: 'Button', text: /Merge/ })).toBeUndefined()
-    expect((await ui.find({ type: 'Link', text: 'Story in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=work&story=333')
+    expect((await ui.find({ type: 'Link', text: 'Story in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=story&story=333')
 
     await ui.press({ key: 'back' })
     await ui.press({ key: 'tab-bell' })
@@ -348,7 +348,7 @@ test('the tabs: a digit each while the pane holds the keyboard, the bell\'s coun
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const keys = ['tab-queue', 'tab-goals', 'tab-bell', 'tab-memory', 'tab-status']
   expect((await Promise.all(keys.map(key => ui.find({ key })))).map(tab => tab?.props.hotkey)).toEqual(['1', '2', '3', '4', '5'])
-  expect((await ui.find({ key: 'tab-bell' }))?.text).toBe('Bell 2')
+  expect((await ui.find({ key: 'tab-bell' }))?.text).toBe('Notices 2')
   const count = await ui.find({ type: 'Text', text: exact('2') })
   expect(count?.props).toMatchObject({ tabular: true, color: 'text', weight: 'semibold' })
 })
@@ -360,7 +360,7 @@ test('THE BAND IS UNCHANGED BUT FOR ITS DIGITS: the same words and colours, ever
 
   for (const surface of ['desktop', 'terminal'] as const) {
     const band = await $.ui.mount({ plugin: 'terylon-pane', surface, component: 'AbovePrompt', props: bandProps() })
-    const row = await band.find({ type: 'Text', text: exact('Terylon · Waiting 3 · Running 2 · Queue 2 · Bell 2') })
+    const row = await band.find({ type: 'Text', text: exact('Terylon Cockpit · Waiting 3 · Running 2 · Queued 2 · Notices 2') })
 
     expect(row?.props.wrap).toBe('truncate-end')
     const digits = await band.findAll({ type: 'Text', text: /^\d+$/ })

@@ -175,8 +175,8 @@ test('A LIST STORY VERIFIED WHILE THE PANE WAS CLOSED: on reopen, the catch-up s
   await terylon.clock.settle()
 
   expect(terylon.prompts).toHaveLength(1)
-  expect(terylon.prompts[0]).toContain('#352 ověřená (accept)')
-  expect(terylon.prompts[0]).toContain('#327 ověřená (merge)')
+  expect(terylon.prompts[0]).toContain('#352 čeká na přijetí')
+  expect(terylon.prompts[0]).toContain('#327 čeká na merge')
 
   // Inside the summary, never told again on its own.
   await terylon.clock.advance(30000)
@@ -283,7 +283,7 @@ test('THE WATCHDOG: no answer from events_since for more than three ticks while 
   const title = await ui.find({ type: 'Text', text: exact('⚠ The done-signal hears nothing') })
   expect(title?.props.size).toBe('heading')
   expect(title?.props.color).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /^events_since has not answered for 100 s, not once this session, while the queue reads\./ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^events_since has not answered for 100 s, not once this session, while Waiting reads./ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^3\. If it stays, run claude --debug and read the lines under terylon-pane: events:/ })).toBeDefined()
 
   // The call answers: the watchdog's clock starts again, and the problem goes.
@@ -328,7 +328,7 @@ test('THE STATUS TAB DRAWS FROM A SNAPSHOT 1.8.3 KEPT, without the done-signal\'
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
     await ui.press({ key: 'tab-status' })
-    expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('TERYLON') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Problems · 0') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /did not draw/ })).toBeUndefined()
     await ui.unmount()
@@ -355,17 +355,17 @@ test('A PART OF THE STATUS TAB THAT THROWS is one problem with its reason and st
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
     await ui.press({ key: 'tab-status' })
-    expect((await ui.find({ type: 'Text', text: exact("The Status tab's alerts did not draw") }))?.props.color).toBe('error')
+    expect((await ui.find({ type: 'Text', text: exact("Health's alerts did not draw") }))?.props.color).toBe('error')
     expect(await ui.find({ type: 'Text', text: /^Reason: / })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('1. Press Refresh, or open another tab and come back.') })).toBeDefined()
     // EVERY OTHER PART IS DRAWN: the machine, the slots, the cost, the policy and the diagnostics.
-    expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('TERYLON') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Slots') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Policy') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.16.0') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.17.0') })).toBeDefined()
     await ui.unmount()
   }
-  expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith("terylon-pane: the Status tab's alerts did not draw: "))).toBe(true)
+  expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith("terylon-pane: Health's alerts did not draw: "))).toBe(true)
 })
 
 test('THE CONNECTION\'S PROBLEM AND THE DONE-SIGNAL\'S, together: each card keeps its own Try again, no key drawn twice', async ($, on) => {
@@ -451,15 +451,15 @@ test('TERYLON_PANE_STATUS=minimal draws the Status tab as plain lines alone: no 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
     await ui.press({ key: 'tab-status' })
-    expect(await ui.find({ type: 'Text', text: exact('Agentic OS: ok') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('Terylon: all well') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Problems: 0') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.16.0') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.17.0') })).toBeDefined()
     expect(await ui.findAll({ type: 'Svg' })).toEqual([])
-    expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: exact('TERYLON') })).toBeUndefined()
     expect((await ui.findAll({ type: 'Button' })).every(button => String(button.key).startsWith('tab-'))).toBe(true)
     await ui.unmount()
   }
-  expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith('terylon-pane: the Status tab draws minimal; problems 0'))).toBe(true)
+  expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith('terylon-pane: Health draws minimal; problems 0'))).toBe(true)
 })
 
 test('TERYLON_PANE_STATUS=no-<part> leaves that part out, and every draw says in claude --debug what it returns', async ($, on) => {
@@ -471,12 +471,12 @@ test('TERYLON_PANE_STATUS=no-<part> leaves that part out, and every draw says in
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'tab-status' })
-  expect(await ui.find({ type: 'Text', text: exact('AGENTIC OS') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('TERYLON') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('Policy') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('⚠ The pane cannot keep its place') })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: exact('Cost') })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: exact('Diagnostics') })).toBeUndefined()
-  expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith('terylon-pane: the Status tab draws machine, problems, alerts, outcomes, policy; problems 0, events store; '))).toBe(true)
+  expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith('terylon-pane: Health draws machine, problems, alerts, outcomes, policy; problems 0, events store; '))).toBe(true)
 })
 
 test("TERYLON_PANE_STATUS=log draws the pane's own log on the Queue tab: where the Status tab began, what it drew and what it holds", async ($, on) => {
@@ -488,9 +488,9 @@ test("TERYLON_PANE_STATUS=log draws the pane's own log on the Queue tab: where t
   expect(await ui.find({ type: 'Text', text: exact("The pane's own log") })).toBeDefined()
   await ui.press({ key: 'tab-status' })
   await ui.press({ key: 'tab-queue' })
-  expect(await ui.find({ type: 'Text', text: /^\d+ terylon-pane: the Status tab begins on desktop at \d+ columns$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^\d+ terylon-pane: the Status tab draws machine, .*; \d+ elements, \d+ characters, nothing odd; \d+ ms$/ })).toBeDefined()
-  expect(terylon.logs.some(log => log.to === 'debug' && /^terylon-pane: the Status tab draws .*nothing odd; \d+ ms$/.test(log.text))).toBe(true)
+  expect(await ui.find({ type: 'Text', text: /^\d+ terylon-pane: Health begins on desktop at \d+ columns$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^\d+ terylon-pane: Health draws machine, .*; \d+ elements, \d+ characters, nothing odd; \d+ ms$/ })).toBeDefined()
+  expect(terylon.logs.some(log => log.to === 'debug' && /^terylon-pane: Health draws .*nothing odd; \d+ ms$/.test(log.text))).toBe(true)
 })
 
 test("the pane's own log is not drawn unless TERYLON_PANE_STATUS asks for it", async ($, on) => {
@@ -546,7 +546,7 @@ test('DIAGNOSTICS SAYS THE DONE-SIGNAL AS KEPT, each value with its type, as pla
   for (const line of ['events: string store', 'since: string 2026-10-11T21:50:00Z', 'reason: object {"code":"EACCES"}', 'answeredAt: string never', 'watchedSince: none', 'silentSince: number NaN', 'store refusals: 0']) {
     expect(await ui.find({ type: 'Text', text: exact(line) })).toBeDefined()
   }
-  expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith("terylon-pane: the Status tab's done-signal: events: string store; since: string"))).toBe(true)
+  expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith("terylon-pane: Health's done-signal: events: string store; since: string"))).toBe(true)
 })
 
 test('⚠ MATCHES THE LIST: a part TERYLON_PANE_STATUS leaves out lights no ⚠ on the tab', async ($, on) => {

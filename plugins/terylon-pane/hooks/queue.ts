@@ -23,6 +23,7 @@ import type {
 
 import { COPY } from './copy'
 import { isAlert } from './health'
+import * as words from './words'
 
 type Json = Record<string, unknown>
 
@@ -67,8 +68,68 @@ export function number(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
-export function money(value: unknown): string {
-  return (number(value) ?? 0).toFixed(2)
+// A HOST PROOF'S SUBJECT (Terylon S68): the host proof's own stories, plans and questions reach no prompt, no band and
+// no catch-up. Only the source `host-proof` is one; an mcp proof's fixtures say `owner` by design.
+export const HOST_PROOF = 'host-proof'
+
+export function isHostProof(item: unknown): boolean {
+  return item !== null && typeof item === 'object' && (item as Json).source === HOST_PROOF
+}
+
+// WHAT TERYLON SPENT, AND WHETHER IT IS KNOWN: on the setup token, or where an item says so, a cost is not known and
+// only its tokens are said, never a $ figure (Design · Glossary). `basis` is the briefing's `costBasis`.
+export type Spent = { usd: number; tokens: number | null; isKnown: boolean }
+
+export function tokensOf(item: Json): number | null {
+  return number(item.tokens) ?? number((item.progress as Json | null | undefined)?.tokens)
+}
+
+export function spentOf(item: Json, basis: string | null): Spent {
+  return { usd: number(item.costUsd) ?? 0, tokens: tokensOf(item), isKnown: item.costKnown !== false && basis !== words.SETUP_TOKEN }
+}
+
+// Several items' spend summed: unknown when any one is, its tokens the sum of those Terylon measured.
+export function spentOfAll(items: Json[], basis: string | null): Spent {
+  const all = items.map(item => spentOf(item, basis))
+  const measured = all.map(item => item.tokens).filter((value): value is number => value !== null)
+
+  return {
+    usd: all.reduce((sum, item) => sum + item.usd, 0),
+    tokens: measured.length === 0 ? null : measured.reduce((sum, value) => sum + value, 0),
+    isKnown: basis !== words.SETUP_TOKEN && all.every(item => item.isKnown),
+  }
+}
+
+// "$2.10", or on the setup token "48 k tokens · cost not known": a row's or a gauge's cost, in a tight place.
+export function costTight(spent: Spent): string {
+  return words.cost({ costKnown: spent.isKnown, costUsd: spent.usd, tokens: spent.tokens }, { tight: true })
+}
+
+// A COST AS THE GLOSSARY SAYS IT: "$2.10", or "48 k tokens · cost not known on the setup token".
+export function costWords(spent: Spent): string {
+  return words.cost({ costKnown: spent.isKnown, costUsd: spent.usd, tokens: spent.tokens })
+}
+
+// A subject as the pane names it: its ref, or "#352" from a Terylon older than refs.
+export function refOf(item: Json | null | undefined, id: unknown): string {
+  return words.refOr(item, id)
+}
+
+// What a console address names a subject by: its ref, or its number from an older Terylon.
+function addressOf(item: Json | null | undefined, id: unknown): string {
+  const named = item === null || item === undefined ? null : text(item.ref)
+
+  return encodeURIComponent(named ?? String(id ?? ''))
+}
+
+// "ADO #481 ↗": a story's work item, only ever this link; `workItem` as {number, url}, or a number beside workItemUrl.
+export function workItemOf(document: Json): { label: string; url: string } | null {
+  const item = document.workItem
+  const found = item !== null && typeof item === 'object' ? (item as Json) : null
+  const numbered = found === null ? number(item) : number(found.number)
+  const url = found === null ? text(document.workItemUrl) : text(found.url) ?? text(document.workItemUrl)
+
+  return numbered === null || url === null ? null : { label: words.workItem(numbered), url }
 }
 
 export function firstLine(value: string): string {
@@ -102,7 +163,8 @@ export function clock(iso: unknown, zone: Zone = 0): string | null {
   return `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`
 }
 
-// "14:20" today, "11. 10." on another day: when a notice was raised, in the host's own time zone.
+// "14:20" today, "yesterday 22:02", "29 Oct 16:10" on another day: when a notice was raised or an event happened, in
+// the host's own time zone, in the glossary's words.
 export function when(iso: unknown, now: number, zone: Zone = 0): string {
   const at = Date.parse(String(iso ?? ''))
 
@@ -110,14 +172,7 @@ export function when(iso: unknown, now: number, zone: Zone = 0): string {
     return ''
   }
 
-  const local = new Date(at - offsetAt(zone, at) * 60000)
-  const today = new Date(now - offsetAt(zone, now) * 60000)
-
-  if (local.toISOString().slice(0, 10) === today.toISOString().slice(0, 10)) {
-    return clock(iso, zone) ?? ''
-  }
-
-  return `${local.getUTCDate()}. ${local.getUTCMonth() + 1}.`
+  return words.daysBefore(at, now, zone) === 0 ? clock(iso, zone) ?? '' : words.moment(at, now, zone)
 }
 
 // THE FILES A TASK OVER A REPOSITORY DECLARES (#39): Terylon takes 1 to 30, and refuses the task otherwise. One path per
@@ -159,14 +214,39 @@ export function isRepositoryTarget(target: unknown): boolean {
   return named !== null && named !== 'list'
 }
 
+// THE CONSOLE'S ADDRESSES (Terylon S66): /?view=<screen> with the subject it is about by its ref; the notices are a
+// panel over Waiting for you, the policy a section of Settings, and Activity holds what History held.
+const CONSOLE_PLACES: Record<string, string> = {
+  bell: '?view=waiting&notices=open',
+  notices: '?view=waiting&notices=open',
+  policy: '?settings=leader',
+  work: '?view=waiting',
+  history: '?view=activity',
+}
+
 export function consoleLink(base: string, query: string): string {
-  return `${base}/?cockpit=${query}`
+  return `${base}/${CONSOLE_PLACES[query] ?? `?view=${query}`}`
+}
+
+// A story's screen in the console, by its ref: its own, the merge's or the blocked one's.
+export function storyLink(base: string, view: 'story' | 'merge' | 'blocked', story: Json | null | undefined, id: unknown): string {
+  return consoleLink(base, `${view}&story=${addressOf(story, id)}`)
+}
+
+// A goal's screen in the console, by its ref.
+export function goalLink(base: string, goal: Json | null | undefined, id: unknown): string {
+  return consoleLink(base, `goal&goal=${addressOf(goal, id)}`)
+}
+
+// A plan's screen in the console, by its ref.
+export function planLink(base: string, plan: Json | null | undefined, id: unknown): string {
+  return consoleLink(base, `plan&plan=${addressOf(plan, id)}`)
 }
 
 // WHERE A GOAL IN HISTORY IS DELETED: the console's Goals on History, the goal's row and its Delete… sheet, where the
 // owner still types the number. A console without the route ignores what it does not know and lands on Goals.
-export function deleteLink(base: string, goal: number): string {
-  return consoleLink(base, `goals&tab=history&goal=${encodeURIComponent(String(goal))}&sheet=delete`)
+export function deleteLink(base: string, goal: number, ref: string | null = null): string {
+  return consoleLink(base, `goals&tab=history&goal=${encodeURIComponent(ref ?? String(goal))}&sheet=delete`)
 }
 
 // "alice-host" from https://alice-host.example.ts.net: the name the owner knows the machine by.
@@ -176,8 +256,8 @@ export function hostName(base: string): string {
   return match?.[1] ?? base
 }
 
-// "goal 11", "story 38", "plan 4": what a question or an event is about.
-export function subjectLabel(subject: string): string {
+// "goal G-SRQ1A", or "goal 11" from a Terylon older than refs: what a question or an event is about.
+export function subjectLabel(subject: string, ref: string | null = null): string {
   const match = /^(goal|story|plan)\/(\d+)$/.exec(subject)
 
   if (match === null) {
@@ -186,18 +266,26 @@ export function subjectLabel(subject: string): string {
 
   const noun = match[1] ?? 'story'
 
-  return `${noun} ${match[2]}`
+  return `${noun} ${ref ?? match[2]}`
+}
+
+// An estimate the glossary says, or none: a plan of $0 or none estimated says only that it waits, never "~$0".
+export function estimateOf(value: unknown): string | null {
+  const estimated = number(value)
+
+  return estimated === null || estimated <= 0 ? null : words.estimate(estimated)
 }
 
 export function questionItems(briefing: Json): PaneQuestionItem[] {
   return list(briefing.questionsOpen).map(question => {
     const subject = text(question.subject) ?? ''
+    const ref = text(question.subjectRef)
 
     return {
       id: number(question.id) ?? 0,
-      about: text(question.about) ?? subjectLabel(subject),
+      about: text(question.about) ?? subjectLabel(subject, ref),
       subject,
-      subjectLabel: subjectLabel(subject),
+      subjectLabel: subjectLabel(subject, ref),
       text: text(question.text) ?? '',
       askedAt: text(question.askedAt),
     }
@@ -228,9 +316,9 @@ export function waitingItems(briefing: Json, base: string): PaneWaitingItem[] {
         kind: 'accept',
         key: `accept-${id}`,
         target: id,
-        title: `#${id} ${text(story.title) ?? ''}`.trim(),
+        title: `${refOf(story, id)} ${text(story.title) ?? ''}`.trim(),
         detail: COPY.verifiedAccept,
-        console: consoleLink(base, `work&story=${id}`),
+        console: storyLink(base, 'story', story, id),
       })
       continue
     }
@@ -239,25 +327,25 @@ export function waitingItems(briefing: Json, base: string): PaneWaitingItem[] {
       kind: 'merge',
       key: `merge-${id}`,
       target: id,
-      title: `#${id} ${text(story.title) ?? ''}`.trim(),
+      title: `${refOf(story, id)} ${text(story.title) ?? ''}`.trim(),
       detail: COPY.verifiedWaiting(text(environment?.name) ?? null),
-      console: consoleLink(base, `merge&story=${id}`),
+      console: storyLink(base, 'merge', story, id),
     })
   }
 
   for (const plan of list(briefing.plansWaiting)) {
     const id = number(plan.id) ?? 0
-    const estimate = number(plan.estimateUsd)
     const taskVersion = taskVersionOf(plan)
+    const label = text(plan.ref) ?? String(id)
     items.push({
       kind: 'plan',
       key: `plan-${id}`,
       target: id,
       title: taskVersion === null
-        ? COPY.planTitle(id, text(plan.goalTitle) ?? '', number(plan.stories) ?? 0)
-        : COPY.taskVersionTitle(id, taskVersion.version, taskVersion.title ?? text(plan.goalTitle) ?? ''),
-      detail: taskVersion === null ? COPY.planWaiting(estimate === null ? null : estimate.toFixed(0)) : COPY.versionWaiting(taskVersion.terms),
-      console: consoleLink(base, `plan&plan=${id}`),
+        ? COPY.planTitle(label, text(plan.goalTitle) ?? '', number(plan.stories) ?? 0)
+        : COPY.taskVersionTitle(label, taskVersion.version, taskVersion.title ?? text(plan.goalTitle) ?? ''),
+      detail: taskVersion === null ? COPY.planWaiting(estimateOf(plan.estimateUsd)) : COPY.versionWaiting(taskVersion.terms),
+      console: planLink(base, plan, id),
     })
   }
 
@@ -267,9 +355,9 @@ export function waitingItems(briefing: Json, base: string): PaneWaitingItem[] {
       kind: 'blocked',
       key: `blocked-${id}`,
       target: id,
-      title: `#${id} ${text(story.title) ?? ''}`.trim(),
+      title: `${refOf(story, id)} ${text(story.title) ?? ''}`.trim(),
       detail: COPY.blocked(text(story.blockedReason) ?? '?'),
-      console: consoleLink(base, `blocked&story=${id}`),
+      console: storyLink(base, 'blocked', story, id),
     })
   }
 
@@ -296,7 +384,7 @@ export function verifiedIds(briefing: Json): ReadonlySet<number> {
   return new Set(list(briefing.storiesVerified).map(story => number(story.id)).filter((id): id is number => id !== null))
 }
 
-export function runningItems(flight: Json, zone: Zone = 0, waiting: ReadonlySet<number> = new Set()): PaneRunningItem[] {
+export function runningItems(flight: Json, zone: Zone = 0, waiting: ReadonlySet<number> = new Set(), basis: string | null = null): PaneRunningItem[] {
   return list(flight.stories).filter(story => !NOT_RUNNING_STATES.has(String(story.state ?? '')) && !waiting.has(number(story.id) ?? -1)).map(story => {
     const progress = (story.progress ?? null) as Json | null
     const step = number(progress?.step)
@@ -320,12 +408,12 @@ export function runningItems(flight: Json, zone: Zone = 0, waiting: ReadonlySet<
 
     return {
       story: number(story.id) ?? 0,
-      title: `#${number(story.id) ?? 0} ${text(story.title) ?? ''}`.trim(),
-      detail: `${where} · $${money(story.costUsd)}`,
+      title: `${refOf(story, number(story.id) ?? 0)} ${text(story.title) ?? ''}`.trim(),
+      detail: `${where} · ${costTight(spentOf(story, basis))}`,
       step: step !== null && steps !== null
         ? COPY.step(step, steps, text(progress?.current))
         : isVerifying && environment !== null
-          ? `${COPY.verifying} v ${environment}`
+          ? COPY.verifyingIn(environment)
           : null,
       fraction: isVerifying ? 0.9 : step !== null && steps !== null && steps > 0 ? Math.min(1, step / steps) : null,
       isStuck: stuck !== null,
@@ -344,30 +432,26 @@ export function queuedItems(stories: Json[], inFlight: ReadonlySet<number>, hasF
     .map(story => {
       const afterIds = Array.isArray(story.after) ? story.after.filter((id): id is number => typeof id === 'number') : []
       const held = text(story.blockedReason)
+      // THE STORIES IT RUNS AFTER, by their refs where the list names them.
+      const before = afterIds.map(id => refOf(stories.find(item => number(item.id) === id), id))
       const detail = held !== null
         ? COPY.held(held)
         : afterIds.length > 0
-          ? COPY.after(afterIds.map(id => `#${id}`).join(', '))
+          ? COPY.after(before.join(', '))
           : hasFreeSlot ? COPY.notStarted : COPY.waitsForSlot
 
-      return { story: number(story.id) ?? 0, title: `#${number(story.id) ?? 0} ${text(story.title) ?? ''}`.trim(), detail, isHeld: held !== null }
+      return { story: number(story.id) ?? 0, title: `${refOf(story, number(story.id) ?? 0)} ${text(story.title) ?? ''}`.trim(), detail, isHeld: held !== null }
     })
 }
 
-export function doneTodayItems(stories: Json[], now: number, zone: Zone = 0): PaneDoneItem[] {
-  const today = new Date(now - offsetAt(zone, now) * 60000).toISOString().slice(0, 10)
-
+export function doneTodayItems(stories: Json[], now: number, zone: Zone = 0, basis: string | null = null): PaneDoneItem[] {
   return stories
     .filter(story => ENDED_STATES.has(String(story.state ?? '')))
-    .filter(story => {
-      const at = Date.parse(String(story.updatedAt ?? ''))
-
-      return !Number.isNaN(at) && new Date(at - offsetAt(zone, at) * 60000).toISOString().slice(0, 10) === today
-    })
+    .filter(story => words.daysBefore(story.updatedAt, now, zone) === 0)
     .map(story => ({
       story: number(story.id) ?? 0,
-      title: `#${number(story.id) ?? 0} ${text(story.title) ?? ''}`.trim(),
-      detail: COPY.mergedAt(clock(story.updatedAt, zone) ?? '?', money(story.costUsd)),
+      title: `${refOf(story, number(story.id) ?? 0)} ${text(story.title) ?? ''}`.trim(),
+      detail: COPY.mergedAt(clock(story.updatedAt, zone) ?? '?', costTight(spentOf(story, basis))),
       isAccepted: isAcceptedStory(story),
     }))
 }
@@ -377,8 +461,22 @@ export function isAcceptedStory(story: Json): boolean {
   return story.state === 'accepted' || text(story.outcome) === 'accepted' || text(story.target) === 'list'
 }
 
-export function spend(flight: Json): string {
-  return list(flight.stories).reduce((sum, story) => sum + (number(story.costUsd) ?? 0), 0).toFixed(2)
+// WHAT THE RUNNING STORIES SPENT: unknown on the setup token, or when Terylon says a story's cost is not known.
+export function spend(flight: Json, basis: string | null = null): Spent {
+  return spentOfAll(list(flight.stories), basis)
+}
+
+// THE BASIS A COST IS SAID ON (Terylon S68): the briefing's costBasis, else work_in_flight's or the metrics'.
+export function costBasisOf(...answers: (Json | null | undefined)[]): string | null {
+  for (const answer of answers) {
+    const basis = answer === null || answer === undefined ? null : text(answer.costBasis)
+
+    if (basis !== null) {
+      return basis
+    }
+  }
+
+  return null
 }
 
 export function dayBudget(policy: Json | null): string | null {
@@ -387,8 +485,8 @@ export function dayBudget(policy: Json | null): string | null {
   return day === null ? null : day.toFixed(0)
 }
 
-export function header(flight: Json, policy: Json | null): string {
-  return COPY.header(spend(flight), dayBudget(policy), list(flight.stories).length, number(flight.slots) ?? 0)
+export function header(flight: Json, policy: Json | null, basis: string | null = null): string {
+  return COPY.header(costTight(spend(flight, basis)), dayBudget(policy), list(flight.stories).length, number(flight.slots) ?? 0)
 }
 
 // The leader's kill switch, from leader_status or the briefing's copy of it: { at, source, reason } or null.
@@ -448,26 +546,25 @@ export function phasesOf(document: Json, stage: string | null): PanePhase[] {
   ]
 }
 
-// "1.4 M": the run's tokens so far, as Terylon measured them.
+// "1.4 M": the run's tokens so far, as Terylon measured them: the glossary's figure without its noun.
 export function tokenCount(tokens: number | null): string | null {
-  if (tokens === null) {
-    return null
-  }
-
-  return tokens >= 1000000 ? `${(tokens / 1000000).toFixed(1)} M` : tokens >= 1000 ? `${Math.round(tokens / 1000)} k` : String(tokens)
+  return tokens === null ? null : words.tokens(tokens).replace(/ tokens?$/, '')
 }
 
 // "1.4 M tokens".
 export function tokensText(tokens: number | null): string | null {
-  const count = tokenCount(tokens)
+  return tokens === null ? null : words.tokens(tokens)
+}
 
-  return count === null ? null : COPY.tokens(count)
+// "$2.10 of the story's $8", or on the setup token "48 k tokens · cost not known on the setup token": never a $ there.
+export function storyCost(spent: Spent, budget: number | null): string {
+  return spent.isKnown ? COPY.costOf(words.money(spent.usd), budget === null ? null : words.budget(budget)) : costWords(spent)
 }
 
 // Who works in the run now, at which stage, on which step, and what it has spent: read from progress, WHILE A RUN GOES,
 // whatever progress names (the owner's walk of 1.5.0, #35: one running story showed Now working, the other did not).
 // An agent or a stage progress does not name is said as not reported, never worked out.
-function workingOf(progress: Json | null, state: string, spent: { usd: number; budget: number | null }, hours: string | null): PaneWorking | null {
+function workingOf(progress: Json | null, state: string, spent: Spent & { budget: number | null }, hours: string | null): PaneWorking | null {
   if (!['running', 'dispatched'].includes(state)) {
     return null
   }
@@ -478,30 +575,36 @@ function workingOf(progress: Json | null, state: string, spent: { usd: number; b
   const steps = number(progress?.steps)
   const name = agent === null ? null : text(agent.name) ?? 'main'
   const others = (number(agent?.running) ?? 0) - 1
-  const cost = COPY.costOf(spent.usd.toFixed(2), spent.budget === null ? null : spent.budget.toFixed(0))
-  const tokens = tokenCount(number(progress?.tokens))
+  // THE RUN'S TOKENS beside a known cost; on the setup token the story's own, which Terylon measures its spend by.
+  const measured = spent.isKnown ? number(progress?.tokens) ?? spent.tokens : spent.tokens ?? number(progress?.tokens)
+  const tokens = tokenCount(measured)
+  // ON THE SETUP TOKEN THE TOKENS ARE THE SPEND: said once, with the phrase, and no bar against a dollar budget.
+  const numbers = spent.isKnown
+    ? [
+        { value: words.money(spent.usd), label: spent.budget === null ? COPY.numberSpent : COPY.numberOfBudget(words.budget(spent.budget)) },
+        ...(tokens === null ? [] : [{ value: tokens, label: COPY.numberTokens }]),
+      ]
+    : [{ value: measured === null ? COPY.numberNoTokens : words.tokens(measured), label: words.COST_NOT_KNOWN }]
 
   return {
     agent: name === null ? COPY.noAgent : `${name === 'main' ? COPY.mainAgent : name}${others > 0 ? ` +${others}` : ''}`,
     stage: stage === null ? COPY.noStage : COPY.stageLabel(stage),
     step: step !== null && steps !== null ? COPY.step(step, steps, text(progress?.current)) : text(progress?.current) ?? COPY.noStep,
     fraction: step !== null && steps !== null && steps > 0 ? step / steps : null,
-    spend: [cost, tokensText(number(progress?.tokens)), hours === null ? null : COPY.sinceStart(hours)].filter(part => part !== null).join(' · '),
-    numbers: [
-      { value: `$${spent.usd.toFixed(2)}`, label: spent.budget === null ? COPY.numberSpent : COPY.numberOfBudget(spent.budget.toFixed(0)) },
-      ...(tokens === null ? [] : [{ value: tokens, label: COPY.numberTokens }]),
-      ...(hours === null ? [] : [{ value: hours, label: COPY.numberSinceStart }]),
-    ],
-    spentUsd: spent.usd,
+    spend: [
+      spent.isKnown ? storyCost(spent, spent.budget) : costWords({ ...spent, tokens: measured }),
+      spent.isKnown ? tokensText(measured) : null,
+      hours === null ? null : COPY.sinceStart(hours),
+    ].filter(part => part !== null).join(' · '),
+    numbers: [...numbers, ...(hours === null ? [] : [{ value: hours, label: COPY.numberSinceStart }])],
+    spentUsd: spent.isKnown ? spent.usd : null,
     budgetUsd: spent.budget,
   }
 }
 
-// "75 h 46 min": a span of milliseconds, in whole hours and minutes.
+// "1 h 9 min", "3 d 3 h": a span of milliseconds, in the glossary's two units at most.
 function duration(milliseconds: number): string {
-  const span = Math.max(0, milliseconds)
-
-  return `${Math.floor(span / 3600000)} h ${Math.floor((span % 3600000) / 60000)} min`
+  return words.duration(Math.max(0, milliseconds) / 1000)
 }
 
 // A story's progress, field by field: work_in_flight's where it names a value, story_get's where it does not. A
@@ -546,7 +649,7 @@ function blockedSpan(timeline: Json[], since: number, now: number): number {
   return blockedFrom === null ? total : total + Math.max(0, now - blockedFrom)
 }
 
-export function storyView(id: number, document: Json, inFlight: Json, question: PaneQuestionItem | null, now: number, zone: Zone = 0): PaneStory {
+export function storyView(id: number, document: Json, inFlight: Json, question: PaneQuestionItem | null, now: number, zone: Zone = 0, basis: string | null = null): PaneStory {
   const state = String(inFlight.state ?? document.state ?? '')
   const progress = progressOf(inFlight, document)
   const step = number(progress?.step)
@@ -569,19 +672,26 @@ export function storyView(id: number, document: Json, inFlight: Json, question: 
     .slice()
     .reverse()
     .map(event => ({ time: when(event.at, now, zone), actor: text(event.actor) ?? '', summary: text(event.summary) ?? text(event.type) ?? '' }))
-  const tone: PaneStory['stateTone'] = state === 'verified' || state === 'merged' || state === 'accepted'
-    ? 'success'
-    : state === 'blocked' || inFlight.stuck != null
-      ? 'warning'
-      : isRunning
-        ? 'suggestion'
-        : 'subtle'
+  // THE STATE'S TONE (hooks/tones.ts): what waits on the owner's merge or acceptance purple, what ended well green, a
+  // story stuck or blocked amber, a run blue, the rest quiet.
+  const tone: PaneStory['stateTone'] = state === 'verified'
+    ? 'merged'
+    : state === 'merged' || state === 'accepted'
+      ? 'success'
+      : state === 'blocked' || inFlight.stuck != null
+        ? 'warning'
+        : isRunning
+          ? 'suggestion'
+          : 'subtle'
+  const spent = spentOf({ costUsd: inFlight.costUsd ?? document.costUsd, costKnown: inFlight.costKnown ?? document.costKnown, tokens: inFlight.tokens ?? document.tokens, progress }, basis)
 
   return {
     story: id,
     phase: 'ok',
     sentence: null,
-    title: `#${id} ${text(document.title) ?? text(inFlight.title) ?? ''}`.trim(),
+    ref: text(document.ref) ?? text(inFlight.ref),
+    goalRef: text(document.goalRef) ?? text(inFlight.goalRef),
+    title: `${refOf({ ref: document.ref ?? inFlight.ref }, id)} ${text(document.title) ?? text(inFlight.title) ?? ''}`.trim(),
     meta: COPY.storyMeta(timed, number(inFlight.attempt ?? document.attempt) ?? 1, text(pullRequest?.branch), model === '' ? null : model),
     running: timed,
     attempt: number(inFlight.attempt ?? document.attempt) ?? 1,
@@ -592,9 +702,9 @@ export function storyView(id: number, document: Json, inFlight: Json, question: 
     stateText: COPY.stateText(state === 'merged' && isAcceptedStory({ ...document, state, target: document.target ?? inFlight.target }) ? 'accepted' : state),
     stateTone: tone,
     step: step !== null && steps !== null ? COPY.step(step, steps, text(progress?.current)) : isRunning ? COPY.noStep : null,
-    working: workingOf(progress, state, { usd: number(inFlight.costUsd ?? document.costUsd) ?? 0, budget }, hours),
+    working: workingOf(progress, state, { ...spent, budget }, hours),
     fraction: step !== null && steps !== null && steps > 0 ? step / steps : null,
-    cost: COPY.costOf(money(inFlight.costUsd ?? document.costUsd), budget === null ? null : budget.toFixed(0)),
+    cost: storyCost(spent, budget),
     phases: phasesOf({ ...document, state }, text(progress?.stage)),
     question: question === null ? null : { id: question.id, text: question.text },
     environment: environment === null || text(environment.name) === null ? null : { name: text(environment.name) ?? '', url: text(environment.url) },
@@ -611,7 +721,8 @@ export function storyView(id: number, document: Json, inFlight: Json, question: 
     timeline,
     pullRequest: pullRequest === null || text(pullRequest.url) === null
       ? null
-      : { label: number(pullRequest.id) === null ? 'PR ↗' : `PR ${number(pullRequest.id)} ↗`, url: text(pullRequest.url) ?? '' },
+      : { label: number(pullRequest.id) === null ? 'PR ↗' : words.pullRequestLink(number(pullRequest.id)), url: text(pullRequest.url) ?? '' },
+    workItem: workItemOf({ ...inFlight, ...document }),
     goal: number(document.goal),
     isRunning,
     isVerified: state === 'verified',
@@ -800,7 +911,8 @@ export function goalItems(goals: Json, questions: readonly PaneQuestionItem[]): 
 
       return {
         id,
-        title: text(goal.title) ?? `#${id}`,
+        title: text(goal.title) ?? refOf(goal, id),
+        ref: text(goal.ref),
         priority: `P${number(goal.priority) ?? 2}`,
         state: String(goal.state ?? ''),
         questions: questions.filter(question => question.subject === `goal/${id}`).length,
@@ -823,8 +935,8 @@ function afterPlaces(story: Json, ids: readonly (number | null)[]): number[] {
   return [...new Set([...byId, ...byPlace])].sort((first, second) => first - second)
 }
 
-// "Today 05:00" on the local day of `now`, "27 Oct 05:00" on another, in the host's own time zone; "?" for a time
-// that cannot be read, so nothing undefined or NaN reaches the drawing.
+// "today 05:00" on the local day of `now`, "27 Oct 05:00" on another, in the host's own time zone and the glossary's
+// words; "?" for a time that cannot be read, so nothing undefined or NaN reaches the drawing.
 export function runDay(iso: unknown, now: number, zone: Zone = 0): string {
   const at = Date.parse(String(iso ?? ''))
 
@@ -833,15 +945,14 @@ export function runDay(iso: unknown, now: number, zone: Zone = 0): string {
   }
 
   // EACH MOMENT IN ITS OWN OFFSET: a run from before a change of clocks keeps its hour, and today is today's.
-  const local = new Date(at - offsetAt(zone, at) * 60000)
-  const today = new Date(now - offsetAt(zone, now) * 60000)
-  const time = `${String(local.getUTCHours()).padStart(2, '0')}:${String(local.getUTCMinutes()).padStart(2, '0')}`
+  const days = words.daysBefore(at, now, zone)
 
-  if (local.toISOString().slice(0, 10) === today.toISOString().slice(0, 10)) {
-    return COPY.runToday(time)
+  if (days === 0) {
+    return COPY.runToday(words.clock(at, zone))
   }
 
-  return `${local.getUTCDate()} ${COPY.months[local.getUTCMonth()] ?? '?'} ${time}`
+  // ANOTHER DAY BY ITS DATE, never "yesterday": a run's day reads the same in a list of days.
+  return `${words.date(at, zone).replace(/ \d{4}$/, '')} ${words.clock(at, zone)}`
 }
 
 // A run's state in words and its tone. A state the pane does not know is drawn as running: Terylon may add one.
@@ -851,7 +962,7 @@ function runStateOf(state: unknown): { state: string; tone: PaneRepeatingRun['to
     case 'accepted':
       return { state: COPY.runAccepted, tone: 'success' }
     case 'verified':
-      return { state: COPY.runGreenWaits, tone: 'attention' }
+      return { state: COPY.runGreenWaits, tone: 'merged' }
     case 'blocked':
       return { state: COPY.runRedWaits, tone: 'attention' }
     case 'abandoned':
@@ -873,19 +984,19 @@ function fileName(value: unknown): string | null {
   return value !== null && typeof value === 'object' ? text((value as Json).name) : text(value)
 }
 
-// A version's terms: its budget per run, and whether a green run accepts itself.
-function termsOf(terms: Json): string[] {
+// A version's terms: its budget per run, not applied on the setup token, and whether a green run accepts itself.
+function termsOf(terms: Json, basis: string | null = null): string[] {
   const budget = number(terms.runBudgetUsd)
 
   return [
-    ...(budget === null ? [] : [COPY.repeatingBudget(money(budget))]),
+    ...(budget === null ? [] : [COPY.repeatingBudget(words.budget(budget), basis === words.SETUP_TOKEN)]),
     terms.autoAccept === true ? COPY.repeatingAcceptsItself : COPY.repeatingWaitsForYou,
   ]
 }
 
 // A REPEATING TASK'S GOAL (Terylon S43), from goal_get's `repeating`: null when the goal is not one. Every field is
 // read tolerantly: a missing or odd-typed one draws less, never throws.
-export function repeatingOf(goal: Json, base: string, now: number, zone: Zone = 0): PaneRepeating | null {
+export function repeatingOf(goal: Json, base: string, now: number, zone: Zone = 0, basis: string | null = null): PaneRepeating | null {
   const repeating = goal.repeating
 
   if (repeating === null || typeof repeating !== 'object' || Array.isArray(repeating)) {
@@ -900,26 +1011,28 @@ export function repeatingOf(goal: Json, base: string, now: number, zone: Zone = 
   const id = number(goal.id)
   const summary = [
     approved === null ? COPY.repeatingNotApproved : COPY.repeatingApproved(version ?? '?'),
-    ...(approved === null ? [] : termsOf(approved)),
+    ...(approved === null ? [] : termsOf(approved, basis)),
     text(document.paused) === null && document.paused !== true ? null : COPY.repeatingPaused,
     waitingVersion === null ? null : COPY.repeatingWaiting(waitingVersion),
   ]
 
   return {
-    title: (approved === null ? null : text(approved.title)) ?? text(goal.title) ?? (id === null ? '' : `#${id}`),
+    title: (approved === null ? null : text(approved.title)) ?? text(goal.title) ?? (id === null ? '' : refOf(goal, id)),
     summary: summary.filter((part): part is string => part !== null).join(' · '),
     runs: list(document.runs).map(run => {
-      const cost = number(run.costUsd)
+      const spent = spentOf(run, basis)
       const files = Array.isArray(run.files) ? run.files.map(fileName).filter((name): name is string => name !== null) : []
+      // A RUN'S COST: its dollars where known, its tokens on the setup token, nothing where Terylon sent neither.
+      const cost = spent.isKnown ? (number(run.costUsd) === null ? null : words.money(spent.usd)) : spent.tokens === null ? null : words.tokens(spent.tokens)
 
       return {
         story: number(run.story),
         day: runDay(run.startedAt, now, zone),
         ...runStateOf(run.state),
-        line: [...files, ...(cost === null ? [] : [`$${money(cost)}`])].join(' · '),
+        line: [...files, ...(cost === null ? [] : [cost])].join(' · '),
       }
     }),
-    console: consoleLink(base, `waiting&task=${id ?? 0}`),
+    console: consoleLink(base, `waiting&task=${encodeURIComponent(text(goal.ref) ?? String(id ?? 0))}`),
   }
 }
 
@@ -927,7 +1040,7 @@ export function repeatingOf(goal: Json, base: string, now: number, zone: Zone = 
 // carries no stories. plans_list says so with a `repeating` object; a plan with no stories while it waits is one too
 // (no other plan has none then, though a withdrawn one or one sent back may list none). Its version, the task's title
 // and its terms where `repeating` carries them.
-export function taskVersionOf(plan: Json): PaneTaskVersion | null {
+export function taskVersionOf(plan: Json, basis: string | null = null): PaneTaskVersion | null {
   const repeating = plan.repeating !== null && typeof plan.repeating === 'object' && !Array.isArray(plan.repeating) ? (plan.repeating as Json) : null
   const stories = Array.isArray(plan.stories) ? plan.stories.length : number(plan.stories)
   const isSetAside = ['withdrawn', 'rethink'].includes(String(plan.state ?? ''))
@@ -939,15 +1052,14 @@ export function taskVersionOf(plan: Json): PaneTaskVersion | null {
   return {
     version: versionOf(repeating?.version ?? plan.version),
     title: repeating === null ? null : text(repeating.title),
-    terms: repeating === null ? null : termsOf(repeating).join(' · '),
+    terms: repeating === null ? null : termsOf(repeating, basis).join(' · '),
   }
 }
 
-export function planItems(plans: Json, base: string): PanePlan[] {
+export function planItems(plans: Json, base: string, basis: string | null = null): PanePlan[] {
   return list(plans.plans).map(plan => {
     const id = number(plan.id) ?? 0
     const state = String(plan.state ?? '')
-    const estimate = number(plan.estimateUsd)
     const isProposed = state === 'proposed'
     const stories = list(plan.stories)
     const ids = stories.map(story => number(story.id))
@@ -955,32 +1067,43 @@ export function planItems(plans: Json, base: string): PanePlan[] {
 
     return {
       id,
+      ref: text(plan.ref),
       goal: number(plan.goal) ?? 0,
+      goalRef: text(plan.goalRef),
       goalTitle: text(plan.goalTitle) ?? '',
       state,
-      stateText: isProposed ? COPY.planWaiting(estimate === null ? null : estimate.toFixed(0)) : COPY.stateText(state),
+      stateText: isProposed ? COPY.planWaiting(estimateOf(plan.estimateUsd)) : COPY.stateText(state),
       isProposed,
       comment: text(plan.comment),
       stories: stories.map((story, index) => {
         const after = afterPlaces(story, ids)
-        const storyEstimate = number(story.estimateUsd)
+        const storyEstimate = estimateOf(story.estimateUsd)
 
         return {
           id: number(story.id) ?? 0,
+          ref: text(story.ref),
           index: index + 1,
           title: titles[index] ?? '',
           // "after <title>": the story it waits for by its title, never by a number (#35).
-          detail: COPY.planStoryDetail(text(story.size) ?? '?', storyEstimate === null ? null : storyEstimate.toFixed(0), after.length === 0 ? null : after.map(place => titles[place - 1] ?? `#${place}`).join(', ')),
+          detail: COPY.planStoryDetail(text(story.size) ?? '?', storyEstimate, after.length === 0 ? null : after.map(place => titles[place - 1] ?? `#${place}`).join(', ')),
           criteria: strings(story.criteria),
           after,
           size: text(story.size) ?? '?',
-          estimate: storyEstimate === null ? null : storyEstimate.toFixed(0),
+          estimate: storyEstimate,
         }
       }),
-      console: consoleLink(base, `plan&plan=${id}`),
-      taskVersion: taskVersionOf(plan),
+      console: planLink(base, plan, id),
+      taskVersion: taskVersionOf(plan, basis),
     }
   })
+}
+
+// WHAT A STORY COST OVER THE 30 DAYS: its dollars, or on the setup token its tokens where metrics says them.
+function metricCost(metrics: Json, basis: string | null): string {
+  const isKnown = metrics.costKnown !== false && basis !== words.SETUP_TOKEN
+  const tokens = number(metrics.tokensPerStory)
+
+  return isKnown ? words.money(metrics.costPerStoryUsd) : tokens === null ? words.COST_NOT_KNOWN_TIGHT : words.tokens(tokens)
 }
 
 function noticeOf(notice: Json, now: number, zone: Zone): PaneNotice {
@@ -1020,14 +1143,14 @@ function lastOfEachKey(notices: Json[]): Json[] {
     })
 }
 
-export function bellView(notices: Json, leader: Json | null, metrics: Json | null, now: number, zone: Zone = 0): PaneBell {
+export function bellView(notices: Json, leader: Json | null, metrics: Json | null, now: number, zone: Zone = 0, basis: string | null = null): PaneBell {
   const all = list(notices.notices)
   const paused = pausedOf(leader, false, zone)
   const rows: { value: string; label: string }[] = metrics === null
     ? []
     : [
         { value: String(number(metrics.stories) ?? 0), label: COPY.metricStories(number(metrics.stories) ?? 0, number((metrics.hostProof as Json | null | undefined)?.stories)) },
-        { value: `$${money(metrics.costPerStoryUsd)}`, label: COPY.metricCost },
+        { value: metricCost(metrics, basis), label: COPY.metricCost },
         { value: String(number(metrics.merged) ?? 0), label: COPY.metricMerged },
         { value: String(number(metrics.opened) ?? 0), label: COPY.metricOpened(number(metrics.opened) ?? 0) },
       ]
@@ -1065,6 +1188,7 @@ export function proposalItems(memory: Json, zone: Zone = 0): PaneProposal[] {
       why: text(proposal.why),
       by: by.startsWith('web:') || by === 'owner' ? 'owner' : 'leader',
       story: subject === null ? number(proposal.story) : Number(subject[1]),
+      storyRef: text(proposal.subjectRef) ?? text(proposal.storyRef),
       at: clock(proposal.at, zone),
     }
   })

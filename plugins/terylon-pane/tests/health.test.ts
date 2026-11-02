@@ -11,26 +11,26 @@ import { BRIEFING, PANE_PROPS, SESSION, bandProps, exact, world } from './fixtur
 const WELL: Health = { connection: 'ok', failingSince: null, isPaused: false, alerts: 0, runningUsd: '5.50', dayBudget: '20', slotsUsed: 2, slots: 4 }
 
 test('well: the spend of today and the slots in use', () => {
-  expect(healthLine(WELL)).toBe('Agentic OS ● ok · $5.50 of $20 today · 2/4 slots')
-  expect(healthLine({ ...WELL, dayBudget: null })).toBe('Agentic OS ● ok · $5.50 today · 2/4 slots')
+  expect(healthLine(WELL)).toBe('Terylon ● all well · $5.50 of $20 today · 2/4 slots')
+  expect(healthLine({ ...WELL, dayBudget: null })).toBe('Terylon ● all well · $5.50 today · 2/4 slots')
 })
 
 test('only the worst problem is said: not allowed, then the connection, then the leader paused, then the alerts', () => {
   const everything: Health = { ...WELL, isPaused: true, alerts: 3, failingSince: '18:42' }
 
-  expect(healthLine({ ...everything, connection: 'not-allowed' })).toBe('Agentic OS ⚠ not allowed · /terylon-pane')
-  expect(healthLine({ ...everything, connection: 'unreachable' })).toBe('Agentic OS ⚠ not answering since 18:42')
-  expect(healthLine({ ...everything })).toBe('Agentic OS ⚠ leader paused')
-  expect(healthLine({ ...everything, isPaused: false })).toBe('Agentic OS ⚠ 3 alerts')
-  expect(healthLine({ ...WELL, alerts: 1 })).toBe('Agentic OS ⚠ 1 alert')
-  expect(healthLine({ ...WELL, connection: 'connecting' })).toBe('Agentic OS · connecting…')
+  expect(healthLine({ ...everything, connection: 'not-allowed' })).toBe('Terylon ⚠ not allowed · /terylon-cockpit')
+  expect(healthLine({ ...everything, connection: 'unreachable' })).toBe('Terylon ⚠ not answering since 18:42')
+  expect(healthLine({ ...everything })).toBe('Terylon ⚠ leader paused')
+  expect(healthLine({ ...everything, isPaused: false })).toBe('Terylon ⚠ 3 alerts')
+  expect(healthLine({ ...WELL, alerts: 1 })).toBe('Terylon ⚠ 1 alert')
+  expect(healthLine({ ...WELL, connection: 'connecting' })).toBe('Terylon · connecting…')
 })
 
 test('the line is never longer than it may be, and a cut line ends with an ellipsis', () => {
-  expect(HEALTH_LONGEST).toBeLessThanOrEqual(60)
+  expect(HEALTH_LONGEST).toBeLessThanOrEqual(96)
   expect(healthLine({ ...WELL, runningUsd: '12345678.90', dayBudget: '99999999', slotsUsed: 100, slots: 1000 }).length).toBeLessThanOrEqual(HEALTH_LONGEST)
-  expect(clip('x'.repeat(80))).toHaveLength(HEALTH_LONGEST)
-  expect(clip('x'.repeat(80)).endsWith('…')).toBe(true)
+  expect(clip('x'.repeat(120))).toHaveLength(HEALTH_LONGEST)
+  expect(clip('x'.repeat(120)).endsWith('…')).toBe(true)
   expect(clip('short')).toBe('short')
 })
 
@@ -64,7 +64,7 @@ test('in a session: the status line counts the alerts, the band says them and it
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
-  expect(terylon.statuses[terylon.statuses.length - 1]).toBe('Agentic OS ⚠ 1 alert')
+  expect(terylon.statuses[terylon.statuses.length - 1]).toBe('Terylon ⚠ 1 alert')
 
   for (const surface of ['desktop', 'terminal'] as const) {
     const band = await $.ui.mount({ plugin: 'terylon-pane', surface, component: 'AbovePrompt', props: bandProps() })
@@ -76,28 +76,28 @@ test('in a session: the status line counts the alerts, the band says them and it
 
   const pane = await $.ui.mount({ plugin: 'terylon-pane', surface: 'desktop', component: 'Pane', requestId: 'terylon', props: PANE_PROPS })
   expect((await pane.find({ key: 'tab-queue' }))?.props.variant).toBe('primary')
-  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Status ⚠')
-  expect((await pane.find({ key: 'tab-bell' }))?.props.label).toBe('Bell · 3')
+  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Health ⚠')
+  expect((await pane.find({ key: 'tab-bell' }))?.props.label).toBe('Notices · 3')
 })
 
 test('in a session: each problem reaches the status line, and the line comes back to well', async ($, on) => {
   const terylon = world(on)
   terylon.mode.server = 'unclassified'
   await $.session.start(SESSION)
-  expect(terylon.statuses[0]).toBe('Agentic OS · connecting…')
+  expect(terylon.statuses[0]).toBe('Terylon · connecting…')
   await terylon.clock.settle()
-  expect(terylon.statuses[terylon.statuses.length - 1]).toBe('Agentic OS ⚠ not allowed · /terylon-pane')
+  expect(terylon.statuses[terylon.statuses.length - 1]).toBe('Terylon ⚠ not allowed · /terylon-cockpit')
 
   terylon.mode.server = 'down'
   await terylon.clock.advance(30000)
-  expect(terylon.statuses[terylon.statuses.length - 1]).toMatch(/^Agentic OS ⚠ not answering since \d\d:\d\d$/)
+  expect(terylon.statuses[terylon.statuses.length - 1]).toMatch(/^Terylon ⚠ not answering since \d\d:\d\d$/)
 
   terylon.mode.server = 'up'
   terylon.answers.briefing = { ...BRIEFING, leader: { paused: { at: '2026-10-11T14:05:00Z', source: 'cockpit', reason: null } } }
   await terylon.clock.advance(60000)
-  expect(terylon.statuses[terylon.statuses.length - 1]).toBe('Agentic OS ⚠ leader paused')
+  expect(terylon.statuses[terylon.statuses.length - 1]).toBe('Terylon ⚠ leader paused')
 
   terylon.answers.briefing = BRIEFING
   await terylon.clock.advance(30000)
-  expect(terylon.statuses[terylon.statuses.length - 1]).toBe('Agentic OS ● ok · $5.50 of $20 today · 2/4 slots')
+  expect(terylon.statuses[terylon.statuses.length - 1]).toBe('Terylon ● all well · $5.50 of $20 today · 2/4 slots')
 })

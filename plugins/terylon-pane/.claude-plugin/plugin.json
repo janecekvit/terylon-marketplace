@@ -1,8 +1,9 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "terylon-pane",
-  "version": "1.16.0",
-  "description": "The Terylon band, status line and pane in Claude Desktop, a mod: what waits for you above the prompt, the health of Agentic OS and today's spend in the status line, and one pane with Queue, Goals, Bell, Memory and Status tabs. It answers the leader's questions, adds tasks and goals, and takes the owner's acts on their cards; it never merges. Requires terylon-os.",
+  "displayName": "Terylon Cockpit",
+  "version": "1.17.0",
+  "description": "Terylon Cockpit: the Terylon band, status line and pane in Claude Desktop, a mod opened by /terylon-cockpit: what waits for you above the prompt, the health of Terylon and today's cost in the status line, and one pane with Waiting, Goals, Notices, Memory and Health tabs, every subject by its ref and every figure in Terylon's words. It answers the leader's questions, adds tasks and goals, and takes the owner's acts on their cards; it never merges. Requires terylon-os.",
   "author": {
     "name": "Vít Janeček"
   },

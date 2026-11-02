@@ -229,7 +229,7 @@ test('A HELD SIGNAL SURVIVES A RESTART: kept in the store before lastSeq moves p
   // Held while the turn runs: in the store as well as in memory, and the position already past its event.
   expect(terylon.prompts).toEqual([])
   expect(kept.get('lastSeq')).toBe(18101)
-  expect(kept.get('held')).toEqual([{ story: 327, kind: 'verified', seq: 18101, title: 'Events since the last look', pullRequest: 196, reason: null }])
+  expect(kept.get('held')).toEqual([{ story: 327, kind: 'verified', seq: 18101, title: 'Events since the last look', pullRequest: 196, reason: null, ref: null }])
   expect(told(kept)).toEqual([])
 })
 

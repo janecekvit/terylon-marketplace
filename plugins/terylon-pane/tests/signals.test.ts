@@ -93,10 +93,10 @@ test('THE CATCH-UP: back after 14 h, ONE summary in the order done, waiting, run
   expect(terylon.prompts).toHaveLength(1)
   const summary = terylon.prompts[0] ?? ''
   expect(summary).toStartWith('Terylon, zatímco byl počítač vypnutý (14 h, 3 změn)')
-  const order = ['**Hotovo:**', '**Čeká na tebe:**', '**Běží:**', '**Zadrhlo se:**', '**Útrata:**'].map(label => summary.indexOf(label))
+  const order = ['**Hotovo:**', '**Čeká na tebe:**', '**Běží:**', '**Zadrhlo se:**', '**Náklady:**'].map(label => summary.indexOf(label))
   expect(order).toEqual([...order].sort((left, right) => left - right))
   expect(summary).toContain('#341 mergnutá · #326 mergnutá')
-  expect(summary).toContain('#327 ověřená (merge) · plán 41, 3 story (schválení) · otázka 9')
+  expect(summary).toContain('#327 čeká na merge · plán 41 ke schválení (3 story) · otázka 9')
   expect(summary).toContain('#333 krok 5/9 · #329 ověřuje se')
   expect(summary).not.toContain('Má mrtvý běh')
 
@@ -135,7 +135,7 @@ test('more than 2 000 events behind: no summary, no signals, a band that links t
   expect(terylon.prompts).toEqual([])
   const band = await $.ui.mount({ plugin: 'terylon-pane', surface: 'desktop', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 3, bodyColumns: 80, scroll: { top: 0, bodyRows: 3 }, view: {} } as never })
   expect(await band.find({ type: 'Text', text: /Missed too much/ })).toBeDefined()
-  expect((await band.find({ type: 'Link' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=history')
+  expect((await band.find({ type: 'Link' }))?.props.href).toBe('https://terylon.example.ts.net/?view=activity')
 
   await terylon.clock.advance(30000)
   expect(terylon.prompts).toEqual([])

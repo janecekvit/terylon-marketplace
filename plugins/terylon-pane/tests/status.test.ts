@@ -21,7 +21,7 @@ test('well: ok, the slots and the runs in them, the cost today and over 30 days,
     await ui.press({ key: 'tab-status' })
 
     expect((await ui.find({ key: 'tab-status' }))?.props.variant).toBe('primary')
-    expect((await ui.find({ type: 'Text', text: exact('ok') }))?.props.color).toBe('success')
+    expect((await ui.find({ type: 'Text', text: exact('all well') }))?.props.color).toBe('success')
     expect(await ui.find({ type: 'Text', text: /^\s*last answer at \d\d:\d\d$/ })).toBeDefined()
     expect(await ui.find({ key: 'status-refresh' })).toBeDefined()
 
@@ -33,13 +33,13 @@ test('well: ok, the slots and the runs in them, the cost today and over 30 days,
     expect(await ui.find({ type: 'Text', text: exact('Problems · 0') })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: exact('Nothing wrong.') }))?.props.color).toBe('subtle')
 
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.16.0') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.17.0') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('TERYLON_URL https://terylon.example.ts.net') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('server plugin:terylon-os:terylon') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Every failure is in claude --debug under terylon-pane:') })).toBeDefined()
 
     await ui.press({ key: 'status-story-333' })
-    expect((await ui.find({ key: 'back' }))?.props.label).toBe('‹ Status')
+    expect((await ui.find({ key: 'back' }))?.props.label).toBe('‹ Health')
     await ui.press({ key: 'back' })
     expect((await ui.find({ key: 'tab-status' }))?.props.variant).toBe('primary')
     await ui.unmount()
@@ -110,7 +110,7 @@ test('paused: resuming is the owner\'s gate, a link to the console and never a b
 
     expect((await ui.find({ type: 'Text', text: exact('paused') }))?.props).toMatchObject({ color: 'text', weight: 'semibold' })
     expect(await ui.find({ type: 'Text', text: exact('The leader is paused') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('1. Press Resume, here or on the queue: the leader continues from its log.') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('1. Press Resume, here or on Waiting: the leader continues from its log.') })).toBeDefined()
     // RESUME IS THE OWNER'S ACT ON THE PAUSED CARD (S27): a button, no longer a link to the console.
     expect(await ui.find({ type: 'Link', text: 'Resume in the console ↗' })).toBeUndefined()
     expect((await ui.find({ key: 'act-leader-resume' }))?.props.variant).toBe('primary')
@@ -132,7 +132,7 @@ test('an alert: its own card with the notice\'s body, which says what to do, and
     expect((await ui.find({ type: 'Text', text: exact('the page is not well') }))?.props.color).toBe('error')
     expect(await ui.find({ type: 'Text', text: /^\s*gatus · / })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('gatus says it stopped answering; check the container.') })).toBeDefined()
-    expect((await ui.find({ type: 'Link', text: 'Bell in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=bell')
+    expect((await ui.find({ type: 'Link', text: 'Notices in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=waiting&notices=open')
     await ui.unmount()
   }
 })
@@ -150,7 +150,7 @@ test('the band\'s Open always opens the pane where the owner left it, the queue 
 
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await pane.find({ key: 'tab-queue' }))?.props.variant).toBe('primary')
-  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Status ⚠')
+  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Health ⚠')
 
   await pane.press({ key: 'tab-goals' })
   await band.press({ key: 'band-open' })
@@ -161,5 +161,5 @@ test('the band\'s Open always opens the pane where the owner left it, the queue 
   await band.press({ key: 'band-open' })
   expect((await band.find({ key: 'band-open' }))?.props.label).toBe('Open')
   expect((await pane.find({ key: 'tab-goals' }))?.props.variant).toBe('primary')
-  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Status')
+  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Health')
 })

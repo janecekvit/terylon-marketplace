@@ -10,7 +10,8 @@
 // More than CATCH_UP_MOST_EVENTS behind: no summary at all, a link to the console. Never a brief, a spec
 // or a memory text: events carry transitions only (S3), and only transitions are told.
 
-import { isListStory, list, money, number, text } from './queue'
+import { isHostProof, isListStory, list, number, refOf, spentOfAll, text } from './queue'
+import * as words from './words'
 
 type Json = Record<string, unknown>
 
@@ -28,7 +29,8 @@ export const SIGNALS_KEPT = 300
 
 export type SignalKind = 'verified' | 'merged' | 'accepted' | 'abandoned' | 'blocked' | 'stuck'
 
-export type Candidate = { story: number; kind: SignalKind; seq: number; title: string; pullRequest: number | null; reason: string | null }
+// A candidate's ref is Terylon's short id for its story, null from a Terylon older than refs, which is named by "#id".
+export type Candidate = { story: number; kind: SignalKind; seq: number; title: string; pullRequest: number | null; reason: string | null; ref?: string | null }
 
 export type Signal = { key: string; story: number; kind: SignalKind; prompt: string; toast: string; line: string }
 
@@ -87,7 +89,8 @@ export function candidatesFromEvents(events: Json[]): Candidate[] {
   const found: Candidate[] = []
 
   for (const event of events) {
-    if (event.type !== 'StoryMoved' || number(event.story) === null) {
+    // A HOST PROOF'S STORY MOVES AND TELLS NOBODY: it is the machine proving itself, not work of the owner's.
+    if (event.type !== 'StoryMoved' || number(event.story) === null || isHostProof(event)) {
       continue
     }
 
@@ -108,6 +111,7 @@ export function candidatesFromEvents(events: Json[]): Candidate[] {
         title: text(event.title) ?? '',
         pullRequest: pullRequestOf(event.pullRequest),
         reason: null,
+        ref: text(event.ref) ?? text(event.storyRef),
       })
     }
   }
@@ -117,7 +121,7 @@ export function candidatesFromEvents(events: Json[]): Candidate[] {
 
 export function candidatesFromFlight(flight: Json): Candidate[] {
   return list(flight.stories)
-    .filter(story => story.stuck !== null && typeof story.stuck === 'object')
+    .filter(story => story.stuck !== null && typeof story.stuck === 'object' && !isHostProof(story))
     .map(story => {
       const stuck = story.stuck as Json
 
@@ -128,6 +132,7 @@ export function candidatesFromFlight(flight: Json): Candidate[] {
         title: text(story.title) ?? '',
         pullRequest: null,
         reason: text(stuck.reason),
+        ref: text(story.ref),
       }
     })
 }
@@ -149,7 +154,7 @@ export function heldOf(value: unknown, into: readonly Candidate[] = []): Candida
       continue
     }
 
-    const candidate: Candidate = { story, kind, seq, title: text(json.title) ?? '', pullRequest: number(json.pullRequest), reason: text(json.reason) }
+    const candidate: Candidate = { story, kind, seq, title: text(json.title) ?? '', pullRequest: number(json.pullRequest), reason: text(json.reason), ref: text(json.ref) }
     const isKnown = [...into, ...read].some(other => other.story === story && other.kind === kind && other.seq === seq)
 
     if (!isKnown) {
@@ -168,7 +173,9 @@ export function signalKey(candidate: Candidate, verdict: Verdict | null): string
 
 export function signalFor(candidate: Candidate, verdict: Verdict | null): Signal {
   const story = candidate.story
-  const named = `Story #${story} „${candidate.title}“`
+  // THE STORY BY ITS REF, in the prompt and the toast alike; "#id" only from a Terylon older than refs.
+  const label = refOf({ ref: candidate.ref ?? null }, story)
+  const named = `Story ${label} „${candidate.title}“`
   const pullRequest = verdict?.pullRequest ?? candidate.pullRequest
   const commit = verdict?.commit != null ? verdict.commit.slice(0, 7) : null
   const where = [pullRequest === null ? null : `PR ${pullRequest}`, commit === null ? null : `commit ${commit}`].filter(part => part !== null).join(', ')
@@ -180,32 +187,32 @@ export function signalFor(candidate: Candidate, verdict: Verdict | null): Signal
     case 'verified':
       if (verdict?.isList === true) {
         prompt = `${named} je ověřená${environment === null ? '' : ` v ${environment}`} a čeká na moje přijetí (Accept)${where === '' ? '' : ` (${where})`}. Shrň mi důkazy a co mám proklikat, než ji přijmu.`
-        toast = `Terylon: #${story} verified, waiting for Accept`
+        toast = `Terylon: ${label} verified, waiting for Accept`
         break
       }
 
       prompt = `${named} je ověřená${environment === null ? '' : ` v ${environment}`} a čeká na merge${where === '' ? '' : ` (${where})`}. Shrň mi důkazy a co mám proklikat.`
-      toast = `Terylon: #${story} verified, waiting for merge`
+      toast = `Terylon: ${label} verified, waiting for merge`
       break
     case 'merged':
       prompt = `${named} je mergnutá${where === '' ? '' : ` (${where})`}. Shrň mi, co se změnilo a co ověřit v produkci.`
-      toast = `Terylon: #${story} merged`
+      toast = `Terylon: ${label} merged`
       break
     case 'accepted':
       prompt = `${named} je přijatá bez merge. Shrň mi, s čím byla přijata.`
-      toast = `Terylon: #${story} accepted`
+      toast = `Terylon: ${label} accepted`
       break
     case 'abandoned':
       prompt = `${named} je opuštěná. Shrň mi proč a co z ní zůstalo.`
-      toast = `Terylon: #${story} abandoned`
+      toast = `Terylon: ${label} abandoned`
       break
     case 'blocked':
       prompt = `${named} je zablokovaná. Shrň mi proč a co potřebuje ode mě.`
-      toast = `Terylon: #${story} blocked`
+      toast = `Terylon: ${label} blocked`
       break
     case 'stuck':
       prompt = `${named} se zasekla${candidate.reason === null ? '' : `: ${candidate.reason}`}. Shrň mi, co potřebuje.`
-      toast = `Terylon: #${story} stuck`
+      toast = `Terylon: ${label} stuck`
       break
   }
 
@@ -305,27 +312,45 @@ function hours(milliseconds: number): string {
   return `${Math.max(1, Math.round(milliseconds / 3600000))} h`
 }
 
-// The one summary posted on a return after CATCH_UP_AFTER_MS: done, waiting for you, running, stuck, spend.
-export function catchUpSummary(input: { awayMs: number; events: Json[]; briefing: Json; flight: Json; policy: Json | null }): { prompt: string; waitingCount: number; band: string } {
+// THE CATCH-UP'S COST LINE, in Czech: the dollars where they are known, else the tokens and that the cost on the setup
+// token is not known, never a $ figure (Design · Glossary).
+export const COST_NOT_KNOWN_CZECH = 'náklady na setup tokenu nejsou známé'
+
+function costLine(flight: Json, policy: Json | null, briefing: Json, basis: string | null): string {
+  const stories = list(flight.stories).filter(story => !isHostProof(story))
+  const spent = spentOfAll(stories, basis)
+  const day = number(policy?.dayBudgetUsd)
+  const isKnown = spent.isKnown && briefing.costKnown !== false
+  const tokens = number(briefing.tokens) ?? spent.tokens
+
+  if (!isKnown) {
+    return `**Náklady:** ${tokens === null || tokens <= 0 ? '' : `${words.tokensCzech(tokens)} · `}${COST_NOT_KNOWN_CZECH}.`
+  }
+
+  return `**Náklady:** ${words.money(spent.usd)} v běžících story${day === null ? '' : ` z denního rozpočtu ${words.budget(day)}`}.`
+}
+
+// The one summary posted on a return after CATCH_UP_AFTER_MS: done, waiting for you, running, stuck, cost. Every
+// subject by its ref, and nothing of a host proof's.
+export function catchUpSummary(input: { awayMs: number; events: Json[]; briefing: Json; flight: Json; policy: Json | null; basis?: string | null }): { prompt: string; waitingCount: number; band: string } {
+  const owners = (items: unknown) => list(items).filter(item => !isHostProof(item))
   const ended = coalesce(candidatesFromEvents(input.events)).filter(candidate => candidate.kind === 'merged' || candidate.kind === 'accepted' || candidate.kind === 'abandoned')
-  const done = ended.map(candidate => `#${candidate.story} ${candidate.kind === 'merged' ? 'mergnutá' : candidate.kind === 'accepted' ? 'přijatá' : 'opuštěná'}`)
-  const verified = list(input.briefing.storiesVerified).map(story => `#${number(story.id) ?? 0} ověřená (${text(story.target) === 'list' ? 'accept' : 'merge'})`)
-  const plans = list(input.briefing.plansWaiting).map(plan => `plán ${number(plan.id) ?? 0}, ${number(plan.stories) ?? 0} story (schválení)`)
-  const questions = list(input.briefing.questionsOpen).map(question => `otázka ${number(question.id) ?? 0}`)
+  const done = ended.map(candidate => `${refOf({ ref: candidate.ref ?? null }, candidate.story)} ${candidate.kind === 'merged' ? 'mergnutá' : candidate.kind === 'accepted' ? 'přijatá' : 'opuštěná'}`)
+  const verified = owners(input.briefing.storiesVerified).map(story => `${refOf(story, number(story.id) ?? 0)} čeká na ${text(story.target) === 'list' ? 'přijetí' : 'merge'}`)
+  const plans = owners(input.briefing.plansWaiting).map(plan => `plán ${text(plan.ref) ?? String(number(plan.id) ?? 0)} ke schválení (${number(plan.stories) ?? 0} story)`)
+  const questions = owners(input.briefing.questionsOpen).map(question => `otázka ${number(question.id) ?? 0}`)
   const waiting = [...verified, ...plans, ...questions]
-  const running = list(input.flight.stories).map(story => {
+  const running = owners(input.flight.stories).map(story => {
     const progress = (story.progress ?? null) as Json | null
     const step = number(progress?.step)
     const steps = number(progress?.steps)
 
-    return `#${number(story.id) ?? 0} ${story.state === 'verifying' ? 'ověřuje se' : step !== null && steps !== null ? `krok ${step}/${steps}` : String(story.state ?? '')}`
+    return `${refOf(story, number(story.id) ?? 0)} ${story.state === 'verifying' ? 'ověřuje se' : step !== null && steps !== null ? `krok ${step}/${steps}` : String(story.state ?? '')}`
   })
   const blocked = [
-    ...list(input.briefing.storiesBlocked).map(story => `#${number(story.id) ?? 0} zablokovaná: ${text(story.blockedReason) ?? '?'}`),
-    ...candidatesFromFlight(input.flight).map(candidate => `#${candidate.story} zaseklá${candidate.reason === null ? '' : `: ${candidate.reason}`}`),
+    ...owners(input.briefing.storiesBlocked).map(story => `${refOf(story, number(story.id) ?? 0)} zablokovaná: ${text(story.blockedReason) ?? '?'}`),
+    ...candidatesFromFlight(input.flight).map(candidate => `${refOf({ ref: candidate.ref ?? null }, candidate.story)} zaseklá${candidate.reason === null ? '' : `: ${candidate.reason}`}`),
   ]
-  const spend = list(input.flight.stories).reduce((sum, story) => sum + (number(story.costUsd) ?? 0), 0)
-  const day = number(input.policy?.dayBudgetUsd)
   const line = (label: string, items: string[]) => `**${label}:** ${items.length === 0 ? 'nic' : items.join(' · ')}`
   const prompt = [
     `Terylon, zatímco byl počítač vypnutý (${hours(input.awayMs)}, ${input.events.length} změn)`,
@@ -334,7 +359,7 @@ export function catchUpSummary(input: { awayMs: number; events: Json[]; briefing
     line('Čeká na tebe', waiting),
     line('Běží', running),
     line('Zadrhlo se', blocked),
-    `**Útrata:** $${money(spend)} v běžících story${day === null ? '' : ` z denního rozpočtu $${day.toFixed(0)}`}.`,
+    costLine(input.flight, input.policy, input.briefing, input.basis ?? null),
     '',
     'Projdi se mnou, co čeká na mě, od nejstaršího.',
   ].join('\n')

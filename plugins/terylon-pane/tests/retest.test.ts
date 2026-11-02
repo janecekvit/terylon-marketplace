@@ -117,7 +117,7 @@ test('A VERIFIED LIST STORY WAITS FOR AN ACCEPTANCE: its row, kind and words say
 
   for (const surface of ['desktop', 'terminal'] as const) {
     // The pane opens where it was left; each surface starts on the queue.
-    await $.command.run({ command: 'terylon-pane', args: '' } as never)
+    await $.command.run({ command: 'terylon-cockpit', args: '' } as never)
     const ui = await $.ui.mount({ ...PANE, surface })
     const row = await ui.find({ key: 'accept-352' })
     expect(row?.text).toMatch(/accept/)
@@ -125,7 +125,7 @@ test('A VERIFIED LIST STORY WAITS FOR AN ACCEPTANCE: its row, kind and words say
     expect(row?.text).toMatch(/#352 Weekly cost summary · verified · waiting for your acceptance/)
     expect(await ui.find({ key: 'merge-352' })).toBeUndefined()
     if (surface === 'desktop') {
-      expect((await chipOf(ui, 'accept-352'))?.dot).toBe('success')
+      expect((await chipOf(ui, 'accept-352'))?.dot).toBe('merged')
     }
 
     // A REPOSITORY STORY KEEPS ITS MERGE: the row, its kind and its link to the console.
@@ -138,7 +138,7 @@ test('A VERIFIED LIST STORY WAITS FOR AN ACCEPTANCE: its row, kind and words say
   }
 
   // THE ROW OPENS UNDER ITSELF and leads to its story's card, where Accept is; no link sends it to a merge.
-  await $.command.run({ command: 'terylon-pane', args: '' } as never)
+  await $.command.run({ command: 'terylon-cockpit', args: '' } as never)
   const ui = await $.ui.mount(MOUNT)
   const mergeLinks = async () => (await ui.findAll({ type: 'Link' })).filter(link => String(link.props.href).includes('merge&story=352'))
   await ui.press({ key: 'accept-352' })
@@ -183,7 +183,7 @@ test('A LIST STORY\'S PHASES HAVE NO PULL REQUEST: verdict, then Accept; a repos
 
   // THE REPOSITORY STORY BESIDE IT still passes through its pull request on the way to the merge.
   await ui.unmount()
-  await $.command.run({ command: 'terylon-pane', args: '' } as never)
+  await $.command.run({ command: 'terylon-cockpit', args: '' } as never)
   const queue = await $.ui.mount(MOUNT)
   await queue.press({ key: 'merge-327' })
   await queue.press({ key: 'open-story-327' })

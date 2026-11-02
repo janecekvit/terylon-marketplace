@@ -21,7 +21,7 @@ type Session = { command: { run: (input: never) => Promise<unknown> } }
 
 // Back to the queue from wherever the pane is: the command opens the one pane on it.
 async function toQueue($: Session): Promise<void> {
-  await $.command.run({ command: 'terylon-pane', args: '' } as never)
+  await $.command.run({ command: 'terylon-cockpit', args: '' } as never)
 }
 
 // A waiting row opened on an earlier surface stays open: pressing it again would close it.
@@ -99,7 +99,7 @@ test('PLAN: Approve calls plan_approve for that plan once, on the press, and say
   expect((await ui.find({ key: 'act-plan-41-approve' }))?.props.variant).toBe('primary')
   expect((await ui.find({ key: 'act-plan-41-rethink' }))?.props.label).toBe('Rethink…')
   expect(await ui.find({ type: 'Link', text: 'Approve in the console ↗' })).toBeUndefined()
-  expect((await ui.find({ type: 'Link', text: 'Edit criteria or pick stories in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=plan&plan=41')
+  expect((await ui.find({ type: 'Link', text: 'Edit criteria or pick stories in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=plan&plan=41')
 
   await ui.press({ key: 'act-plan-41-approve' })
   expect(actCalls(terylon.calls)).toEqual([{ tool: 'plan_approve', args: { plan: 41 } }])
@@ -169,7 +169,7 @@ test('REFUSED: Terylon\'s sentence word for word on a red card, its status, Refr
   expect(await ui.find({ type: 'Text', text: exact('Story 333 is pr-open; only a dispatched or running story has a run to stop.') })).toBeDefined()
   expect((await ui.find({ key: 'act-story-333-outcome' }))?.props.borderColor).toBe('error')
   expect((await ui.find({ key: 'act-story-333-refresh' }))?.props.label).toBe('Refresh')
-  expect((await ui.find({ type: 'Link', text: 'Story in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=work&story=333')
+  expect((await ui.find({ type: 'Link', text: 'Story in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=story&story=333')
 
   await ui.press({ key: 'act-story-333-refresh' })
   expect(await ui.find({ type: 'Text', text: exact('✗ Refused (409)') })).toBeUndefined()
@@ -207,7 +207,7 @@ test('STORY, VERIFIED IN A REPOSITORY: merge is only ever the console\'s link; R
   for (const surface of ['desktop', 'terminal'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     await openStory($, ui, 327)
-    expect((await ui.find({ type: 'Link', text: 'Merge in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=merge&story=327')
+    expect((await ui.find({ type: 'Link', text: 'Merge in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=merge&story=327')
     expect(await ui.find({ type: 'Button', text: /Merge/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: exact('Merge is the one gate: your passkey confirms it in the console, at exactly commit 4be21c0. The pane never merges.') })).toBeDefined()
     expect(await ui.find({ key: 'act-story-327-accept' })).toBeUndefined()

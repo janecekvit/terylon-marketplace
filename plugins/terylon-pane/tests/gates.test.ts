@@ -52,7 +52,7 @@ test(`pressing every Button on every screen of the ${surface} surface calls no g
     const paths = surface === 'mobile' ? PATHS : [...PATHS, ['quick-open'], ['quick-open', 'add-send']]
 
     for (const path of paths) {
-      await $.command.run({ command: 'terylon-pane', args: '' } as never)
+      await $.command.run({ command: 'terylon-cockpit', args: '' } as never)
 
       for (const [index, key] of path.entries()) {
         const nextKey = path[index + 1]

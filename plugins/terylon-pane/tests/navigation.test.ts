@@ -33,7 +33,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
     expect((await ui.find({ key: 'story-state' }))?.props.backgroundColor).toBe(surface === 'desktop' ? 'userMessageBackground' : undefined)
     expect(await ui.find({ type: 'Text', text: /attempt 2 · feat\/direct-dispatch · opus \/ high$/ })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: exact('feat/direct-dispatch') }))?.props.mono).toBe(true)
-    expect((await ui.find({ type: 'Text', text: exact('running 12 h 0 min') }))?.props.tabular).toBe(true)
+    expect((await ui.find({ type: 'Text', text: exact('running 12 h') }))?.props.tabular).toBe(true)
     // THE PHASES FROM progress.stage (#360), never the timeline: up to Tests done, Tests now, the rest to come.
     expect(await ui.find({ type: 'Text', text: exact('5 of 8') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /does not report|from the timeline/ })).toBeUndefined()
@@ -67,7 +67,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
 
     if (surface === 'desktop') {
       // THE RUN'S NUMBERS LARGE, in tabular digits, and the spend against the story's budget as a bar.
-      for (const [value, label] of [['$2.10', "of the story's $8"], ['1.4 M', 'tokens'], ['12 h 0 min', 'since start']]) {
+      for (const [value, label] of [['$2.10', "of the story's $8"], ['1.4 M', 'tokens'], ['12 h', 'since start']]) {
         const number = await ui.find({ type: 'Text', text: exact(value ?? '') })
         expect(number?.props.size).toBe('title')
         expect(number?.props.tabular).toBe(true)
@@ -76,7 +76,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
 
       expect((await pictures(ui)).map(item => item.alt)).toContain("$2.10 of the story's $8")
     } else {
-      expect((await ui.find({ type: 'Text', text: exact("$2.10 of the story's $8 · 1.4 M tokens · 12 h 0 min since start") }))?.props.color).toBe('inactive')
+      expect((await ui.find({ type: 'Text', text: exact("$2.10 of the story's $8 · 1.4 M tokens · 12 h since start") }))?.props.color).toBe('inactive')
     }
 
     // The run's question, answerable from here or in the console.
@@ -104,7 +104,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
     expect(await ui.find({ key: 'goal-story-333' })).toBeDefined()
     await ui.press({ key: 'back' })
     expect(await ui.find({ type: 'Text', text: exact('#333 Direct dispatch') })).toBeDefined()
-    expect((await ui.find({ key: 'back' }))?.props.label).toBe('‹ Queue')
+    expect((await ui.find({ key: 'back' }))?.props.label).toBe('‹ Waiting')
     await ui.press({ key: 'back' })
     expect(await ui.find({ type: 'Text', text: exact('Waiting for you · 3') })).toBeDefined()
   })
@@ -120,7 +120,7 @@ test('a verified story shows its environment, verdict, overrun and criteria; mer
   await ui.press({ key: 'open-story-327' })
 
   expect(await ui.find({ type: 'Text', text: /verified · waits for you/ })).toBeDefined()
-  expect((await chipOf(ui, 'story-state'))?.dot).toBe('success')
+  expect((await chipOf(ui, 'story-state'))?.dot).toBe('merged')
   expect(await ui.find({ type: 'Text', text: exact('Environment pr-196') })).toBeDefined()
   expect((await ui.find({ type: 'Link', text: 'https://pr-196.terylon.example.ts.net ↗' }))?.props.href).toBe('https://pr-196.terylon.example.ts.net')
   expect((await ui.find({ type: 'Text', text: exact('Verdict') }))?.props.color).toBe('success')
@@ -134,7 +134,7 @@ test('a verified story shows its environment, verdict, overrun and criteria; mer
   expect(await ui.find({ type: 'Text', text: exact('8 of 8') })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: exact('commit 4be21c0') }))?.props.mono).toBe(true)
 
-  expect((await ui.find({ type: 'Link', text: 'Merge in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=merge&story=327')
+  expect((await ui.find({ type: 'Link', text: 'Merge in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=merge&story=327')
   expect((await ui.find({ type: 'Link', text: 'PR 196 ↗' }))?.props.href).toBe('https://dev.example/pr/196')
   expect(await ui.find({ type: 'Button', text: /Merge/ })).toBeUndefined()
   expect((await ui.find({ key: 'act-story-327-return' }))?.props.label).toBe('Return…')
@@ -213,7 +213,7 @@ test('a waiting plan opens with its stories, each opening the story; approve and
   // row alone, never beside the chain (#39).
   expect((await pictures(ui)).map(item => item.alt)).toEqual(['Health: tlačítko Check now; Notice handle přes MCP after Health: tlačítko Check now'])
   expect(await ui.find({ type: 'Text', text: exact('S ~$3 → M ~$5') })).toBeUndefined()
-  expect((await ui.find({ type: 'Link', text: 'Edit criteria or pick stories in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=plan&plan=41')
+  expect((await ui.find({ type: 'Link', text: 'Edit criteria or pick stories in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=plan&plan=41')
   expect((await ui.find({ key: 'act-plan-41-approve' }))?.props.label).toBe('Approve')
   expect((await ui.find({ key: 'act-plan-41-rethink' }))?.props.label).toBe('Rethink…')
 
@@ -274,7 +274,7 @@ test('the bell tab reads the notices, the leader and the metrics; a notice is ha
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ key: 'tab-bell' }))?.props.label).toBe('Bell · 2')
+  expect((await ui.find({ key: 'tab-bell' }))?.props.label).toBe('Notices · 2')
   await ui.press({ key: 'tab-bell' })
 
   expect(await ui.find({ type: 'Text', text: exact('Needs you · 2') })).toBeDefined()
@@ -282,7 +282,7 @@ test('the bell tab reads the notices, the leader and the metrics; a notice is ha
   // next day. The expectation is computed as the pane computes it, so it holds in every zone.
   const raised = when(NOTICES.notices.find(notice => notice.id === 117)?.raisedAt, WORLD_NOW, hostZoneOffset(WORLD_NOW))
   expect(raised).toBe(hostZoneOffset(WORLD_NOW) === 0 ? '07:26' : raised)
-  expect(raised).toMatch(/^(\d\d:\d\d|\d{1,2}\. \d{1,2}\.)$/)
+  expect(raised).toMatch(/^(\d\d:\d\d|yesterday \d\d:\d\d|\d{1,2} [A-Z][a-z]{2} \d\d:\d\d)$/)
   expect((await ui.find({ key: 'notice-117' }))?.text).toMatch(new RegExp(`^\\s*(?:●\\s+)?diun\\s+A newer docker\\.io/amir20/dozzle:latest is published\\s+${escapeRegExp(raised)} ▸$`))
   // THE SOURCE AS A CHIP (S32): a fault of the machine in error, everything else inactive.
   expect((await chipOf(ui, 'notice-117'))?.dot).toBe('inactive')
@@ -305,8 +305,8 @@ test('the bell tab reads the notices, the leader and the metrics; a notice is ha
   expect((await ui.find({ key: 'leader-actions' }))?.props.borderStyle).toBeUndefined()
   expect(await ui.find({ type: 'Link', text: 'Pause the leader ↗' })).toBeUndefined()
   expect(await ui.find({ key: 'act-leader-pause' })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: exact('Mark handled is notice_handle, which decides nothing about work. Pause and Resume are on the queue and the Status tab.') })).toBeDefined()
-  expect(await ui.find({ type: 'Link', text: 'Bell in the console ↗' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('Mark handled is notice_handle, which decides nothing about work. Pause and Resume are on Waiting and Health.') })).toBeDefined()
+  expect(await ui.find({ type: 'Link', text: 'Notices in the console ↗' })).toBeDefined()
 
   for (const tool of ['notices_list', 'leader_status', 'metrics']) {
     expect(terylon.calls.map(call => call.tool)).toContain(tool)
@@ -330,17 +330,26 @@ test('Memory is a tab of the one pane: no second pane opens, and the tabs lead b
   expect(await ui.find({ type: 'Text', text: exact('Waiting for you · 3') })).toBeDefined()
 })
 
-test('/terylon-pane and /terylon open the pane on the queue; /terylon-memory opens the same pane on its Memory tab', async ($, on) => {
+// TERYLON COCKPIT'S ONE COMMAND (Terylon S68): /terylon-cockpit opens the pane on Waiting, the Memory a tab of it; the
+// three commands it had before are gone, not aliased.
+test('/terylon-cockpit is the one command: it opens the pane on Waiting; /terylon-pane, /terylon and /terylon-memory are gone', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
-  await $.command.run({ command: 'terylon-pane', args: '' } as never)
-  await $.command.run({ command: 'terylon', args: '' } as never)
-  await $.command.run({ command: 'terylon-memory', args: '' } as never)
+  expect(await $.command.run({ command: 'terylon-cockpit', args: '' } as never)).toEqual({ text: 'Terylon Cockpit is open.' })
+  expect(terylon.opens).toEqual(['terylon'])
 
-  expect(terylon.opens).toEqual(['terylon', 'terylon', 'terylon'])
+  for (const gone of ['terylon-pane', 'terylon', 'terylon-memory']) {
+    expect(await $.command.run({ command: gone, args: '' } as never).then(() => 'answered', () => 'not a command')).toBe('not a command')
+  }
+
+  expect(terylon.opens).toEqual(['terylon'])
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ key: 'tab-queue' }))?.props.variant).toBe('primary')
+  expect((await ui.find({ key: 'tab-queue' }))?.props.label).toBe('Waiting')
+  expect(await ui.find({ type: 'Text', text: exact('/terylon-cockpit') })).toBeDefined()
+  await ui.press({ key: 'tab-memory' })
   expect((await ui.find({ key: 'tab-memory' }))?.props.variant).toBe('primary')
 })

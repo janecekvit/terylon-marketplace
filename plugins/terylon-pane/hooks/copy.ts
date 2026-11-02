@@ -1,25 +1,30 @@
-// The band's and the pane's own words, in English: the interface, as the operator chose it on 2026-10-12 (#332).
-// What Terylon sends (story titles, the leader's questions, memory entries, rules) is drawn in the language it
-// came in, untranslated. The prompts the pane posts into the session are the owner's words to Claude, in Czech.
+// Terylon Cockpit's own words, in English: the interface, as the operator chose it on 2026-10-12 (#332), in Terylon's
+// glossary since Terylon S68 (Design · Glossary): Waiting · Goals · Notices · Memory · Health, every subject by its ref,
+// every figure through hooks/words.ts. What Terylon sends (story titles, the leader's questions, memory entries, rules)
+// is drawn in the language it came in, untranslated. The prompts the pane posts into the session are the owner's words
+// to Claude, in Czech; no word drawn on a surface is Czech.
 
 // What the leader does with a new goal, as the owner is told after Add goal (S31).
 const GOAL_READ_FIRST = 'The leader reads it first: a general direction stays a goal; a concrete ask — a file, a document, one change — becomes a task under a goal.'
 
 export const COPY = {
-  title: 'Terylon',
+  title: 'Terylon Cockpit',
+  // The machine's name, where the band says what is wrong with the pane's way to it rather than what waits.
+  machineName: 'Terylon',
   connecting: 'connecting…',
   refresh: 'Refresh',
   ago: (seconds: number) => (seconds < 60 ? `${seconds} s ago` : `${Math.round(seconds / 60)} min ago`),
   connected: (age: string) => `connected · ${age}`,
   disconnected: (since: string) => `not answering since ${since}`,
-  footer: '/terylon-pane · /terylon-memory',
+  // TERYLON COCKPIT'S ONE COMMAND: no other alias, its Memory a tab.
+  footer: '/terylon-cockpit',
 
   // The band above the prompt.
   bandWaiting: 'Waiting',
-  bandBell: 'Bell',
+  bandNotices: 'Notices',
   bandRunning: 'Running',
   bandStuck: (count: number) => ` (${count} stuck)`,
-  bandQueued: 'Queue',
+  bandQueued: 'Queued',
   bandLeader: 'Leader',
   bandPaused: (since: string | null) => (since === null ? 'paused' : `paused since ${since}`),
   bandNotAllowed: "Claude Code refused the pane's call",
@@ -33,27 +38,29 @@ export const COPY = {
   bandOpen: 'Open',
   bandConsole: 'Console ↗',
 
-  // The status line: the health of Agentic OS and its spend.
-  healthConnecting: 'Agentic OS · connecting…',
-  healthOk: (running: string, day: string | null, used: number, slots: number) =>
-    `Agentic OS ● ok · $${running}${day === null ? '' : ` of $${day}`} today · ${used}/${slots} slots`,
-  healthNotAllowed: 'Agentic OS ⚠ not allowed · /terylon-pane',
-  healthNoServer: 'Agentic OS ⚠ no terylon server · /terylon-pane',
-  healthRefused: 'Agentic OS ⚠ refused: not the owner',
-  healthError: 'Agentic OS ⚠ Terylon returned an error',
-  healthUnreachable: (since: string) => `Agentic OS ⚠ not answering since ${since}`,
-  healthPaused: 'Agentic OS ⚠ leader paused',
-  healthAlerts: (count: number) => `Agentic OS ⚠ ${count} ${count === 1 ? 'alert' : 'alerts'}`,
+  // The status line: the health of Terylon, the machine, and today's cost.
+  healthConnecting: 'Terylon · connecting…',
+  healthOk: (cost: string, used: number, slots: number) => `Terylon ● all well · ${cost} · ${used}/${slots} slots`,
+  healthNotAllowed: 'Terylon ⚠ not allowed · /terylon-cockpit',
+  healthNoServer: 'Terylon ⚠ no terylon server · /terylon-cockpit',
+  healthRefused: 'Terylon ⚠ refused: not the owner',
+  healthError: 'Terylon ⚠ Terylon returned an error',
+  healthUnreachable: (since: string) => `Terylon ⚠ not answering since ${since}`,
+  healthPaused: 'Terylon ⚠ leader paused',
+  healthAlerts: (count: number) => `Terylon ⚠ ${count} ${count === 1 ? 'alert' : 'alerts'}`,
+  // TODAY'S COST: "$5.50 of $20 today", or on the setup token "66 k tokens today · cost not known on the setup token".
+  todayCost: (running: string, day: string | null) => `${running}${day === null ? '' : ` of ${day}`} today`,
+  todayTokens: (tokens: string | null, phrase: string) => `${tokens === null ? '' : `${tokens} today · `}${phrase}`,
 
-  // The Status tab: the machine, its slots, its cost, what is wrong and how to fix it, and where to look.
-  statusMachine: 'Agentic OS',
+  // Health: the machine, its slots, its cost, what is wrong and how to fix it, and where to look.
+  statusMachine: 'Terylon',
   statusSince: (time: string) => `since ${time}`,
   statusLastAnswer: (time: string | null) => (time === null ? 'no answer yet' : `last answer at ${time}`),
   statusSlots: 'Slots',
   statusSlotsLine: (used: number, slots: number) => `${used} of ${slots} running`,
   statusSlotsHint: 'policy slots',
   statusCost: 'Cost',
-  statusToday: (running: string, day: string | null) => (day === null ? `$${running} today, no daily limit set` : `$${running} of the $${day} daily limit today`),
+  statusToday: (running: string, day: string | null) => (day === null ? `${running} today, no daily limit set` : `${running} of the ${day} daily limit today`),
   statusMonth: 'Last 30 days',
   statusProblems: 'Problems',
   nothingWrong: 'Nothing wrong.',
@@ -75,7 +82,7 @@ export const COPY = {
     'The pane retries every minute; Try again does it now.',
   ],
   pausedTitle: 'The leader is paused',
-  fixPaused: ['Press Resume, here or on the queue: the leader continues from its log.'],
+  fixPaused: ['Press Resume, here or on Waiting: the leader continues from its log.'],
   alertHint: (source: string, time: string) => `${source} · ${time}`,
   fixAlert: 'What to do is in the notice; handling it is the console\'s.',
   statusDiagnostics: 'Diagnostics',
@@ -89,18 +96,18 @@ export const COPY = {
   signallerMissingTitle: 'No session is posting the done-signal',
   signallerMissingBody: 'No open session holds the lease that lets one read Terylon\'s events and post them, so nothing that moves is told here.',
   fixSignallerMissing: [
-    'Type in the Claude session you work in, or open the Terylon pane there: that session takes the lease within a tick.',
+    'Type in the Claude session you work in, or open Terylon Cockpit there: that session takes the lease within a tick.',
     'If it stays, check that this is not a claude -p run, and see Diagnostics under signaller and store refusals.',
     'Then run claude --debug and read the lines under terylon-pane: events:',
   ],
   diagnosticsDebug: 'Every failure is in claude --debug under terylon-pane:',
 
   // Tabs.
-  tabQueue: 'Queue',
+  tabQueue: 'Waiting',
   tabGoals: 'Goals',
-  tabBell: (count: number) => (count > 0 ? `Bell · ${count}` : 'Bell'),
+  tabNotices: (count: number) => (count > 0 ? `Notices · ${count}` : 'Notices'),
   tabMemory: 'Memory',
-  tabStatus: (hasProblem: boolean) => (hasProblem ? 'Status ⚠' : 'Status'),
+  tabHealth: (hasProblem: boolean) => (hasProblem ? 'Health ⚠' : 'Health'),
   selected: (label: string) => `● ${label}`,
   back: '‹ Back',
 
@@ -130,27 +137,30 @@ export const COPY = {
   kindStory: 'story',
   kindRunning: 'running',
   kindStuck: 'stuck',
-  header: (runningUsd: string, dayBudget: string | null, used: number, slots: number) =>
-    `running $${runningUsd}${dayBudget === null ? '' : ` of $${dayBudget} today`} · ${used} of ${slots} slots`,
-  // The Running heading's two gauges (S32), and what the narrow dock and the terminal say in their place.
+  header: (cost: string, dayBudget: string | null, used: number, slots: number) =>
+    `running ${cost}${dayBudget === null ? '' : ` of $${dayBudget} today`} · ${used} of ${slots} slots`,
+  // The Running heading's two gauges (S32), and what the narrow dock and the terminal say in their place. The cost is
+  // the glossary's: "$5.50", or on the setup token "66 k tokens · cost not known", never a $ figure there.
   gaugeSlots: (used: number, slots: number) => `${used}/${slots} slots`,
-  gaugeSpend: (runningUsd: string, dayBudget: string | null) => (dayBudget === null ? `$${runningUsd} today` : `$${runningUsd} of $${dayBudget}`),
-  gaugeSpendAlt: (runningUsd: string, dayBudget: string) => `$${runningUsd} of $${dayBudget} today`,
-  gaugesNarrow: (used: number, slots: number, runningUsd: string) => `${used}/${slots} · $${runningUsd}`,
+  gaugeSpend: (cost: string, dayBudget: string | null) => (dayBudget === null ? `${cost} today` : `${cost} of ${dayBudget}`),
+  gaugeSpendAlt: (cost: string, dayBudget: string) => `${cost} of ${dayBudget} today`,
+  gaugesNarrow: (used: number, slots: number, cost: string) => `${used}/${slots} · ${cost}`,
   verifiedWaiting: (environment: string | null) =>
     environment === null ? 'verified · waiting for merge' : `verified in ${environment} · waiting for merge`,
-  planWaiting: (estimate: string | null) => (estimate === null ? 'to approve' : `to approve · ~$${estimate}`),
-  planTitle: (plan: number, goal: string, stories: number) => `Plan ${plan} · ${goal} · ${stories} ${stories === 1 ? 'story' : 'stories'}`,
+  // A plan's estimate as the glossary says it ("~$14"), none where it is $0 or not estimated: never "~$0".
+  planWaiting: (estimate: string | null) => (estimate === null ? 'to approve' : `to approve · ${estimate}`),
+  planTitle: (plan: string, goal: string, stories: number) => `Plan ${plan} · ${goal} · ${stories} ${stories === 1 ? 'story' : 'stories'}`,
   // A repeating task's version plan (Terylon S43): no stories to count, one version to approve.
   taskVersion: (version: string | null, task: string) => (version === null ? `a new version of ${task}` : `version ${version} of ${task}`),
-  taskVersionTitle: (plan: number, version: string | null, task: string) => `Plan ${plan} · ${version === null ? `a new version of ${task}` : `version ${version} of ${task}`}`,
+  taskVersionTitle: (plan: string, version: string | null, task: string) => `Plan ${plan} · ${version === null ? `a new version of ${task}` : `version ${version} of ${task}`}`,
   approveVersionNote: (version: string | null) => `Approve: each later task_run uses ${version === null ? 'this version' : `version ${version}`}.`,
   versionWaiting: (terms: string | null) => (terms === null ? 'to approve' : `to approve · ${terms}`),
   // The task's settled versions, on its card: "Versions: 1 (plan 2536), 2 (plan 2573)".
-  repeatingVersions: (versions: readonly { version: string | null; plan: number; isWithdrawn: boolean }[]) =>
+  repeatingVersions: (versions: readonly { version: string | null; plan: string; isWithdrawn: boolean }[]) =>
     `Versions: ${versions.map(item => `${item.version === null ? '' : `${item.version} `}${item.isWithdrawn ? 'withdrawn ' : ''}(plan ${item.plan})`).join(', ')}`,
   blocked: (reason: string) => `blocked: ${reason}`,
   verifying: 'verifying',
+  verifyingIn: (environment: string) => `verifying in ${environment}`,
   stuckSince: (time: string) => `stuck since ${time}`,
   after: (stories: string) => `after ${stories}`,
   held: (reason: string) => reason,
@@ -160,7 +170,7 @@ export const COPY = {
   notStarted: 'not started, though a slot is free',
   heldTitle: 'Held',
   verifiedAccept: 'verified · waiting for your acceptance',
-  mergedAt: (time: string, cost: string) => `${time} · $${cost}`,
+  mergedAt: (time: string, cost: string) => `${time} · ${cost}`,
   answer: 'Answer',
   answerInConsole: 'Answer in the console ↗',
   openStory: 'Open story',
@@ -176,7 +186,7 @@ export const COPY = {
   addOnPhoneNote: 'The phone has no Input: “Add a task…” posts a request into the session, and you tell Claude the task.',
   addOnPhonePrompt: 'Chci přidat úkol lídrovi Terylonu. Zeptej se mě, co a po čem.',
   paused: (since: string | null, reason: string | null) =>
-    `The leader is paused${since === null ? '' : ` since ${since}`}${reason === null ? '' : ` (${reason})`}. Nothing new starts; the queue below stands still.`,
+    `The leader is paused${since === null ? '' : ` since ${since}`}${reason === null ? '' : ` (${reason})`}. Nothing new starts; what is queued below stands still.`,
 
   // The states that are not a queue: each says what happened, why, and the step that fixes it.
   noServerTitle: 'The pane found no MCP server terylon',
@@ -198,7 +208,7 @@ export const COPY = {
   reason: (problem: string) => `Reason: ${problem}`,
   addAfterReconnect: 'Adding a task waits for the connection; what you typed stays.',
   refusedTitle: 'Refused: you are not the owner',
-  refusedBody: 'The pane shows the queue to the owner only; sign this PC into the tailnet with your own account.',
+  refusedBody: 'The pane shows what waits to the owner only; sign this PC into the tailnet with your own account.',
   errorTitle: 'Terylon returned an error',
   errorBody: 'Health in the console shows why.',
   health: 'Health ↗',
@@ -211,7 +221,7 @@ export const COPY = {
   // THE DONE-SIGNAL STOPPED: events_since, or the store that keeps the pane's place, failed. Each kind says its fix.
   eventsNotAllowedTitle: "Claude Code refused the done-signal's call",
   eventsNotAllowedBody:
-    'The queue is read, but Claude Code refused events_since, the call that tells you a story was verified, merged or blocked. Until it passes, nothing is told: no prompt, no toast, no catch-up.',
+    'Waiting is read, but Claude Code refused events_since, the call that tells you a story was verified, merged or blocked. Until it passes, nothing is told: no prompt, no toast, no catch-up.',
   fixEventsNotAllowed: [
     'Add these rules to ~/.claude/settings.json, under "permissions" → "allow"; events_since must be among them, spelled as below:',
     'If the rule is already there, restart Claude Desktop, so the settings are read again.',
@@ -219,7 +229,7 @@ export const COPY = {
   ],
   eventsStoppedTitle: 'The done-signal stopped',
   eventsStoppedBody: (since: string) =>
-    `Since ${since}, events_since has not answered as the owner's. The queue is current, but a story verified, merged or blocked is not told.`,
+    `Since ${since}, events_since has not answered as the owner's. Waiting is current, but a story verified, merged or blocked is not told.`,
   fixEventsStopped: [
     'Open Health in the console to see why.',
     'Press Try again; every poll also tries again.',
@@ -237,24 +247,24 @@ export const COPY = {
   ],
   eventsSilentTitle: 'The done-signal hears nothing',
   eventsSilentBody: (seconds: number, last: string | null) =>
-    `events_since has not answered for ${seconds} s${last === null ? ', not once this session' : `; its last answer was at ${last}`}, while the queue reads. Nothing failed that the pane could see: its events path stopped before the call.`,
+    `events_since has not answered for ${seconds} s${last === null ? ', not once this session' : `; its last answer was at ${last}`}, while Waiting reads. Nothing failed that the pane could see: its events path stopped before the call.`,
   fixEventsSilent: [
     'Press Try again.',
     'Restart Claude Desktop.',
     'If it stays, run claude --debug and read the lines under terylon-pane: events: — the last one says where it stopped.',
   ],
   // A PART OF THE STATUS TAB THAT DID NOT DRAW: said as a problem, the rest of the tab drawn around it.
-  statusPartFailed: (part: string) => `The Status tab's ${part} did not draw`,
+  statusPartFailed: (part: string) => `Health's ${part} did not draw`,
   fixStatusPart: [
     'Press Refresh, or open another tab and come back.',
-    'If it stays, run claude --debug and read the line under terylon-pane: the Status tab',
+    'If it stays, run claude --debug and read the line under terylon-pane: Health',
     'Restart Claude Desktop.',
   ],
   // THE STATUS TAB DRAWN MINIMAL (TERYLON_PANE_STATUS=minimal): plain lines, to bisect a tab Desktop does not draw.
-  statusMinimalMachine: (word: string) => `Agentic OS: ${word}`,
+  statusMinimalMachine: (word: string) => `Terylon: ${word}`,
   paneLogTitle: "The pane's own log",
   paneLogHint: 'TERYLON_PANE_STATUS=log · newest last',
-  paneLogEmpty: 'Nothing logged yet. Open the Status tab, then come back here.',
+  paneLogEmpty: 'Nothing logged yet. Open Health, then come back here.',
   statusMinimalProblems: (count: number, events: string | null) => `Problems: ${count}${events === null ? '' : ` (the done-signal: ${events})`}`,
   storeTimedOut: (seconds: number) => `the store did not answer within ${seconds} s`,
   storeReadFailed: (key: string, error: string) => `reading ${key} from the store failed: ${error}`,
@@ -262,8 +272,8 @@ export const COPY = {
 
   // One story.
   summariseInSession: 'Summarise in the session',
-  summarisePrompt: (story: number) =>
-    `Shrň mi story #${story} z Terylonu: kde je, co stojí a co potřebuje (story_get, work_in_flight).`,
+  summarisePrompt: (story: string) =>
+    `Shrň mi story ${story} z Terylonu: kde je, co stojí a co potřebuje (story_get, work_in_flight).`,
   summariseNote: '“Summarise in the session” posts a question into the chat; Claude answers it through story_get. The pane decides nothing.',
   storyInConsole: 'Story in the console ↗',
   storyLoading: 'Loading the story…',
@@ -280,7 +290,7 @@ export const COPY = {
   phasesNoStage: (done: number, all: number) => `${done} of ${all} · no stage reported`,
   phasesEnded: (done: number, all: number, state: string) => `${done} of ${all} · ${state}`,
   stepOf: (step: number, steps: number) => `step ${step} of ${steps}`,
-  costOf: (cost: string, budget: string | null) => (budget === null ? `$${cost}` : `$${cost} of the story's $${budget}`),
+  costOf: (cost: string, budget: string | null) => (budget === null ? cost : `${cost} of the story's ${budget}`),
   phases: 'Phases',
   phasesHint: (done: number, all: number) => `${done} of ${all}`,
   phaseAdmitted: 'Admitted to a slot',
@@ -289,7 +299,7 @@ export const COPY = {
   phaseShort: (label: string) => PHASE_SHORT[label] ?? label,
   phaseTooltip: (label: string, role: string | null, status: string, step: string | null) =>
     [label, role, status === 'now' ? 'now' : status === 'done' ? 'done' : 'to come', step].filter(part => part !== null).join(' · '),
-  storyCaption: (goal: number | null) => (goal === null ? 'STORY' : `STORY · GOAL ${goal}`),
+  storyCaption: (goal: string | null) => (goal === null ? 'STORY' : `STORY · GOAL ${goal}`),
   storyRunning: (hours: string) => `running ${hours}`,
   storyBlocked: (hours: string) => `blocked for ${hours}`,
   storyAttempt: (attempt: number) => `attempt ${attempt}`,
@@ -301,10 +311,12 @@ export const COPY = {
   tokens: (count: string) => `${count} tokens`,
   sinceStart: (hours: string) => `${hours} since start`,
   numberSpent: 'spent',
-  numberOfBudget: (budget: string) => `of the story's $${budget}`,
+  numberOfBudget: (budget: string) => `of the story's ${budget}`,
+  // ON THE SETUP TOKEN WITH NO TOKENS MEASURED YET: the spend's cell says none rather than a figure.
+  numberNoTokens: '—',
   numberTokens: 'tokens',
   numberSinceStart: 'since start',
-  spendAlt: (cost: string, budget: string) => `$${cost} of the story's $${budget}`,
+  spendAlt: (cost: string, budget: string) => `${cost} of the story's ${budget}`,
   questionFromRun: 'Question from the run',
   waitsOnYou: 'waits for you',
   environment: (name: string) => `Environment ${name}`,
@@ -317,7 +329,7 @@ export const COPY = {
   less: 'less ▴',
   timeline: 'What happened',
   timelineHint: 'newest first',
-  goalOf: (goal: number) => `Goal ${goal}`,
+  goalOf: (goal: string) => `Goal ${goal}`,
   stateText: (state: string) => STATE_TEXT[state] ?? state,
 
   // A question of the leader's.
@@ -352,9 +364,9 @@ export const COPY = {
   closedLoading: 'Loading the closed goals…',
   closedChanged: 'The closed goals changed since they were read.',
   closedReadAgain: 'Read them again',
-  plan: (plan: number) => `Plan ${plan}`,
+  plan: (plan: string) => `Plan ${plan}`,
   planStoryDetail: (size: string, estimate: string | null, after: string | null) =>
-    [size, estimate === null ? null : `~$${estimate}`, after === null ? null : `after ${after}`].filter(part => part !== null).join(' · '),
+    [size, estimate, after === null ? null : `after ${after}`].filter(part => part !== null).join(' · '),
   // A plan's order said in words, by its stories' titles: "A; B; C after A" (#35).
   planOrderAlt: (stories: readonly { title: string; after: readonly string[] }[]) =>
     stories.map(story => (story.after.length === 0 ? story.title : `${story.title} after ${story.after.join(' and ')}`)).join('; '),
@@ -432,9 +444,9 @@ export const COPY = {
   specSaved: (sentence: string) => `✓ ${sentence}`,
   specInConsole: 'In the console ↗',
   specDecisions: 'YOUR DECISIONS ON EARLIER PLANS',
-  specDecision: (plan: number, day: string, comment: string | null) => `Plan ${plan} · ${day}${comment === null ? '' : ` · “${comment}”`}`,
+  specDecision: (plan: string, day: string, comment: string | null) => `Plan ${plan} · ${day}${comment === null ? '' : ` · “${comment}”`}`,
   specLoading: 'Loading the specification…',
-  specOf: (goal: number) => `Goal ${goal} · specification`,
+  specOf: (goal: string) => `Goal ${goal} · specification`,
   specVersionShown: (version: number) => `Version ${version}`,
   specReadOnly: (revised: string) => (revised === '' ? 'read-only' : `revised ${revised} · read-only`),
   specFileMissing: (name: string, version: number) => `${name} is not in version ${version}.`,
@@ -444,7 +456,8 @@ export const COPY = {
   repeatingApproved: (version: string) => `Approved version ${version}`,
   repeatingNotApproved: 'No version approved yet',
   repeatingWaiting: (version: string) => `version ${version} waits for you`,
-  repeatingBudget: (usd: string) => `up to $${usd} a run`,
+  // A run's budget, "up to $1 a run", and on the setup token that it is not applied (Design · Glossary).
+  repeatingBudget: (budget: string, isNotApplied: boolean) => `up to ${budget} a run${isNotApplied ? ' · not applied on the setup token' : ''}`,
   repeatingAcceptsItself: 'green runs accepted by themselves',
   repeatingWaitsForYou: 'green runs wait for you',
   repeatingPaused: 'paused',
@@ -452,7 +465,7 @@ export const COPY = {
   repeatingFoot: 'Started by your routine; Terylon keeps no clock.',
   repeatingInConsole: 'The task in the console ↗',
   openRun: 'Open the run ↗',
-  runToday: (time: string) => `Today ${time}`,
+  runToday: (time: string) => `today ${time}`,
   months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as readonly string[],
   runAccepted: 'green · accepted',
   runGreenWaits: 'green · waits for you',
@@ -462,7 +475,7 @@ export const COPY = {
   loading: 'Loading…',
   loadError: (what: string) => `${what} did not load`,
 
-  // The bell and health.
+  // Notices and Health.
   needsYou: 'Needs you',
   bellHint: 'notices_list',
   machine: 'Machine',
@@ -479,8 +492,8 @@ export const COPY = {
   metricMerged: 'merged',
   metricOpened: (count: number) => (count === 1 ? 'PR opened' : 'PRs opened'),
   loadTimedOut: (seconds: number) => `Terylon did not answer within ${seconds} s. Press the tab again to retry.`,
-  bellInConsole: 'Bell in the console ↗',
-  bellNote: 'Mark handled is notice_handle, which decides nothing about work. Pause and Resume are on the queue and the Status tab.',
+  noticesInConsole: 'Notices in the console ↗',
+  bellNote: 'Mark handled is notice_handle, which decides nothing about work. Pause and Resume are on Waiting and Health.',
   markHandled: 'Mark handled',
   handling: 'Marking…',
   nothingYet: 'Nothing yet.',
@@ -518,7 +531,7 @@ export const COPY = {
   nextTask: 'Next task',
   notAdded: 'Not handed over',
   timeout: (command: string | null) =>
-    `The leader did not answer within 10 s. The task may have arrived; look at the queue before you send it again${command === null ? '' : ` (command ${command})`}.`,
+    `The leader did not answer within 10 s. The task may have arrived; look at Waiting before you send it again${command === null ? '' : ` (command ${command})`}.`,
   pausedAdd: 'The leader is paused. The task is written down and waits; the plan comes after the resume.',
   editAndRetry: 'Edit and try again',
   noGoal: 'No open goal: add a goal on the Goals tab, then the task.',
@@ -642,11 +655,11 @@ export const COPY = {
   actNotAllowed: (tool: string) => `Claude Code refused the pane's call to ${tool}`,
   actNotAllowedBody: (nothing: string, button: string) => `${nothing} Add the pane's rules in ~/.claude/settings.json, then press ${button.replace(/…$/, '')} again.`,
   actFix: 'How to fix',
-  actFixNote: 'How to fix opens the Status tab with every rule the pane needs, merge never among them.',
+  actFixNote: 'How to fix opens Health with every rule the pane needs, merge never among them.',
   actBusyNote: 'Every other button on this card waits until the leader answers.',
   actCancel: 'Cancel',
   actRefresh: 'Refresh',
-  openQueue: 'Open the queue',
+  openQueue: 'Open Waiting',
   approveNote: (count: number) => `Approve starts ${count === 1 ? 'its story' : count === 2 ? 'both stories' : `all ${count} stories`} as the plan orders them.`,
   approveConsole: 'Edit criteria or pick stories in the console ↗',
   rethinkLabel: 'What to think again about',
@@ -668,21 +681,21 @@ export const COPY = {
   // WHAT A DROP WITHDRAWS AND ABANDONS, from the goal's own data, none included (the owner's walk of 1.5.0, #35): since
   // Terylon S35 (#388) goal_drop withdraws the goal's waiting plans and abandons every story of it that has not ended,
   // stopping a run first. Nothing of the goal keeps running.
-  dropGoalWarning: (plans: readonly number[], stories: readonly { id: number; title: string; isRunning: boolean }[]) =>
+  dropGoalWarning: (plans: readonly string[], stories: readonly { label: string; title: string; isRunning: boolean }[]) =>
     [
       'Drop it for good: the leader stops working on it.',
       plans.length === 0
         ? 'No plan of it waits.'
-        : `It withdraws ${plans.length === 1 ? 'plan' : 'plans'} ${andList(plans.map(String))}, which ${plans.length === 1 ? 'waits' : 'wait'} for a decision.`,
+        : `It withdraws ${plans.length === 1 ? 'plan' : 'plans'} ${andList(plans)}, which ${plans.length === 1 ? 'waits' : 'wait'} for a decision.`,
       stories.length === 0
         ? 'No story of it is open.'
-        : `It abandons ${andList(stories.map(story => `#${story.id} ${story.title}`))}${stories.some(story => story.isRunning) ? `, stopping the run of ${andList(stories.filter(story => story.isRunning).map(story => `#${story.id}`))} first` : ''}.`,
+        : `It abandons ${andList(stories.map(story => `${story.label} ${story.title}`))}${stories.some(story => story.isRunning) ? `, stopping the run of ${andList(stories.filter(story => story.isRunning).map(story => story.label))} first` : ''}.`,
     ].join(' '),
   proposalsHeading: 'Proposals waiting',
   proposalsHint: 'memory changes when you confirm',
   // Who proposed it, never their login: "web:<login>" is the owner, "brain" the leader (Terylon main aaf07e8).
-  proposedBy: (by: string, story: number | null, time: string | null) =>
-    [by === 'owner' ? 'proposed by you' : 'proposed by the leader', story === null ? null : `#${story}`, time].filter(part => part !== null).join(' · '),
+  proposedBy: (by: string, story: string | null, time: string | null) =>
+    [by === 'owner' ? 'proposed by you' : 'proposed by the leader', story, time].filter(part => part !== null).join(' · '),
   proposalWhy: (why: string) => `Why: ${why}`,
   memoryBrowser: "Versions, roll-back and dropped proposals stay in the console's memory browser ↗",
   policy: 'Policy',
