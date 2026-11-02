@@ -537,4 +537,9 @@ test('a story\'s acts are drawn on the terminal too, and the busy label and the 
   await openStory($, ui, 327)
   expect(await ui.find({ key: 'act-story-327-return' })).toBeDefined()
   expect(await ui.find({ type: 'Link', text: 'PR 196 ↗' })).toBeDefined()
+
+  // THE FILE'S LAST TEST LEAVES NOTHING RUNNING: a read the pane still had out settling after the file unloaded was
+  // refused as "no hooks module of that name is loaded" and failed the file under load.
+  await terylon.clock.settle()
+  await ui.unmount()
 })
