@@ -139,7 +139,7 @@ type Reset = { from: number; head: number | null; refused: string | null }
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.17.1'
+export const MOD_VERSION = '1.17.2'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -4107,8 +4107,9 @@ export const register: Register = on => {
       const card_ = cardOf(`plan-${plan.id}`, <Text size="heading" weight="semibold">{COPY.plan(plan.ref ?? String(plan.id))}<Text color="subtle" weight="regular">{` · ${planSubtitle}`}</Text></Text>, plan.stateText, [
         // A PLAN AS A CHAIN (S32): the order and the "after" of its stories as an Svg, as 1 → 2 → 3 on the terminal. Only
         // the order (#39): the sizes beside it, "S ~$3 → M ~$5", read as nodes of a second chain, and a plan of one story
-        // drew "○ M" above its row. A plan of one story has no order to draw; each size is said on its story's row.
-        plan.stories.length < 2
+        // drew "○ M" above its row. A plan of one story has no order to draw; each size is said on its story's row. Nor
+        // has a plan whose stories wait for none: its chain would be circles with nothing between them.
+        plan.stories.length < 2 || plan.stories.every(item => item.after.length === 0)
           ? null
           : (
               <Box key={`plan-${plan.id}-chain`} flexDirection="row" gap={1} alignItems="center">

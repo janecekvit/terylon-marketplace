@@ -429,3 +429,18 @@ test('a list story merged is told accepted on its goal\'s stories, as the glossa
   expect(String(row?.props.label)).toContain('accepted')
   expect(String(row?.props.label)).not.toContain('merged')
 })
+
+test('a plan whose stories wait for none draws no chain: its order is its rows', async ($, on) => {
+  const terylon = refWorld(on)
+  terylon.answers.plans_list = { plans: REF_PLANS.plans.map(plan => ({ ...plan, stories: (plan as { stories?: unknown[] }).stories?.map(story => ({ ...(story as object), runsAfter: [], after: [] })) })) }
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  for (const surface of ['desktop', 'terminal'] as const) {
+    const ui = await $.ui.mount({ ...PANE, props: PANE_PROPS, surface })
+    await ui.press({ key: 'tab-goals' })
+    expect(await ui.find({ key: 'plan-41' })).toBeDefined()
+    expect(await ui.find({ key: 'plan-41-chain' })).toBeUndefined()
+    await ui.unmount()
+  }
+})
