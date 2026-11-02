@@ -397,3 +397,35 @@ for (const surface of ['desktop', 'terminal'] as const) {
     await ui.unmount()
   })
 }
+
+test('a plan the briefing names by number alone is drawn on Waiting by the ref plans_list gave it', async ($, on) => {
+  const terylon = refWorld(on)
+  terylon.answers.briefing = { ...REF_BRIEFING, plansWaiting: REF_BRIEFING.plansWaiting.map(plan => ({ ...plan, ref: undefined, goalRef: undefined })) }
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount({ ...PANE, props: PANE_PROPS, surface: 'desktop' })
+  await ui.press({ key: 'tab-goals' })
+  await ui.press({ key: 'tab-queue' })
+  await terylon.clock.advance(30_000)
+  await terylon.clock.settle()
+
+  const row = await ui.find({ key: 'plan-41' })
+  expect(String(row?.props.label)).toContain('P-Y46G7')
+  expect(String(row?.props.label)).not.toContain('Plan 41')
+})
+
+test('a list story merged is told accepted on its goal\'s stories, as the glossary says', async ($, on) => {
+  const terylon = refWorld(on)
+  terylon.answers.goal_get = () => ({ ...REF_GOAL_3, target: 'list', storyList: [{ id: 401, title: 'Reply BETA', state: 'merged', target: 'list', ref: 'S-346D1' }] })
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount({ ...PANE, props: PANE_PROPS, surface: 'desktop' })
+  await ui.press({ key: 'tab-goals' })
+  await ui.press({ key: 'goal-3' })
+
+  const row = await ui.find({ key: 'goal-story-401' })
+  expect(String(row?.props.label)).toContain('accepted')
+  expect(String(row?.props.label)).not.toContain('merged')
+})

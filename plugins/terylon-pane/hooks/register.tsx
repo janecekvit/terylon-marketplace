@@ -139,7 +139,7 @@ type Reset = { from: number; head: number | null; refused: string | null }
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.17.0'
+export const MOD_VERSION = '1.17.1'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -641,7 +641,8 @@ async function refresh($: EngineInterface): Promise<boolean> {
   // A PLAN THE OWNER JUST DECIDED leaves "Waiting for you" at once, whatever the briefing still lists (#35).
   lastBriefing = {
     ...briefing.value,
-    plansWaiting: withoutHostProof(briefing.value.plansWaiting, false).filter(plan => settledState(`plan-${number(plan.id) ?? 0}`, 'proposed', now) === 'proposed'),
+    // A plan the briefing names by number alone takes the ref plans_list gave it.
+    plansWaiting: withoutHostProof(briefing.value.plansWaiting, false).filter(plan => settledState(`plan-${number(plan.id) ?? 0}`, 'proposed', now) === 'proposed').map(plan => (text(plan.ref) === null ? { ...plan, ...refItem('plan', number(plan.id) ?? 0) } : plan)),
     storiesVerified: await withTargets($, withoutHostProof(briefing.value.storiesVerified).filter(item => settledState(`story-${number(item.id) ?? 0}`, 'verified', now) === 'verified'), lastStories),
     storiesBlocked: withoutHostProof(briefing.value.storiesBlocked),
     questionsOpen: withoutHostProof(briefing.value.questionsOpen, false),
@@ -2145,7 +2146,7 @@ async function openGoal($: EngineInterface, id: number): Promise<void> {
     title: text(document.title) ?? refOf(document, id),
     ref: text(document.ref),
     meta: COPY.goalMeta(`P${number(document.priority) ?? 2}`, COPY.stateText(state)),
-    stories: list(document.storyList).map(item => ({ id: number(item.id) ?? 0, title: `${refOf(item, number(item.id) ?? 0)} ${text(item.title) ?? ''}`.trim(), state: COPY.stateText(String(item.state ?? '')) })),
+    stories: list(document.storyList).map(item => ({ id: number(item.id) ?? 0, title: `${refOf(item, number(item.id) ?? 0)} ${text(item.title) ?? ''}`.trim(), state: COPY.stateText(String(item.target) === 'list' && item.state === 'merged' ? 'accepted' : String(item.state ?? '')) })),
     isOpen: ['open', 'active'].includes(state),
     // EVERY STORY OF IT THAT HAS NOT ENDED, which a drop abandons (Terylon S35, #388), by title; a run is stopped first.
     openStories: list(document.storyList)
