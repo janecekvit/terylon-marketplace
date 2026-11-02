@@ -110,7 +110,7 @@ export function costWords(spent: Spent): string {
   return words.cost({ costKnown: spent.isKnown, costUsd: spent.usd, tokens: spent.tokens })
 }
 
-// A subject as the pane names it: its ref, or "#352" from a Terylon older than refs.
+// A subject as the pane names it: its ref, or a hash and its number from a Terylon older than refs.
 export function refOf(item: Json | null | undefined, id: unknown): string {
   return words.refOr(item, id)
 }
@@ -122,7 +122,7 @@ function addressOf(item: Json | null | undefined, id: unknown): string {
   return encodeURIComponent(named ?? String(id ?? ''))
 }
 
-// "ADO #481 ↗": a story's work item, only ever this link; `workItem` as {number, url}, or a number beside workItemUrl.
+// "ADO #n ↗": a story's work item, only ever this link; `workItem` as {number, url}, or a number beside workItemUrl.
 export function workItemOf(document: Json): { label: string; url: string } | null {
   const item = document.workItem
   const found = item !== null && typeof item === 'object' ? (item as Json) : null

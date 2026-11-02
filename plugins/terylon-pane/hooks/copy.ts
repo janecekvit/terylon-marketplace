@@ -1,4 +1,4 @@
-// Terylon Cockpit's own words, in English: the interface, as the operator chose it on 2026-10-12 (#332), in Terylon's
+// Terylon Cockpit's own words, in English: the interface, as the operator chose it, in Terylon's
 // glossary since Terylon S68 (Design · Glossary): Waiting · Goals · Notices · Memory · Health, every subject by its ref,
 // every figure through hooks/words.ts. What Terylon sends (story titles, the leader's questions, memory entries, rules)
 // is drawn in the language it came in, untranslated. The prompts the pane posts into the session are the owner's words

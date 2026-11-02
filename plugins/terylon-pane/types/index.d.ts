@@ -151,7 +151,7 @@ export type PaneStory = {
   // Terylon's short ids (Terylon S66): its ref and its goal's, null from a Terylon older than refs.
   ref?: string | null
   goalRef?: string | null
-  // Its work item, only ever the link "ADO #481 ↗".
+  // Its work item, only ever the link "ADO #n ↗".
   workItem?: { label: string; url: string } | null
   step: string | null
   fraction: number | null

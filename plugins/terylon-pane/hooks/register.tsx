@@ -1,4 +1,4 @@
-// terylon-pane, Terylon Cockpit (Terylon S68): the band and the pane in Claude Desktop (S7, #332), built to the approved
+// terylon-pane, Terylon Cockpit (Terylon S68): the band and the pane in Claude Desktop (S7), built to the approved
 // S15 canvas, page v2, in Terylon's tones, words and refs since S68 (hooks/tones.ts, hooks/words.ts).
 //
 //   every 30 s ──▶ $.mcp.call terylon: briefing · work_in_flight · stories_list · events_since
@@ -10,7 +10,7 @@
 //        │      Waiting ── Waiting for you ──▶ question (question_answer) · story · plan
 //        │        │        Running · Queued · Done today ──▶ story ──▶ goal ──▶ story …
 //        │      Goals ──── goals_list · plans_list ──▶ goal · plan ──▶ story; a new goal is goal_add
-//        │      Notices ── notices_list · leader_status · metrics; Mark handled is notice_handle (#360)
+//        │      Notices ── notices_list · leader_status · metrics; Mark handled is notice_handle
 //        │      Memory ─── memory_get; an edit is memory_propose, confirmed in the console
 //        │      Health ─── the machine, its slots and cost, every problem and its fix, the policy
 //        └──▶ the done-signal: $.prompt.submit once per story and verdict commit, and a toast, by the story's ref
@@ -304,7 +304,7 @@ function rememberRefs(kind: 'story' | 'goal' | 'plan', items: readonly Json[]): 
   }
 }
 
-// A subject's label: its ref, else "#333" for a story and the bare number for a goal or a plan, as before refs.
+// A subject's label: its ref, else a hash and its number for a story and the bare number for a goal or a plan, as before refs.
 function labelOf(kind: 'story' | 'goal' | 'plan', id: number): string {
   return refs.get(`${kind}-${id}`) ?? (kind === 'story' ? `#${id}` : String(id))
 }
@@ -3701,7 +3701,7 @@ export const register: Register = on => {
             <Button key="summarise" label={COPY.summariseInSession} onPress={() => postPrompt($, COPY.summarisePrompt(storyLabel))} />
             {shownStory.goal !== null && <Button key="story-goal" label={COPY.goalOf(goalLabel ?? String(shownStory.goal))} dimColor onPress={() => go({ screen: 'goal', goal: shownStory.goal ?? 0 })} />}
             {shownStory.pullRequest !== null && <Link href={shownStory.pullRequest.url} label={shownStory.pullRequest.label} />}
-            {/* A WORK ITEM IS ONLY EVER THIS LINK, "ADO #481 ↗", never the story's name. */}
+            {/* A WORK ITEM IS ONLY EVER THIS LINK, "ADO #n ↗", never the story's name. */}
             {shownStory.workItem !== null && shownStory.workItem !== undefined && <Link href={shownStory.workItem.url} label={shownStory.workItem.label} />}
             <Link href={storyLink(base, 'story', storyRef, shownStory.story)} label={COPY.storyInConsole} />
           </Box>

@@ -402,7 +402,7 @@ export function subject(item: Json | null | undefined, kind = 'story'): string {
   return `${kind} ${item !== null && item !== undefined && item.id !== undefined ? String(item.id) : ''}`
 }
 
-// "ADO #481 ↗": a work item is only ever a labelled link, never a story's name.
+// "ADO #n ↗": a work item is only ever a labelled link, never a story's name.
 export function workItem(value: unknown): string {
   return `ADO #${String(value)} ↗`
 }
@@ -468,7 +468,7 @@ export function storyState(story: Json | null | undefined): StateWord {
   }
 }
 
-// THE ENDED LINE, the heading on an ended story's screen: "Merged by you · PR 246 ↗ · today 20:17", built on the same
+// THE ENDED LINE, the heading on an ended story's screen: "Merged by you · PR n ↗ · today 20:17", built on the same
 // word as its chip; null while it has not ended.
 export function storyEnded(story: Json | null | undefined, now: unknown, zone?: Zone): string | null {
   const item = story ?? {}
@@ -528,7 +528,7 @@ export function machine(state: MachineFacts | null | undefined, zone?: Zone): st
 
 // --------------------------------------------------------------------------------------------- the pane's own uses
 
-// A SUBJECT'S NAME WHERE THE PANE SHOWS ITS NUMBER TODAY: its ref, or "#352" from a Terylon older than refs.
+// A SUBJECT'S NAME WHERE THE PANE SHOWS ITS NUMBER TODAY: its ref, or a hash and its number from a Terylon older than refs.
 export function refOr(item: Json | null | undefined, id: unknown): string {
   return item !== null && item !== undefined && typeof item.ref === 'string' && item.ref.trim() !== '' ? item.ref : `#${String(id ?? '')}`
 }
