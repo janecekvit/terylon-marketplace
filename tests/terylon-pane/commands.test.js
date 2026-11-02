@@ -13,7 +13,7 @@ const PLUGINS_ROOT = path.join(__dirname, "..", "..", "plugins");
 // The mod under test.
 const MOD_NAME = "terylon-pane";
 
-// A command the module registers: `$.command.register({ name: 'terylon-pane', ...`.
+// A command the module registers: `$.command.register({ name: 'terylon-cockpit', ...`.
 const REGISTERED_COMMAND = /\$\.command\.register\(\{\s*name:\s*'([^']+)'/g;
 
 function readManifest(pluginName)
@@ -44,9 +44,10 @@ function registeredCommands()
     return [...source.matchAll(REGISTERED_COMMAND)].map(match => match[1]);
 }
 
-test("the mod registers /terylon-pane, /terylon and /terylon-memory", () =>
+// TERYLON COCKPIT'S ONE COMMAND (Terylon S68): /terylon-pane, /terylon and /terylon-memory are gone, not aliased.
+test("the mod registers /terylon-cockpit and nothing else", () =>
 {
-    assert.deepEqual(registeredCommands().sort(), ["terylon", "terylon-memory", "terylon-pane"]);
+    assert.deepEqual(registeredCommands(), ["terylon-cockpit"]);
 });
 
 test("no command shares a name with a skill of the mod or of a plugin it depends on", () =>

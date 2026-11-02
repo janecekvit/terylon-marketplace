@@ -1,18 +1,22 @@
-// terylon-pane: the Terylon band and pane in Claude Desktop (S7, #332), built to the approved S15 canvas, page v2.
+// terylon-pane, Terylon Cockpit (Terylon S68): the band and the pane in Claude Desktop (S7), built to the approved
+// S15 canvas, page v2, in Terylon's tones, words and refs since S68 (hooks/tones.ts, hooks/words.ts).
 //
 //   every 30 s ──▶ $.mcp.call terylon: briefing · work_in_flight · stories_list · events_since
 //        │            (through callTerylon's allow-list: NEVER a gate tool)
-//        ├──▶ the band above the prompt, what calls for the owner: Terylon · Waiting · Running · Queue   [Open | Fix]
-//        ├──▶ the status line, the machine's health and spend: Agentic OS ● ok · $x of $y today · a/b slots
-//        ├──▶ the pane, opened by the band or /terylon-pane, never by itself:
-//        │      Fronta ── Čeká na tebe ──▶ question (question_answer) · story · plan
-//        │        │       Běží · Ve frontě · Hotovo dnes ──▶ story ──▶ goal ──▶ story …
-//        │      Cíle ──── goals_list · plans_list ──▶ goal · plan ──▶ story; a new goal is goal_add
-//        │      Zvonek ── notices_list · leader_status · metrics; Mark handled is notice_handle (#360)
-//        │      Paměť ─── the memory pane: memory_get; an edit is memory_propose, confirmed in the console
-//        └──▶ the done-signal: $.prompt.submit once per story and verdict commit, and a toast
+//        ├──▶ the band above the prompt, what calls for the owner: Terylon Cockpit · Waiting · Running · Queued · Notices
+//        ├──▶ the status line, the machine's health and cost: Terylon ● all well · $x of $y today · a/b slots, or on the
+//        │      setup token its tokens and "cost not known on the setup token", never a $ figure
+//        ├──▶ the pane, opened by the band or /terylon-cockpit, never by itself:
+//        │      Waiting ── Waiting for you ──▶ question (question_answer) · story · plan
+//        │        │        Running · Queued · Done today ──▶ story ──▶ goal ──▶ story …
+//        │      Goals ──── goals_list · plans_list ──▶ goal · plan ──▶ story; a new goal is goal_add
+//        │      Notices ── notices_list · leader_status · metrics; Mark handled is notice_handle
+//        │      Memory ─── memory_get; an edit is memory_propose, confirmed in the console
+//        │      Health ─── the machine, its slots and cost, every problem and its fix, the policy
+//        └──▶ the done-signal: $.prompt.submit once per story and verdict commit, and a toast, by the story's ref
 //   session start, away > 2 h ──▶ ONE catch-up summary, and the band says it until dismissed
-//   "Přidat" ──▶ tasks_add, which becomes a plan the owner approves in the console
+//   a host proof's subjects ──▶ no prompt, no band count, no catch-up line
+//   "Add" ──▶ tasks_add, which becomes a plan the owner approves in the console
 //
 // The mod holds no rule the endpoint does not: every decision is a Link to the console.
 //
@@ -51,16 +55,21 @@ import type {
 import { COPY } from './copy'
 import { CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, NARROW_COLUMNS, STEPPER_COLUMNS, dots, meter, phaseGlyph, planChain, planOrder, proofsOf, segments, slotsGauge, spendBar, splitHash, stepper } from './drawing'
 import type { Picture, Proofs } from './drawing'
-import { ALERT_SOURCES, REASON_WHOLE, alertCount, checkTree, healthLine, plainLine, stateWord, statusDrawingOf, storeFileOf, treeLine, typedLine } from './health'
+import { ALERT_SOURCES, REASON_WHOLE, alertCount, checkTree, healthLine, plainLine, stateWord, statusDrawingOf, storeFileOf, todayCost, treeLine, typedLine } from './health'
 import type { Health, StatusPart } from './health'
 import { MISSING_SERVER, NEEDS_TEXT, NOT_ALLOWED, SERVER_CANDIDATES, TEXT_LIMITS, actArguments, allowRules, assertPaneTool, isSendable, readResult } from './terylon'
 import type { TerylonAnswer } from './terylon'
+import { CARD_STROKES, kindTone, markOf, wordOf } from './tones'
+import * as words from './words'
 import {
   alertItems,
   bellView,
   clock,
   consoleLink,
+  costBasisOf,
+  costTight,
   deleteLink,
+  goalLink,
   dayBudget,
   doneTodayItems,
   filesOf,
@@ -68,6 +77,7 @@ import {
   goalItems,
   header,
   hostName,
+  isHostProof,
   isListStory,
   isRepositoryTarget,
   list,
@@ -85,10 +95,12 @@ import {
   questionChoices,
   questionItems,
   queuedItems,
+  refOf,
   repeatingOf,
   runDay,
   runningItems,
   spend,
+  storyLink,
   storyView,
   text,
   verifiedIds,
@@ -127,7 +139,7 @@ type Reset = { from: number; head: number | null; refused: string | null }
 export const PANE = 'terylon'
 
 // The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.16.0'
+export const MOD_VERSION = '1.17.4'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -205,6 +217,9 @@ const EMPTY_SNAPSHOT: PaneSnapshot = {
   signallerMissingSince: null,
   signallerHolder: null,
   sessionIdSource: 'fallback',
+  costKnown: true,
+  runningTokens: null,
+  costBasis: null,
 }
 
 const QUEUE: PaneScreen = { screen: 'queue' }
@@ -260,6 +275,64 @@ let lastStories: Json[] = []
 let policy: Json | null = null
 let lastAttemptAt = 0
 let isPolling = false
+
+// THE BASIS TODAY'S COST IS SAID ON, as the briefing names it: 'setup-token' says no $ figure anywhere.
+let costBasis: string | null = null
+
+// A HOST PROOF'S STORIES, as Terylon's answers name them by `source`: none reaches a prompt, the band or the catch-up.
+const hostProofStories = new Set<number>()
+
+// TERYLON'S SHORT IDS, by kind and number ("story-333" → "S-BD6XS"), from every answer the pane reads: the label a
+// screen names its subject by where it holds only the number. Lost on a reload, refilled by the next read.
+const refs = new Map<string, string>()
+
+function rememberRefs(kind: 'story' | 'goal' | 'plan', items: readonly Json[]): void {
+  for (const item of items) {
+    const id = number(item.id)
+    const ref = text(item.ref)
+
+    if (id !== null && ref !== null) {
+      refs.set(`${kind}-${id}`, ref)
+    }
+
+    const goal = number(item.goal)
+    const goalRef = text(item.goalRef)
+
+    if (kind !== 'goal' && goal !== null && goalRef !== null) {
+      refs.set(`goal-${goal}`, goalRef)
+    }
+  }
+}
+
+// A subject's label: its ref, else a hash and its number for a story and the bare number for a goal or a plan, as before refs.
+function labelOf(kind: 'story' | 'goal' | 'plan', id: number): string {
+  return refs.get(`${kind}-${id}`) ?? (kind === 'story' ? `#${id}` : String(id))
+}
+
+// What a console address names a subject by: its ref where it is known, else its number.
+function refItem(kind: 'story' | 'goal' | 'plan', id: number): Json {
+  const ref = refs.get(`${kind}-${id}`)
+
+  return ref === undefined ? {} : { ref }
+}
+
+// AN ANSWER WITHOUT A HOST PROOF'S SUBJECTS: a story, a plan or a question whose source says so, or a story the pane
+// already knows as one, is left out, and every story it names is remembered as one.
+function withoutHostProof(items: unknown, isStory = true): Json[] {
+  return list(items).filter(item => {
+    const id = isStory ? number(item.id) ?? number(item.story) : null
+
+    if (isHostProof(item)) {
+      if (id !== null) {
+        hostProofStories.add(id)
+      }
+
+      return false
+    }
+
+    return id === null || !hostProofStories.has(id)
+  })
+}
 
 // THIS SESSION, as the lease names it: its id, whether nobody is at it, whether its band or pane was drawn, and when
 // the owner last typed in it.
@@ -458,6 +531,8 @@ function healthOf(current: PaneSnapshot, offset: Zone): Health {
     dayBudget: current.dayBudget,
     slotsUsed: current.slotsUsed,
     slots: current.slots,
+    isCostKnown: current.costKnown !== false,
+    tokens: current.runningTokens ?? null,
   }
 }
 
@@ -557,18 +632,26 @@ async function refresh($: EngineInterface): Promise<boolean> {
     policy = answered.kind === 'ok' ? policyAfterSave(answered.value, now) : null
   }
 
-  lastFlight = flight.value
+  // A HOST PROOF'S SUBJECTS LEAVE EVERY ANSWER FIRST: no count of the band, no prompt and no catch-up says them.
+  lastStories = withoutHostProof(stories.value.stories)
+  lastFlight = { ...flight.value, stories: withoutHostProof(flight.value.stories) }
+  costBasis = costBasisOf(briefing.value, flight.value)
+  rememberRefs('story', [...lastStories, ...list(lastFlight.stories), ...list(briefing.value.storiesVerified), ...list(briefing.value.storiesBlocked)])
+  rememberRefs('plan', list(briefing.value.plansWaiting))
   // A PLAN THE OWNER JUST DECIDED leaves "Waiting for you" at once, whatever the briefing still lists (#35).
-  lastStories = list(stories.value.stories)
   lastBriefing = {
     ...briefing.value,
-    plansWaiting: list(briefing.value.plansWaiting).filter(plan => settledState(`plan-${number(plan.id) ?? 0}`, 'proposed', now) === 'proposed'),
-    storiesVerified: await withTargets($, list(briefing.value.storiesVerified).filter(item => settledState(`story-${number(item.id) ?? 0}`, 'verified', now) === 'verified'), lastStories),
+    // A plan the briefing names by number alone takes the ref plans_list gave it.
+    plansWaiting: withoutHostProof(briefing.value.plansWaiting, false).filter(plan => settledState(`plan-${number(plan.id) ?? 0}`, 'proposed', now) === 'proposed').map(plan => (text(plan.ref) === null ? { ...plan, ...refItem('plan', number(plan.id) ?? 0) } : plan)),
+    storiesVerified: await withTargets($, withoutHostProof(briefing.value.storiesVerified).filter(item => settledState(`story-${number(item.id) ?? 0}`, 'verified', now) === 'verified'), lastStories),
+    storiesBlocked: withoutHostProof(briefing.value.storiesBlocked),
+    questionsOpen: withoutHostProof(briefing.value.questionsOpen, false),
   }
 
   const base = await baseUrl($)
   const offset = zoneOffset
-  const running = runningItems(lastFlight, offset, verifiedIds(lastBriefing))
+  const running = runningItems(lastFlight, offset, verifiedIds(lastBriefing), costBasis)
+  const spent = spend(lastFlight, costBasis)
   const inFlight = new Set(running.map(item => item.story))
   const paused = pausedOf((lastBriefing.leader ?? null) as Json | null, lastFlight.paused === true, offset)
   const slots = number(lastFlight.slots) ?? number(policy?.slots) ?? 0
@@ -579,8 +662,11 @@ async function refresh($: EngineInterface): Promise<boolean> {
     problem: null,
     fetchedAt: now,
     failingSince: null,
-    header: header(lastFlight, policy),
-    runningUsd: spend(lastFlight),
+    header: header(lastFlight, policy, costBasis),
+    runningUsd: spent.usd.toFixed(2),
+    costKnown: spent.isKnown,
+    runningTokens: spent.tokens,
+    costBasis,
     dayBudget: dayBudget(policy),
     slots,
     slotsUsed: running.length,
@@ -594,7 +680,7 @@ async function refresh($: EngineInterface): Promise<boolean> {
     waiting: waitingItems(lastBriefing, base),
     running,
     queued: queuedItems(queuedStories, inFlight, paused === null && running.length < slots),
-    doneToday: doneTodayItems(lastStories, now, offset),
+    doneToday: doneTodayItems(lastStories, now, offset, costBasis),
     // THE DONE-SIGNAL'S PROBLEM IS ITS OWN: a good read of the queue says nothing of events_since or the store.
     events: current.events ?? null,
     eventsAnsweredAt: current.eventsAnsweredAt ?? null,
@@ -925,6 +1011,13 @@ async function settleSignals($: EngineInterface, candidates: Candidate[], done: 
       continue
     }
 
+    // A HOST PROOF'S STORY TELLS NOBODY: its source, read again right before the post, says so.
+    if ((answered.kind === 'ok' && isHostProof(answered.value)) || hostProofStories.has(candidate.story)) {
+      hostProofStories.add(candidate.story)
+      debug($, `not posting ${candidate.story}:${candidate.kind}: the story is a host proof's`)
+      continue
+    }
+
     // AN ACCEPT PRESSED IN THE PANE stands over a story_get that lags, or that did not answer.
     const story = answered.kind === 'ok'
       ? settledStory(answered.value, candidate.story, now)
@@ -944,7 +1037,9 @@ async function settleSignals($: EngineInterface, candidates: Candidate[], done: 
     }
 
     done.push(key)
-    signals.push(signalFor(settled_, verdict))
+    // THE STORY BY ITS REF, as story_get names it right before the post, else as the event or the list named it.
+    const ref = (story === null ? null : text(story.ref)) ?? settled_.ref ?? refs.get(`story-${candidate.story}`) ?? null
+    signals.push(signalFor({ ...settled_, ref }, verdict))
   }
 
   return signals
@@ -1337,7 +1432,8 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
   const base = await baseUrl($)
   // A GOALDELETED IN THE FEED drops its goal everywhere, before anything of its stories could be told.
   await forgetGoals($, deletedGoalsOf(read_.events))
-  const events = withoutDeletedGoals(read_.events, deletedGoals)
+  // A HOST PROOF'S EVENTS ARE TOLD NOWHERE: by their source, or by a story the pane knows as one.
+  const events = withoutDeletedGoals(read_.events, deletedGoals).filter(event => !isHostProof(event) && !hostProofStories.has(number(event.story) ?? -1))
   const candidates = [
     ...candidatesFromEvents(events),
     ...candidatesFromFlight(lastFlight).filter(candidate => !deletedStories.has(candidate.story)),
@@ -1349,7 +1445,7 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
     await update($, band, (): PaneBand => ({ text: `${COPY.tooFarHeading} · ${COPY.tooFarBody(String(CATCH_UP_MOST_EVENTS))}`, link: consoleLink(base, 'history'), isAlert: true }))
   } else if (isCatchUp) {
     // Back after a long time away: ONE summary, the gap's signals inside it.
-    const summary = catchUpSummary({ awayMs, events, briefing: lastBriefing, flight: lastFlight, policy })
+    const summary = catchUpSummary({ awayMs, events, briefing: lastBriefing, flight: lastFlight, policy, basis: costBasis })
     await markSignalled($, candidates)
     debug($, `posting the catch-up summary of ${read_.events.length} events`)
     await $.prompt.submit({ text: summary.prompt })
@@ -1584,7 +1680,8 @@ async function openStory($: EngineInterface, id: number): Promise<void> {
   }
 
   const document = settledStory(answered.kind === 'ok' ? answered.value : {}, id, now)
-  const view_ = storyView(id, document, inFlight, question, now, zoneOffset)
+  rememberRefs('story', [{ ...document, id }])
+  const view_ = storyView(id, document, inFlight, question, now, zoneOffset, costBasis)
   await update($, story, (): PaneStory | null => view_)
 
   // A RUNNING STORY OPENS ON "NOW WORKING" (S32): the pane moves the least that shows it, and not at all when it shows.
@@ -1602,15 +1699,19 @@ async function readFlight($: EngineInterface, now: number): Promise<void> {
     return
   }
 
-  lastFlight = flight.value
+  lastFlight = { ...flight.value, stories: withoutHostProof(flight.value.stories) }
+  rememberRefs('story', list(lastFlight.stories))
 
-  const running = runningItems(lastFlight, zoneOffset, verifiedIds(lastBriefing))
+  const running = runningItems(lastFlight, zoneOffset, verifiedIds(lastBriefing), costBasis)
+  const spent = spend(lastFlight, costBasis)
 
   await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({
     ...EMPTY_SNAPSHOT,
     ...current,
-    header: header(lastFlight, policy),
-    runningUsd: spend(lastFlight),
+    header: header(lastFlight, policy, costBasis),
+    runningUsd: spent.usd.toFixed(2),
+    costKnown: spent.isKnown,
+    runningTokens: spent.tokens,
     slotsUsed: running.length,
     running,
   }))
@@ -1718,8 +1819,11 @@ async function readGoalsFromTerylon($: EngineInterface): Promise<void> {
   // A GOAL DELETED FOR GOOD stays gone, its plans with it, where a list read right after the deletion still names it.
   const goalsNow = { ...goalsAnswer.value, goals: list(goalsAnswer.value.goals).filter(item => !deletedGoals.has(number(item.id) ?? -1)).map(item => ({ ...item, state: settledState(`goal-${number(item.id) ?? 0}`, String(item.state ?? ''), now) })) }
   const plansNow = plansAnswer.kind === 'ok' ? { ...plansAnswer.value, plans: list(plansAnswer.value.plans).filter(item => !deletedGoals.has(number(item.goal) ?? -1)).map(item => ({ ...item, state: settledState(`plan-${number(item.id) ?? 0}`, String(item.state ?? ''), now) })) } : {}
+  rememberRefs('goal', list(goalsNow.goals))
+  rememberRefs('plan', list((plansNow as Json).plans))
+  rememberRefs('story', list((plansNow as Json).plans).flatMap(plan => list(plan.stories)))
   const items = goalItems(goalsNow, questions)
-  const plans = plansAnswer.kind === 'ok' ? planItems(plansNow, base) : []
+  const plans = plansAnswer.kind === 'ok' ? planItems(plansNow, base, costBasis) : []
   const targets = targetsOf(goalsAnswer.value)
   // A Terylon with S44 answers the open goals and closedCount, one without it the full list: read per answer.
   const closedCount = number(goalsAnswer.value.closedCount)
@@ -1772,6 +1876,7 @@ async function readClosedGoals($: EngineInterface): Promise<void> {
   const now = await $.clock.now()
   const questions = (await readSnapshot($)).questions
   const closedNow = { ...answered.value, goals: list(answered.value.goals).filter(item => !deletedGoals.has(number(item.id) ?? -1)).map(item => ({ ...item, state: settledState(`goal-${number(item.id) ?? 0}`, String(item.state ?? ''), now) })) }
+  rememberRefs('goal', list(closedNow.goals))
 
   await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, closed: goalItems(closedNow, questions).closed, closedPhase: 'ok', closedSentence: null }))
 }
@@ -2030,20 +2135,23 @@ async function openGoal($: EngineInterface, id: number): Promise<void> {
   const document = answered.value
   const now = await $.clock.now()
   const state = settledState(`goal-${id}`, String(document.state ?? ''), now)
-  const repeating = repeatingOf({ ...document, id }, await baseUrl($), now, zoneOffset)
+  const repeating = repeatingOf({ ...document, id }, await baseUrl($), now, zoneOffset, costBasis)
+  rememberRefs('goal', [{ ...document, id }])
+  rememberRefs('story', list(document.storyList))
 
   await update($, goal, (): PaneGoal | null => ({
     goal: id,
     phase: 'ok',
     sentence: null,
-    title: text(document.title) ?? `#${id}`,
+    title: text(document.title) ?? refOf(document, id),
+    ref: text(document.ref),
     meta: COPY.goalMeta(`P${number(document.priority) ?? 2}`, COPY.stateText(state)),
-    stories: list(document.storyList).map(item => ({ id: number(item.id) ?? 0, title: `#${number(item.id) ?? 0} ${text(item.title) ?? ''}`.trim(), state: COPY.stateText(String(item.state ?? '')) })),
+    stories: list(document.storyList).map(item => ({ id: number(item.id) ?? 0, title: `${refOf(item, number(item.id) ?? 0)} ${text(item.title) ?? ''}`.trim(), state: COPY.stateText(String(item.target) === 'list' && item.state === 'merged' ? 'accepted' : String(item.state ?? '')) })),
     isOpen: ['open', 'active'].includes(state),
     // EVERY STORY OF IT THAT HAS NOT ENDED, which a drop abandons (Terylon S35, #388), by title; a run is stopped first.
     openStories: list(document.storyList)
       .filter(item => OPEN_STORY_STATES.includes(String(item.state ?? '')))
-      .map(item => ({ id: number(item.id) ?? 0, title: text(item.title) ?? '', isRunning: ['dispatched', 'running'].includes(String(item.state ?? '')) })),
+      .map(item => ({ id: number(item.id) ?? 0, label: refOf(item, number(item.id) ?? 0), title: text(item.title) ?? '', isRunning: ['dispatched', 'running'].includes(String(item.state ?? '')) })),
     repeating,
     // ITS SPECIFICATION (Terylon S53), with the owner's decisions on earlier plans; null where goal_get names none.
     specification: specificationOf(document, now, zoneOffset),
@@ -2075,7 +2183,7 @@ async function readBellFromTerylon($: EngineInterface): Promise<void> {
   const now = await $.clock.now()
 
   await update($, bell, (): PaneBell =>
-    bellView(notices.value, leader.kind === 'ok' ? leader.value : null, metrics.kind === 'ok' ? metrics.value : null, now, zoneOffset))
+    bellView(notices.value, leader.kind === 'ok' ? leader.value : null, metrics.kind === 'ok' ? metrics.value : null, now, zoneOffset, costBasis ?? (metrics.kind === 'ok' ? costBasisOf(metrics.value) : null)))
 }
 
 // A notice marked handled from the Bell tab (#360): notice_handle is a write the owner decided is not a gate, so
@@ -2301,7 +2409,7 @@ async function openAdd($: EngineInterface, title: string): Promise<void> {
     .map(item => String(number(item.id) ?? 0))
   const stories = lastStories
     .filter(item => !['merged', 'abandoned'].includes(String(item.state)))
-    .map(item => ({ value: String(number(item.id) ?? 0), label: `#${number(item.id) ?? 0} ${text(item.title) ?? ''}` }))
+    .map(item => ({ value: String(number(item.id) ?? 0), label: `${refOf(item, number(item.id) ?? 0)} ${text(item.title) ?? ''}` }))
 
   await update($, add, (): PaneAdd => ({ ...EMPTY_ADD, title, goal: choices[0]?.value ?? '', goals: choices, repositoryGoals, stories: [{ value: '', label: COPY.nothingBefore }, ...stories] }))
   await update($, view, (current: PaneView): PaneView => ({ stack: [...stackOf(current), { screen: 'add' }] }))
@@ -2351,7 +2459,7 @@ async function sendTask($: EngineInterface): Promise<void> {
 
   await update($, add, (current: PaneAdd): PaneAdd => {
     if (answered.kind === 'ok' && answered.value.accepted === true) {
-      return { ...current, phase: 'added', sentence: text(answered.value.sentence), link: consoleLink(base, `plan&goal=${goalId}`), sent: { title, criteria, files: declared.files } }
+      return { ...current, phase: 'added', sentence: text(answered.value.sentence), link: goalLink(base, refItem('goal', goalId), goalId), sent: { title, criteria, files: declared.files } }
     }
 
     if (answered.kind === 'ok' && answered.value.accepted == null) {
@@ -2458,17 +2566,17 @@ function backLabel(stack: readonly PaneScreen[]): string {
     case 'goals':
       return `‹ ${COPY.tabGoals}`
     case 'bell':
-      return `‹ ${COPY.tabBell(0)}`
+      return `‹ ${COPY.tabNotices(0)}`
     case 'memory':
       return `‹ ${COPY.tabMemory}`
     case 'status':
-      return `‹ ${COPY.tabStatus(false)}`
+      return `‹ ${COPY.tabHealth(false)}`
     case 'story':
-      return `‹ #${previous.story}`
+      return `‹ ${labelOf('story', previous.story)}`
     case 'goal':
-      return `‹ ${COPY.goalOf(previous.goal)}`
+      return `‹ ${COPY.goalOf(labelOf('goal', previous.goal))}`
     case 'plan':
-      return `‹ ${COPY.plan(previous.plan)}`
+      return `‹ ${COPY.plan(labelOf('plan', previous.plan))}`
     case 'question':
       return COPY.back
     default:
@@ -2505,7 +2613,7 @@ type CardTone = 'plain' | 'wait' | 'bad'
 // owner's walk of 1.2.0): on a tinted fill the hints, links and chips could not be read.
 function card(elements: Elements, look: Look, key: string, title: unknown, hint: unknown, children: unknown[], tone: CardTone = 'plain'): unknown {
   const { Box, Text } = elements
-  const toneKey = tone === 'wait' ? 'warning' : tone === 'bad' ? 'error' : 'subtle'
+  const toneKey = CARD_STROKES[tone]
 
   return (
     <Box
@@ -2671,9 +2779,8 @@ function withHash(elements: Elements, line: string, tone?: Tone): unknown {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'terylon-pane', description: 'Opens the Terylon pane: queue, goals, bell, memory' })
-    await $.command.register({ name: 'terylon', description: 'Opens the Terylon pane (the same as /terylon-pane)' })
-    await $.command.register({ name: 'terylon-memory', description: "Opens the Terylon pane on the leader's memory; an edit is confirmed in the console" })
+    // TERYLON COCKPIT'S ONE COMMAND (Terylon S68): /terylon-pane, /terylon and /terylon-memory are gone, not aliased.
+    await $.command.register({ name: 'terylon-cockpit', description: 'Opens Terylon Cockpit: Waiting, Goals, Notices, Memory and Health' })
     storyTargets.clear()
     // UNATTENDED ONLY WHEN THE ENGINE SAYS SO TWICE: no person at the prompt and nowhere to draw, a -p run or the SDK.
     // An engine that names neither starts a session someone is at.
@@ -2721,22 +2828,10 @@ export const register: Register = on => {
     return result
   })
 
-  on('command.run', { command: 'terylon-pane' }, async $ => {
+  on('command.run', { command: 'terylon-cockpit' }, async $ => {
     await openPane($, QUEUE)
 
-    return { text: 'The Terylon pane is open.' }
-  })
-
-  on('command.run', { command: 'terylon' }, async $ => {
-    await openPane($, QUEUE)
-
-    return { text: 'The Terylon pane is open.' }
-  })
-
-  on('command.run', { command: 'terylon-memory' }, async $ => {
-    await openPane($, { screen: 'memory' })
-
-    return { text: "The leader's memory is open." }
+    return { text: 'Terylon Cockpit is open.' }
   })
 
   // A FAULT THE HOST REPORTED for what the pane drew, said in its own log as well as the debug log.
@@ -2792,15 +2887,19 @@ export const register: Register = on => {
       ...(stuck > 0 ? [<Text color="error" tabular>{COPY.bandStuck(stuck)}</Text>] : []),
     ]
     let segments: unknown[]
+    let title: string = COPY.title
     switch (current.connection) {
       case 'connecting':
         segments = [<Text color="subtle">{` · ${COPY.connecting}`}</Text>]
         break
+      // WHAT IS WRONG WITH THE WAY TO THE MACHINE is said under its name, Terylon, as the board draws it.
       case 'not-allowed':
         segments = [<Text color="subtle">{' · '}</Text>, <Text color="error">{COPY.bandNotAllowed}</Text>, <Text color="subtle">{` · ${COPY.bandNotAllowedHint}`}</Text>]
+        title = COPY.machineName
         break
       case 'no-server':
         segments = [<Text color="subtle">{' · '}</Text>, <Text color="error">{COPY.bandNoServer}</Text>, <Text color="subtle">{` · ${COPY.bandNoServerHint}`}</Text>]
+        title = COPY.machineName
         break
       case 'refused':
         segments = [<Text color="subtle">{' · '}</Text>, <Text color="error">{COPY.bandRefused}</Text>]
@@ -2823,12 +2922,12 @@ export const register: Register = on => {
               ...pair(COPY.bandLeader, COPY.bandPaused(current.pausedSince), 'attention'),
               ...pair(COPY.bandWaiting, String(current.waiting.length), current.waiting.length > 0 ? 'attention' : 'inactive'),
               ...pair(COPY.bandQueued, String(current.queued.length), 'inactive'),
-              ...pair(COPY.bandBell, String(current.notices), current.notices > 0 ? 'attention' : 'inactive'),
+              ...pair(COPY.bandNotices, String(current.notices), current.notices > 0 ? 'attention' : 'inactive'),
             ]
           : [
               ...counts,
               ...pair(COPY.bandQueued, String(current.queued.length), 'inactive'),
-              ...pair(COPY.bandBell, String(current.notices), current.notices > 0 ? 'attention' : 'inactive'),
+              ...pair(COPY.bandNotices, String(current.notices), current.notices > 0 ? 'attention' : 'inactive'),
               ...(current.alerts > 0 ? [<Text color="error" tabular>{COPY.bandAlerts(current.alerts)}</Text>] : []),
             ]
     }
@@ -2837,7 +2936,7 @@ export const register: Register = on => {
       <Box width="100%" flexDirection="row" justifyContent="space-between" gap={1}>
         <Box flexGrow={1} flexShrink={1}>
           <Text wrap="truncate-end">
-            <Text color="inactive">{COPY.title}</Text>
+            <Text color="inactive">{title}</Text>
             {segments}
           </Text>
         </Box>
@@ -3000,14 +3099,14 @@ export const register: Register = on => {
       <Box key="tabs" flexDirection="row" gap={look.isGraphic ? 'xs' : 1} flexWrap="wrap">
         {tabButton('tab-queue', '1', COPY.tabQueue, QUEUE, tab === 'queue', null)}
         {tabButton('tab-goals', '2', COPY.tabGoals, { screen: 'goals' }, tab === 'goals', null)}
-        {tabButton('tab-bell', '3', COPY.tabBell(0), { screen: 'bell' }, tab === 'bell', current.notices > 0 ? { text: String(current.notices), tone: 'attention' } : null)}
+        {tabButton('tab-bell', '3', COPY.tabNotices(0), { screen: 'bell' }, tab === 'bell', current.notices > 0 ? { text: String(current.notices), tone: 'attention' } : null)}
         {tabButton('tab-memory', '4', COPY.tabMemory, { screen: 'memory' }, tab === 'memory', null)}
-        {tabButton('tab-status', '5', COPY.tabStatus(false), { screen: 'status' }, tab === 'status', hasProblem(current, drawingAsked.off) ? { text: '⚠', tone: 'warning' } : null)}
+        {tabButton('tab-status', '5', COPY.tabHealth(false), { screen: 'status' }, tab === 'status', hasProblem(current, drawingAsked.off) ? { text: '⚠', tone: 'warning' } : null)}
       </Box>
     )
     const context = (
       <Box key="context" flexDirection="row" justifyContent="space-between" gap={1}>
-        <Link href={base === '' ? 'https://' : base} label={hostName(base)} />
+        <Link href={base === '' ? 'https://' : base} label={`${hostName(base)} ↗`} />
         <Box flexDirection="row" gap={1}>
           <Text color={isStale ? 'error' : 'subtle'} size="footnote" tabular>
             {screen.screen === 'memory'
@@ -3100,11 +3199,15 @@ export const register: Register = on => {
     // The slots and today's spend, as gauges where the surface draws Svg, as ▰▱ cells on the terminal.
     const runningUsd = Number(current.runningUsd)
     const budgetUsd = current.dayBudget === null ? null : Number(current.dayBudget)
+    // TODAY'S COST, OR ITS TOKENS ON THE SETUP TOKEN: no $ figure and no bar against a dollar limit where it is not known.
+    const isCostKnown = current.costKnown !== false
+    const costNow = isCostKnown ? words.money(runningUsd) : costTight({ usd: runningUsd, tokens: current.runningTokens ?? null, isKnown: false })
+    const dayNow = current.dayBudget === null || !isCostKnown ? null : words.budget(budgetUsd)
 
     // THE STATUS TAB: the machine, its slots and cost, every problem with how to fix it, and where to look.
     if (screen.screen === 'status') {
       // EVERY DRAW SAYS THAT IT BEGAN: a line here with no "draws" after it is a draw that never returned.
-      note($, `terylon-pane: the Status tab begins on ${e.surface} at ${e.props.bodyColumns} columns`)
+      note($, `terylon-pane: Health begins on ${e.surface} at ${e.props.bodyColumns} columns`)
 
       // A PART THAT THROWS IS ONE PROBLEM, NEVER A BLANK TAB: Desktop draws its own placeholder when a render fails.
       const part = async (name: string, build: () => unknown): Promise<unknown> => {
@@ -3112,7 +3215,7 @@ export const register: Register = on => {
           return await build()
         } catch (error) {
           const message = messageOf(error)
-          note($, `terylon-pane: the Status tab's ${name} did not draw: ${message}`)
+          note($, `terylon-pane: Health's ${name} did not draw: ${message}`)
 
           return cardOf(`problem-part-${name}`, warned(COPY.statusPartFailed(name)), null, [reason(message), steps(COPY.fixStatusPart)], 'bad')
         }
@@ -3135,7 +3238,7 @@ export const register: Register = on => {
           cardOf(`problem-alert-${notice.id}`, warned(notice.title), COPY.alertHint(notice.source, notice.when), [
             notice.body === '' ? null : <Text color="inactive">{notice.body}</Text>,
             <Text color="subtle">{COPY.fixAlert}</Text>,
-            <Link href={notice.link === null ? consoleLink(base, 'bell') : `${base}${notice.link}`} label={COPY.bellInConsole} />,
+            <Link href={notice.link === null ? consoleLink(base, 'bell') : `${base}${notice.link}`} label={COPY.noticesInConsole} />,
           ], 'bad')))
         // ITS OWN Try again AND RULES, KEYED APART from the connection's: two elements of one key are one too many.
         // THE DONE-SIGNAL'S OWN PROBLEM: the queue may read well while events_since, or the store, fails on its own. DRAWN
@@ -3195,7 +3298,7 @@ export const register: Register = on => {
           COPY.diagnosticsEvents('store refusals', String(storeRefusals)),
           COPY.diagnosticsEvents('signaller', current.signaller === 'this' ? COPY.signallerThis(current.signallerHolder ?? shortId(sessionId), current.sessionIdSource) : current.signaller === 'another' ? COPY.signallerAnother(current.signallerHolder ?? '?', at(current.signallerSince)) : COPY.signallerNone),
         ]
-        note($, `terylon-pane: the Status tab's done-signal: ${eventsDiagnostics.join('; ')}`)
+        note($, `terylon-pane: Health's done-signal: ${eventsDiagnostics.join('; ')}`)
         const problems = [problemCard, rulesCard, isShown('events') ? eventsCard : null, isShown('events') ? signallerCard : null, pausedCard, ...(isShown('alerts') ? (Array.isArray(alertCards) ? alertCards : [alertCards]) : [])].filter(item => item !== null)
         const slotsCard = await part('slots', () => cardOf('status-slots', COPY.statusSlots, COPY.statusSlotsHint, [
           look.isGraphic ? picture(elements, slotsGauge(current.slotsUsed, current.slots, true)) : null,
@@ -3205,7 +3308,7 @@ export const register: Register = on => {
             rowOf({
               key: `status-story-${item.story}`,
               kind: item.isStuck ? COPY.kindStuck : item.isVerifying ? COPY.verifying : COPY.kindRunning,
-              kindTone: item.isStuck ? 'warning' : 'subtle',
+              kindTone: markOf(kindTone(item.isStuck ? 'stuck' : 'running')),
               title: item.title,
               detail: item.detail,
               onPress: () => go({ screen: 'story', story: item.story }),
@@ -3258,9 +3361,12 @@ export const register: Register = on => {
         const costCard = await part('cost', async () => {
           const bellState = await readBell($)
 
+          // ON THE SETUP TOKEN: the tokens and the phrase, and no bar against a dollar limit.
+          const today = isCostKnown ? COPY.statusToday(words.money(runningUsd), current.dayBudget === null ? null : words.budget(budgetUsd)) : todayCost(healthOf(current, offset))
+
           return cardOf('status-cost', COPY.statusCost, null, [
-            look.isGraphic && budgetUsd !== null ? picture(elements, spendBar(runningUsd, budgetUsd, 'wide', COPY.statusToday(current.runningUsd, current.dayBudget))) : null,
-            <Text tabular>{COPY.statusToday(current.runningUsd, current.dayBudget)}</Text>,
+            look.isGraphic && budgetUsd !== null && isCostKnown ? picture(elements, spendBar(runningUsd, budgetUsd, 'wide', today)) : null,
+            <Text tabular>{today}</Text>,
             bellState.metrics.length === 0 ? null : (
               <Text tabular>
                 <Text color="subtle">{`${COPY.statusMonth} `}</Text>
@@ -3329,13 +3435,13 @@ export const register: Register = on => {
 
         // EVERY DRAW SAYS WHAT IT RETURNS and what in it a host may refuse: a line here beside a blank pane is a tree
         // the host dropped, and the check names what the kit lets through.
-        note($, `terylon-pane: the Status tab draws ${drawingAsked.isMinimal ? 'minimal' : STATUS_DRAWN.filter(isShown).join(', ')}; problems ${problems.length}${events === null ? '' : `, events ${events.kind}`}${silentSince === null ? '' : ', the watchdog'}; ${treeLine(checkTree(tree))}; ${Math.max(0, (await $.clock.now()) - now)} ms`)
+        note($, `terylon-pane: Health draws ${drawingAsked.isMinimal ? 'minimal' : STATUS_DRAWN.filter(isShown).join(', ')}; problems ${problems.length}${events === null ? '' : `, events ${events.kind}`}${silentSince === null ? '' : ', the watchdog'}; ${treeLine(checkTree(tree))}; ${Math.max(0, (await $.clock.now()) - now)} ms`)
 
         return tree
       } catch (error) {
         // WHAT NO PART CAUGHT still draws the tabs and says why, so the owner can move on and read the debug log.
         const message = messageOf(error)
-        note($, `terylon-pane: the Status tab did not draw: ${message}`)
+        note($, `terylon-pane: Health did not draw: ${message}`)
 
         return (
           <Box flexDirection="column" gap={1}>
@@ -3388,7 +3494,7 @@ export const register: Register = on => {
         return (
           <Box flexDirection="column" gap={1}>
             {backButton}
-            {cardOf('story-error', warned(COPY.storyError), `#${screen.story}`, [reason(shownStory.sentence)], 'bad')}
+            {cardOf('story-error', warned(COPY.storyError), labelOf('story', screen.story), [reason(shownStory.sentence)], 'bad')}
             {footer}
           </Box>
         )
@@ -3398,6 +3504,7 @@ export const register: Register = on => {
       const timelineOpen = shown.includes(`timeline-${shownStory.story}`)
       const done = shownStory.phases.filter(item => item.status === 'done').length
       const nowAt = shownStory.phases.findIndex(item => item.status === 'now')
+      // STUCK OR BLOCKED, its node now is drawn amber.
       const isStuck = shownStory.stateTone === 'warning'
       const labels = shortLabels(shownStory.phases)
       const tooltips = look.proofs.svgTooltips
@@ -3412,6 +3519,10 @@ export const register: Register = on => {
       const working = shownStory.working
       const storyKey = `story-${shownStory.story}`
       const storyAct = actState(storyKey)
+      // THE STORY AND ITS GOAL BY THEIR REFS, in the console's addresses, its Goal button and the prompt alike.
+      const storyRef = refItem('story', shownStory.story)
+      const storyLabel = labelOf('story', shownStory.story)
+      const goalLabel = shownStory.goal === null ? null : shownStory.goalRef ?? labelOf('goal', shownStory.goal)
 
       return (
         <Box flexDirection="column" gap={1}>
@@ -3420,7 +3531,7 @@ export const register: Register = on => {
             {age !== null && <Text color="subtle" size="footnote" tabular>{age}</Text>}
           </Box>
           <Box key="story-head" flexDirection="column">
-            <Text size="caption" color="subtle">{COPY.storyCaption(shownStory.goal)}</Text>
+            <Text size="caption" color="subtle">{COPY.storyCaption(goalLabel)}</Text>
             <Text size="title" weight="semibold">{shownStory.title}</Text>
             <Box flexDirection="row" gap={1}>
               {stateChip}
@@ -3482,7 +3593,8 @@ export const register: Register = on => {
                         </Box>
                       ))}
                     </Box>,
-                    picture(elements, spendBar(working.spentUsd, working.budgetUsd, 'full', COPY.spendAlt(working.spentUsd.toFixed(2), (working.budgetUsd ?? 0).toFixed(0)))),
+                    // A BAR AGAINST THE STORY'S DOLLAR BUDGET only where the cost is known: none on the setup token.
+                    working.spentUsd === null ? null : picture(elements, spendBar(working.spentUsd, working.budgetUsd, 'full', COPY.spendAlt(words.money(working.spentUsd), words.budget(working.budgetUsd ?? 0)))),
                   ]
                 : [
                     <Text>{working.step}</Text>,
@@ -3580,17 +3692,19 @@ export const register: Register = on => {
                 ],
             actBusyNote(storyKey),
           ], 'wait')}
-          {actOutcome(storyKey, consoleLink(base, `work&story=${shownStory.story}`), COPY.storyInConsole)}
+          {actOutcome(storyKey, storyLink(base, 'story', storyRef, shownStory.story), COPY.storyInConsole)}
           <Box key="story-actions" flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
-            {shownStory.isVerified && !shownStory.isList && <Link href={consoleLink(base, `merge&story=${shownStory.story}`)} label={COPY.mergeInConsole} />}
+            {shownStory.isVerified && !shownStory.isList && <Link href={storyLink(base, 'merge', storyRef, shownStory.story)} label={COPY.mergeInConsole} />}
             {shownStory.isVerified && shownStory.isList && actButton(storyKey, 'story_accept', screen.story, { isPrimary: true })}
             {shownStory.isVerified && actButton(storyKey, 'story_return', screen.story, { opens: true })}
             {shownStory.canStop && actButton(storyKey, 'story_stop', screen.story)}
             {shownStory.canAbandon && actButton(storyKey, 'story_abandon', screen.story, { isDanger: true, opens: true })}
-            <Button key="summarise" label={COPY.summariseInSession} onPress={() => postPrompt($, COPY.summarisePrompt(screen.story))} />
-            {shownStory.goal !== null && <Button key="story-goal" label={COPY.goalOf(shownStory.goal)} dimColor onPress={() => go({ screen: 'goal', goal: shownStory.goal ?? 0 })} />}
+            <Button key="summarise" label={COPY.summariseInSession} onPress={() => postPrompt($, COPY.summarisePrompt(storyLabel))} />
+            {shownStory.goal !== null && <Button key="story-goal" label={COPY.goalOf(goalLabel ?? String(shownStory.goal))} dimColor onPress={() => go({ screen: 'goal', goal: shownStory.goal ?? 0 })} />}
             {shownStory.pullRequest !== null && <Link href={shownStory.pullRequest.url} label={shownStory.pullRequest.label} />}
-            <Link href={consoleLink(base, `work&story=${shownStory.story}`)} label={COPY.storyInConsole} />
+            {/* A WORK ITEM IS ONLY EVER THIS LINK, "ADO #n ↗", never the story's name. */}
+            {shownStory.workItem !== null && shownStory.workItem !== undefined && <Link href={shownStory.workItem.url} label={shownStory.workItem.label} />}
+            <Link href={storyLink(base, 'story', storyRef, shownStory.story)} label={COPY.storyInConsole} />
           </Box>
           {shownStory.isVerified && storyAct.open === 'story_return' && actField(storyKey, 'story_return', screen.story, { label: COPY.returnLabel, placeholder: COPY.returnPlaceholder })}
           {shownStory.canAbandon && storyAct.open === 'story_abandon' && actField(storyKey, 'story_abandon', screen.story, { label: COPY.whyOptional, isDanger: true })}
@@ -3942,7 +4056,7 @@ export const register: Register = on => {
                     <Text size="footnote" color="subtle" wrap="truncate-end">
                       <Text color="inactive">{proposal.file === 'owner' ? COPY.memoryOwnerFile : proposal.file.replace(/^(topic|project):/, '')}</Text>
                       {' · '}
-                      <Text>{COPY.proposedBy(proposal.by, proposal.story, null)}</Text>
+                      <Text>{COPY.proposedBy(proposal.by, proposal.storyRef ?? (proposal.story === null ? null : labelOf('story', proposal.story)), null)}</Text>
                       {proposal.at === null ? null : ' · '}
                       {proposal.at === null ? null : <Text tabular>{proposal.at}</Text>}
                     </Text>
@@ -3990,11 +4104,12 @@ export const register: Register = on => {
       // A value an older version stored has no taskVersion: it is drawn as a plan of stories until plans_list is read again.
       const taskVersion = plan.taskVersion ?? null
       const planSubtitle = taskVersion === null ? plan.goalTitle : COPY.taskVersion(taskVersion.version, taskVersion.title ?? plan.goalTitle)
-      const card_ = cardOf(`plan-${plan.id}`, <Text size="heading" weight="semibold">{COPY.plan(plan.id)}<Text color="subtle" weight="regular">{` · ${planSubtitle}`}</Text></Text>, plan.stateText, [
+      const card_ = cardOf(`plan-${plan.id}`, <Text size="heading" weight="semibold">{COPY.plan(plan.ref ?? String(plan.id))}<Text color="subtle" weight="regular">{` · ${planSubtitle}`}</Text></Text>, plan.stateText, [
         // A PLAN AS A CHAIN (S32): the order and the "after" of its stories as an Svg, as 1 → 2 → 3 on the terminal. Only
         // the order (#39): the sizes beside it, "S ~$3 → M ~$5", read as nodes of a second chain, and a plan of one story
-        // drew "○ M" above its row. A plan of one story has no order to draw; each size is said on its story's row.
-        plan.stories.length < 2
+        // drew "○ M" above its row. A plan of one story has no order to draw; each size is said on its story's row. Nor
+        // has a plan whose stories wait for none: its chain would be circles with nothing between them.
+        plan.stories.length < 2 || plan.stories.every(item => item.after.length === 0)
           ? null
           : (
               <Box key={`plan-${plan.id}-chain`} flexDirection="row" gap={1} alignItems="center">
@@ -4016,7 +4131,7 @@ export const register: Register = on => {
         <Box flexDirection="row" gap={1} flexWrap="wrap">
           {plan.isProposed && actButton(planKey, 'plan_approve', plan.id, { isPrimary: true })}
           {plan.isProposed && actButton(planKey, 'plan_rethink', plan.id, { opens: true })}
-          <Button key={`plan-${plan.id}-goal`} label={COPY.goalOf(plan.goal)} dimColor onPress={() => go({ screen: 'goal', goal: plan.goal })} />
+          <Button key={`plan-${plan.id}-goal`} label={COPY.goalOf(plan.goalRef ?? labelOf('goal', plan.goal))} dimColor onPress={() => go({ screen: 'goal', goal: plan.goal })} />
         </Box>,
         plan.isProposed && actState(planKey).open === 'plan_rethink' ? actField(planKey, 'plan_rethink', plan.id, { label: COPY.rethinkLabel }) : null,
         plan.isProposed && actState(planKey).open === 'plan_rethink' ? <Text color="subtle" size="footnote">{COPY.rethinkNote}</Text> : null,
@@ -4047,7 +4162,7 @@ export const register: Register = on => {
         // THE TASK'S SETTLED VERSIONS, in one line here rather than as plans below the card: nothing in them waits.
         versions.length === 0 ? null : (
           <Text key="repeating-versions" color="subtle" size="footnote">
-            {COPY.repeatingVersions(versions.map(plan => ({ version: plan.taskVersion?.version ?? null, plan: plan.id, isWithdrawn: plan.state === 'withdrawn' })))}
+            {COPY.repeatingVersions(versions.map(plan => ({ version: plan.taskVersion?.version ?? null, plan: plan.ref ?? String(plan.id), isWithdrawn: plan.state === 'withdrawn' })))}
           </Text>
         ),
         newest === undefined
@@ -4128,10 +4243,10 @@ export const register: Register = on => {
         <Box flexDirection="column" gap={1}>
           {backButton}
           {shownSpec.phase === 'error'
-            ? cardOf('spec-error', warned(COPY.loadError(COPY.specOf(screen.goal))), null, [reason(shownSpec.sentence)], 'bad')
+            ? cardOf('spec-error', warned(COPY.loadError(COPY.specOf(labelOf('goal', screen.goal)))), null, [reason(shownSpec.sentence)], 'bad')
             : (
                 <Box key="spec-head" flexDirection="column">
-                  <Text size="caption" color="subtle">{COPY.specOf(screen.goal).toUpperCase()}</Text>
+                  <Text size="caption" color="subtle">{COPY.specOf(labelOf('goal', screen.goal)).toUpperCase()}</Text>
                   <Text size="title" weight="semibold">{screen.file ?? COPY.specVersionShown(version)}</Text>
                   <Text color="subtle" size="footnote">{screen.file === null ? COPY.specReadOnly(shownSpec.revised) : `${COPY.specVersionShown(version)} · ${COPY.specReadOnly(shownSpec.revised)}`}</Text>
                 </Box>
@@ -4140,7 +4255,7 @@ export const register: Register = on => {
           {shownSpec.phase === 'ok' && files.map(file => cardOf(`spec-text-${file.name}`, file.name, charactersText(file.text.length), [
             <Markdown key={`spec-markdown-${file.name}`} text={file.text} />,
           ]))}
-          <Link key="spec-view-console" href={consoleLink(base, `goals&goal=${screen.goal}`)} label={COPY.specInConsole} />
+          <Link key="spec-view-console" href={goalLink(base, refItem('goal', screen.goal), screen.goal)} label={COPY.specInConsole} />
           {footer}
         </Box>
       )
@@ -4204,7 +4319,7 @@ export const register: Register = on => {
           {isRevising ? null : <Button key="spec-revise" label={COPY.specRevise} onPress={() => openRevise($, screen.goal, specification.version)} />}
           {specification.older.map(version => <Button key={`spec-version-${version}`} label={COPY.specVersion(version)} dimColor onPress={() => go({ screen: 'spec', goal: screen.goal, version, file: null })} />)}
         </Box>,
-        <Link key="spec-console" href={consoleLink(base, `goals&goal=${screen.goal}`)} label={COPY.specInConsole} />,
+        <Link key="spec-console" href={goalLink(base, refItem('goal', screen.goal), screen.goal)} label={COPY.specInConsole} />,
         specification.decisions.length === 0 ? null : (
           <Box key="spec-decisions" flexDirection="column">
             <Text size="caption" color="subtle">{COPY.specDecisions}</Text>
@@ -4241,37 +4356,37 @@ export const register: Register = on => {
         <Box flexDirection="column" gap={1}>
           {backButton}
           {shownGoal.phase === 'error'
-            ? cardOf('goal-error', warned(COPY.loadError(COPY.goalOf(screen.goal))), null, [reason(shownGoal.sentence)], 'bad')
+            ? cardOf('goal-error', warned(COPY.loadError(COPY.goalOf(labelOf('goal', screen.goal)))), null, [reason(shownGoal.sentence)], 'bad')
             : (
                 <Box key="goal-head" flexDirection="column">
-                  <Text size="caption" color="subtle">{COPY.goalOf(screen.goal).toUpperCase()}</Text>
+                  <Text size="caption" color="subtle">{COPY.goalOf(shownGoal.ref ?? labelOf('goal', screen.goal)).toUpperCase()}</Text>
                   <Text size="title" weight="semibold">{shownGoal.title}</Text>
                   <Text color="subtle" size="footnote">{shownGoal.meta}</Text>
                 </Box>
               )}
           {specCard}
           {reviseCard}
-          {specCard === null ? null : actOutcome(specKey, consoleLink(base, `goals&goal=${screen.goal}`), COPY.specInConsole)}
+          {specCard === null ? null : actOutcome(specKey, goalLink(base, refItem('goal', screen.goal), screen.goal), COPY.specInConsole)}
           {shownGoal.phase === 'ok' && repeating !== null && repeatingCard(repeating, settledVersions)}
           {shownGoal.phase === 'ok' && repeating === null && cardOf('goal-stories', COPY.goalStories, <Text color="subtle" size="footnote" tabular>{String(shownGoal.stories.length)}</Text>, [
             shownGoal.stories.length === 0 ? quiet(elements, COPY.noGoalStories) : null,
             ...shownGoal.stories.map(item =>
-              rowOf({ key: `goal-story-${item.id}`, kind: COPY.kindStory, title: item.title, detail: item.state, onPress: () => go({ screen: 'story', story: item.id }) })),
+              rowOf({ key: `goal-story-${item.id}`, kind: COPY.kindStory, kindTone: markOf(kindTone(item.state)), title: item.title, detail: item.state, onPress: () => go({ screen: 'story', story: item.id }) })),
           ])}
           {questions.length > 0 && cardOf('goal-questions', headingOf(COPY.goalQuestionsHeading, questions.length, 'text'), null, questions.map(item =>
-            rowOf({ key: `goal-question-${item.id}`, kind: COPY.kindQuestion, kindTone: 'warning', title: firstLine(item.text), onPress: () => go({ screen: 'question', question: item.id }) })), 'wait')}
+            rowOf({ key: `goal-question-${item.id}`, kind: COPY.kindQuestion, kindTone: markOf(kindTone('question')), title: firstLine(item.text), onPress: () => go({ screen: 'question', question: item.id }) })), 'wait')}
           {plans.filter(plan => !settledVersions.includes(plan)).map(plan =>
-            rowOf({ key: `goal-plan-${plan.id}`, kind: COPY.kindPlan, title: COPY.plan(plan.id), detail: plan.stateText, detailTone: plan.isProposed ? 'attention' : 'subtle', onPress: () => go({ screen: 'plan', plan: plan.id }) }))}
+            rowOf({ key: `goal-plan-${plan.id}`, kind: COPY.kindPlan, kindTone: plan.isProposed ? markOf(kindTone('plan')) : undefined, title: COPY.plan(plan.ref ?? String(plan.id)), detail: plan.stateText, detailTone: plan.isProposed ? 'attention' : 'subtle', onPress: () => go({ screen: 'plan', plan: plan.id }) }))}
           {/* THE GOAL'S ACT (S27): Drop goal… asks once more, saying what it withdraws and what keeps running. */}
           {shownGoal.phase === 'ok' && shownGoal.isOpen && goalAct.open !== 'goal_drop' && (
             <Box key="goal-actions" flexDirection="row" gap={1}>{actButton(goalKey, 'goal_drop', screen.goal, { isDanger: true, opens: true })}</Box>
           )}
-          {shownGoal.phase === 'ok' && goalAct.open === 'goal_drop' && cardOf(`act-${goalKey}-confirm`, <Text>{COPY.dropGoalWarning(plans.filter(plan => plan.isProposed || plan.state === 'rethink').map(plan => plan.id), shownGoal.openStories ?? [])}</Text>, null, [
+          {shownGoal.phase === 'ok' && goalAct.open === 'goal_drop' && cardOf(`act-${goalKey}-confirm`, <Text>{COPY.dropGoalWarning(plans.filter(plan => plan.isProposed || plan.state === 'rethink').map(plan => plan.ref ?? String(plan.id)), (shownGoal.openStories ?? []).map(item => ({ ...item, label: item.label ?? labelOf('story', item.id) })))}</Text>, null, [
             actField(goalKey, 'goal_drop', screen.goal, { label: '', isDanger: true, hasText: false }),
           ], 'wait')}
           {actBusyNote(goalKey)}
-          {actOutcome(goalKey, consoleLink(base, `goals&goal=${screen.goal}`), COPY.goalInConsole)}
-          <Link key="goal-console" href={consoleLink(base, `goals&goal=${screen.goal}`)} label={COPY.goalInConsole} />
+          {actOutcome(goalKey, goalLink(base, refItem('goal', screen.goal), screen.goal), COPY.goalInConsole)}
+          <Link key="goal-console" href={goalLink(base, refItem('goal', screen.goal), screen.goal)} label={COPY.goalInConsole} />
           {footer}
         </Box>
       )
@@ -4347,7 +4462,7 @@ export const register: Register = on => {
                 titleTone: isClosedShown ? 'subtle' : undefined,
                 isTitleDim: isClosedShown,
                 // DELETE… ENDS EACH HISTORY ROW: the console's Goals, where the owner deletes it; no tool of the pane deletes.
-                trail: isClosedShown ? { href: deleteLink(base, item.id), label: COPY.deleteInConsole } : null,
+                trail: isClosedShown ? { href: deleteLink(base, item.id, item.ref ?? null), label: COPY.deleteInConsole } : null,
                 detail: item.questions > 0 ? COPY.goalQuestions(item.questions) : item.stories,
                 detailTone: item.questions > 0 ? 'attention' : 'subtle',
                 onPress: () => go({ screen: 'goal', goal: item.id }),
@@ -4405,7 +4520,7 @@ export const register: Register = on => {
           {context}
           {problemCard}
           {bellState.phase === 'loading' && quiet(elements, COPY.loading)}
-          {bellState.phase === 'error' && cardOf('bell-error', warned(COPY.loadError(COPY.tabBell(0))), null, [reason(bellState.sentence)], 'bad')}
+          {bellState.phase === 'error' && cardOf('bell-error', warned(COPY.loadError(COPY.tabNotices(0))), null, [reason(bellState.sentence)], 'bad')}
           {bellState.phase === 'ok' && cardOf('bell-needs', headingOf(COPY.needsYou, bellState.unhandledCount, bellState.unhandledCount > 0 ? 'text' : 'inactive'), COPY.bellHint, [
             bellState.unhandled.length === 0 ? quiet(elements, COPY.nothingYet) : null,
             ...bellState.unhandled.map(notice =>
@@ -4427,7 +4542,7 @@ export const register: Register = on => {
                         label={bellState.handling === notice.id ? COPY.handling : COPY.markHandled}
                         onPress={() => handleNotice($, notice.id)}
                       />
-                      {notice.link !== null && <Link href={`${base}${notice.link}`} label={COPY.bellInConsole} />}
+                      {notice.link !== null && <Link href={`${base}${notice.link}`} label={COPY.noticesInConsole} />}
                     </Box>
                   </Box>
                 ) : null,
@@ -4472,9 +4587,9 @@ export const register: Register = on => {
                   </Box>
                 ),
           ])}
-          {/* WHERE S32 LEFT THE DASHED SLOT: the leader's Pause and Resume are on the queue and the Status tab (S27). */}
+          {/* WHERE S32 LEFT THE DASHED SLOT: the leader's Pause and Resume are on Waiting and Health (S27). */}
           <Box key="leader-actions" flexDirection="row" gap={1} flexWrap="wrap">
-            <Link href={consoleLink(base, 'bell')} label={COPY.bellInConsole} />
+            <Link href={consoleLink(base, 'bell')} label={COPY.noticesInConsole} />
             <Link href={consoleLink(base, 'health')} label={COPY.health} />
           </Box>
           {footer}
@@ -4485,31 +4600,31 @@ export const register: Register = on => {
     // THE QUEUE: waiting for you, running, queued or held, done today. Each card stays, quiet when empty.
     const waitingKind = (kind: string) =>
       kind === 'question' ? COPY.kindQuestion : kind === 'merge' ? COPY.kindMerge : kind === 'accept' ? COPY.kindAccept : kind === 'plan' ? COPY.kindPlan : COPY.kindBlocked
-    const waitingTone = (kind: string): Tone =>
-      kind === 'question' ? 'warning' : kind === 'merge' ? 'merged' : kind === 'accept' ? 'success' : kind === 'blocked' ? 'error' : 'inactive'
+    // THE KIND'S DOT (hooks/tones.ts): what waits on the owner's merge, acceptance or approval purple, a question amber.
+    const waitingTone = (kind: string): Tone => markOf(kindTone(kind))
     // THE CARD'S HINT says where each waiting decision is taken: a merge in the console, an acceptance on its card (#39).
     const hasAccept = current.waiting.some(item => item.kind === 'accept')
     const waitingHint = !hasAccept ? COPY.waitingHint : current.waiting.some(item => item.kind === 'merge') ? COPY.waitingHintBoth : COPY.waitingHintAccept
     const waitingReveal = (kind: string) => (kind === 'question' ? COPY.answerInConsole : COPY.mergeInConsole)
     const slots = slotsGauge(current.slotsUsed, current.slots, false)
-    const spend = budgetUsd === null ? null : spendBar(runningUsd, budgetUsd, 'small', COPY.gaugeSpendAlt(current.runningUsd, current.dayBudget ?? ''))
+    const spend = budgetUsd === null || !isCostKnown ? null : spendBar(runningUsd, budgetUsd, 'small', COPY.gaugeSpendAlt(costNow, dayNow ?? ''))
 
     // THE RUNNING HEADING'S GAUGES (S32): the slots and today's spend as two small Svg with their numbers; the
     // narrow dock says the numbers alone, the terminal draws ▰▱ cells.
     const gauges = !look.isGraphic
       ? (
           <Text color="subtle" tabular>
-            {`${meter(current.slotsUsed, Math.min(current.slots, 12))} ${COPY.gaugeSlots(current.slotsUsed, current.slots)} · ${budgetUsd === null || budgetUsd <= 0 ? '' : `${meter((runningUsd / budgetUsd) * 4, 4)} `}${COPY.gaugeSpend(current.runningUsd, current.dayBudget)}`}
+            {`${meter(current.slotsUsed, Math.min(current.slots, 12))} ${COPY.gaugeSlots(current.slotsUsed, current.slots)} · ${budgetUsd === null || budgetUsd <= 0 || !isCostKnown ? '' : `${meter((runningUsd / budgetUsd) * 4, 4)} `}${isCostKnown ? COPY.gaugeSpend(costNow, dayNow) : costNow}`}
           </Text>
         )
       : look.isNarrow
-        ? <Text color="subtle" size="footnote" tabular>{COPY.gaugesNarrow(current.slotsUsed, current.slots, current.runningUsd)}</Text>
+        ? <Text color="subtle" size="footnote" tabular>{COPY.gaugesNarrow(current.slotsUsed, current.slots, costNow)}</Text>
         : (
             <Box flexDirection="row" gap="sm" alignItems="center">
               {picture(elements, slots)}
               <Text color="subtle" size="footnote" tabular>{COPY.gaugeSlots(current.slotsUsed, current.slots)}</Text>
               {picture(elements, spend)}
-              <Text color="subtle" size="footnote" tabular>{COPY.gaugeSpend(current.runningUsd, current.dayBudget)}</Text>
+              <Text color="subtle" size="footnote" tabular>{isCostKnown ? COPY.gaugeSpend(costNow, dayNow) : costNow}</Text>
             </Box>
           )
 
@@ -4587,13 +4702,14 @@ export const register: Register = on => {
               onPress: () => go({ screen: 'story', story: item.story }),
             })),
         ])}
-        {cardOf('done', headingOf(COPY.doneToday, current.doneToday.length, current.doneToday.length > 0 ? 'success' : 'inactive'), null, [
+        {cardOf('done', headingOf(COPY.doneToday, current.doneToday.length, current.doneToday.length > 0 ? wordOf('ok').color : 'inactive'), null, [
           current.doneToday.length === 0 ? quiet(elements, COPY.nothingDone) : null,
           ...current.doneToday.map(item =>
             rowOf({
               key: `done-${item.story}`,
               kind: item.isAccepted === true ? COPY.kindAccepted : COPY.kindMerged,
-              kindTone: 'merged',
+              // DONE IS GREEN: merged or accepted, the gate's purple is for what still waits.
+              kindTone: markOf(kindTone('merged')),
               title: item.title,
               detail: item.detail,
               onPress: () => go({ screen: 'story', story: item.story }),

@@ -86,6 +86,11 @@ export type PaneSnapshot = {
   // The holder's id, shortened, and where this session's own id came from: the engine's session.id, or made here.
   signallerHolder: string | null
   sessionIdSource: 'session.id' | 'fallback'
+  // TODAY'S COST, KNOWN OR NOT (Terylon S68): on the setup token, or where a story says its cost is not known, only the
+  // tokens are said, never a $ figure. The basis is the briefing's costBasis, 'api' or 'setup-token'.
+  costKnown?: boolean
+  runningTokens?: number | null
+  costBasis?: string | null
   // Since when no session has posted the done-signal, once that outlasts a lease: null while one does.
   signallerMissingSince: number | null
 }
@@ -118,7 +123,8 @@ export type PaneWorking = {
   spend: string
   // The run's numbers drawn large on the desktop (S32): the spend, the tokens, the time since start.
   numbers: { value: string; label: string }[]
-  spentUsd: number
+  // Null where the cost is not known: no spend bar is drawn against a dollar budget then.
+  spentUsd: number | null
   budgetUsd: number | null
 }
 
@@ -141,7 +147,12 @@ export type PaneStory = {
   model: string | null
   state: string
   stateText: string
-  stateTone: 'success' | 'warning' | 'suggestion' | 'subtle'
+  stateTone: 'success' | 'warning' | 'suggestion' | 'subtle' | 'merged'
+  // Terylon's short ids (Terylon S66): its ref and its goal's, null from a Terylon older than refs.
+  ref?: string | null
+  goalRef?: string | null
+  // Its work item, only ever the link "ADO #n ↗".
+  workItem?: { label: string; url: string } | null
   step: string | null
   fraction: number | null
   cost: string
@@ -202,15 +213,17 @@ export type PaneAnswer = {
   sentence: string | null
 }
 
-export type PaneGoalItem = { id: number; title: string; priority: string; state: string; questions: number; stories: string }
+export type PaneGoalItem = { id: number; ref?: string | null; title: string; priority: string; state: string; questions: number; stories: string }
 
 // `after`: the places in the plan, 1-based, of the stories this one waits for (#35).
-export type PanePlanStory = { id: number; index: number; title: string; detail: string; criteria: string[]; after: number[]; size: string; estimate: string | null }
+export type PanePlanStory = { id: number; ref?: string | null; index: number; title: string; detail: string; criteria: string[]; after: number[]; size: string; estimate: string | null }
 
 export type PanePlan = {
   id: number
   goal: number
   goalTitle: string
+  ref?: string | null
+  goalRef?: string | null
   state: string
   stateText: string
   isProposed: boolean
@@ -255,12 +268,14 @@ export type PaneGoal = {
   phase: 'loading' | 'ok' | 'error' | 'deleted'
   sentence: string | null
   title: string
+  // Its ref (Terylon S66), null from a Terylon older than refs.
+  ref?: string | null
   meta: string
   stories: { id: number; title: string; state: string }[]
   // An open or active goal can be dropped (S27); a done or dropped one cannot. A drop abandons every story of it that
   // has not ended, stopping a run first (Terylon S35, #388), and the drop says which, by title (#35).
   isOpen: boolean
-  openStories: { id: number; title: string; isRunning: boolean }[]
+  openStories: { id: number; label?: string; title: string; isRunning: boolean }[]
   // A REPEATING TASK'S GOAL (Terylon S43): its card replaces the stories card. Absent in a value an older version stored.
   repeating?: PaneRepeating | null
   // ITS SPECIFICATION (Terylon S53), from goal_get: null where it has none. Absent in a value an older version stored.
@@ -317,7 +332,7 @@ export type PaneSpecView = {
 
 // One run of a repeating task, newest first: its day in the host's time zone, its state in words and that state's tone,
 // and its files with its cost. `story` is null when Terylon names none, and the run then opens nothing.
-export type PaneRepeatingRun = { story: number | null; day: string; state: string; tone: 'success' | 'attention' | 'subtle'; line: string }
+export type PaneRepeatingRun = { story: number | null; day: string; state: string; tone: 'success' | 'attention' | 'subtle' | 'merged'; line: string }
 
 export type PaneRepeating = { title: string; summary: string; runs: PaneRepeatingRun[]; console: string }
 
@@ -354,7 +369,7 @@ export type PaneMemoryEdit = {
 // A memory proposal waiting for the owner (S27): what it changes, why, and who proposed it, the owner or the leader.
 export type PaneProposalOperation = { action: string; file: string; text: string | null; oldText: string | null }
 
-export type PaneProposal = { id: number; file: string; action: string; oldText: string | null; text: string | null; operations: PaneProposalOperation[]; why: string | null; by: 'owner' | 'leader'; story: number | null; at: string | null }
+export type PaneProposal = { id: number; file: string; action: string; oldText: string | null; text: string | null; operations: PaneProposalOperation[]; why: string | null; by: 'owner' | 'leader'; story: number | null; storyRef?: string | null; at: string | null }
 
 export type PaneMemory = {
   phase: 'loading' | 'ok' | 'error' | 'editing' | 'sending' | 'proposed' | 'refused'

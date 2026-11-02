@@ -27,7 +27,7 @@ test('adding a task sends tasks_add under the goal, after the chosen story, and 
   })
   expect(await ui.find({ type: 'Text', text: '✓ Handed over' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'Lídr z úkolu udělal plán 42.' })).toBeDefined()
-  expect((await ui.find({ type: 'Link', text: 'Plan in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=plan&goal=3')
+  expect((await ui.find({ type: 'Link', text: 'Plan in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=goal&goal=3')
   // The plan the task becomes is approved on its own card, under Waiting for you, never from the task's result.
   expect(await ui.find({ type: 'Button', text: /Approve/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: 'The plan it becomes waits for you under “Waiting for you”.' })).toBeDefined()
@@ -58,7 +58,7 @@ test('a leader that does not answer within 10 s is said so with the command, and
   const ui = await $.ui.mount(MOUNT)
   await ui.input({ key: 'quick-add', text: 'Pomalý' })
   await ui.press({ key: 'add-send' })
-  expect(await ui.find({ type: 'Text', text: 'The leader did not answer within 10 s. The task may have arrived; look at the queue before you send it again (command 9f2c).' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'The leader did not answer within 10 s. The task may have arrived; look at Waiting before you send it again (command 9f2c).' })).toBeDefined()
 
   terylon.answers.work_in_flight = { slots: 4, paused: true, stories: [] }
   await ui.press({ key: 'back' })

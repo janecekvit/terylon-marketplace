@@ -23,15 +23,15 @@ test('calm: every value at its default is inactive, names subtle, one truncating
   for (const surface of SURFACES) {
     const band = await $.ui.mount(bandOn(surface))
 
-    expect((await band.find({ type: 'Text', text: exact('Terylon') }))?.props.color).toBe('inactive')
+    expect((await band.find({ type: 'Text', text: exact('Terylon Cockpit') }))?.props.color).toBe('inactive')
     expect((await band.find({ type: 'Text', text: exact(' · Waiting ') }))?.props.color).toBe('subtle')
-    expect((await band.find({ type: 'Text', text: exact(' · Queue ') }))?.props.color).toBe('subtle')
+    expect((await band.find({ type: 'Text', text: exact(' · Queued ') }))?.props.color).toBe('subtle')
 
     for (const zero of await band.findAll({ type: 'Text', text: exact('0') })) {
       expect(zero.props.color).toBe('inactive')
     }
 
-    const row = await band.find({ type: 'Text', text: /^Terylon · Waiting 0 · Running 0 · Queue 0 · Bell 0$/ })
+    const row = await band.find({ type: 'Text', text: /^Terylon Cockpit · Waiting 0 · Running 0 · Queued 0 · Notices 0$/ })
     expect(row?.props.wrap).toBe('truncate-end')
 
     const button = await band.find({ key: 'band-open' })
@@ -55,7 +55,7 @@ test('something waits: Waiting in semibold text, Running in suggestion, the rest
   for (const surface of SURFACES) {
     const band = await $.ui.mount(bandOn(surface))
 
-    expect(await band.find({ type: 'Text', text: exact('Terylon · Waiting 3 · Running 2 · Queue 2 · Bell 2') })).toBeDefined()
+    expect(await band.find({ type: 'Text', text: exact('Terylon Cockpit · Waiting 3 · Running 2 · Queued 2 · Notices 2') })).toBeDefined()
     expect((await band.find({ type: 'Text', text: exact('3') }))?.props).toMatchObject({ color: 'text', weight: 'semibold' })
     // THE BELL'S COUNT: the unhandled notices, in semibold text while any waits.
     expect((await band.findAll({ type: 'Text', text: exact('2') })).map(text => [text.props.color, text.props.weight])).toEqual([['suggestion', undefined], ['inactive', undefined], ['text', 'semibold']])
@@ -111,7 +111,7 @@ test('not allowed: the band says Claude Code refused, and Open opens the pane, w
   expect(await pane.find({ type: 'Text', text: exact("Claude Code refused the pane's call") })).toBeDefined()
   expect((await pane.find({ type: 'Code', text: /permissions/ }))?.props.language).toBe('json')
   expect((await pane.find({ key: 'tab-queue' }))?.props.variant).toBe('primary')
-  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Status ⚠')
+  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Health ⚠')
   expect(await pane.find({ type: 'Text', text: /^Reason: / })).toBeDefined()
 })
 
@@ -162,7 +162,7 @@ test('a survey takes the band: the mod yields to what draws beneath it', async (
   for (const surface of SURFACES) {
     const band = await $.ui.mount(bandOn(surface, true))
     expect(await band.find({ type: 'Text', text: exact('survey') })).toBeDefined()
-    expect(await band.find({ type: 'Text', text: exact('Terylon') })).toBeUndefined()
+    expect(await band.find({ type: 'Text', text: exact('Terylon Cockpit') })).toBeUndefined()
     expect(await band.find({ key: 'band-open' })).toBeUndefined()
     await band.unmount()
   }
@@ -174,7 +174,7 @@ test('the band and the status line split the work, and the pane never opens by i
   await terylon.clock.settle()
   await terylon.clock.advance(60000)
 
-  expect(terylon.statuses[terylon.statuses.length - 1]).toBe('Agentic OS ● ok · $5.50 of $20 today · 2/4 slots')
+  expect(terylon.statuses[terylon.statuses.length - 1]).toBe('Terylon ● all well · $5.50 of $20 today · 2/4 slots')
   expect(terylon.opens).toEqual([])
 
   const band = await $.ui.mount(bandOn('desktop'))

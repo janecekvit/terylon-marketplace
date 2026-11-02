@@ -16,13 +16,13 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 const NEWEST = '2026-10-28T05:00:00Z'
 const NOW = lateOnTheLocalDayOf(NEWEST)
 
-// What the pane should say for `iso`, computed through the host's own offset: "Today 06:00" or "27 Oct 06:00" in Prague.
+// What the pane should say for `iso`, computed through the host's own offset: "today 06:00" or "27 Oct 06:00" in Prague.
 function localDay(iso: string, isToday: boolean): string {
   const moment = Date.parse(iso)
   const local = new Date(moment - hostZoneOffset(moment) * 60000)
   const time = `${String(local.getUTCHours()).padStart(2, '0')}:${String(local.getUTCMinutes()).padStart(2, '0')}`
 
-  return isToday ? `Today ${time}` : `${local.getUTCDate()} ${MONTHS[local.getUTCMonth()]} ${time}`
+  return isToday ? `today ${time}` : `${local.getUTCDate()} ${MONTHS[local.getUTCMonth()]} ${time}`
 }
 
 const REPEATING = {
@@ -102,7 +102,7 @@ for (const [surface, props] of [['desktop', PANE_PROPS], ['terminal', PANE_PROPS
 
     // THE OLDER RUNS, a row each: the day the press, the state a Text of its own beside it, in its tone. Desktop draws a
     // Button's label in one colour, so the state is never inside it.
-    const olderRuns = [[87, '2026-10-27T05:00:00Z', 'green · accepted', 'subtle'], [86, '2026-10-26T05:00:00Z', 'red · waits for you', 'text'], [85, '2026-10-25T05:00:00Z', 'green · waits for you', 'text'], [84, '2026-10-24T05:00:00Z', 'abandoned', 'subtle']] as const
+    const olderRuns = [[87, '2026-10-27T05:00:00Z', 'green · accepted', 'subtle'], [86, '2026-10-26T05:00:00Z', 'red · waits for you', 'text'], [85, '2026-10-25T05:00:00Z', 'green · waits for you', 'merged'], [84, '2026-10-24T05:00:00Z', 'abandoned', 'subtle']] as const
     for (const [index, [story, iso, state, tone]] of olderRuns.entries()) {
       const press = await ui.find({ key: `repeating-run-${story}` })
       expect(press?.type).toBe('Button')
@@ -121,7 +121,7 @@ for (const [surface, props] of [['desktop', PANE_PROPS], ['terminal', PANE_PROPS
     }
 
     expect(await ui.find({ type: 'Text', text: exact('Started by your routine; Terylon keeps no clock.') })).toBeDefined()
-    expect((await ui.find({ type: 'Link', text: 'The task in the console ↗' }))?.props.href).toBe(`${BASE}/?cockpit=waiting&task=12`)
+    expect((await ui.find({ type: 'Link', text: 'The task in the console ↗' }))?.props.href).toBe(`${BASE}/?view=waiting&task=12`)
     expect(undrawable(await ui.drawn())).toEqual([])
   })
 }
@@ -242,11 +242,11 @@ test('a plan with no stories, under a repeating task, draws', async ($, on) => {
 test('runDay reads today and another day in the given offset, and "?" for a time it cannot read', () => {
   const now = Date.parse('2026-10-28T22:00:00Z')
 
-  expect(runDay('2026-10-28T05:00:00Z', now, 0)).toBe('Today 05:00')
+  expect(runDay('2026-10-28T05:00:00Z', now, 0)).toBe('today 05:00')
   expect(runDay('2026-10-27T05:00:00Z', now, 0)).toBe('27 Oct 05:00')
   // Prague, an hour east: 22:00 UTC is the next day there.
   expect(runDay('2026-10-28T05:00:00Z', now, -120)).toBe('28 Oct 07:00')
-  expect(runDay('2026-10-28T23:30:00Z', now, -120)).toBe('Today 01:30')
+  expect(runDay('2026-10-28T23:30:00Z', now, -120)).toBe('today 01:30')
   // New York, four hours west.
   expect(runDay('2026-10-28T02:00:00Z', now, 240)).toBe('27 Oct 22:00')
   expect(runDay(undefined, now, 0)).toBe('?')
@@ -260,7 +260,7 @@ test('repeatingOf is null for a goal that is not repeating, and tolerates what i
   expect(repeatingOf({ id: 3, repeating: 'yes' }, BASE, NOW)).toBeNull()
 
   const empty = repeatingOf({ id: 12, title: 'Forex', repeating: {} }, BASE, NOW)
-  expect(empty).toEqual({ title: 'Forex', summary: 'No version approved yet', runs: [], console: `${BASE}/?cockpit=waiting&task=12` })
+  expect(empty).toEqual({ title: 'Forex', summary: 'No version approved yet', runs: [], console: `${BASE}/?view=waiting&task=12` })
 })
 
 // A REPEATING TASK'S VERSION PLAN as plans_list answers it in production (Terylon S43): a `repeating` object and no
@@ -292,7 +292,7 @@ for (const [surface, props] of [['desktop', PANE_PROPS], ['terminal', PANE_PROPS
     expect(await ui.find({ type: 'Text', text: /Plan 2573 · version 2 of TEST PR54: sum the amounts/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /0 stories|~\$0/ })).toBeUndefined()
     await ui.press({ key: 'plan-2573' })
-    expect(await ui.find({ type: 'Text', text: exact('to approve · up to $1.00 a run · green runs accepted by themselves') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('to approve · up to $1 a run · green runs accepted by themselves') })).toBeDefined()
   })
 }
 
@@ -320,8 +320,8 @@ test('a version plan\'s card says what Approve does to later runs, never "all 0 
   expect(await ui.find({ type: 'Text', text: exact('Approve: each later task_run uses version 2.') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /0 stories|its story|both stories/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: exact(' · version 2 of TEST PR54: sum the amounts') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: exact('up to $1.00 a run · green runs accepted by themselves') })).toBeDefined()
-  expect((await ui.find({ type: 'Link', text: 'Plan in the console ↗' }))?.props.href).toBe(`${BASE}/?cockpit=plan&plan=2573`)
+  expect(await ui.find({ type: 'Text', text: exact('up to $1 a run · green runs accepted by themselves') })).toBeDefined()
+  expect((await ui.find({ type: 'Link', text: 'Plan in the console ↗' }))?.props.href).toBe(`${BASE}/?view=plan&plan=2573`)
   expect(await ui.find({ type: 'Button', text: /Approve/ })).toBeDefined()
   expect(undrawable(await ui.drawn())).toEqual([])
 })
@@ -375,7 +375,7 @@ test('an ordinary goal keeps every plan below it', async ($, on) => {
 })
 
 test('taskVersionOf reads the live plan: its version, the task\'s title and its terms', () => {
-  expect(taskVersionOf(LIVE_VERSION_PLAN)).toEqual({ version: '2', title: 'TEST PR54: sum the amounts', terms: 'up to $1.00 a run · green runs accepted by themselves' })
+  expect(taskVersionOf(LIVE_VERSION_PLAN)).toEqual({ version: '2', title: 'TEST PR54: sum the amounts', terms: 'up to $1 a run · green runs accepted by themselves' })
   expect(taskVersionOf({ ...LIVE_VERSION_PLAN, repeating: { title: 'No version', autoAccept: false } })).toEqual({ version: null, title: 'No version', terms: 'green runs wait for you' })
   expect(taskVersionOf({ ...LIVE_VERSION_PLAN, repeating: 'not an object', state: 'withdrawn' })).toBeNull()
   expect(taskVersionOf({ ...LIVE_VERSION_PLAN, repeating: ['a'], state: 'proposed' })).toEqual({ version: null, title: null, terms: null })

@@ -11,7 +11,7 @@ const MOUNT = { ...PANE, surface: 'desktop' } as const
 type Session = { command: { run: (input: never) => Promise<unknown> } }
 
 async function toQueue($: Session): Promise<void> {
-  await $.command.run({ command: 'terylon-pane', args: '' } as never)
+  await $.command.run({ command: 'terylon-cockpit', args: '' } as never)
 }
 
 const ACTS = ['plan_approve', 'plan_rethink', 'story_return', 'story_unblock', 'story_abandon', 'story_stop', 'story_accept', 'leader_pause', 'leader_resume', 'goal_drop', 'memory_confirm', 'memory_drop', 'policy_save']
@@ -415,8 +415,8 @@ test('AN UNBLOCKED STORY\'S HEADER COUNTS ONLY ITS RUNNING TIME: the hour it sto
   const ui = await $.ui.mount(MOUNT)
   await ui.press({ key: 'story-333' })
   // Started at 10:00, now 22:00, stopped from 12:00 to 13:00: eleven hours of running.
-  expect(await ui.find({ type: 'Text', text: exact('running 11 h 0 min') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: exact('running 12 h 0 min') })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: exact('running 11 h') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('running 12 h') })).toBeUndefined()
 })
 
 test('THE NEW TASK\'S "What to do" IS A FIELD OF SEVERAL ROWS, and a title typed over lines is sent as one line', async ($, on) => {

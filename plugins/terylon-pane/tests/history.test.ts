@@ -15,7 +15,7 @@ const SURFACES = [['desktop', PANE_PROPS, 'desktop'], ['terminal', PANE_PROPS, '
 const DELETE_LINK = 'Delete… ↗'
 // The goal's row in History with its Delete… sheet open (Terylon S49); the owner still types the number there.
 function deleteHref(goal: number): string {
-  return `${BASE}/?cockpit=goals&tab=history&goal=${goal}&sheet=delete`
+  return `${BASE}/?view=goals&tab=history&goal=${goal}&sheet=delete`
 }
 
 const OPEN_GOALS = [
@@ -309,6 +309,6 @@ test('AFTER A RESET, a goal deleted in the old history hides nothing: a new goal
 })
 
 test('deleteLink is the goal\'s row in History with its Delete… sheet, the id URL-safe', () => {
-  expect(deleteLink('https://terylon.example.ts.net', 52)).toBe('https://terylon.example.ts.net/?cockpit=goals&tab=history&goal=52&sheet=delete')
-  expect(deleteLink('https://terylon.example.ts.net', 1e21)).toBe('https://terylon.example.ts.net/?cockpit=goals&tab=history&goal=1e%2B21&sheet=delete')
+  expect(deleteLink('https://terylon.example.ts.net', 52)).toBe('https://terylon.example.ts.net/?view=goals&tab=history&goal=52&sheet=delete')
+  expect(deleteLink('https://terylon.example.ts.net', 1e21)).toBe('https://terylon.example.ts.net/?view=goals&tab=history&goal=1e%2B21&sheet=delete')
 })

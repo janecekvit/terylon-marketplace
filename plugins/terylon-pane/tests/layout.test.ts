@@ -14,7 +14,7 @@ const BELL = {
   unhandled: 2,
   notices: [
     { id: 90, source: 'session', title: 'Production has no egress', body: 'Fix: as root, set EGRESS=off and restart terylon-host-firewall.', key: 'incident:321-egress', link: null, raisedAt: '2026-10-10T11:19:17Z', handledAt: null },
-    { id: 56, source: 'orchestrator', title: '#265: test web push', body: '', key: 'orchestrator/265-push-test', link: '/?cockpit=waiting', raisedAt: '2026-10-08T07:49:00Z', handledAt: null },
+    { id: 56, source: 'orchestrator', title: '#265: test web push', body: '', key: 'orchestrator/265-push-test', link: '/?view=waiting', raisedAt: '2026-10-08T07:49:00Z', handledAt: null },
     { id: 175, source: 'backup', title: 'The backup ran', body: 'at 09:51', key: 'backup', raisedAt: '2026-10-11T09:51:09Z', handledAt: '2026-10-11T09:51:09Z' },
     { id: 157, source: 'backup', title: 'The backup ran', body: 'at 03:35', key: 'backup', raisedAt: '2026-10-11T03:35:19Z', handledAt: '2026-10-11T03:35:19Z' },
     { id: 120, source: 'backup', title: 'The backup ran', body: 'at 03:30', key: 'backup', raisedAt: '2026-10-10T03:30:00Z', handledAt: '2026-10-10T03:30:00Z' },
@@ -93,7 +93,7 @@ test('the bell: a row opens its body, which says what to do, and its own console
     expect(await ui.find({ type: 'Link', text: exact('↗') })).toBeUndefined()
     await ui.press({ key: 'notice-56' })
     expect(await ui.find({ type: 'Text', text: exact('No more than the title.') })).toBeDefined()
-    expect((await ui.find({ type: 'Link', text: 'Bell in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=waiting')
+    expect((await ui.find({ type: 'Link', text: 'Notices in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=waiting')
     await ui.press({ key: 'notice-56' })
     await ui.unmount()
   }

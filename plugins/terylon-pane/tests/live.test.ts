@@ -89,11 +89,11 @@ test('a subagent at work is named with how many more are out, and its stage besi
   expect((await ui.find({ type: 'Text', text: exact('Review') }))?.props.color).toBe('suggestion')
   expect(await ui.find({ type: 'Text', text: exact('$0.40') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('950') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: exact('1 h 0 min') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('1 h') })).toBeDefined()
 
   const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await terminal.find({ type: 'Text', text: exact('● Review · reviewer') })).toBeDefined()
-  expect(await terminal.find({ type: 'Text', text: exact("$0.40 of the story's $8 · 950 tokens · 1 h 0 min since start") })).toBeDefined()
+  expect(await terminal.find({ type: 'Text', text: exact("$0.40 of the story's $8 · 950 tokens · 1 h since start") })).toBeDefined()
 })
 
 test('a notice is marked handled from the Bell tab through notice_handle, and the bell and the band drop it at once', async ($, on) => {
@@ -102,11 +102,11 @@ test('a notice is marked handled from the Bell tab through notice_handle, and th
   await terylon.clock.settle()
 
   const band = await $.ui.mount({ plugin: 'terylon-pane', surface: 'desktop', component: 'AbovePrompt', props: bandProps() })
-  expect(await band.find({ type: 'Text', text: /· Bell 2$/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /· Notices 2$/ })).toBeDefined()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'tab-bell' })
-  expect((await ui.find({ key: 'tab-bell' }))?.props.label).toMatch(/Bell · 2$/)
+  expect((await ui.find({ key: 'tab-bell' }))?.props.label).toMatch(/Notices · 2$/)
   expect(await ui.find({ key: 'handle-117' })).toBeUndefined()
 
   await ui.press({ key: 'notice-117' })
@@ -116,7 +116,7 @@ test('a notice is marked handled from the Bell tab through notice_handle, and th
   expect(terylon.calls.filter(call => call.tool === 'notice_handle')).toEqual([{ server: 'plugin:terylon-os:terylon', tool: 'notice_handle', args: { notice: 117 } }])
   expect(await ui.find({ key: 'notice-117' })).toBeUndefined()
   expect(await ui.find({ key: 'notice-168' })).toBeDefined()
-  expect(await band.find({ type: 'Text', text: /· Bell 1$/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /· Notices 1$/ })).toBeDefined()
   expect(terylon.calls.filter(call => GATES.includes(call.tool))).toEqual([])
 })
 
@@ -126,14 +126,14 @@ test('the band says what Terylon published within one poll after a notice is han
   await terylon.clock.settle()
 
   const band = await $.ui.mount({ plugin: 'terylon-pane', surface: 'terminal', component: 'AbovePrompt', props: bandProps() })
-  expect(await band.find({ type: 'Text', text: /· Bell 2$/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /· Notices 2$/ })).toBeDefined()
 
   // HANDLED IN THE CONSOLE, or by Claude: the next poll reads the bell Terylon published again.
   terylon.answers.notices_list = { unhandled: 0, notices: NOTICES.notices.map(notice => ({ ...notice, handledAt: notice.handledAt ?? '2026-10-11T22:00:10Z' })) }
   await terylon.clock.advance(30000)
   await terylon.clock.settle()
 
-  expect(await band.find({ type: 'Text', text: /· Bell 0$/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /· Notices 0$/ })).toBeDefined()
 })
 
 test('a notice Terylon refuses to mark handled stays, and the refusal is said with its reason', async ($, on) => {
@@ -162,7 +162,7 @@ test('a goal is dropped from its own screen (S27), the console\'s goals screen s
 
   // goal_drop IS AN OWNER WRITE SINCE TERYLON PR 228 (S27): the goal's own screen drops it; the console's goals
   // screen stays a link away — "goal" is no screen there.
-  expect((await ui.find({ type: 'Link', text: 'Goal in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=goals&goal=3')
+  expect((await ui.find({ type: 'Link', text: 'Goal in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=goal&goal=3')
   expect((await ui.find({ key: 'act-goal-3-drop' }))?.props.label).toBe('Drop goal…')
   expect(terylon.calls.filter(call => call.tool === 'goal_drop')).toEqual([])
 })
