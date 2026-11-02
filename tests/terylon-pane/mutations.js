@@ -597,8 +597,14 @@ const MUTATIONS = [
     {
         name: "a plan of one story draws its chain again",
         file: "hooks/register.tsx",
-        find: "        plan.stories.length < 2\n",
+        find: "        plan.stories.length < 2 || plan.stories.every(item => item.after.length === 0)\n",
         replace: "        plan.stories.length === 0\n",
+    },
+    {
+        name: "a plan whose stories wait for none draws its chain again",
+        file: "hooks/register.tsx",
+        find: "        plan.stories.length < 2 || plan.stories.every(item => item.after.length === 0)\n",
+        replace: "        plan.stories.length < 2\n",
     },
     {
         name: "the unreachable fix no longer says to reconnect after a network outage",
