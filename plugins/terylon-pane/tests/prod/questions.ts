@@ -1,0 +1,1 @@
+export default {"questions":[{"id":2337,"subject":"story/123","about":"S-N18ZF Sum the price column","text":"The data has no `price` column, only `item` and `amount`. Which column should I sum: `amount`, or another column you can provide?","followsUp":null,"askedAt":"2026-11-02T06:38:15.458305+00:00","answer":null,"answeredAt":null,"hidden":false}]}

@@ -9,8 +9,8 @@ const path = require("node:path");
 const { MUTATIONS } = require("./mutations.js");
 const { parseShard, selectShard } = require("./shard.js");
 
-// The shard count CI's matrix runs; ci.yml's pane-mutations job names the same eight, which a test below holds.
-const CI_SHARD_COUNT = 8;
+// The shard count CI's matrix runs; ci.yml's pane-mutations job names the same twelve, which a test below holds.
+const CI_SHARD_COUNT = 12;
 
 function shardsOf(items, count)
 {
@@ -53,8 +53,8 @@ test("ci.yml's matrix runs exactly the shards this suite proves, and each fits i
 
     assert.ok(workflow.includes(`shard: [${shards}]`), `ci.yml's matrix is not shard: [${shards}]`);
     assert.ok(workflow.includes(`MUTATION_SHARD: \${{ matrix.shard }}/${CI_SHARD_COUNT}`), `ci.yml does not pass MUTATION_SHARD as <shard>/${CI_SHARD_COUNT}`);
-    // About half a minute per run of plugin test, a runner twice as slow, and the job's 30 minutes.
-    assert.ok(Math.ceil(MUTATIONS.length / CI_SHARD_COUNT) + 1 <= 28, `${Math.ceil(MUTATIONS.length / CI_SHARD_COUNT)} mutations a shard will not fit a 30-minute job: raise the shard count`);
+    // A little over a minute per run of plugin test on a hosted runner, and the job's 30 minutes.
+    assert.ok(Math.ceil(MUTATIONS.length / CI_SHARD_COUNT) + 1 <= 22, `${Math.ceil(MUTATIONS.length / CI_SHARD_COUNT)} mutations a shard will not fit a 30-minute job: raise the shard count`);
 });
 
 test("every mutation has a name of its own, so a shard's log names what it ran", () =>

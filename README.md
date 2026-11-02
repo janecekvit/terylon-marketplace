@@ -23,7 +23,7 @@ It also carries **Terylon**, the agentic OS extension: an MCP endpoint and a Cla
      │                                          │
      │                     terylon-ado or terylon-github: the same work on either forge
      │
-     └─ the Terylon pane and /mcp ───────▶ terylon-os, terylon-pane   goals handed to Terylon's leader
+     └─ Terylon Cockpit and /mcp ────────▶ terylon-os, terylon-pane   goals handed to Terylon's leader
 ```
 
 ## What you get
@@ -40,7 +40,7 @@ It also carries **Terylon**, the agentic OS extension: an MCP endpoint and a Cla
 
 You enable **two** plugins for a repository: the **role** you work in, and the **adapter** for where it is hosted (`terylon-ado` or `terylon-github`). Everything else arrives as a dependency.
 
-**You keep the decisions.** A skill that writes to your forge shows you what it will write and waits for your go-ahead, unless you pass `--auto`; `--dry-run` writes nothing. The development pipeline stops at its gates on the main thread, where only you can answer. The Terylon pane never merges: a merge is a link to Terylon's console, confirmed there with your passkey. Every other decision, a plan approved, a story returned or a pause, is one you take on its card in the pane, and only when you press it.
+**You keep the decisions.** A skill that writes to your forge shows you what it will write and waits for your go-ahead, unless you pass `--auto`; `--dry-run` writes nothing. The development pipeline stops at its gates on the main thread, where only you can answer. Terylon Cockpit never merges: a merge is a link to Terylon's console, confirmed there with your passkey. Every other decision, a plan approved, a story returned or a pause, is one you take on its card in the pane, and only when you press it.
 
 ## How a story travels
 
@@ -178,7 +178,7 @@ The plugin graph is drawn here and only here, from every `plugin.json#dependenci
 | `terylon-dev` | developers | `develop`, `brainstorm`, `write-plan`, `run-build-loop`, `background-run` | `leader`, `planner`, `developer`, `debugger`, `refactorer`, `security-reviewer`, `performance-reviewer`, `architecture-reviewer`, `edge-case-reviewer` |
 | `terylon-test` | anyone holding a checklist that decides something | `test`, `verify-test-plan`, `run-build-and-tests`, `run-ui-flows` | `tester` |
 | `terylon-os` | the owner of a Terylon, in any session: terminal, Desktop, SSH, Remote Control | `briefing`, `add-goal`, `review-plan`, `show-story`, `merge-gate`, `hand-over` | — |
-| `terylon-pane` | the owner of a Terylon, in Claude Desktop | — (a mod: `/terylon-pane`, `/terylon-memory`) | — |
+| `terylon-pane` | the owner of a Terylon, in Claude Desktop | — (a mod, Terylon Cockpit: `/terylon-cockpit`) | — |
 
 **`terylon-forge` is a port and ships no adapter, on purpose.** Declaring one would install an Azure DevOps MCP server in every GitHub repository. That is why you enable two keys, and why the adapters are siblings of the role plugins rather than layers under them. The reasoning is in [`docs/architecture/port-and-adapter-split.md`](./docs/architecture/port-and-adapter-split.md).
 
@@ -234,7 +234,7 @@ Terylon runs on your own machine and holds your goals. Its leader breaks each go
 | Plugin | Gives you |
 |---|---|
 | `terylon-os` | Terylon's `/mcp` server in any Claude Code session, with one skill per prompt it serves: the morning briefing, adding a goal, reviewing a plan, a story's state, the merge gate, a hand-over. Set `TERYLON_URL`; there is no default address and no token |
-| `terylon-pane` | in Claude Desktop, three things: a band above the prompt saying what waits for you; a status line with the machine's health and today's spend; and a pane with five tabs (*Queue*, *Goals*, *Bell*, *Memory*, *Status*). The pane answers the leader's questions, adds tasks and goals, follows a running story's stage, agent and tokens, and marks notices handled. It takes your acts on their cards (approve a plan, return, unblock, stop or accept a story, pause the leader, drop a goal, confirm a memory proposal, save the policy) and never merges |
+| `terylon-pane` | *Terylon Cockpit*, opened by `/terylon-cockpit`: in Claude Desktop, three things: a band above the prompt saying what waits for you; a status line with the machine's health and today's cost, on the setup token its tokens and *cost not known on the setup token*; and a pane with five tabs (*Waiting*, *Goals*, *Notices*, *Memory*, *Health*), every subject by its ref. The pane answers the leader's questions, adds tasks and goals, follows a running story's stage, agent and tokens, and marks notices handled. It takes your acts on their cards (approve a plan, return, unblock, stop or accept a story, pause the leader, drop a goal, confirm a memory proposal, save the policy) and never merges |
 
 Agentic OS is the only source of truth, and the PC's pane and the phone through Remote Control both reach it through the same `/mcp`. See [one source of truth, reached from two places](./docs/architecture/one-source-of-truth-reached-from-two-places.md), and the READMEs of [`terylon-os`](./plugins/terylon-os/README.md) and [`terylon-pane`](./plugins/terylon-pane/README.md) for setup.
 
@@ -286,7 +286,7 @@ The marketplace is built with itself: its stories, builds, reviews and test-plan
 
 | Job | Runs | Needs |
 |---|---|---|
-| Unit suites | `node --test "**/*.test.js"`: every skill held to the Agent Skills specification, the forge-port contract and fixture tests, the harness's ref checks, the hook and measurement scripts, the Terylon pane's command and version checks, and the tests of the pane's plan and shards. The pane's mutation and zone suites skip in this job, which installs no `claude` CLI, and run in the pane's own jobs instead | nothing |
+| Unit suites | `node --test "**/*.test.js"`: every skill held to the Agent Skills specification, the forge-port contract and fixture tests, the harness's ref checks, the hook and measurement scripts, Terylon Cockpit's command, glossary and version checks, and the tests of the pane's plan and shards. The pane's mutation and zone suites skip in this job, which installs no `claude` CLI, and run in the pane's own jobs instead | nothing |
 | End-to-end install stage | `node tests/e2e/run.js --stages install`: installs the marketplace from the commit under test as a consumer does, and checks every plugin, skill, agent, hook and MCP server loads | nothing: no login, no token, no model call |
 | terylon-pane plan | `tests/terylon-pane/needs-pane-suites.js` over the paths the pull request changes: whether the two suites below run. They do when it changes the mod, its tests, the pinned Claude Code or `ci.yml`, and always on a push to `main` | nothing |
 | terylon-pane mutations (shard 1/8 to 8/8) | `node --test tests/terylon-pane/mutations.test.js` with `MUTATION_SHARD` set: each planted mutation turning the mod's tests red, an eighth of them per runner, in parallel | the plan said run |

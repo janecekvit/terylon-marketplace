@@ -9,16 +9,16 @@ test('the queue draws the four groups from Terylon as cards, each row one Button
   const terylon = world(on, { now: lateOnTheLocalDayOf('2026-10-11T12:20:00Z') })
   await $.session.start(SESSION)
   await terylon.clock.settle()
-  await $.command.run({ command: 'terylon-pane', args: '' } as never).catch(() => undefined)
+  await $.command.run({ command: 'terylon-cockpit', args: '' } as never).catch(() => undefined)
 
   for (const surface of ['desktop', 'terminal'] as const) {
     const ui = await $.ui.mount({ plugin: 'terylon-pane', surface, component: 'Pane', requestId: 'terylon', props: PANE_PROPS })
 
     const tab = await ui.find({ key: 'tab-queue' })
-    expect(tab?.props.label).toBe('Queue')
+    expect(tab?.props.label).toBe('Waiting')
     expect(tab?.props.variant).toBe('primary')
     expect(tab?.props.hotkey).toBe('1')
-    expect(tab?.text).toBe(surface === 'terminal' ? '● Queue' : 'Queue')
+    expect(tab?.text).toBe(surface === 'terminal' ? '● Waiting' : 'Waiting')
     expect((await ui.find({ key: 'tab-goals' }))?.props.dimColor).toBe(true)
     expect((await ui.find({ type: 'Link', text: 'terylon' }))?.props.href).toBe('https://terylon.example.ts.net')
     const connected = await ui.find({ type: 'Text', text: exact('connected · 0 s ago') })
@@ -34,7 +34,7 @@ test('the queue draws the four groups from Terylon as cards, each row one Button
     // THE KIND AS A CHIP: a dot in the kind's colour, the word in inactive, which reads on the chip in both themes.
     expect(await chipOf(ui, 'question-9')).toEqual({ word: 'inactive', dot: 'warning', background: surface === 'desktop' ? 'userMessageBackground' : undefined, size: 'caption' })
     expect((await chipOf(ui, 'merge-327'))?.dot).toBe('merged')
-    expect((await chipOf(ui, 'plan-41'))?.dot).toBe('inactive')
+    expect((await chipOf(ui, 'plan-41'))?.dot).toBe('merged')
 
     expect(await ui.find({ type: 'Text', text: exact('Running · 2') })).toBeDefined()
     expect((await ui.find({ key: 'story-333' }))?.text).toMatch(/^#333 Direct dispatch\s+5\/8 · \$2\.10$/)
@@ -63,11 +63,11 @@ test('the queue draws the four groups from Terylon as cards, each row one Button
     expect((await ui.find({ type: 'Text', text: exact('tvoje volba') }))?.props).toMatchObject({ color: 'text', weight: 'semibold' })
 
     expect(await ui.find({ type: 'Text', text: exact('Done today · 1') })).toBeDefined()
-    expect((await chipOf(ui, 'done-341'))?.dot).toBe('merged')
+    expect((await chipOf(ui, 'done-341'))?.dot).toBe('success')
     expect((await ui.find({ key: 'done-341' }))?.text).toContain('#341 S10a cleanup')
 
     expect(await ui.find({ key: 'quick-add' })).toBeDefined()
-    const footer = await ui.find({ type: 'Text', text: exact('/terylon-pane · /terylon-memory') })
+    const footer = await ui.find({ type: 'Text', text: exact('/terylon-cockpit') })
     expect(footer?.props.color).toBe('subtle')
     expect(footer?.props.mono).toBe(true)
     await ui.unmount()
@@ -134,7 +134,7 @@ test('a waiting row opens under itself: the whole question and the way to answer
 
   await ui.press({ key: 'question-9' })
   expect((await ui.find({ key: 'answer-9' }))?.props.label).toBe('Answer')
-  expect((await ui.find({ type: 'Link', text: 'Answer in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=question&question=9')
+  expect((await ui.find({ type: 'Link', text: 'Answer in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=question&question=9')
 
   await ui.press({ key: 'question-9' })
   expect(await ui.find({ key: 'answer-9' })).toBeUndefined()
@@ -156,10 +156,10 @@ test('every console link points at the console screen of its subject, never at a
 
   const links = (await ui.findAll({ type: 'Link' })).map(link => String(link.props.href))
 
-  expect(links).toContain('https://terylon.example.ts.net/?cockpit=merge&story=327')
-  expect(links).toContain('https://terylon.example.ts.net/?cockpit=question&question=9')
+  expect(links).toContain('https://terylon.example.ts.net/?view=merge&story=327')
+  expect(links).toContain('https://terylon.example.ts.net/?view=question&question=9')
   // A PLAN'S ROW OPENS THE PLAN (S27): its acts are on its card; the row itself no longer links out.
-  expect(links).not.toContain('https://terylon.example.ts.net/?cockpit=plan&plan=41')
+  expect(links).not.toContain('https://terylon.example.ts.net/?view=plan&plan=41')
   expect(await ui.find({ key: 'open-plan-41' })).toBeDefined()
 })
 
@@ -198,7 +198,7 @@ test('a row longer than its card stays one line: the title is cut inside the one
     await ui.press({ key: 'question-22' })
     const whole = await ui.find({ type: 'Text', text: exact(long) })
     expect(whole?.props.wrap).toBeUndefined()
-    expect((await ui.find({ type: 'Link', text: 'Answer in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=question&question=22')
+    expect((await ui.find({ type: 'Link', text: 'Answer in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=question&question=22')
     await ui.press({ key: 'question-22' })
     await ui.unmount()
   }

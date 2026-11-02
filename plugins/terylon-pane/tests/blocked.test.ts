@@ -24,7 +24,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     await ui.press({ key: 'story-333' })
 
-    expect((await ui.find({ type: 'Text', text: exact('blocked for 2 h 0 min') }))?.props.tabular).toBe(true)
+    expect((await ui.find({ type: 'Text', text: exact('blocked for 2 h') }))?.props.tabular).toBe(true)
     expect(await ui.find({ type: 'Text', text: /running \d+ h/ })).toBeUndefined()
     await ui.unmount()
   })
@@ -40,6 +40,6 @@ test('a blocked story with no blockedFrom is timed from its last update', async 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'story-333' })
 
-  expect(await ui.find({ type: 'Text', text: exact('blocked for 0 h 30 min') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('blocked for 30 min') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /running \d+ h/ })).toBeUndefined()
 })

@@ -1,10 +1,11 @@
-// The status line: the health of Agentic OS and its spend, in one short line beside the model's name. The band
+// The status line: the health of Terylon and today's cost, in one short line beside the model's name. The band
 // above the prompt says what calls for the owner; this says whether the machine is well, never the same thing twice.
 // Pure: no $, so a test reads it without a session.
 
 import type { PaneConnection } from '../types'
 
 import { COPY } from './copy'
+import * as words from './words'
 
 type Json = Record<string, unknown>
 
@@ -21,7 +22,9 @@ export const FAILING_SOURCES: readonly string[] = ['production', 'backup']
 const FAILURE = /\bfail|roll(ed)?\s?back|\berror\b/i
 
 // The longest the line is drawn, in characters, so it fits beside "Opus 5.5 High".
-export const HEALTH_LONGEST = 60
+// The setup token's phrase is said whole (Design · Glossary): "Terylon ● all well · 66 k tokens today · cost not known
+// on the setup token · 1/2 slots" is 84 characters.
+export const HEALTH_LONGEST = 96
 
 // Not alerts, ever: the briefing, the leader's questions and its news, a newer image published, a test.
 // They wait for the owner on the band and in the bell, not as the machine's health.
@@ -184,6 +187,19 @@ export type Health = {
   dayBudget: string | null
   slotsUsed: number
   slots: number
+  // WHETHER TODAY'S COST IS KNOWN: on the setup token only its tokens are, and no $ figure is said.
+  isCostKnown?: boolean
+  tokens?: number | null
+}
+
+// TODAY'S COST IN THE GLOSSARY'S WORDS: "$5.50 of $20 today", or "66 k tokens today · cost not known on the setup
+// token" where it is not known.
+export function todayCost(health: Health): string {
+  if (health.isCostKnown === false) {
+    return COPY.todayTokens(health.tokens === null || health.tokens === undefined || health.tokens <= 0 ? null : words.tokens(health.tokens), words.COST_NOT_KNOWN)
+  }
+
+  return COPY.todayCost(words.money(Number(health.runningUsd)), health.dayBudget === null ? null : words.budget(Number(health.dayBudget)))
 }
 
 // The machine's state in one word, for the Status tab: the same order as the status line.
@@ -213,7 +229,8 @@ export function stateWord(health: Health): { word: string; tone: 'success' | 'at
     return { word: health.alerts === 1 ? '1 alert' : `${health.alerts} alerts`, tone: 'error' }
   }
 
-  return { word: 'ok', tone: 'success' }
+  // ALL WELL, as the glossary names the machine when nothing is wrong.
+  return { word: words.machine({ warnings: 0, failing: 0 }), tone: 'success' }
 }
 
 // Only the worst problem is said: a call Claude Code refused, then the connection, the leader paused, the alerts.
@@ -243,5 +260,5 @@ export function healthLine(health: Health): string {
     return clip(COPY.healthAlerts(health.alerts))
   }
 
-  return clip(COPY.healthOk(health.runningUsd, health.dayBudget, health.slotsUsed, health.slots))
+  return clip(COPY.healthOk(todayCost(health), health.slotsUsed, health.slots))
 }

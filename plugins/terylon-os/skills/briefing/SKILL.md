@@ -10,7 +10,7 @@ allowed-tools: mcp__plugin_terylon-os_terylon__* mcp__terylon__*
 
 ## What to do
 
-> Call the terylon briefing tool. Tell me in a few lines what waits on me — plans at the gate (id, goal, stories, estimate), stories verified and waiting for their merge, the leader's open questions, blocked stories, whether the leader is paused — then offer the one next act that matters most. Do not act before I choose.
+> Call the terylon briefing tool. Tell me in a few lines what waits on me — plans at the gate (its ref, its goal's ref, stories, estimate), stories verified and waiting for their merge, the leader's open questions, blocked stories, whether the leader is paused — then offer the one next act that matters most. Do not act before I choose.
 
 ## What binds it
 

@@ -467,3 +467,17 @@ function chipIn(node: unknown): { word: unknown; dot: unknown; background: unkno
 export async function chipOf(ui: { find: (query: { key?: string }) => Promise<unknown> }, key: string): Promise<{ word: unknown; dot: unknown; background: unknown; size: unknown } | null> {
   return chipIn(await ui.find({ key }))
 }
+
+// TERYLON COCKPIT ON ITS MEMORY TAB (Terylon S68): /terylon-cockpit is the one command, and Memory a tab of its pane, so a
+// test that opened the memory with /terylon-memory opens the pane and presses Memory.
+type Engine = {
+  command: { run: (request: never) => Promise<unknown> }
+  ui: { mount: (request: never) => Promise<{ press: (query: { key: string }) => Promise<unknown>; unmount: () => Promise<unknown> }> }
+}
+
+export async function openMemoryTab($: Engine): Promise<void> {
+  await $.command.run({ command: 'terylon-cockpit', args: '' } as never)
+  const pane = await $.ui.mount({ plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS, surface: 'desktop' } as never)
+  await pane.press({ key: 'tab-memory' })
+  await pane.unmount()
+}

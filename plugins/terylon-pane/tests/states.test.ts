@@ -79,7 +79,7 @@ test('frame H: refused as not the owner, and Terylon returning an error, each sa
   await ui.press({ key: 'retry' })
   expect(await ui.find({ type: 'Text', text: exact('Terylon returned an error') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('Reason: work_in_flight: 503 The leader is not answering.') })).toBeDefined()
-  expect((await ui.find({ type: 'Link', text: 'Health ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?cockpit=health')
+  expect((await ui.find({ type: 'Link', text: 'Health ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=health')
 })
 
 test('frame F: an empty queue keeps every card, each saying quietly that it is empty, and invites a task', async ($, on) => {
