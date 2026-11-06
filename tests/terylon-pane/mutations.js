@@ -287,8 +287,8 @@ const MUTATIONS = [
     {
         name: "one story is said as stories again",
         file: "hooks/copy.ts",
-        find: "`${count === 1 ? 'story' : 'stories'}",
-        replace: "`${'stories'}",
+        find: "metricStories: (count: number) => (count === 1 ? 'story' : 'stories'),",
+        replace: "metricStories: (count: number) => ('stories'),",
     },
     // S32 (#25): the drawing on the 2.1.304 mod API.
     {
