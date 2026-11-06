@@ -147,7 +147,6 @@ test('a question is answered from the pane: a choice pressed, question_answer se
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'question-606' })
   await ui.press({ key: 'answer-606' })
 
   expect((await ui.find({ type: 'Text', text: exact('question 2 of 2') }))?.props).toMatchObject({ color: 'text', weight: 'semibold' })
@@ -180,7 +179,6 @@ test('a typed answer is sent as typed; a refusal is said with its reason and the
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  await ui.press({ key: 'question-9' })
   await ui.press({ key: 'answer-9' })
   await ui.input({ key: 'answer-text', text: 'Ano, od posledního commitu.', kind: 'change' })
   await ui.press({ key: 'answer-send' })
@@ -273,7 +271,7 @@ test('More reads the notices, the leader and the metrics; a notice is handled th
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ key: 'tab-bell' }))?.props.label).toBe('Notices 2 ›')
+  expect((await ui.find({ key: 'tab-bell' }))?.props.label).toBe('Notices 2')
   await pill(ui, 'tab-bell')
 
   expect(await ui.find({ type: 'Text', text: exact('Notices · 2') })).toBeDefined()

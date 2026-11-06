@@ -110,8 +110,8 @@ test('a notice is marked handled on More through notice_handle, and its list and
   await ui.press({ key: 'handle-117' })
 
   expect(terylon.calls.filter(call => call.tool === 'notice_handle')).toEqual([{ server: 'plugin:terylon-os:terylon', tool: 'notice_handle', args: { notice: 117 } }])
-  expect(await ui.find({ key: 'notice-117' })).toBeUndefined()
-  expect(await ui.find({ key: 'notice-168' })).toBeDefined()
+  expect(await ui.find({ key: 'notice-card-117' })).toBeUndefined()
+  expect(await ui.find({ key: 'notice-card-168' })).toBeDefined()
   expect(await band.find({ type: 'Text', text: /· Notices 1$/ })).toBeDefined()
   expect(terylon.calls.filter(call => GATES.includes(call.tool))).toEqual([])
 })
@@ -142,7 +142,7 @@ test('a notice Terylon refuses to mark handled stays, and the refusal is said wi
   await pill(ui, 'tab-bell')
   await ui.press({ key: 'handle-168' })
 
-  expect(await ui.find({ key: 'notice-168' })).toBeDefined()
+  expect(await ui.find({ key: 'notice-card-168' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /no such tool notice_handle/ })).toBeDefined()
 })
 

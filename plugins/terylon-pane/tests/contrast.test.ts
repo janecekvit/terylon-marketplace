@@ -1,12 +1,13 @@
 // THE OWNER'S WALK OF 1.2.0 (2026-10-23): on the waiting card's tint and the problem card's, in dark and worse in light,
-// the hints, the links, the chips and an open question's body could not be read. No card is filled any more; these
+// the hints, the links, the chips and an open question's body could not be read. So no card takes a tint of what it holds,
+// and every card on a graphic surface lies on one faint neutral fill, the waiting tile on a translucent purple; these
 // tests hold every word and link on a card that waits or warns, and every chip, to WCAG's 4.5:1 (3:1 for a dot) in both
 // themes, on the desktop and the terminal. The kit gives the theme keys a drawing names, never the painted colours, so
 // the ratio is computed from the S32 canvas's palette in tests/contrast.ts.
 
 import { test, expect } from 'claude-code/testing'
 
-import { CHIP_BACKGROUND, CHIP_WORD } from '../hooks/drawing'
+import { BADGE_FILL, CARD_FILL, CHIP_BACKGROUND, CHIP_WORD, WAITING_TILE_FILL } from '../hooks/drawing'
 import { KIND_TONES, TONE_KEYS, WARNING_LIGHT, markOf, wordOf } from '../hooks/tones'
 import type { WordTone } from '../hooks/tones'
 
@@ -85,7 +86,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
     expect(closed.map(ink => ink.text)).toEqual(expect.arrayContaining(['Waiting for you', 'question', 'merge', 'plan', 'blocked', '●', 'Merge ↗']))
     expect(unreadable(closed)).toEqual([])
 
-    for (const key of ['question-9', 'merge-327', 'plan-41', 'blocked-87']) {
+    for (const key of ['merge-327', 'plan-41', 'blocked-87']) {
       await ui.press({ key })
     }
 
@@ -144,11 +145,13 @@ test('no card is filled, on any screen: the stroke carries the warning, the pane
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
 
   const noneFilled = async () => {
-    expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.borderStyle === 'round' && box.props.backgroundColor !== undefined)).toEqual([])
+    const fills = (await ui.findAll({ type: 'Box' })).filter(box => box.props.borderStyle === 'round').map(box => box.props.backgroundColor)
+
+    expect(fills.filter(fill => ![CARD_FILL, WAITING_TILE_FILL, BADGE_FILL].includes(String(fill)))).toEqual([])
   }
 
   await noneFilled()
-  await ui.press({ key: 'question-9' })
+  await ui.press({ key: 'plan-41' })
   await noneFilled()
   await toOverview(ui)
   await noneFilled()
@@ -238,7 +241,7 @@ const WALKS: Walked[] = [
       terylon.answers.briefing = { ...BRIEFING, questionsOpen: [...BRIEFING.questionsOpen, GOAL_QUESTION], unhandledNotices: 2 }
       terylon.answers.work_in_flight = { ...FLIGHT, stories: FLIGHT.stories.map(story => (story.id === 333 ? { ...story, stuck: { since: '2026-10-11T15:20:00Z', reason: 'no progress' } } : story)) }
     },
-    paths: [['question-9'], ['story-333'], ['merge-327', 'open-story-327'], ['question-606', 'answer-606'], ['refresh', 'goal-3'], ['refresh', 'goal-new-open'], ['tab-status', 'fold-machine', 'fold-memory-owner', 'fold-policy', 'fold-diagnostics']],
+    paths: [['question-9'], ['story-333'], ['merge-327', 'open-story-327'], ['question-606'], ['refresh', 'goal-3'], ['refresh', 'goal-new-open'], ['tab-status', 'fold-machine', 'fold-memory-owner', 'fold-policy', 'fold-diagnostics']],
     words: [/^\(1 stuck\)$/, /^question 2 of 2$/, /^! files outside the declaration$/],
   },
   {
@@ -247,7 +250,7 @@ const WALKS: Walked[] = [
       terylon.answers.briefing = { ...BRIEFING, leader: { paused: PAUSED } }
       terylon.answers.leader_status = { paused: PAUSED }
     },
-    paths: [['tab-status', 'fold-machine']],
+    paths: [['tab-status'], ['tab-bell']],
     words: [/^paused since \d\d:\d\d$/, /^paused$/],
   },
   {

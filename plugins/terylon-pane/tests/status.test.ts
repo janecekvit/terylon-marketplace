@@ -142,17 +142,17 @@ test('the band\'s Open always opens the pane where the owner left it, the overvi
   expect(terylon.opens).toEqual(['terylon'])
 
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Health ⚠ ›')
+  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Health ⚠')
 
   await pill(pane, 'tab-bell')
   await band.press({ key: 'band-open' })
-  expect(await pane.find({ key: 'more-notices' })).toBeDefined()
+  expect(await pane.find({ key: 'notices' })).toBeDefined()
 
   terylon.answers.notices_list = { unhandled: 0, notices: [] }
   await terylon.clock.advance(30000)
   await band.press({ key: 'band-open' })
   expect((await band.find({ key: 'band-open' }))?.props.label).toBe('Open')
-  expect(await pane.find({ key: 'more-notices' })).toBeDefined()
+  expect(await pane.find({ key: 'notices' })).toBeDefined()
   await toRoot(pane)
-  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Health ›')
+  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Health')
 })

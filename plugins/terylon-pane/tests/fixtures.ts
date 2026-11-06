@@ -476,6 +476,10 @@ type Mounted = {
 
 // ‹ back to the overview from wherever the pane is.
 export async function toRoot(ui: Mounted): Promise<void> {
+  if ((await ui.find({ key: 'notices-close' })) !== undefined) {
+    await ui.press({ key: 'notices-close' })
+  }
+
   while ((await ui.find({ key: 'back' })) !== undefined) {
     await ui.press({ key: 'back' })
   }
@@ -491,7 +495,7 @@ export async function toOverview(ui: Mounted): Promise<void> {
   await ui.press({ key: 'refresh' })
 }
 
-// A pill: More, whose sections are all on one page, from the overview.
+// A button of the overview's head: Notices, or More whose sections are on one page, from the overview.
 export async function pill(ui: Mounted, key: 'tab-bell' | 'tab-memory' | 'tab-status'): Promise<void> {
   if ((await ui.find({ key })) === undefined) {
     await toRoot(ui)

@@ -75,7 +75,7 @@ test('in a session: the status line counts the alerts, the band says them and it
   }
 
   const pane = await $.ui.mount({ plugin: 'terylon-pane', surface: 'desktop', component: 'Pane', requestId: 'terylon', props: PANE_PROPS })
-  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Health ⚠ ›')
+  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Health ⚠')
   expect((await pane.find({ key: 'tab-bell' }))?.props.label).toBe('Notices 3 ›')
 })
 

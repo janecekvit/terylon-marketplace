@@ -49,7 +49,6 @@ test('every answered question is confirmed and its field cleared, the second as 
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'question-9' })
   await ui.press({ key: 'answer-9' })
   await ui.input({ key: 'answer-text', text: 'Ano, od posledního commitu.', kind: 'change' })
   await ui.press({ key: 'answer-send' })
@@ -77,7 +76,6 @@ test('a refused answer keeps its text and says why in the same place', async ($,
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'question-9' })
   await ui.press({ key: 'answer-9' })
   await ui.input({ key: 'answer-text', text: 'Ano, od posledního commitu.', kind: 'submit' })
 

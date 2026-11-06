@@ -58,7 +58,7 @@ for (const [surface, props, drawnOn] of SURFACES) {
       labels.push(String((await ui.find({ key }))?.props.label ?? ''))
     }
 
-    expect(labels).toEqual(['Notices 2 ›', 'Memory ›', 'Health ›'])
+    expect(labels).toEqual(['Notices 2', 'Memory', 'Health'])
     // THE ONE COMMAND IS SAID ON THE TERMINAL'S FOOTER, and on More everywhere.
     expect((await ui.find({ type: 'Text', text: exact('/terylon-cockpit') })) !== undefined).toBe(drawnOn === 'terminal')
 

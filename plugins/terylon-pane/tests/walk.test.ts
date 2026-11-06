@@ -67,7 +67,7 @@ test('a goals or bell value an earlier version of the mod left behind is replace
   await pill(ui, 'tab-bell')
   await terylon.clock.settle()
   expect(await isLoading(ui)).toBe(false)
-  expect(await ui.find({ key: 'notice-117' })).toBeDefined()
+  expect(await ui.find({ key: 'notice-card-117' })).toBeDefined()
 })
 
 test('the same prompt is posted into the chat once, however often it is pressed', async ($, on) => {
@@ -77,7 +77,6 @@ test('the same prompt is posted into the chat once, however often it is pressed'
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'question-606' })
   await ui.press({ key: 'answer-606' })
   // A DOUBLE CLICK, then a press a moment later.
   await Promise.all([ui.press({ key: 'answer-discuss' }), ui.press({ key: 'answer-discuss' })])
@@ -100,7 +99,6 @@ test('an answer is sent once while it is being sent, however often Send is press
   terylon.hang.add('question_answer')
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'question-606' })
   await ui.press({ key: 'answer-606' })
   await ui.input({ key: 'answer-text', text: 'vzhled webu na mobilu', kind: 'change' })
   // A DOUBLE CLICK: both presses dispatched before the screen draws "sending".

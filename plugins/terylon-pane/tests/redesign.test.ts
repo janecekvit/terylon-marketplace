@@ -57,7 +57,6 @@ test('TURNED OFF, 1.1.2 DRAWS: one-line fields, no hover reveal, no tooltip', as
   expect(stepper?.source).not.toContain('<title>')
 
   await ui.press({ key: 'back' })
-  await ui.press({ key: 'question-606' })
   await ui.press({ key: 'answer-606' })
   const field = await ui.find({ key: 'answer-text' })
   expect(field?.props.rows).toBeUndefined()
@@ -76,7 +75,6 @@ test('input-rows, PROVEN AND ON: the answer takes four rows, the criteria three,
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'question-9' })
   await ui.press({ key: 'answer-9' })
   expect((await ui.find({ key: 'answer-text' }))?.props.rows).toBe(4)
 
@@ -99,12 +97,10 @@ test('ONE WAY TO SEND AN ANSWER on the desktop: the Answer button, and no submit
   for (const [surface, label] of [['desktop', ''], ['terminal', 'answer']] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     await toOverview(ui)
-    await ui.press({ key: 'question-9' })
     await ui.press({ key: 'answer-9' })
     expect((await ui.find({ key: 'answer-text' }))?.props.submitLabel).toBe(label)
     expect((await ui.findAll({ type: 'Button', text: /^Answer$/ })).map(button => button.key)).toEqual(['answer-send'])
     await ui.press({ key: 'back' })
-    await ui.press({ key: 'question-9' })
     await ui.unmount()
   }
 })
@@ -131,11 +127,10 @@ test('hover-reveal, PROVEN AND ON: a question\'s row lights and shows its consol
   expect((await ui.findAll({ type: 'Link' })).map(link => link.text)).not.toContain('Approve in the console ↗')
   expect(await ui.find({ type: 'Button', text: /Merge/ })).toBeUndefined()
 
-  // NO REVEAL OVER AN OPEN ROW (the owner's walk of 1.2.0): it covered the question; the body carries the link.
+  // A QUESTION'S ROW NEVER OPENS: a press leads to the question, whose own screen links the console.
   await ui.press({ key: 'question-9' })
-  expect(await revealsIn(ui)).toHaveLength(0)
   expect((await ui.findAll({ type: 'Link', text: 'Answer in the console ↗' }))).toHaveLength(1)
-  await ui.press({ key: 'question-9' })
+  await ui.press({ key: 'back' })
   expect(await revealsIn(ui)).toHaveLength(1)
   await ui.unmount()
 

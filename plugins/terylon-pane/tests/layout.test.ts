@@ -71,7 +71,7 @@ test('the kind column holds "orchestrator" whole, and never grows past fourteen 
   expect(kindWidth(['production-follow'])).toBe(14)
 })
 
-test('a notice: its card is open with its body, which says what to do and its own console link; a press folds it', async ($, on) => {
+test('a notice: its card is open with its body, which says what to do and its own console link', async ($, on) => {
   const terylon = world(on)
   terylon.answers.notices_list = BELL
   await $.session.start(SESSION)
@@ -81,12 +81,9 @@ test('a notice: its card is open with its body, which says what to do and its ow
     const ui = await $.ui.mount({ ...PANE, surface })
     await pill(ui, 'tab-bell')
 
-    expect(await ui.find({ type: 'Text', text: /^\s*●?\s*orchestrator\s*$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^orchestrator · / })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: /EGRESS=off/ }))?.props.color).toBe('inactive')
     expect(await ui.find({ key: 'handle-90' })).toBeDefined()
-    await ui.press({ key: 'notice-90' })
-    expect(await ui.find({ key: 'handle-90' })).toBeUndefined()
-    await ui.press({ key: 'notice-90' })
 
     expect(await ui.find({ type: 'Link', text: exact('↗') })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: exact('No more than the title.') })).toBeDefined()
@@ -105,7 +102,7 @@ test('the machine card shows the newest notice of each key, four different ones'
   await pill(ui, 'tab-bell')
   await ui.press({ key: 'fold-machine' })
 
-  const handled = (await ui.findAll({ type: 'Text', text: /^✓ (?!The leader runs)\S/ })).map(line => line.text)
+  const handled = (await ui.findAll({ type: 'Text', text: /^✓ \S/ })).map(line => line.text)
   expect(handled).toHaveLength(4)
   expect(handled.filter(line => line.includes('The backup ran'))).toHaveLength(1)
 

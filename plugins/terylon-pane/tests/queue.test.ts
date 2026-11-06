@@ -77,9 +77,9 @@ test('the overview: the machine in a line, three tiles, Waiting for you, a card 
 
     // THE FOOTER: the 30 days in a line and the pills.
     expect(await ui.find({ type: 'Text', text: exact('Last 30 days 43 stories · $1.10 per story') })).toBeDefined()
-    expect((await ui.find({ key: 'tab-bell' }))?.props.label).toBe('Notices 2 ›')
+    expect((await ui.find({ key: 'tab-bell' }))?.props.label).toBe('Notices 2')
     expect((await ui.find({ key: 'tab-memory' }))?.props.label).toBe('Memory 1 ›')
-    expect((await ui.find({ key: 'tab-status' }))?.props.label).toBe('Health ›')
+    expect((await ui.find({ key: 'tab-status' }))?.props.label).toBe('Health')
     await ui.unmount()
   }
 })

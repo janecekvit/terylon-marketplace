@@ -68,7 +68,7 @@ export const CHIP_DOT = '●'
 // THE FILLS, RAW AND TRANSLUCENT, on a graphic surface alone: they lie over a pane the theme paints, so one value reads
 // on both themes. Their alpha is as high as tests/contrast.ts lets every word and link on them stay at 4.5:1: a plain
 // card and a goal's card, and the waiting tile, whose word is `inactive` since `subtle` falls short on it.
-export const CARD_FILL = 'rgba(170,170,170,0.06)'
+export const CARD_FILL = 'rgba(140,140,140,0.035)'
 export const WAITING_TILE_FILL = 'rgba(107,71,214,0.16)'
 
 // THE SLIDE-OVER: what dims the overview under it, and its own opaque ground. THE GROUND IS A THEME KEY, NOT A RAW COLOUR:
