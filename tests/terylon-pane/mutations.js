@@ -1498,7 +1498,7 @@ const MUTATIONS = [
     {
         name: "a goal's screen no longer says What next",
         file: "hooks/register.tsx",
-        find: "            nextLine('goal-next', COPY.whatNext, goalNext),\n",
+        find: "              {nextLine('goal-next', COPY.whatNext, goalNext)}\n",
         replace: "",
     },
     {

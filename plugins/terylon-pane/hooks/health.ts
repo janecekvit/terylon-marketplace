@@ -58,7 +58,7 @@ export function clip(line: string, longest = HEALTH_LONGEST): string {
 }
 
 // HEALTH'S PARTS, as TERYLON_PANE_STATUS names them to bisect a part Desktop does not draw: `no-<part>` leaves
-// that part out, `minimal` draws the tab as plain lines alone. Unset, the whole tab is drawn.
+// that part out, `minimal` draws Health as plain lines alone. Unset, the whole of it is drawn.
 export const STATUS_PARTS = ['machine', 'gauges', 'problems', 'events', 'alerts', 'policy', 'outcomes', 'diagnostics'] as const
 
 export type StatusPart = (typeof STATUS_PARTS)[number]
