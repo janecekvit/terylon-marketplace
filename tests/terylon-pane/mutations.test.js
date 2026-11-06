@@ -77,22 +77,10 @@ function runTests(target)
 
 const SKIP = skipReason();
 
-// ACTS.TEST.TS'S KNOWN LOAD FAILURE (#39): every case passed, then a read the pane still had out settled after the file
-// unloaded. The baseline alone is run again once for it, and only when it is its one failure; a mutation's red stands.
-const LOAD_FAILURE = /\(fail\) the file ran to its end[\s\S]*\$\.state\.get refused: no hooks module of that name is loaded/;
-
-function onlyTheLoadFailure(run)
-{
-    const output = `${run.stdout}\n${run.stderr}`;
-
-    return run.status !== 0 && LOAD_FAILURE.test(output) && (output.match(/^\s*\(fail\)/gm) ?? []).length === 1;
-}
-
-test("the unmutated mod passes its own tests", { skip: SKIP, timeout: RUN_TIMEOUT_MILLISECONDS * 2 }, () =>
+test("the unmutated mod passes its own tests", { skip: SKIP, timeout: RUN_TIMEOUT_MILLISECONDS }, () =>
 {
     const target = copyMod();
-    const first = runTests(target);
-    const run = onlyTheLoadFailure(first) ? runTests(target) : first;
+    const run = runTests(target);
 
     assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`);
     fs.rmSync(path.dirname(target), { recursive: true, force: true });

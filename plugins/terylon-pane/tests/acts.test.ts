@@ -141,18 +141,24 @@ test('BUSY: between the press and the answer the act reads "…ing", the card\'s
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await openPlan(ui)
-  void ui.press({ key: 'act-plan-41-approve' })
+  const presses = [ui.press({ key: 'act-plan-41-approve' })]
   await terylon.clock.settle()
 
   expect((await ui.find({ key: 'act-plan-41-approve' }))?.props.label).toBe('Approving…')
   expect((await ui.find({ key: 'act-plan-41-rethink' }))?.props.dimColor).toBe(true)
   expect(await ui.find({ type: 'Text', text: exact('Every other button on this card waits until the leader answers.') })).toBeDefined()
 
-  void ui.press({ key: 'act-plan-41-approve' })
-  void ui.press({ key: 'act-plan-41-rethink' })
+  presses.push(ui.press({ key: 'act-plan-41-approve' }), ui.press({ key: 'act-plan-41-rethink' }))
   await terylon.clock.settle()
   expect(actCalls(terylon.calls)).toEqual([{ tool: 'plan_approve', args: { plan: 41 } }])
   expect(await ui.find({ key: 'act-plan-41-text' })).toBeUndefined()
+
+  // A PRESS LEFT HANGING ENDS IN THIS TEST: answered at the file's unload, its next read is refused and fails the file.
+  for (const release of terylon.held.splice(0)) {
+    release()
+  }
+  await Promise.all(presses)
+  await terylon.clock.settle()
 })
 
 test('REFUSED: Terylon\'s sentence word for word on a red card, its status, Refresh, and the console as the way round', async ($, on) => {
@@ -542,8 +548,4 @@ test('a story\'s acts are drawn on the terminal too, and the busy label and the 
   expect(await ui.find({ key: 'act-story-327-return' })).toBeDefined()
   expect(await ui.find({ type: 'Link', text: 'PR 196 ↗' })).toBeDefined()
 
-  // THE FILE'S LAST TEST LEAVES NOTHING RUNNING: a read the pane still had out settling after the file unloaded was
-  // refused as "no hooks module of that name is loaded" and failed the file under load.
-  await terylon.clock.settle()
-  await ui.unmount()
 })
