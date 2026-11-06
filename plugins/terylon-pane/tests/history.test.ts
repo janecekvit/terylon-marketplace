@@ -7,7 +7,7 @@ import { test, expect } from 'claude-code/testing'
 
 import { deleteLink } from '../hooks/queue'
 
-import { BASE, NARROW_PANE_PROPS, PANE_PROPS, PLANS, SESSION, events, exact, refusal, storyMoved, world, toOverview, toAddTask } from './fixtures'
+import { BASE, BRIEFING, NARROW_PANE_PROPS, PANE_PROPS, PLANS, SESSION, events, exact, refusal, storyMoved, world, toOverview, toAddTask } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 const SURFACES = [['desktop', PANE_PROPS, 'desktop'], ['terminal', PANE_PROPS, 'terminal'], ['narrow dock', NARROW_PANE_PROPS, 'desktop']] as const
@@ -247,6 +247,7 @@ test('GOALDELETED, BEFORE S44: an open goal leaves the overview, its road gone, 
   // The full list, no closedCount.
   terylon.answers.goals_list = { goals: [...OPEN_GOALS, { id: 12, title: 'Household budget', priority: 2, state: 'open', stories: {} }] }
   terylon.answers.plans_list = { plans: [...PLANS.plans, { ...PLAN_144, id: 150, goal: 12, goalTitle: 'Household budget' }] }
+  terylon.answers.briefing = { ...BRIEFING, plansWaiting: [...BRIEFING.plansWaiting, { id: 150, goal: 12, goalTitle: 'Household budget', stories: 1, estimateUsd: 2 }] }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
@@ -263,6 +264,12 @@ test('GOALDELETED, BEFORE S44: an open goal leaves the overview, its road gone, 
   expect(await ui.find({ key: 'goal-12' })).toBeUndefined()
   expect(await ui.find({ key: 'goal-3' })).toBeDefined()
   expect(await ui.find({ key: 'plan-41' })).toBeDefined()
+
+  // ITS PLAN'S CARD IS GONE WITH IT, though a read of the plans still names it: a row the briefing still lists opens nothing to act on.
+  await ui.press({ key: 'plan-150' })
+  await ui.press({ key: 'open-plan-150' })
+  expect(await ui.find({ key: 'act-plan-150-approve' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: exact('No plan waits.') })).toBeDefined()
 })
 
 test('AFTER A RESET, a goal deleted in the old history hides nothing: a new goal 8 is listed and its story signals', async ($, on) => {

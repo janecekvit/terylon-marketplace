@@ -74,3 +74,16 @@ test('a leader that does not answer within 10 s is said so with the command, and
   await ui.press({ key: 'add-send' })
   expect(await ui.find({ type: 'Text', text: 'The leader is paused. The task is written down and waits; the plan comes after the resume.' })).toBeDefined()
 })
+
+test('a goal that closed while the form opened: the new task\'s form says there is no open goal, in ink and never in amber', async ($, on) => {
+  const terylon = world(on)
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount(MOUNT)
+  await toAddTask(ui)
+  terylon.answers.goals_list = { goals: [], closedCount: 1 }
+  await ui.input({ key: 'quick-add', text: 'Too late' })
+
+  expect((await ui.find({ type: 'Text', text: 'No open goal: add a goal on the overview, then the task.' }))?.props).toMatchObject({ color: 'text', weight: 'semibold' })
+})
