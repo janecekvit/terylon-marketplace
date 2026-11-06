@@ -1149,7 +1149,7 @@ export function bellView(notices: Json, leader: Json | null, metrics: Json | nul
   const rows: { value: string; label: string }[] = metrics === null
     ? []
     : [
-        { value: String(number(metrics.stories) ?? 0), label: COPY.metricStories(number(metrics.stories) ?? 0, number((metrics.hostProof as Json | null | undefined)?.stories)) },
+        { value: String(number(metrics.stories) ?? 0), label: COPY.metricStories(number(metrics.stories) ?? 0) },
         { value: metricCost(metrics, basis), label: COPY.metricCost },
         { value: String(number(metrics.merged) ?? 0), label: COPY.metricMerged },
         { value: String(number(metrics.opened) ?? 0), label: COPY.metricOpened(number(metrics.opened) ?? 0) },

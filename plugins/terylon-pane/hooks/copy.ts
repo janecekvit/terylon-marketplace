@@ -487,7 +487,7 @@ export const COPY = {
   metricsHint: 'metrics',
   // ONE STORY, ONE PR OPENED: the operator's walk of 1.1.1 read "1 stories" on the Status tab. The number is the PRs
   // opened over the 30 days, not the PRs open now (Terylon S40, #402).
-  metricStories: (count: number, hostProof: number | null) => `${count === 1 ? 'story' : 'stories'}${hostProof === null || hostProof === 0 ? '' : ` (+${hostProof} host proof)`}`,
+  metricStories: (count: number) => (count === 1 ? 'story' : 'stories'),
   metricCost: 'per story',
   metricMerged: 'merged',
   metricOpened: (count: number) => (count === 1 ? 'PR opened' : 'PRs opened'),

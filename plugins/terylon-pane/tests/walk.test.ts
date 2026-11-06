@@ -114,13 +114,13 @@ test('an answer is sent once while it is being sent, however often Send is press
 
 test('one story and one PR opened are said in the singular on the Status tab and the Bell', async ($, on) => {
   const terylon = world(on)
-  terylon.answers.metrics = { stories: 1, opened: 1, merged: 0, costPerStoryUsd: 46.44, hostProof: { stories: 72 }, rows: [] }
+  terylon.answers.metrics = { stories: 1, opened: 1, merged: 0, costPerStoryUsd: 46.44, rows: [] }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'tab-status' })
   await terylon.clock.settle()
-  expect(await ui.find({ type: 'Text', text: exact('1 story (+72 host proof) · $46.44 per story · 0 merged · 1 PR opened') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('1 story · $46.44 per story · 0 merged · 1 PR opened') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /1 stories|1 PRs opened|open PR/ })).toBeUndefined()
 })
