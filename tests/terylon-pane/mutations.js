@@ -407,10 +407,10 @@ const MUTATIONS = [
         replace: "backgroundColor={look.isGraphic ? shownStory.stateTone : undefined} paddingX",
     },
     {
-        name: "the hover reveal is laid over an open row",
+        name: "a question's row no longer leads to its question",
         file: "hooks/register.tsx",
-        find: " && !isOpen && ",
-        replace: " && ",
+        find: "              onPress: () => (item.kind === 'question' ? go({ screen: 'question', question: item.target }) : toggle($, item.key)),\n",
+        replace: "              onPress: () => toggle($, item.key),\n",
     },
     {
         name: "an Svg is left to size its own box",
@@ -1520,7 +1520,7 @@ const MUTATIONS = [
         replace: "",
     },
     {
-        name: "an act taken on a row says nothing once its row has gone",
+        name: "an act still going when its card was left says nothing once its row has gone",
         file: "hooks/register.tsx",
         find: "        {rowOutcomes}\n",
         replace: "",

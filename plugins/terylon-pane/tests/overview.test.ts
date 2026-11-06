@@ -577,3 +577,27 @@ test('a fold stays open across a walk, and each says what it holds', async ($, o
   expect((await ui.find({ key: 'fold-queued' }))?.text).toBe('▾ Queued 2')
   expect(await ui.find({ key: 'queued-328' })).toBeDefined()
 })
+
+test('AN ACT STILL GOING WHEN ITS CARD IS LEFT says what became of it under Waiting for you, though its row has gone', async ($, on) => {
+  const terylon = world(on)
+  terylon.answers.plan_approve = { accepted: true, sentence: 'Plan 41: 2 approved, 0 dropped.', commandId: 'c1', subjectId: 3 }
+  terylon.hang.add('plan_approve')
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount({ ...PANE, props: PANE_PROPS, surface: 'desktop' })
+  await ui.press({ key: 'open-plan-41' })
+  const pressed = ui.press({ key: 'act-plan-41-approve' })
+  await terylon.clock.settle()
+  await ui.press({ key: 'back' })
+
+  for (const release of terylon.held.splice(0)) {
+    release()
+  }
+
+  await pressed
+  await terylon.clock.settle()
+  expect(await ui.find({ key: 'tiles' })).toBeDefined()
+  expect(await ui.find({ key: 'plan-41' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: exact('✓ Plan 41: 2 approved, 0 dropped.') })).toBeDefined()
+})
