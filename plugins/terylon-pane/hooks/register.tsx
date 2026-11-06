@@ -2446,6 +2446,7 @@ async function leaveActs($: EngineInterface): Promise<void> {
     return Object.fromEntries(Object.entries(all).filter(([, value]) => value?.busy != null).map(([key, value]) => [key, { ...NO_ACT, busy: value.busy }]))
   })
   await update($, policyForm, (): PanePolicyForm => EMPTY_POLICY_FORM)
+  await update($, testMode, (current: PaneTestMode): PaneTestMode => ({ ...EMPTY_TEST_MODE, ...current, note: null }))
 }
 
 // An act's field: opened under its card by its button, closed by the same button or Cancel. Not while it is busy.
@@ -3200,6 +3201,7 @@ export const register: Register = on => {
 
   // THE PANE: the screen on top of the stack, the overview at its root.
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    // EVERY SCREEN'S DRAWING, each returning where it ends; test mode's line goes over whichever it was, at the end.
     const drawn = await (async (): Promise<unknown> => {
     isSeen = true
     ensurePoll($, 'the pane')
@@ -5019,7 +5021,7 @@ export const register: Register = on => {
     // OPEN UNTIL IT IS SHUT: nothing running is ever hidden, so a story no goal could be found for stands in the open.
     const isElsewhereOpen = !shown.includes('fold-running')
 
-    const tree_ = (
+    const overviewDrawing = (
       <Box flexDirection="column" gap={1}>
         {overviewHead}
         {tiles}
@@ -5136,7 +5138,8 @@ export const register: Register = on => {
         {overviewFoot}
       </Box>
     )
-    return withNotices(tree_)
+
+    return withNotices(overviewDrawing)
     })()
 
     // TEST MODE IS SAID ON EVERY SCREEN: its head names it on the overview, this line elsewhere, and the sentence of what

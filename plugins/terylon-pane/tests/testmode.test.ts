@@ -317,6 +317,10 @@ for (const surface of ['desktop', 'terminal'] as const) {
     await ui.press({ key: 'merge-act-204' })
     expect(await ui.find({ type: 'Text', text: exact('Test mode: nothing was merged. A real merge is confirmed with your passkey in the console.') })).toBeDefined()
     expect(terylon.calls.filter(call => call.tool === 'story_merge')).toEqual([])
+
+    // THE SENTENCE STANDS UNTIL THE OWNER MOVES ON.
+    await ui.press({ key: 'tab-status' })
+    expect(await ui.find({ type: 'Text', text: /nothing was merged/ })).toBeUndefined()
   })
 }
 
