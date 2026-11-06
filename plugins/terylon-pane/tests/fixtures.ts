@@ -79,7 +79,7 @@ export const BRIEFING = {
   briefing: 'x',
   plansWaiting: [{ id: 41, goal: 3, goalTitle: 'Agentic OS', stories: 3, estimateUsd: 14 }],
   questionsOpen: [{ id: 9, subject: 'story/333', about: '#333', text: 'Má mrtvý běh pokračovat od posledního commitu?' }],
-  storiesVerified: [{ id: 327, title: 'Events since the last look', environment: { name: 'pr-196', url: 'https://x' } }],
+  storiesVerified: [{ id: 327, goal: 3, title: 'Events since the last look', environment: { name: 'pr-196', url: 'https://x' } }],
   storiesBlocked: [],
   leader: { paused: false },
   unhandledNotices: 0,
@@ -89,18 +89,18 @@ export const FLIGHT = {
   slots: 4,
   paused: false,
   stories: [
-    { id: 333, title: 'Direct dispatch', run: 'r1', state: 'running', attempt: 2, progress: { stage: 'test', step: 5, steps: 9, current: 'testy', agent: { name: 'tester', running: 1 }, tokens: 1400000 }, startedAt: '2026-10-11T10:00:00Z', costUsd: 2.1, budgetUsd: 8, hours: 6, stuck: null, environment: null },
-    { id: 329, title: 'Memory proposals', run: 'r2', state: 'verifying', attempt: 1, progress: { stage: 'verify', step: null, steps: null, current: null, agent: null, tokens: null }, startedAt: '2026-10-11T09:00:00Z', costUsd: 3.4, budgetUsd: 8, hours: 6, stuck: null, environment: { name: 'pr-197', url: 'https://y' } },
+    { id: 333, goal: 3, title: 'Direct dispatch', run: 'r1', state: 'running', attempt: 2, progress: { stage: 'test', step: 5, steps: 9, current: 'testy', agent: { name: 'tester', running: 1 }, tokens: 1400000 }, startedAt: '2026-10-11T10:00:00Z', costUsd: 2.1, budgetUsd: 8, hours: 6, stuck: null, environment: null },
+    { id: 329, goal: 3, title: 'Memory proposals', run: 'r2', state: 'verifying', attempt: 1, progress: { stage: 'verify', step: null, steps: null, current: null, agent: null, tokens: null }, startedAt: '2026-10-11T09:00:00Z', costUsd: 3.4, budgetUsd: 8, hours: 6, stuck: null, environment: { name: 'pr-197', url: 'https://y' } },
   ],
 }
 
 export const STORIES = {
   stories: [
-    { id: 333, title: 'Direct dispatch', state: 'running', updatedAt: '2026-10-11T10:00:00Z' },
-    { id: 329, title: 'Memory proposals', state: 'verifying', updatedAt: '2026-10-11T10:00:00Z' },
-    { id: 328, title: "Owner's spec and plan", state: 'approved', after: [324], updatedAt: '2026-10-11T08:00:00Z' },
-    { id: 347, title: 'Logs', state: 'approved', blockedReason: 'tvoje volba', after: [], updatedAt: '2026-10-11T08:00:00Z' },
-    { id: 341, title: 'S10a cleanup', state: 'merged', costUsd: 5.6, updatedAt: '2026-10-11T12:20:00Z' },
+    { id: 333, goal: 3, title: 'Direct dispatch', state: 'running', updatedAt: '2026-10-11T10:00:00Z' },
+    { id: 329, goal: 3, title: 'Memory proposals', state: 'verifying', updatedAt: '2026-10-11T10:00:00Z' },
+    { id: 328, goal: 3, title: "Owner's spec and plan", state: 'approved', after: [324], updatedAt: '2026-10-11T08:00:00Z' },
+    { id: 347, goal: 3, title: 'Logs', state: 'approved', blockedReason: 'tvoje volba', after: [], updatedAt: '2026-10-11T08:00:00Z' },
+    { id: 341, goal: 3, title: 'S10a cleanup', state: 'merged', costUsd: 5.6, updatedAt: '2026-10-11T12:20:00Z' },
   ],
 }
 
@@ -468,16 +468,86 @@ export async function chipOf(ui: { find: (query: { key?: string }) => Promise<un
   return chipIn(await ui.find({ key }))
 }
 
-// TERYLON COCKPIT ON ITS MEMORY TAB (Terylon S68): /terylon-cockpit is the one command, and Memory a tab of its pane, so a
-// test that opened the memory with /terylon-memory opens the pane and presses Memory.
-type Engine = {
-  command: { run: (request: never) => Promise<unknown> }
-  ui: { mount: (request: never) => Promise<{ press: (query: { key: string }) => Promise<unknown>; unmount: () => Promise<unknown> }> }
+// THE WAYS THROUGH THE PANE: the overview at its root, More behind its pills, a new goal and a new task each a press away.
+type Mounted = {
+  find: (query: { key: string }) => Promise<unknown>
+  press: (query: { key: string }) => Promise<unknown>
 }
 
-export async function openMemoryTab($: Engine): Promise<void> {
+// ‹ back to the overview from wherever the pane is.
+export async function toRoot(ui: Mounted): Promise<void> {
+  while ((await ui.find({ key: 'back' })) !== undefined) {
+    await ui.press({ key: 'back' })
+  }
+
+  if ((await ui.find({ key: 'tab-queue' })) !== undefined) {
+    await ui.press({ key: 'tab-queue' })
+  }
+}
+
+// The overview, its goals read as opening the pane reads them: Refresh on it.
+export async function toOverview(ui: Mounted): Promise<void> {
+  await toRoot(ui)
+  await ui.press({ key: 'refresh' })
+}
+
+// A pill: More, whose sections are all on one page, from the overview.
+export async function pill(ui: Mounted, key: 'tab-bell' | 'tab-memory' | 'tab-status'): Promise<void> {
+  if ((await ui.find({ key })) === undefined) {
+    await toRoot(ui)
+  }
+
+  await ui.press({ key })
+}
+
+// A fold opened, where a press on an earlier surface has not opened it already: its state stays across mounts.
+export async function unfold(ui: { find: (query: { key: string }) => Promise<{ text?: string } | undefined> ; press: (query: { key: string }) => Promise<unknown> }, key: string): Promise<void> {
+  if (!String((await ui.find({ key }))?.text ?? '').includes('▾')) {
+    await ui.press({ key })
+  }
+}
+
+// More, with a fold of it open: Health's Policy or Diagnostics, Notices' What the machine did, Memory's About you…
+export async function moreWith(ui: Parameters<typeof unfold>[0] & Mounted, ...keys: string[]): Promise<void> {
+  await pill(ui, 'tab-status')
+
+  for (const key of keys) {
+    await unfold(ui, key)
+  }
+}
+
+export async function toNewGoal(ui: Mounted): Promise<void> {
+  await toOverview(ui)
+  await ui.press({ key: 'goal-new-open' })
+}
+
+// A goal's "Add a task", where a new task starts from: the field quick-add under the goal it goes to.
+export async function toAddTask(ui: Mounted, goal = 3): Promise<void> {
+  await toOverview(ui)
+  await ui.press({ key: `goal-${goal}` })
+  await unfold(ui as never, 'fold-add-task')
+}
+
+// Open a pane that has read the overview, as /terylon-cockpit does.
+type Engine = {
+  command: { run: (request: never) => Promise<unknown> }
+}
+
+export async function openCockpit($: Engine): Promise<void> {
+  await $.command.run({ command: 'terylon-cockpit', args: '' } as never)
+}
+
+// The memory's folds open, as a test of what the owner remembers reads them: About you, Topics and the rules.
+export async function openMemoryTab($: Engine & { ui: { mount: (request: never) => Promise<Mounted & { unmount: () => Promise<unknown>; find: (query: { key: string }) => Promise<{ text?: string } | undefined> }> } }): Promise<void> {
   await $.command.run({ command: 'terylon-cockpit', args: '' } as never)
   const pane = await $.ui.mount({ plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS, surface: 'desktop' } as never)
   await pane.press({ key: 'tab-memory' })
+
+  for (const key of ['fold-memory-owner', 'fold-memory-topics', 'fold-memory-rules']) {
+    if ((await pane.find({ key })) !== undefined) {
+      await unfold(pane as never, key)
+    }
+  }
+
   await pane.unmount()
 }

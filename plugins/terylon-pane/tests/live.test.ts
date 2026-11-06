@@ -6,7 +6,7 @@ import { test, expect } from 'claude-code/testing'
 
 import { SVG_COLOURS } from '../hooks/drawing'
 
-import { GATES, NOTICES, PANE_PROPS, SESSION, STORY_333, bandProps, exact, pictures, world } from './fixtures'
+import { GATES, NOTICES, PANE_PROPS, SESSION, STORY_333, bandProps, exact, pictures, world, pill } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -58,17 +58,17 @@ test('a story Terylon reports no stage for draws no phase as now, and Now workin
   expect(await ui.find({ type: 'Text', text: exact('Now working') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('no agent reported · no stage reported') })).toBeDefined()
 
-  // THE SAME ON THE DESKTOP (S32): the stepper and the running row's segments draw no node as now, in no colour of
-  // now, and say so in their alt; the labels under the stepper have none in the colour of now either.
+  // THE SAME ON THE DESKTOP (S32): the road and the running row's road draw no segment as now, in no colour of
+  // now, and say so in their alt; the names under the road have none in the colour of now either.
   const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await desktop.press({ key: 'back' })
-  const segments = (await pictures(desktop)).find(item => /phase/i.test(item.alt))
-  expect(segments?.alt).toBe('1 of 8 phases done')
-  expect(segments?.source).not.toContain(SVG_COLOURS.now)
-  await desktop.press({ key: 'story-333' })
   const [stepper] = await pictures(desktop)
   expect(stepper?.alt).toBe('Admitted done; Plan, Develop, Review, Tests, Pull req., Verified, Merge to come')
-  expect(stepper?.source).not.toContain(SVG_COLOURS.now)
+  expect(stepper?.source).not.toContain(SVG_COLOURS.roadNow)
+  await desktop.press({ key: 'back' })
+  // THE STORY IS UNDER NO GOAL: its row on the overview draws its road the same.
+  const row = (await pictures(desktop)).find(item => /Admitted done/.test(item.alt))
+  expect(row?.source).not.toContain(SVG_COLOURS.roadNow)
+  await desktop.press({ key: 'story-333' })
   const labels = ['Admitted', 'Plan', 'Develop', 'Review', 'Tests', 'Pull req.', 'Verified', 'Merge']
   expect((await desktop.findAll({ type: 'Text' })).filter(node => labels.includes(node.text) && node.props.color === 'suggestion')).toEqual([])
   expect(await desktop.find({ type: 'Text', text: exact('1 of 8 · no stage reported') })).toBeDefined()
@@ -96,7 +96,7 @@ test('a subagent at work is named with how many more are out, and its stage besi
   expect(await terminal.find({ type: 'Text', text: exact("$0.40 of the story's $8 · 950 tokens · 1 h since start") })).toBeDefined()
 })
 
-test('a notice is marked handled from the Bell tab through notice_handle, and the bell and the band drop it at once', async ($, on) => {
+test('a notice is marked handled on More through notice_handle, and its list and the band drop it at once', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -105,11 +105,7 @@ test('a notice is marked handled from the Bell tab through notice_handle, and th
   expect(await band.find({ type: 'Text', text: /· Notices 2$/ })).toBeDefined()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-bell' })
-  expect((await ui.find({ key: 'tab-bell' }))?.props.label).toMatch(/Notices · 2$/)
-  expect(await ui.find({ key: 'handle-117' })).toBeUndefined()
-
-  await ui.press({ key: 'notice-117' })
+  await pill(ui, 'tab-bell')
   expect((await ui.find({ key: 'handle-117' }))?.props.label).toBe('Mark handled')
   await ui.press({ key: 'handle-117' })
 
@@ -143,8 +139,7 @@ test('a notice Terylon refuses to mark handled stays, and the refusal is said wi
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-bell' })
-  await ui.press({ key: 'notice-168' })
+  await pill(ui, 'tab-bell')
   await ui.press({ key: 'handle-168' })
 
   expect(await ui.find({ key: 'notice-168' })).toBeDefined()

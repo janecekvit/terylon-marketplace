@@ -3,7 +3,7 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { GOAL_QUESTION, BRIEFING, PANE_PROPS, SESSION, exact, world } from './fixtures'
+import { GOAL_QUESTION, BRIEFING, PANE_PROPS, SESSION, exact, world, pill, toOverview } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -35,7 +35,7 @@ for (const [tab, tool, title] of [['tab-goals', 'goals_list', 'Goals did not loa
 
     // PRESSED AGAIN, it loads: nothing is left stuck.
     terylon.hang.delete(tool)
-    await ui.press({ key: 'tab-queue' })
+    await toOverview(ui)
     await ui.press({ key: tab })
     await terylon.clock.settle()
     expect(await isLoading(ui)).toBe(false)
@@ -59,12 +59,12 @@ test('a goals or bell value an earlier version of the mod left behind is replace
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   await terylon.clock.settle()
   expect(await isLoading(ui)).toBe(false)
   expect(await ui.find({ type: 'Text', text: exact('P1 · Agentic OS') })).toBeDefined()
 
-  await ui.press({ key: 'tab-bell' })
+  await pill(ui, 'tab-bell')
   await terylon.clock.settle()
   expect(await isLoading(ui)).toBe(false)
   expect(await ui.find({ key: 'notice-117' })).toBeDefined()
@@ -119,7 +119,7 @@ test('one story and one PR opened are said in the singular on the Status tab and
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
+  await pill(ui, 'tab-status')
   await terylon.clock.settle()
   expect(await ui.find({ type: 'Text', text: exact('1 story · $46.44 per story · 0 merged · 1 PR opened') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /1 stories|1 PRs opened|open PR/ })).toBeUndefined()

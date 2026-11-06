@@ -1,5 +1,5 @@
 // Terylon Cockpit's own words, in English: the interface, as the operator chose it, in Terylon's
-// glossary since Terylon S68 (Design · Glossary): Waiting · Goals · Notices · Memory · Health, every subject by its ref,
+// glossary since Terylon S68 (Design · Glossary): the overview, Notices · Memory · Health, every subject by its ref,
 // every figure through hooks/words.ts. What Terylon sends (story titles, the leader's questions, memory entries, rules)
 // is drawn in the language it came in, untranslated. The prompts the pane posts into the session are the owner's words
 // to Claude, in Czech; no word drawn on a surface is Czech.
@@ -13,11 +13,56 @@ export const COPY = {
   machineName: 'Terylon',
   connecting: 'connecting…',
   refresh: 'Refresh',
-  ago: (seconds: number) => (seconds < 60 ? `${seconds} s ago` : `${Math.round(seconds / 60)} min ago`),
-  connected: (age: string) => `connected · ${age}`,
+  connectedShort: 'connected',
   disconnected: (since: string) => `not answering since ${since}`,
-  // TERYLON COCKPIT'S ONE COMMAND: no other alias, its Memory a tab.
+  // TERYLON COCKPIT'S ONE COMMAND: no other alias.
   footer: '/terylon-cockpit',
+
+  // The overview: the machine in a line, the three tiles, the goals, the folds, the 30-day line and the pills.
+  overview: 'Overview',
+  tileWaiting: 'waiting for you',
+  tileRunning: 'running',
+  tileStuck: 'stuck',
+  tilesWaiting: (count: number) => `${count} waiting`,
+  tilesRunning: (count: number) => `${count} running`,
+  tilesStuck: (count: number) => `${count} stuck`,
+  goalsHeading: 'Goals',
+  foldRunning: 'Running, goal not found',
+  pillNotices: (count: number) => `Notices ${count} ›`,
+  pillMemory: (count: number | null) => (count === null ? 'Memory ›' : `Memory ${count} ›`),
+  pillHealth: (hasProblem: boolean) => (hasProblem ? 'Health ⚠ ›' : 'Health ›'),
+  monthLine: (line: string) => `Last 30 days ${line}`,
+  // A goal's card: its road's words, how many of its stories are done, and what comes next.
+  road: { plan: 'Plan', approve: 'Approve', build: 'Build', verify: 'Verify', merge: 'Your merge', accept: 'Your accept', done: 'Done' },
+  storiesDone: (done: number, all: number) => `${done} of ${all} ${all === 1 ? 'story' : 'stories'}`,
+  planOnRoad: (plan: string, stories: number) => `plan ${plan} · ${stories} ${stories === 1 ? 'story' : 'stories'}`,
+  nextApprove: 'Waits for your approval',
+  nextApprovePlan: (plan: string) => `Plan ${plan} waits for your approval`,
+  nextMerge: 'Merge in the console',
+  nextAccept: 'Accept it on its card',
+  nextVerify: 'The leader verifies it',
+  nextBuild: 'The leader builds it',
+  nextQueued: 'Waits for a slot',
+  nextBlocked: 'Blocked: waits for you',
+  nextStuck: 'Stuck: look at it',
+  nextPlan: 'The leader plans it',
+  nextDone: 'Nothing left to do',
+  nextQuestion: 'Asks you a question',
+  whatNext: 'What next',
+  storyRunningFor: (duration: string | null) => (duration === null ? 'running' : `running ${duration}`),
+  stuckFlag: (count: number) => `${count} stuck`,
+  addTask: 'Add a task',
+  yourDecisions: 'Your decisions on earlier plans',
+  // More: Notices, Memory and Health on one page.
+  more: 'More',
+  moreNotices: 'Notices',
+  moreMemory: 'Memory',
+  moreHealth: 'Health',
+  machineDid: 'What the machine did',
+  memoryTopics: 'Topics',
+  pauseLeader: 'Pause the leader',
+  statusRowSlots: 'Slots',
+  statusRowCost: 'Cost',
 
   // The band above the prompt.
   bandWaiting: 'Waiting',
@@ -82,7 +127,7 @@ export const COPY = {
     'The pane retries every minute; Try again does it now.',
   ],
   pausedTitle: 'The leader is paused',
-  fixPaused: ['Press Resume, here or on Waiting: the leader continues from its log.'],
+  fixPaused: ['Press Resume, here or on the overview: the leader continues from its log.'],
   alertHint: (source: string, time: string) => `${source} · ${time}`,
   fixAlert: 'What to do is in the notice; handling it is the console\'s.',
   statusDiagnostics: 'Diagnostics',
@@ -102,12 +147,6 @@ export const COPY = {
   ],
   diagnosticsDebug: 'Every failure is in claude --debug under terylon-pane:',
 
-  // Tabs.
-  tabQueue: 'Waiting',
-  tabGoals: 'Goals',
-  tabNotices: (count: number) => (count > 0 ? `Notices · ${count}` : 'Notices'),
-  tabMemory: 'Memory',
-  tabHealth: (hasProblem: boolean) => (hasProblem ? 'Health ⚠' : 'Health'),
   selected: (label: string) => `● ${label}`,
   back: '‹ Back',
 
@@ -149,10 +188,10 @@ export const COPY = {
     environment === null ? 'verified · waiting for merge' : `verified in ${environment} · waiting for merge`,
   // A plan's estimate as the glossary says it ("~$14"), none where it is $0 or not estimated: never "~$0".
   planWaiting: (estimate: string | null) => (estimate === null ? 'to approve' : `to approve · ${estimate}`),
-  planTitle: (plan: string, goal: string, stories: number) => `Plan ${plan} · ${goal} · ${stories} ${stories === 1 ? 'story' : 'stories'}`,
+  planTitle: (goal: string, stories: number) => `${goal} · ${stories} ${stories === 1 ? 'story' : 'stories'}`,
   // A repeating task's version plan (Terylon S43): no stories to count, one version to approve.
   taskVersion: (version: string | null, task: string) => (version === null ? `a new version of ${task}` : `version ${version} of ${task}`),
-  taskVersionTitle: (plan: string, version: string | null, task: string) => `Plan ${plan} · ${version === null ? `a new version of ${task}` : `version ${version} of ${task}`}`,
+  taskVersionTitle: (version: string | null, task: string) => (version === null ? `a new version of ${task}` : `version ${version} of ${task}`),
   approveVersionNote: (version: string | null) => `Approve: each later task_run uses ${version === null ? 'this version' : `version ${version}`}.`,
   versionWaiting: (terms: string | null) => (terms === null ? 'to approve' : `to approve · ${terms}`),
   // The task's settled versions, on its card: "Versions: 1 (plan 2536), 2 (plan 2573)".
@@ -176,6 +215,8 @@ export const COPY = {
   openStory: 'Open story',
   openPlan: 'Open plan',
   mergeInConsole: 'Merge in the console ↗',
+  mergeShort: 'Merge ↗',
+  rowOpen: 'Open',
   emptyTitle: 'Nothing runs and nothing waits',
   emptyHint: 'Add a task below, or write a story out with Claude in the session and hand it over whole.',
   quickLabel: 'New task for the leader',
@@ -221,7 +262,7 @@ export const COPY = {
   // THE DONE-SIGNAL STOPPED: events_since, or the store that keeps the pane's place, failed. Each kind says its fix.
   eventsNotAllowedTitle: "Claude Code refused the done-signal's call",
   eventsNotAllowedBody:
-    'Waiting is read, but Claude Code refused events_since, the call that tells you a story was verified, merged or blocked. Until it passes, nothing is told: no prompt, no toast, no catch-up.',
+    'The overview reads, but Claude Code refused events_since, the call that tells you a story was verified, merged or blocked. Until it passes, nothing is told: no prompt, no toast, no catch-up.',
   fixEventsNotAllowed: [
     'Add these rules to ~/.claude/settings.json, under "permissions" → "allow"; events_since must be among them, spelled as below:',
     'If the rule is already there, restart Claude Desktop, so the settings are read again.',
@@ -229,7 +270,7 @@ export const COPY = {
   ],
   eventsStoppedTitle: 'The done-signal stopped',
   eventsStoppedBody: (since: string) =>
-    `Since ${since}, events_since has not answered as the owner's. Waiting is current, but a story verified, merged or blocked is not told.`,
+    `Since ${since}, events_since has not answered as the owner's. The overview is current, but a story verified, merged or blocked is not told.`,
   fixEventsStopped: [
     'Open Health in the console to see why.',
     'Press Try again; every poll also tries again.',
@@ -247,7 +288,7 @@ export const COPY = {
   ],
   eventsSilentTitle: 'The done-signal hears nothing',
   eventsSilentBody: (seconds: number, last: string | null) =>
-    `events_since has not answered for ${seconds} s${last === null ? ', not once this session' : `; its last answer was at ${last}`}, while Waiting reads. Nothing failed that the pane could see: its events path stopped before the call.`,
+    `events_since has not answered for ${seconds} s${last === null ? ', not once this session' : `; its last answer was at ${last}`}, while the overview reads. Nothing failed that the pane could see: its events path stopped before the call.`,
   fixEventsSilent: [
     'Press Try again.',
     'Restart Claude Desktop.',
@@ -256,7 +297,7 @@ export const COPY = {
   // A PART OF THE STATUS TAB THAT DID NOT DRAW: said as a problem, the rest of the tab drawn around it.
   statusPartFailed: (part: string) => `Health's ${part} did not draw`,
   fixStatusPart: [
-    'Press Refresh, or open another tab and come back.',
+    'Press Refresh, or go back and open it again.',
     'If it stays, run claude --debug and read the line under terylon-pane: Health',
     'Restart Claude Desktop.',
   ],
@@ -325,7 +366,7 @@ export const COPY = {
   overrun: 'files outside the declaration',
   criteria: 'Criteria',
   criteriaHint: (count: number) => `${count}`,
-  more: (count: number) => `${count} more ▾`,
+  moreCount: (count: number) => `${count} more ▾`,
   less: 'less ▴',
   timeline: 'What happened',
   timelineHint: 'newest first',
@@ -491,9 +532,11 @@ export const COPY = {
   metricCost: 'per story',
   metricMerged: 'merged',
   metricOpened: (count: number) => (count === 1 ? 'PR opened' : 'PRs opened'),
-  loadTimedOut: (seconds: number) => `Terylon did not answer within ${seconds} s. Press the tab again to retry.`,
+  monthStories: (count: number) => `${count} ${count === 1 ? 'story' : 'stories'}`,
+  monthCost: (cost: string) => `${cost} per story`,
+  loadTimedOut: (seconds: number) => `Terylon did not answer within ${seconds} s. Press Refresh to retry.`,
   noticesInConsole: 'Notices in the console ↗',
-  bellNote: 'Mark handled is notice_handle, which decides nothing about work. Pause and Resume are on Waiting and Health.',
+  bellNote: 'Mark handled is notice_handle, which decides nothing about work.',
   markHandled: 'Mark handled',
   handling: 'Marking…',
   nothingYet: 'Nothing yet.',
@@ -531,10 +574,10 @@ export const COPY = {
   nextTask: 'Next task',
   notAdded: 'Not handed over',
   timeout: (command: string | null) =>
-    `The leader did not answer within 10 s. The task may have arrived; look at Waiting before you send it again${command === null ? '' : ` (command ${command})`}.`,
+    `The leader did not answer within 10 s. The task may have arrived; look at Waiting for you before you send it again${command === null ? '' : ` (command ${command})`}.`,
   pausedAdd: 'The leader is paused. The task is written down and waits; the plan comes after the resume.',
   editAndRetry: 'Edit and try again',
-  noGoal: 'No open goal: add a goal on the Goals tab, then the task.',
+  noGoal: 'No open goal: add a goal on the overview, then the task.',
 
   // The leader's memory.
   memoryContext: 'what the leader remembers across runs',
@@ -573,7 +616,7 @@ export const COPY = {
     story_abandon: 'Abandon…',
     story_stop: 'Stop',
     story_accept: 'Accept',
-    leader_pause: 'Pause…',
+    leader_pause: 'Pause the leader…',
     leader_resume: 'Resume',
     goal_drop: 'Drop goal…',
     memory_confirm: 'Confirm',
@@ -659,7 +702,7 @@ export const COPY = {
   actBusyNote: 'Every other button on this card waits until the leader answers.',
   actCancel: 'Cancel',
   actRefresh: 'Refresh',
-  openQueue: 'Open Waiting',
+  openQueue: 'Open the overview',
   approveNote: (count: number) => `Approve starts ${count === 1 ? 'its story' : count === 2 ? 'both stories' : `all ${count} stories`} as the plan orders them.`,
   approveConsole: 'Edit criteria or pick stories in the console ↗',
   rethinkLabel: 'What to think again about',

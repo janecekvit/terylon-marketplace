@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
-import { PANE_PROPS, SESSION, world } from './fixtures'
+import { PANE_PROPS, SESSION, world, toAddTask, toOverview } from './fixtures'
 
 const MOUNT = { plugin: 'terylon-pane', surface: 'desktop', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -10,6 +10,7 @@ test('adding a task sends tasks_add under the goal, after the chosen story, and 
   await terylon.clock.settle()
 
   const ui = await $.ui.mount(MOUNT)
+  await toAddTask(ui)
   await ui.input({ key: 'quick-add', text: 'Konzole: tlačítko Check now u Health' })
 
   expect(await ui.find({ type: 'Text', text: 'New task' })).toBeDefined()
@@ -40,6 +41,7 @@ test("a refused task shows the leader's own sentence, and the form comes back to
   await terylon.clock.settle()
 
   const ui = await $.ui.mount(MOUNT)
+  await toAddTask(ui)
   await ui.input({ key: 'quick-add', text: 'Kruh' })
   await ui.press({ key: 'add-send' })
 
@@ -56,15 +58,17 @@ test('a leader that does not answer within 10 s is said so with the command, and
   await terylon.clock.settle()
 
   const ui = await $.ui.mount(MOUNT)
+  await toAddTask(ui)
   await ui.input({ key: 'quick-add', text: 'Pomalý' })
   await ui.press({ key: 'add-send' })
-  expect(await ui.find({ type: 'Text', text: 'The leader did not answer within 10 s. The task may have arrived; look at Waiting before you send it again (command 9f2c).' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'The leader did not answer within 10 s. The task may have arrived; look at Waiting for you before you send it again (command 9f2c).' })).toBeDefined()
 
   terylon.answers.work_in_flight = { slots: 4, paused: true, stories: [] }
-  await ui.press({ key: 'back' })
-  await ui.press({ key: 'refresh' })
+  await toOverview(ui)
   expect(await ui.find({ type: 'Text', text: /The leader is paused/ })).toBeDefined()
   expect((await ui.find({ key: 'act-leader-resume' }))?.props.label).toBe('Resume')
+
+  await toAddTask(ui)
 
   await ui.input({ key: 'quick-add', text: 'Během pauzy' })
   await ui.press({ key: 'add-send' })

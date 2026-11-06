@@ -3,7 +3,7 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { BRIEFING, FLIGHT, GOALS, PANE_PROPS, PLANS, SESSION, STORIES, STORY_333, exact, pictures, world } from './fixtures'
+import { BRIEFING, FLIGHT, GOALS, PANE_PROPS, PLANS, SESSION, STORIES, STORY_333, exact, pictures, world, pill, toOverview, toAddTask, moreWith, unfold } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 const MOUNT = { ...PANE, surface: 'desktop' } as const
@@ -26,6 +26,7 @@ const WALK_TITLE = 'TEST 5: the pane walk'
 
 async function typeNewTask(ui: { input: (input: never) => Promise<unknown>; press: (input: never) => Promise<unknown> }): Promise<void> {
   for (let length = 1; length <= WALK_TITLE.length; length += 1) {
+    await toAddTask(ui)
     await ui.input({ key: 'quick-add', text: WALK_TITLE.slice(0, length), kind: 'change' } as never)
   }
 
@@ -74,7 +75,8 @@ test('STALE AFTER APPROVE: the plan reads approved at once, its acts gone, thoug
   await terylon.clock.settle()
 
   const ui = await $.ui.mount(MOUNT)
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
+  await ui.press({ key: 'goal-3' })
   await ui.press({ key: 'act-plan-41-approve' })
 
   expect(await ui.find({ type: 'Text', text: exact('✓ Plan 41: 2 approved, 0 dropped.') })).toBeDefined()
@@ -107,7 +109,7 @@ test('STALE AFTER A POLICY SAVE: the form closes on ✓ and the card shows what 
   await terylon.clock.settle()
 
   const ui = await $.ui.mount(MOUNT)
-  await ui.press({ key: 'tab-status' })
+  await moreWith(ui, 'fold-policy')
   await ui.press({ key: 'act-policy-edit' })
   await ui.input({ key: 'act-policy-field-slots', text: '3', kind: 'change' })
   await ui.press({ key: 'act-policy-send' })
@@ -131,7 +133,7 @@ test('STALE AFTER DROP GOAL: the goal reads dropped at once, Drop goal… gone, 
   await terylon.clock.settle()
 
   const ui = await $.ui.mount(MOUNT)
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   await ui.press({ key: 'goal-3' })
   await ui.press({ key: 'act-goal-3-drop' })
   await ui.press({ key: 'act-goal-3-send' })
@@ -141,8 +143,9 @@ test('STALE AFTER DROP GOAL: the goal reads dropped at once, Drop goal… gone, 
   expect(await ui.find({ key: 'act-goal-3-drop' })).toBeUndefined()
 
   await toQueue($)
-  await ui.press({ key: 'tab-goals' })
-  expect((await ui.find({ key: 'goals-show-open' }))?.props.label).toBe('Open · 1')
+  await toOverview(ui)
+  expect(await ui.find({ key: 'goal-3' })).toBeUndefined()
+  expect(await ui.find({ key: 'goal-11' })).toBeDefined()
 })
 
 // A story blocked as stopped, as story_get answers it.
@@ -167,7 +170,7 @@ test('ABANDON IS RED: a danger act is a plain Button whose word is drawn in erro
   expect((await ui.find({ type: 'Text', text: exact('Abandon for good') }))?.props.color).toBe('error')
 
   await toQueue($)
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   await ui.press({ key: 'goal-3' })
   expect((await ui.find({ key: 'act-goal-3-drop' }))?.props.plain).toBe(true)
   expect((await ui.find({ type: 'Text', text: exact('Drop goal…') }))?.props.color).toBe('error')
@@ -179,7 +182,7 @@ test('HOW TO FIX NAMES NO BUTTON THAT IS NOT THERE: the rules an act needs end w
   await terylon.clock.settle()
 
   const ui = await $.ui.mount(MOUNT)
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   terylon.mode.server = 'prompted'
   await ui.press({ key: 'act-plan-41-approve' })
   terylon.mode.server = 'up'
@@ -212,7 +215,7 @@ test('DROP GOAL SAYS WHAT IT WITHDRAWS AND ABANDONS, by title, and says so when 
   await terylon.clock.settle()
 
   const ui = await $.ui.mount(MOUNT)
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   await ui.press({ key: 'goal-11' })
   await ui.press({ key: 'act-goal-11-drop' })
   expect(await ui.find({ type: 'Text', text: exact('Drop it for good: the leader stops working on it. It withdraws plan 107, which waits for a decision. It abandons #14 TEST C and #15 TEST D, stopping the run of #15 first.') })).toBeDefined()
@@ -220,7 +223,7 @@ test('DROP GOAL SAYS WHAT IT WITHDRAWS AND ABANDONS, by title, and says so when 
   terylon.answers.plans_list = { plans: [] }
   terylon.answers.goal_get = (args: Record<string, unknown>) => ({ id: args.goal, title: 'Test z telefonu', priority: 2, state: 'open', storyList: [] })
   await toQueue($)
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   await ui.press({ key: 'goal-11' })
   await ui.press({ key: 'act-goal-11-drop' })
   expect(await ui.find({ type: 'Text', text: exact('Drop it for good: the leader stops working on it. No plan of it waits. No story of it is open.') })).toBeDefined()
@@ -236,6 +239,7 @@ test('A STUCK APPROVED STORY: not said to wait for a slot while one is free', as
   await terylon.clock.settle()
 
   const ui = await $.ui.mount(MOUNT)
+  await unfold(ui, 'fold-queued')
   expect(await ui.find({ type: 'Text', text: exact('not started, though a slot is free') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('waits for a slot') })).toBeUndefined()
 
@@ -258,6 +262,7 @@ test('A HELD APPROVED STORY SAYS WHY: the reason story_get carries, on its row a
   await terylon.clock.settle()
 
   const ui = await $.ui.mount(MOUNT)
+  await unfold(ui, 'fold-queued')
   expect(await ui.find({ type: 'Text', text: exact(HELD_REASON) })).toBeDefined()
   expect((await ui.find({ key: 'queued-14' }))?.text).toMatch(/^\s*(?:●\s+)?held\s+#14 TEST C: after A\s+after #12; #12 was abandoned, so order it again$/)
 
@@ -276,6 +281,7 @@ test('A STUCK APPROVED STORY CAN BE ENDED: Abandon… on its card, sent with its
   await terylon.clock.settle()
 
   const ui = await $.ui.mount(MOUNT)
+  await unfold(ui, 'fold-queued')
   await ui.press({ key: 'queued-360' })
   await ui.press({ key: 'act-story-360-abandon' })
   expect(actCalls(terylon.calls)).toEqual([])
@@ -285,14 +291,14 @@ test('A STUCK APPROVED STORY CAN BE ENDED: Abandon… on its card, sent with its
   expect(await ui.find({ type: 'Text', text: exact('✓ Story 360 is abandoned.') })).toBeDefined()
 })
 
-test('A DROPPED GOAL\'S PLANS LEAVE THE GOALS TAB; an open goal\'s stay', async ($, on) => {
+test('A DROPPED GOAL\'S PLANS ARE ON NO CARD OF THE OVERVIEW; an open goal\'s waits as its row', async ($, on) => {
   const terylon = world(on)
   terylon.answers.plans_list = { plans: [...PLANS.plans, { id: 144, goal: 1, goalTitle: 'Old', state: 'approved', estimateUsd: 4, comment: null, stories: [] }, { id: 107, goal: 1, goalTitle: 'Old', state: 'rethink', estimateUsd: 4, comment: null, stories: [] }] }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount(MOUNT)
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   expect(GOALS.goals.find(goal => goal.id === 1)?.state).toBe('dropped')
   expect(await ui.find({ key: 'plan-41' })).toBeDefined()
   expect(await ui.find({ key: 'plan-144' })).toBeUndefined()
@@ -325,7 +331,8 @@ test('A PLAN\'S ORDER IS ITS STORIES\' after: one arrow, A to C, B on its own, a
   await terylon.clock.settle()
 
   const ui = await $.ui.mount(MOUNT)
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
+  await ui.press({ key: 'goal-3' })
   expect(await ui.find({ type: 'Text', text: exact('S · ~$3 · after TEST A: the queue') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /after 12/ })).toBeUndefined()
 
@@ -336,12 +343,15 @@ test('A PLAN\'S ORDER IS ITS STORIES\' after: one arrow, A to C, B on its own, a
   await ui.unmount()
 
   const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  await terminal.press({ key: 'tab-goals' })
+  await toOverview(terminal)
+  await terminal.press({ key: 'goal-3' })
   expect(await terminal.find({ type: 'Text', text: exact('1 → 3 · 2') })).toBeDefined()
 })
 
 test('THE ROW AND THE CARD READ ONE STAGE: a story opened reads work_in_flight again, and both draw that answer', async ($, on) => {
   const terylon = world(on)
+  // NO GOAL TO FIND: the story stays a row of its own, with its phase, beside the overview's goals.
+  terylon.answers.goals_list = { goals: [], closedCount: 0 }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
@@ -425,6 +435,7 @@ test('THE NEW TASK\'S "What to do" IS A FIELD OF SEVERAL ROWS, and a title typed
   await terylon.clock.settle()
 
   const ui = await $.ui.mount(MOUNT)
+  await toAddTask(ui)
   await ui.input({ key: 'quick-add', text: 'A long task' })
   expect((await ui.find({ key: 'add-title' }))?.props.rows).toBe(3)
 
@@ -446,33 +457,34 @@ test('TWO WAITING PLANS OF ONE GOAL are both drawn, each with its own acts, and 
   expect(await ui.find({ key: 'plan-41' })).toBeDefined()
   expect(await ui.find({ key: 'plan-42' })).toBeDefined()
 
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   expect(await ui.find({ key: 'act-plan-41-approve' })).toBeDefined()
   expect(await ui.find({ key: 'act-plan-42-approve' })).toBeDefined()
 
   await toQueue($)
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   await ui.press({ key: 'goal-3' })
-  expect(await ui.find({ key: 'goal-plan-41' })).toBeDefined()
-  expect(await ui.find({ key: 'goal-plan-42' })).toBeDefined()
+  // BOTH WAIT, EACH ITS CARD WITH ITS ACTS, ON THE GOAL'S OWN SCREEN.
+  expect(await ui.find({ key: 'act-plan-41-rethink' })).toBeDefined()
+  expect(await ui.find({ key: 'act-plan-42-rethink' })).toBeDefined()
 })
 
 // A WITHDRAWN PLAN waits on nothing: the Goals tab folds it away, and its goal's own screen keeps it.
 const WITHDRAWN_PLAN = { id: 653, goal: 3, goalTitle: 'Agentic OS', state: 'withdrawn', estimateUsd: 4, comment: 'every story of it was abandoned', stories: [] }
 
-test('A WITHDRAWN PLAN LEAVES THE GOALS TAB and stays on its goal\'s screen; a waiting plan of the same goal stays on both', async ($, on) => {
+test('A WITHDRAWN PLAN IS NO ROW OF THE OVERVIEW and stays on its goal\'s screen; a waiting plan of the same goal is on both', async ($, on) => {
   const terylon = world(on)
   terylon.answers.plans_list = { plans: [...PLANS.plans, WITHDRAWN_PLAN] }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount(MOUNT)
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   expect(await ui.find({ key: 'plan-41' })).toBeDefined()
   expect(await ui.find({ key: 'plan-653' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /Plan 653/ })).toBeUndefined()
 
   await ui.press({ key: 'goal-3' })
-  expect(await ui.find({ key: 'goal-plan-41' })).toBeDefined()
+  expect(await ui.find({ key: 'act-plan-41-approve' })).toBeDefined()
   expect((await ui.find({ key: 'goal-plan-653' }))?.text).toMatch(/withdrawn/)
 })

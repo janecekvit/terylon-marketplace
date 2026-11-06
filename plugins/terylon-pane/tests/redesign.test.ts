@@ -6,7 +6,7 @@ import { test, expect } from 'claude-code/testing'
 
 import { SVG_COLOURS, proofsOf } from '../hooks/drawing'
 
-import { BRIEFING, GOAL_QUESTION, MID_PANE_PROPS, NARROW_PANE_PROPS, PANE_PROPS, SESSION, bandProps, exact, pictures, world } from './fixtures'
+import { BRIEFING, GOAL_QUESTION, MID_PANE_PROPS, NARROW_PANE_PROPS, PANE_PROPS, SESSION, bandProps, exact, pictures, world, pill, toOverview, toAddTask, moreWith } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -64,6 +64,7 @@ test('TURNED OFF, 1.1.2 DRAWS: one-line fields, no hover reveal, no tooltip', as
   expect(field?.props.autoFocus).toBe(true)
 
   await ui.press({ key: 'back' })
+  await toAddTask(ui)
   await ui.input({ key: 'quick-add', text: 'Health: a Check now button' })
   expect((await ui.find({ key: 'add-criteria' }))?.props.rows).toBeUndefined()
   expect((await ui.find({ key: 'add-criteria' }))?.props.placeholder).toBe('Separate them with semicolons, or the leader writes them')
@@ -80,6 +81,7 @@ test('input-rows, PROVEN AND ON: the answer takes four rows, the criteria three,
   expect((await ui.find({ key: 'answer-text' }))?.props.rows).toBe(4)
 
   await ui.press({ key: 'back' })
+  await toAddTask(ui)
   await ui.input({ key: 'quick-add', text: 'Health: a Check now button' })
   expect((await ui.find({ key: 'add-criteria' }))?.props.rows).toBe(3)
   expect((await ui.find({ key: 'add-criteria' }))?.props.placeholder).toBe('One per line, or the leader writes them')
@@ -96,7 +98,7 @@ test('ONE WAY TO SEND AN ANSWER on the desktop: the Answer button, and no submit
 
   for (const [surface, label] of [['desktop', ''], ['terminal', 'answer']] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-queue' })
+    await toOverview(ui)
     await ui.press({ key: 'question-9' })
     await ui.press({ key: 'answer-9' })
     expect((await ui.find({ key: 'answer-text' }))?.props.submitLabel).toBe(label)
@@ -256,7 +258,7 @@ test('THE NARROW DOCK, below 44 body columns: rows drop their detail, the phases
   expect(drawn.every(item => item.source.includes('<circle') && !item.source.includes('<rect'))).toBe(true)
 
   // The Status tab stacks its slots and cost; a wide pane sets them side by side.
-  await ui.press({ key: 'tab-status' })
+  await moreWith(ui, 'fold-diagnostics')
   expect(await ui.find({ key: 'status-gauges' })).toBeUndefined()
   await ui.unmount()
   const wide = await $.ui.mount({ ...PANE, surface: 'desktop' })
@@ -271,12 +273,12 @@ test('the Status tab says the machine in one word, large, in its colour, its tim
 
   for (const surface of ['desktop', 'terminal'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-status' })
+    await moreWith(ui, 'fold-diagnostics')
     const word = await ui.find({ type: 'Text', text: exact('all well') })
 
     expect(word?.props).toMatchObject({ size: 'title', weight: 'semibold', color: 'success' })
     expect((await ui.find({ type: 'Text', text: /^\s*last answer at / }))?.props.tabular).toBe(true)
-    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.18.0') }))?.props.mono).toBe(true)
+    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.19.0') }))?.props.mono).toBe(true)
     await ui.unmount()
   }
 })
@@ -287,7 +289,7 @@ test('the New goal card says a goal is a general direction, in the words of the 
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   expect((await ui.find({ key: 'goal-new' }))?.props.borderStyle).toBe('round')
   expect(await ui.find({ type: 'Text', text: exact('A goal is a general direction. A concrete ask — a file, a document, one change — becomes a task under a goal. The leader asks its questions first, then makes a plan you approve.') })).toBeDefined()
 })
@@ -298,6 +300,7 @@ test('THE NEW TASK: goal, after and size are Selects over tasks_add, and what is
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await toAddTask(ui)
   await ui.input({ key: 'quick-add', text: 'Health: a Check now button' })
 
   expect((await ui.find({ key: 'add-goal' }))?.props.options).toEqual([{ value: '3', label: 'P1 · Agentic OS' }, { value: '11', label: 'Test z telefonu' }])
@@ -322,7 +325,7 @@ test('THE S27 SLOTS (#27) ARE FILLED: the story\'s acts and its links on one pla
 
   for (const surface of ['desktop', 'terminal'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-queue' })
+    await toOverview(ui)
     await ui.press({ key: 'story-333' })
 
     const slot = await ui.find({ key: 'story-actions' })
@@ -332,7 +335,7 @@ test('THE S27 SLOTS (#27) ARE FILLED: the story\'s acts and its links on one pla
     expect((await ui.find({ type: 'Link', text: 'Story in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=story&story=333')
 
     await ui.press({ key: 'back' })
-    await ui.press({ key: 'tab-bell' })
+    await pill(ui, 'tab-bell')
     expect((await ui.find({ key: 'leader-actions' }))?.props.borderStyle).toBeUndefined()
     await ui.unmount()
   }

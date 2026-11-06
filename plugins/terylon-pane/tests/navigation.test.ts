@@ -4,7 +4,7 @@
 import { test, expect } from 'claude-code/testing'
 
 import { when } from '../hooks/queue'
-import { BRIEFING, GOALS, GOAL_QUESTION, NOTICES, PANE_PROPS, SESSION, WORLD_NOW, chipOf, exact, hostZoneOffset, pictures, world } from './fixtures'
+import { BRIEFING, GOALS, GOAL_QUESTION, NOTICES, PANE_PROPS, SESSION, WORLD_NOW, chipOf, exact, hostZoneOffset, pictures, world, pill, toOverview } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -232,7 +232,7 @@ test('the goals tab: open goals by priority with their questions, the closed one
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
 
   expect((await ui.find({ key: 'tab-goals' }))?.props.variant).toBe('primary')
   expect((await ui.find({ key: 'goals-show-open' }))?.props.label).toBe('Open · 2')
@@ -275,7 +275,7 @@ test('the bell tab reads the notices, the leader and the metrics; a notice is ha
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ key: 'tab-bell' }))?.props.label).toBe('Notices · 2')
-  await ui.press({ key: 'tab-bell' })
+  await pill(ui, 'tab-bell')
 
   expect(await ui.find({ type: 'Text', text: exact('Needs you · 2') })).toBeDefined()
   // WHEN IT WAS RAISED, in the host's own zone (#39): 07:26 on a UTC runner, "11. 10." in Prague, where 22:00 UTC is the
@@ -319,14 +319,14 @@ test('Memory is a tab of the one pane: no second pane opens, and the tabs lead b
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-memory' })
+  await pill(ui, 'tab-memory')
   expect(terylon.opens).toEqual([])
   expect((await ui.find({ key: 'tab-memory' }))?.props.variant).toBe('primary')
   expect(await ui.find({ type: 'Text', text: exact('About you') })).toBeDefined()
 
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   expect((await ui.find({ key: 'tab-goals' }))?.props.variant).toBe('primary')
-  await ui.press({ key: 'tab-queue' })
+  await toOverview(ui)
   expect(await ui.find({ type: 'Text', text: exact('Waiting for you · 3') })).toBeDefined()
 })
 
@@ -350,6 +350,6 @@ test('/terylon-cockpit is the one command: it opens the pane on Waiting; /terylo
   expect((await ui.find({ key: 'tab-queue' }))?.props.variant).toBe('primary')
   expect((await ui.find({ key: 'tab-queue' }))?.props.label).toBe('Waiting')
   expect(await ui.find({ type: 'Text', text: exact('/terylon-cockpit') })).toBeDefined()
-  await ui.press({ key: 'tab-memory' })
+  await pill(ui, 'tab-memory')
   expect((await ui.find({ key: 'tab-memory' }))?.props.variant).toBe('primary')
 })

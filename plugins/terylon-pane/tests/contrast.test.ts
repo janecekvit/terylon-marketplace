@@ -12,7 +12,7 @@ import type { WordTone } from '../hooks/tones'
 
 import { MARK_RATIO, PALETTE, TEXT_RATIO, contrast, inks, strokedCards } from './contrast'
 import type { Ink, Theme } from './contrast'
-import { BRIEFING, FLIGHT, GOAL_QUESTION, MEMORY, NARROW_PANE_PROPS, PANE_PROPS, SESSION, bandProps, refusal, world } from './fixtures'
+import { BRIEFING, FLIGHT, GOAL_QUESTION, MEMORY, NARROW_PANE_PROPS, PANE_PROPS, SESSION, bandProps, refusal, world, pill, toOverview, toRoot } from './fixtures'
 import { SETUP_BRIEFING, SETUP_FLIGHT, SETUP_STORIES } from './shapes'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
@@ -82,7 +82,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
 
     const ui = await $.ui.mount({ ...PANE, surface })
     const closed = strokedCards(await ui.drawn()).flatMap(card => inks(card))
-    expect(closed.map(ink => ink.text)).toEqual(expect.arrayContaining(['Waiting for you', 'question', 'merge', 'plan', 'blocked', '●']))
+    expect(closed.map(ink => ink.text)).toEqual(expect.arrayContaining(['Waiting for you', 'question', 'merge', 'plan', 'blocked', '●', 'Merge ↗']))
     expect(unreadable(closed)).toEqual([])
 
     for (const key of ['question-9', 'merge-327', 'plan-41', 'blocked-87']) {
@@ -109,20 +109,18 @@ for (const surface of ['desktop', 'terminal'] as const) {
       seen.push(...strokedCards(await ui.drawn()).flatMap(card => inks(card)))
     }
 
-    await ui.press({ key: 'tab-status' })
+    await pill(ui, 'tab-status')
     await look()
-    await ui.press({ key: 'tab-goals' })
+    await toOverview(ui)
+    await ui.press({ key: 'goal-3' })
     await look()
-    await ui.press({ key: 'tab-bell' })
-    await ui.press({ key: 'notice-117' })
-    await look()
-    await ui.press({ key: 'tab-queue' })
+    await toOverview(ui)
     await ui.press({ key: 'story-333' })
     await look()
 
-    expect(seen.map(ink => ink.text)).toEqual(expect.arrayContaining(['the page is not well', 'Notices in the console ↗', 'Approve starts both stories as the plan orders them.', 'Edit criteria or pick stories in the console ↗', 'notices_list', 'Question from the run', 'Answer in the console ↗']))
-    // The alert's title on its problem card in `error`; as a row on the Bell, a title in `text`.
-    expect(seen.filter(ink => ink.text === 'the page is not well').map(ink => ink.color)).toEqual(['error', 'text'])
+    expect(seen.map(ink => ink.text)).toEqual(expect.arrayContaining(['the page is not well', 'Notices in the console ↗', 'Approve starts both stories as the plan orders them.', 'Edit criteria or pick stories in the console ↗', 'Question from the run', 'Answer in the console ↗']))
+    // The alert's title on its problem card in `error`; on its notice's card, a title in `text`.
+    expect(seen.filter(ink => ink.text === 'the page is not well').map(ink => ink.color).sort()).toEqual(['error', 'text'])
     expect(unreadable(seen)).toEqual([])
     await ui.unmount()
 
@@ -130,7 +128,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
     terylon.mode.server = 'unclassified'
     await terylon.clock.advance(30000)
     const refused = await $.ui.mount({ ...PANE, surface })
-    await refused.press({ key: 'tab-queue' })
+    await toOverview(refused)
     const problem = strokedCards(await refused.drawn()).flatMap(card => inks(card))
     expect(problem.map(ink => ink.text)).toEqual(expect.arrayContaining(["Claude Code refused the pane's call", 'How to fix']))
     expect(unreadable(problem)).toEqual([])
@@ -145,10 +143,19 @@ test('no card is filled, on any screen: the stroke carries the warning, the pane
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
 
-  for (const key of ['tab-queue', 'question-9', 'tab-goals', 'tab-bell', 'tab-memory', 'tab-status']) {
-    await ui.press({ key })
+  const noneFilled = async () => {
     expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.borderStyle === 'round' && box.props.backgroundColor !== undefined)).toEqual([])
   }
+
+  await noneFilled()
+  await ui.press({ key: 'question-9' })
+  await noneFilled()
+  await toOverview(ui)
+  await noneFilled()
+  await ui.press({ key: 'goal-3' })
+  await noneFilled()
+  await pill(ui, 'tab-status')
+  await noneFilled()
 })
 
 // THE OWNER'S ACTS (S27) on the cards that wait or warn: a blocked story's, a refusal's, Claude Code's refusal, the
@@ -178,7 +185,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
     terylon.mode.server = 'up'
     await look()
     await ui.press({ key: 'back' })
-    await ui.press({ key: 'tab-memory' })
+    await pill(ui, 'tab-memory')
     await look()
 
     expect(seen.map(ink => ink.text)).toEqual(expect.arrayContaining(['Blocked', 'Abandon…', '✗ Refused (409)', 'Story 329 is running; only a blocked story is unblocked.', '⚠', "Claude Code refused the pane's call to story_unblock", 'Old text.', 'New text.']))
@@ -231,9 +238,8 @@ const WALKS: Walked[] = [
       terylon.answers.briefing = { ...BRIEFING, questionsOpen: [...BRIEFING.questionsOpen, GOAL_QUESTION], unhandledNotices: 2 }
       terylon.answers.work_in_flight = { ...FLIGHT, stories: FLIGHT.stories.map(story => (story.id === 333 ? { ...story, stuck: { since: '2026-10-11T15:20:00Z', reason: 'no progress' } } : story)) }
     },
-    paths: [['tab-queue', 'question-9'], ['tab-queue', 'story-333'], ['tab-queue', 'merge-327', 'open-story-327'], ['tab-queue', 'question-606', 'answer-606'], ['tab-goals', 'goal-3'], ['tab-bell'], ['tab-memory'], ['tab-status']],
+    paths: [['question-9'], ['story-333'], ['merge-327', 'open-story-327'], ['question-606', 'answer-606'], ['refresh', 'goal-3'], ['refresh', 'goal-new-open'], ['tab-status', 'fold-machine', 'fold-memory-owner', 'fold-policy', 'fold-diagnostics']],
     words: [/^\(1 stuck\)$/, /^question 2 of 2$/, /^! files outside the declaration$/],
-    details: [/^tvoje volba$/, /^1 question$/],
   },
   {
     name: 'the leader paused',
@@ -241,7 +247,7 @@ const WALKS: Walked[] = [
       terylon.answers.briefing = { ...BRIEFING, leader: { paused: PAUSED } }
       terylon.answers.leader_status = { paused: PAUSED }
     },
-    paths: [['tab-queue'], ['tab-bell'], ['tab-status']],
+    paths: [['tab-status', 'fold-machine']],
     words: [/^paused since \d\d:\d\d$/, /^paused$/],
   },
   {
@@ -250,7 +256,7 @@ const WALKS: Walked[] = [
       terylon.answers.notices_list = { unhandled: 1, notices: [GATUS] }
       terylon.answers.briefing = { ...BRIEFING, unhandledNotices: 1 }
     },
-    paths: [['tab-bell'], ['tab-status']],
+    paths: [['tab-status']],
     words: [/^· 1 alert$/, /^1 alert$/],
   },
   {
@@ -258,7 +264,7 @@ const WALKS: Walked[] = [
     set: terylon => {
       terylon.mode.server = 'unclassified'
     },
-    paths: [['tab-queue'], ['tab-status']],
+    paths: [['tab-status']],
     words: [/^Claude Code refused the pane's call$/, /^not allowed$/],
   },
   {
@@ -266,7 +272,7 @@ const WALKS: Walked[] = [
     set: terylon => {
       terylon.mode.server = 'missing'
     },
-    paths: [['tab-queue'], ['tab-status']],
+    paths: [['tab-status']],
     words: [/^no terylon server$/, /^no server$/],
   },
   {
@@ -276,7 +282,7 @@ const WALKS: Walked[] = [
       terylon.mode.server = 'down'
       await terylon.clock.advance(30000)
     },
-    paths: [['tab-queue'], ['tab-status']],
+    paths: [['tab-status']],
     words: [/^not answering since \d\d:\d\d$/, /^not answering$/],
   },
   {
@@ -285,7 +291,7 @@ const WALKS: Walked[] = [
       terylon.answers.goals_list = { goals: [{ id: 12, title: 'Daily forex statistics', priority: 2, state: 'active', stories: { accepted: 1 } }], closedCount: 0 }
       terylon.answers.goal_get = (args: Record<string, unknown>) => (args.goal === 12 ? REPEATING_GOAL : { id: args.goal, title: 'Other', priority: 2, state: 'open', storyList: [] })
     },
-    paths: [['tab-goals', 'goal-12']],
+    paths: [['refresh', 'goal-12']],
     words: [/^(· )?red · waits for you$/, /^(· )?green · waits for you$/],
   },
   {
@@ -295,17 +301,17 @@ const WALKS: Walked[] = [
       terylon.answers.work_in_flight = SETUP_FLIGHT
       terylon.answers.stories_list = SETUP_STORIES
     },
-    paths: [['tab-queue', 'story-333'], ['tab-status']],
+    paths: [['story-333'], ['tab-status']],
     words: [/cost not known/],
   },
   {
-    name: 'a new task with no open goal to add it to',
+    name: 'a new task under a goal, and no open goal at all',
     set: terylon => {
-      terylon.answers.goals_list = { goals: [], closedCount: 0 }
+      terylon.answers.goals_list = (args: Record<string, unknown>) => (args.closed === true ? { goals: [] } : { goals: [{ id: 3, title: 'P1 · Agentic OS', priority: 1, state: 'open', stories: {} }], closedCount: 0 })
     },
-    paths: [['tab-queue']],
+    paths: [['refresh', 'goal-3', 'fold-add-task']],
     typed: { key: 'quick-add', text: 'Konzole: tlačítko Check now u Health' },
-    words: [/^No open goal: add a goal on the Goals tab, then the task\.$/],
+    words: [/^New task$/],
   },
 ]
 
@@ -325,12 +331,12 @@ for (const [surface, props] of [['desktop', PANE_PROPS], ['narrow dock', NARROW_
 
       const ui = await $.ui.mount({ ...PANE, props, surface: drawnOn })
       seen.push(...inks(await ui.drawn()))
+      await toOverview(ui)
+      seen.push(...inks(await ui.drawn()))
 
       for (const path of walk.paths) {
-        // A subject's screen draws ‹ back in place of the tabs: walk back to them before the next path.
-        while ((await ui.find({ key: 'tab-queue' })) === undefined && (await ui.find({ key: 'back' })) !== undefined) {
-          await ui.press({ key: 'back' })
-        }
+        // A subject's screen draws ‹ back in place of the pills: walk back to the overview before the next path.
+        await toRoot(ui)
 
         for (const key of path) {
           await ui.press({ key })

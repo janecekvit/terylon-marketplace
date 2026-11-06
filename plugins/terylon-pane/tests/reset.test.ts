@@ -5,7 +5,7 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { HOUR, PANE_PROPS, SESSION, events, exact, refusal, storyMoved, world } from './fixtures'
+import { HOUR, PANE_PROPS, SESSION, events, exact, refusal, storyMoved, world, pill } from './fixtures'
 
 const OLD_SEQ = 2483
 const NEW_HEAD = 5
@@ -292,7 +292,7 @@ test('A REFUSED EPOCH is forgotten: the pane starts over, the next tick asks for
 
   // A start over, not a failure: the Status tab names no stopped done-signal.
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
+  await pill(ui, 'tab-status')
   expect(await ui.find({ type: 'Text', text: exact('⚠ The done-signal stopped') })).toBeUndefined()
   await ui.unmount()
 
@@ -326,7 +326,7 @@ for (const other of [refusal('The leader is not answering.', 503), refusal("'lim
     expect(await bandText($)).toBeUndefined()
 
     const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-    await ui.press({ key: 'tab-status' })
+    await pill(ui, 'tab-status')
     expect(await ui.find({ type: 'Text', text: exact('⚠ The done-signal stopped') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact(`Reason: ${String(other.refused)}`) })).toBeDefined()
   })

@@ -9,7 +9,7 @@ import type { On } from 'claude-code'
 
 import { checkTree, storeFileOf, treeLine } from '../hooks/health'
 
-import { BRIEFING, FLIGHT, HOUR, PANE_PROPS, PLANS, SESSION, STORY_327, events, exact, lateOnTheLocalDayOf, storyMoved, world } from './fixtures'
+import { BRIEFING, FLIGHT, HOUR, PANE_PROPS, PLANS, SESSION, STORY_327, events, exact, lateOnTheLocalDayOf, storyMoved, world, pill, toOverview, moreWith, unfold } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 const SURFACES = ['desktop', 'terminal'] as const
@@ -72,8 +72,8 @@ test('A STORE THAT REFUSES does not stop the done-signal: events_since is called
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    expect((await ui.find({ key: 'tab-status' }))?.text).toContain('⚠')
-    await ui.press({ key: 'tab-status' })
+    expect((await ui.find({ key: 'tab-status' }))?.props.label).toContain('⚠')
+    await moreWith(ui, 'fold-diagnostics')
 
     expect(await ui.find({ type: 'Text', text: exact('Problems · 1') })).toBeDefined()
     // THE TITLE IN THE DEFAULT COLOUR, its ⚠ the warning: the red title was among what Desktop did not draw on this tab.
@@ -102,7 +102,7 @@ test('A STORE THAT NEVER ANSWERS holds no poll: the next tick reads the queue an
   expect(terylon.calls.filter(call => call.tool === 'events_since').length).toBeGreaterThanOrEqual(2)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
+  await moreWith(ui, 'fold-diagnostics')
   expect(await ui.find({ type: 'Text', text: exact('⚠ The pane cannot keep its place') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Reason: .*the store did not answer within 2 s$/ })).toBeDefined()
 })
@@ -122,11 +122,11 @@ test('events_since REFUSED BY CLAUDE CODE: the queue reads, and the Status tab n
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-queue' })
+    await toOverview(ui)
     // THE QUEUE IS NOT THE PROBLEM: it is drawn, and the Status tab carries the warning.
     expect(await ui.find({ key: 'row-merge-327' })).toBeDefined()
-    expect((await ui.find({ key: 'tab-status' }))?.text).toContain('⚠')
-    await ui.press({ key: 'tab-status' })
+    expect((await ui.find({ key: 'tab-status' }))?.props.label).toContain('⚠')
+    await moreWith(ui, 'fold-diagnostics')
 
     // THE TITLE IN THE DEFAULT COLOUR, its ⚠ the warning: the red title was among what Desktop did not draw on this tab.
 
@@ -146,8 +146,8 @@ test('events_since REFUSED BY CLAUDE CODE: the queue reads, and the Status tab n
   terylon.denied.delete('events_since')
   await terylon.clock.advance(30000)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
-  expect(await ui.find({ type: 'Text', text: exact('Problems · 0') })).toBeDefined()
+  await moreWith(ui, 'fold-diagnostics')
+  expect(await ui.find({ type: 'Text', text: exact('Problems · 1') })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: exact("⚠ Claude Code refused the done-signal's call") })).toBeUndefined()
 })
 
@@ -158,7 +158,7 @@ test('events_since failing on Terylon: the done-signal stopped, since when, its 
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
+  await moreWith(ui, 'fold-diagnostics')
   expect(await ui.find({ type: 'Text', text: exact('⚠ The done-signal stopped') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Since \d\d:\d\d, events_since has not answered as the owner's\./ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('Reason: no such tool events_since') })).toBeDefined()
@@ -240,7 +240,8 @@ test('DONE TODAY: an accepted list story says accepted, a merged one merged', as
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    expect(await ui.find({ type: 'Text', text: exact('Done today · 3') })).toBeDefined()
+    await unfold(ui, 'fold-done')
+    expect((await ui.find({ key: 'fold-done' }))?.text).toBe('▾ Done today 3')
     expect((await ui.find({ key: 'done-341' }))?.text).toMatch(/merged\s+#341 S10a cleanup/)
     expect((await ui.find({ key: 'done-94' }))?.text).toMatch(/accepted\s+#94 Weekly cost summary/)
     expect((await ui.find({ key: 'done-94' }))?.text).not.toMatch(/merged/)
@@ -257,6 +258,7 @@ test('AN ENDED STORY\'S PHASES say how it ended, never "no stage reported"', asy
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await unfold(ui, 'fold-done')
   await ui.press({ key: 'done-341' })
   expect(await ui.find({ type: 'Text', text: /no stage reported/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /^\d of \d · accepted$/ })).toBeDefined()
@@ -269,21 +271,20 @@ test('THE WATCHDOG: no answer from events_since for more than three ticks while 
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
+  await moreWith(ui, 'fold-diagnostics')
 
   // Within the bound: nothing said yet, the call may still answer.
   await terylon.clock.advance(60000)
-  expect(await ui.find({ type: 'Text', text: exact('Problems · 0') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Problems/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: exact('⚠ The done-signal hears nothing') })).toBeUndefined()
 
   // Past three ticks with no answer, at the watchdog's next look: the problem, though nothing failed that the pane saw.
   await terylon.clock.advance(41000)
-  expect((await ui.find({ key: 'tab-status' }))?.text).toContain('⚠')
   // THE TITLE IN THE DEFAULT COLOUR, its ⚠ the warning: the red title was among what Desktop did not draw on this tab.
   const title = await ui.find({ type: 'Text', text: exact('⚠ The done-signal hears nothing') })
   expect(title?.props.size).toBe('heading')
   expect(title?.props.color).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /^events_since has not answered for 100 s, not once this session, while Waiting reads./ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^events_since has not answered for 100 s, not once this session, while the overview reads./ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^3\. If it stays, run claude --debug and read the lines under terylon-pane: events:/ })).toBeDefined()
 
   // The call answers: the watchdog's clock starts again, and the problem goes.
@@ -293,7 +294,7 @@ test('THE WATCHDOG: no answer from events_since for more than three ticks while 
   }
   await terylon.clock.advance(30000)
   expect(await ui.find({ type: 'Text', text: exact('⚠ The done-signal hears nothing') })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: exact('Problems · 0') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Problems/ })).toBeUndefined()
 })
 
 test('THE WATCHDOG stays quiet while the queue itself does not read: that problem is said already', async ($, on) => {
@@ -303,7 +304,7 @@ test('THE WATCHDOG stays quiet while the queue itself does not read: that proble
   await terylon.clock.advance(150000)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
+  await moreWith(ui, 'fold-diagnostics')
   expect(await ui.find({ type: 'Text', text: exact('⚠ The done-signal hears nothing') })).toBeUndefined()
 })
 
@@ -327,9 +328,9 @@ test('THE STATUS TAB DRAWS FROM A SNAPSHOT 1.8.3 KEPT, without the done-signal\'
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-status' })
-    expect(await ui.find({ type: 'Text', text: exact('TERYLON') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('Problems · 0') })).toBeDefined()
+    await moreWith(ui, 'fold-diagnostics')
+    expect(await ui.find({ type: 'Text', text: exact('Terylon') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^Problems/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /did not draw/ })).toBeUndefined()
     await ui.unmount()
   }
@@ -341,10 +342,10 @@ test('A DONE-SIGNAL FIELD OF ANOTHER SHAPE is read as none: the Status tab draws
   await $.session.start(SESSION)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
-  expect(await ui.find({ type: 'Text', text: exact('Problems · 0') })).toBeDefined()
+  await moreWith(ui, 'fold-diagnostics')
+  expect(await ui.find({ type: 'Text', text: /^Problems/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /did not draw/ })).toBeUndefined()
-  expect((await ui.find({ key: 'tab-status' }))?.text).not.toContain('⚠')
+  expect((await ui.find({ key: 'tab-status' }))?.props.label).not.toContain('⚠')
 })
 
 test('A PART OF THE STATUS TAB THAT THROWS is one problem with its reason and steps; the rest of the tab draws', async ($, on) => {
@@ -354,15 +355,15 @@ test('A PART OF THE STATUS TAB THAT THROWS is one problem with its reason and st
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-status' })
+    await moreWith(ui, 'fold-diagnostics')
     expect((await ui.find({ type: 'Text', text: exact("Health's alerts did not draw") }))?.props.color).toBe('error')
     expect(await ui.find({ type: 'Text', text: /^Reason: / })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('1. Press Refresh, or open another tab and come back.') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('1. Press Refresh, or go back and open it again.') })).toBeDefined()
     // EVERY OTHER PART IS DRAWN: the machine, the slots, the cost, the policy and the diagnostics.
-    expect(await ui.find({ type: 'Text', text: exact('TERYLON') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('Terylon') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Slots') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('Policy') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.18.0') })).toBeDefined()
+    expect(await ui.find({ key: 'fold-policy' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.19.0') })).toBeDefined()
     await ui.unmount()
   }
   expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith("terylon-pane: Health's alerts did not draw: "))).toBe(true)
@@ -378,7 +379,7 @@ test('THE CONNECTION\'S PROBLEM AND THE DONE-SIGNAL\'S, together: each card keep
   await terylon.clock.advance(30000)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
+  await moreWith(ui, 'fold-diagnostics')
   expect(await ui.find({ type: 'Text', text: exact('⚠ The pane cannot keep its place') })).toBeDefined()
   const keys = (await ui.findAll({ type: 'Button' })).map(button => button.key).filter(key => key !== undefined)
   expect(keys.filter(key => key === 'retry')).toHaveLength(1)
@@ -401,6 +402,7 @@ test('AN ACCEPTED LIST STORY, which Terylon calls merged, reads accepted on its 
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await unfold(ui, 'fold-done')
   await ui.press({ key: 'done-105' })
   expect(await ui.find({ type: 'Text', text: /^\W*accepted\W*$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^\W*merged\W*$/ })).toBeUndefined()
@@ -430,7 +432,7 @@ test('A VERIFIED STORY THAT WORK_IN_FLIGHT STILL LISTS is not drawn under Runnin
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-queue' })
+    await toOverview(ui)
     expect(await ui.find({ key: 'accept-352' })).toBeDefined()
     expect(await ui.find({ key: 'merge-327' })).toBeDefined()
     // ITS OWN STATE says verified; the other, still said running, is one the briefing lists as verified.
@@ -443,20 +445,19 @@ test('A VERIFIED STORY THAT WORK_IN_FLIGHT STILL LISTS is not drawn under Runnin
   }
 })
 
-test('TERYLON_PANE_STATUS=minimal draws the Status tab as plain lines alone: no card, no picture, no button but the tabs', async ($, on) => {
+test('TERYLON_PANE_STATUS=minimal draws Health as plain lines alone: no card, no picture', async ($, on) => {
   const terylon = world(on, { env: { TERYLON_PANE_STATUS: 'minimal' } })
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-status' })
+    await pill(ui, 'tab-status')
     expect(await ui.find({ type: 'Text', text: exact('Terylon: all well') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Problems: 0') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.18.0') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.19.0') })).toBeDefined()
     expect(await ui.findAll({ type: 'Svg' })).toEqual([])
-    expect(await ui.find({ type: 'Text', text: exact('TERYLON') })).toBeUndefined()
-    expect((await ui.findAll({ type: 'Button' })).every(button => String(button.key).startsWith('tab-'))).toBe(true)
+    expect(await ui.find({ type: 'Text', text: exact('Terylon') })).toBeUndefined()
     await ui.unmount()
   }
   expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith('terylon-pane: Health draws minimal; problems 0'))).toBe(true)
@@ -470,12 +471,12 @@ test('TERYLON_PANE_STATUS=no-<part> leaves that part out, and every draw says in
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
-  expect(await ui.find({ type: 'Text', text: exact('TERYLON') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: exact('Policy') })).toBeDefined()
+  await pill(ui, 'tab-status')
+  expect(await ui.find({ type: 'Text', text: exact('Terylon') })).toBeDefined()
+  expect(await ui.find({ key: 'fold-policy' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: exact('⚠ The pane cannot keep its place') })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: exact('Cost') })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: exact('Diagnostics') })).toBeUndefined()
+  expect(await ui.find({ key: 'status-month' })).toBeUndefined()
+  expect(await ui.find({ key: 'fold-diagnostics' })).toBeUndefined()
   expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith('terylon-pane: Health draws machine, problems, alerts, outcomes, policy; problems 0, events store; '))).toBe(true)
 })
 
@@ -486,8 +487,8 @@ test("TERYLON_PANE_STATUS=log draws the pane's own log on the Queue tab: where t
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: exact("The pane's own log") })).toBeDefined()
-  await ui.press({ key: 'tab-status' })
-  await ui.press({ key: 'tab-queue' })
+  await moreWith(ui, 'fold-diagnostics')
+  await toOverview(ui)
   expect(await ui.find({ type: 'Text', text: /^\d+ terylon-pane: Health begins on desktop at \d+ columns$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^\d+ terylon-pane: Health draws machine, .*; \d+ elements, \d+ characters, nothing odd; \d+ ms$/ })).toBeDefined()
   expect(terylon.logs.some(log => log.to === 'debug' && /^terylon-pane: Health draws .*nothing odd; \d+ ms$/.test(log.text))).toBe(true)
@@ -499,8 +500,8 @@ test("the pane's own log is not drawn unless TERYLON_PANE_STATUS asks for it", a
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
-  await ui.press({ key: 'tab-queue' })
+  await moreWith(ui, 'fold-diagnostics')
+  await toOverview(ui)
   expect(await ui.find({ type: 'Text', text: exact("The pane's own log") })).toBeUndefined()
 })
 
@@ -524,7 +525,7 @@ test('A HOSTILE REASON draws as one clean line: no control character, no page of
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-status' })
+    await moreWith(ui, 'fold-diagnostics')
     const line = await ui.find({ type: 'Text', text: /^Reason: EACCES/ })
     expect(line).toBeDefined()
     expect(String(line?.text)).not.toMatch(/[\u0000-\u0008\u000B-\u001F\u007F]/)
@@ -539,10 +540,10 @@ test('DIAGNOSTICS SAYS THE DONE-SIGNAL AS KEPT, each value with its type, as pla
   await $.session.start(SESSION)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
+  await moreWith(ui, 'fold-diagnostics')
   // Of another shape, the events problem is read as none: no card, and no ⚠ over an empty list.
   expect(await ui.find({ type: 'Text', text: exact('⚠ The pane cannot keep its place') })).toBeUndefined()
-  expect((await ui.find({ key: 'tab-status' }))?.text).not.toContain('⚠')
+  expect((await ui.find({ key: 'tab-status' }))?.props.label).not.toContain('⚠')
   for (const line of ['events: string store', 'since: string 2026-10-11T21:50:00Z', 'reason: object {"code":"EACCES"}', 'answeredAt: string never', 'watchedSince: none', 'silentSince: number NaN', 'store refusals: 0']) {
     expect(await ui.find({ type: 'Text', text: exact(line) })).toBeDefined()
   }
@@ -555,9 +556,9 @@ test('⚠ MATCHES THE LIST: a part TERYLON_PANE_STATUS leaves out lights no ⚠ 
   await $.session.start(SESSION)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ key: 'tab-status' }))?.text).not.toContain('⚠')
-  await ui.press({ key: 'tab-status' })
-  expect(await ui.find({ type: 'Text', text: exact('Nothing wrong.') })).toBeDefined()
+  expect((await ui.find({ key: 'tab-status' }))?.props.label).not.toContain('⚠')
+  await moreWith(ui, 'fold-diagnostics')
+  expect(await ui.find({ type: 'Text', text: /^Problems/ })).toBeUndefined()
 })
 
 test('AN S43 PAGE OF events_since: repeating tasks, a type the pane does not know, a null and a story moved with fields missing, read as no problem', async ($, on) => {
@@ -579,13 +580,13 @@ test('AN S43 PAGE OF events_since: repeating tasks, a type the pane does not kno
   await terylon.clock.advance(30000)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
-  expect(await ui.find({ type: 'Text', text: exact('Nothing wrong.') })).toBeDefined()
+  await moreWith(ui, 'fold-diagnostics')
+  expect(await ui.find({ type: 'Text', text: /^Problems/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: exact('events: none') })).toBeDefined()
   expect(eventsLogs(terylon).some(line => line.startsWith('terylon-pane: events: stopped'))).toBe(false)
 })
 
-test('AN S43 PLAN that repeats and carries no stories draws on the Goals tab beside a plan that does, and nothing fails', async ($, on) => {
+test('AN S43 PLAN that repeats and carries no stories is read beside a plan that does, and nothing fails', async ($, on) => {
   const terylon = world(on)
   terylon.answers.plans_list = { ...PLANS, plans: [...PLANS.plans, { id: 42, goal: 3, goalTitle: 'Agentic OS', state: 'approved', repeating: { every: 'day' }, estimateUsd: null, comment: null }] }
   await $.session.start(SESSION)
@@ -593,9 +594,9 @@ test('AN S43 PLAN that repeats and carries no stories draws on the Goals tab bes
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-goals' })
+    await toOverview(ui)
     expect(await ui.find({ type: 'Text', text: /did not load/ })).toBeUndefined()
-    expect(await ui.find({ key: 'goals-show-open' })).toBeDefined()
+    expect(await ui.find({ key: 'goals-show-closed' })).toBeDefined()
     await ui.unmount()
   }
 })
@@ -610,7 +611,7 @@ test('A STORE FILE THAT CANNOT BE READ: the card names the file the refusal name
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-status' })
+    await moreWith(ui, 'fold-diagnostics')
     expect(await ui.find({ type: 'Text', text: /Delete the pane's store file: C:\\Users\\alice\\\.claude\\plugins\\store\\terylon-pane_terylon-3f2a9c\.json\. It holds only where the pane last looked and the signals it told, so nothing that matters is lost\.$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Restart Claude Desktop: the pane reads Terylon's newest event and goes on from there\.$/ })).toBeDefined()
     // THE REASON WHOLE, wrapped, on the card and in Diagnostics: the path at its end is the fix.
@@ -631,7 +632,7 @@ test('the store file is read from a refusal on Windows or POSIX, and a refusal t
   world(on)
   await $.session.start(SESSION)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
+  await moreWith(ui, 'fold-diagnostics')
   expect(await ui.find({ type: 'Text', text: /Delete the pane's store file: ~\/\.claude\/plugins\/store\/terylon-pane_terylon-\*\.json\./ })).toBeDefined()
 })
 
@@ -675,14 +676,14 @@ test('AFTER ACCEPT PRESSED IN THE PANE, its verified move asks nothing, though s
   expect(terylon.prompts.filter(prompt => prompt.includes('čeká na moje přijetí'))).toEqual([])
 })
 
-test("WITH A PROBLEM, its card stands under the Problems heading, never an empty Problems card above it; with none, the card says so", async ($, on) => {
+test("WITH A PROBLEM, its card stands under the Problems heading; with none, nothing is said of problems at all", async ($, on) => {
   seedSnapshot(on, { ...SNAPSHOT_1_8_3, events: { kind: 'store', reason: STORE_REFUSAL, since: Date.parse('2026-10-11T21:50:00Z') } })
   world(on)
   await $.session.start(SESSION)
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-status' })
+    await moreWith(ui, 'fold-diagnostics')
     expect(await ui.find({ type: 'Text', text: exact('Problems · 1') })).toBeDefined()
     expect(await ui.find({ key: 'status-problems' })).toBeUndefined()
     expect(await ui.find({ key: 'problem-events' })).toBeDefined()
@@ -692,15 +693,14 @@ test("WITH A PROBLEM, its card stands under the Problems heading, never an empty
   }
 })
 
-test('with nothing wrong, the Problems card says so, and Diagnostics reads none for the done-signal', async ($, on) => {
+test('with nothing wrong, no Problems heading is drawn, and Diagnostics reads none for the done-signal', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
-  expect(await ui.find({ key: 'status-problems' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: exact('Nothing wrong.') })).toBeDefined()
+  await moreWith(ui, 'fold-diagnostics')
+  expect(await ui.find({ type: 'Text', text: /^Problems/ })).toBeUndefined()
   for (const line of ['events: none', 'since: none', 'reason: none']) {
     expect(await ui.find({ type: 'Text', text: exact(line) })).toBeDefined()
   }

@@ -3,7 +3,7 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { BRIEFING, GATES, PANE_PROPS, SESSION, bandProps, exact, world } from './fixtures'
+import { BRIEFING, GATES, PANE_PROPS, SESSION, bandProps, exact, world, pill, toOverview, moreWith } from './fixtures'
 
 const SURFACES = ['desktop', 'terminal'] as const
 
@@ -18,7 +18,7 @@ test('well: ok, the slots and the runs in them, the cost today and over 30 days,
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-status' })
+    await moreWith(ui, 'fold-diagnostics')
 
     expect((await ui.find({ key: 'tab-status' }))?.props.variant).toBe('primary')
     expect((await ui.find({ type: 'Text', text: exact('all well') }))?.props.color).toBe('success')
@@ -33,7 +33,7 @@ test('well: ok, the slots and the runs in them, the cost today and over 30 days,
     expect(await ui.find({ type: 'Text', text: exact('Problems · 0') })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: exact('Nothing wrong.') }))?.props.color).toBe('subtle')
 
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.18.0') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.19.0') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('TERYLON_URL https://terylon.example.ts.net') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('server plugin:terylon-os:terylon') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Every failure is in claude --debug under terylon-pane:') })).toBeDefined()
@@ -54,7 +54,7 @@ test('not allowed: the reason in the engine\'s words, how to fix it in steps, an
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-status' })
+    await moreWith(ui, 'fold-diagnostics')
 
     expect((await ui.find({ type: 'Text', text: exact('not allowed') }))?.props.color).toBe('error')
     expect(await ui.find({ type: 'Text', text: exact('Problems · 1') })).toBeDefined()
@@ -85,7 +85,7 @@ test('not answering: since when, the last answer, the reason, and the tailnet an
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-status' })
+    await moreWith(ui, 'fold-diagnostics')
 
     expect((await ui.find({ type: 'Text', text: exact('not answering') }))?.props.color).toBe('error')
     expect(await ui.find({ type: 'Text', text: /^ · since \d\d:\d\d$/ })).toBeDefined()
@@ -106,7 +106,7 @@ test('paused: resuming is the owner\'s gate, a link to the console and never a b
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-status' })
+    await moreWith(ui, 'fold-diagnostics')
 
     expect((await ui.find({ type: 'Text', text: exact('paused') }))?.props).toMatchObject({ color: 'text', weight: 'semibold' })
     expect(await ui.find({ type: 'Text', text: exact('The leader is paused') })).toBeDefined()
@@ -126,7 +126,7 @@ test('an alert: its own card with the notice\'s body, which says what to do, and
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-status' })
+    await moreWith(ui, 'fold-diagnostics')
 
     expect((await ui.find({ type: 'Text', text: exact('1 alert') }))?.props.color).toBe('error')
     expect((await ui.find({ type: 'Text', text: exact('the page is not well') }))?.props.color).toBe('error')
@@ -152,7 +152,7 @@ test('the band\'s Open always opens the pane where the owner left it, the queue 
   expect((await pane.find({ key: 'tab-queue' }))?.props.variant).toBe('primary')
   expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Health ⚠')
 
-  await pane.press({ key: 'tab-goals' })
+  await toOverview(pane)
   await band.press({ key: 'band-open' })
   expect((await pane.find({ key: 'tab-goals' }))?.props.variant).toBe('primary')
 

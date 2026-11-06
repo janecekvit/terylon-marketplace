@@ -1,12 +1,12 @@
-// The pane's pictures, as S32 (#25) draws them on the 2.1.304 mod API: the 8-phase stepper, the running row's
-// segments, the slots gauge, the spend bar and a plan's chain, each an SVG document for `Svg`; and the text the
-// terminal draws in their place, since the terminal has no `Svg`. Pure: no $, so a test reads it without a session.
+// The pane's pictures: the road of a goal or a story, the spend bar and a plan's chain, each an SVG document for `Svg`;
+// and the text the terminal draws in their place, since the terminal has no `Svg`. Pure: no $, so a test reads it
+// without a session.
 //
 // AN SVG DOES NOT READ THE THEME (the canvas's light-theme board): its colours are fixed, medium-saturated so they
 // hold on white and on dark, grey as transparency rather than a fixed dark, and NO WORD inside it. Every word sits in
 // a `Text` beside it, which follows the theme; the `alt` says the whole picture for a reader that cannot see it.
 
-import type { PanePhase } from '../types'
+import type { PaneRoadStep } from '../types'
 
 // The fixed colours of every picture, as the canvas's boards draw them.
 export const SVG_COLOURS = {
@@ -15,19 +15,28 @@ export const SVG_COLOURS = {
   stuck: '#e3a03f',
   rest: '#8f8d88',
   gate: '#a98bf0',
-  check: '#1a1a19',
+  roadDone: '#4caf7d',
+  roadNow: '#6f9ff0',
+  roadAhead: '#6b6b68',
+  roadGate: '#8e72d8',
 } as const
 
-// Below this many body columns the pane is the narrow dock (the canvas's 360 px board): a row drops its detail,
-// the running phases shrink to dots and the gauges to their numbers.
+// Below this many body columns the pane is the narrow dock (the canvas's 360 px board): a row drops its detail and the
+// tiles are one line of counts.
 export const NARROW_COLUMNS = 44
+
+// A TERMINAL NARROWER THAN THIS has no room for three boxes side by side: its tiles are one line of counts.
+export const NARROW_TERMINAL_COLUMNS = 70
+
+// From this many body columns two cards stand side by side, a dock of about 640 px.
+export const WIDE_COLUMNS = 88
 
 // THE THREE DESKTOP PROOFS (S32), all PROVEN in the owner's walk of 1.2.0 in Desktop 3.6556.2.0 (engine 2.1.308) on
 // 2026-10-23, and on. `no-<name>` in TERYLON_PANE_PROOFS is the escape hatch that turns one off; off draws 1.1.2.
 //   input-rows    a multi-line answer (rows 4) and criteria one per line (rows 3); off: one line, semicolons
 //   hover-reveal  a waiting row lights under the pointer and lays its console link over its right edge, never over
 //                 an open row; off: the link sits in the row's body, one press away
-//   svg-tooltips  a phase of the stepper says its stage, role and step under a still pointer; off: the labels alone
+//   svg-tooltips  a phase of a story's road says its stage, role and step under a still pointer; off: the names alone
 export type Proofs = { inputRows: boolean; hoverReveal: boolean; svgTooltips: boolean }
 
 export const PROOF_NAMES = { inputRows: 'input-rows', hoverReveal: 'hover-reveal', svgTooltips: 'svg-tooltips' } as const
@@ -54,9 +63,9 @@ export const CHIP_BACKGROUND = 'userMessageBackground'
 export const CHIP_WORD = 'inactive'
 export const CHIP_DOT = '●'
 
-// Below this many body columns the stepper of eight would shrink as a whole and its labels run together (the owner's
-// walk, a dock of about 435 px): it is drawn compact instead, its nodes at their size and only the phase now labelled.
-export const STEPPER_COLUMNS = 60
+// Below this many body columns the names of a story's eight phases would run together (the owner's walk, a dock of
+// about 435 px): only the phase now is named under its road.
+export const ROAD_NAMES_COLUMNS = 60
 
 // A picture and its own height in CSS pixels, given to `Svg` so a surface does not size its box for itself.
 export type Picture = { source: string; alt: string; height: number }
@@ -73,14 +82,9 @@ function round(value: number): string {
   return String(Math.round(value * 10) / 10)
 }
 
-// Where the stepper's node of each phase sits, and the phase said now, if Terylon reported one.
-function nowOf(phases: readonly PanePhase[]): number {
-  return phases.findIndex(phase => phase.status === 'now')
-}
-
-// "Admitted, Plan, Develop, Review done; Tests now; Pull request, Verified, Merge to come": the stepper's alt.
-export function phasesAlt(phases: readonly PanePhase[], labels: readonly string[], isStuck = false): string {
-  const named = (status: PanePhase['status']) => phases.map((phase, index) => (phase.status === status ? labels[index] ?? phase.label : null)).filter(label => label !== null)
+// "Admitted, Plan, Develop, Review done; Tests now; Pull req., Verified, Merge to come": a road's alt.
+export function roadAlt(steps: readonly PaneRoadStep[], isStuck = false): string {
+  const named = (status: PaneRoadStep['status']) => steps.filter(step => step.status === status).map(step => step.name)
   const done = named('done')
   const now = named('now')
   const next = named('next')
@@ -92,154 +96,47 @@ export function phasesAlt(phases: readonly PanePhase[], labels: readonly string[
   ].filter(part => part !== null).join('; ')
 }
 
-// "Phase 5 of 8: tests": a running row's segments, said in one line; a story with no stage reported says how far.
-export function segmentsAlt(phases: readonly PanePhase[], labels: readonly string[], isStuck: boolean): string {
-  const now = nowOf(phases)
+// How tall a road is, and the air between its segments as a share of its width.
+const ROAD_HEIGHT = 6
+const ROAD_GAP_PERCENT = 0.8
 
-  if (now < 0) {
-    return `${phases.filter(phase => phase.status === 'done').length} of ${phases.length} phases done`
-  }
-
-  return `Phase ${now + 1} of ${phases.length}: ${(labels[now] ?? phases[now]?.label ?? '').toLowerCase()}${isStuck ? ', stuck' : ''}`
-}
-
-function fillOf(phase: PanePhase, isStuck: boolean): string {
-  return phase.status === 'done' ? SVG_COLOURS.done : phase.status === 'now' ? (isStuck ? SVG_COLOURS.stuck : SVG_COLOURS.now) : SVG_COLOURS.rest
-}
-
-// Where the centre of each of `count` equal columns falls, as a share of the row's width: the label row's columns,
-// and so the stepper's nodes. One scale for both, so a label sits under its node at any width (the owner's walk of
-// 1.2.2: at ~1060 px a node strip of fixed width sat centred under labels that stretched with the pane).
-export function columnCentres(count: number): number[] {
-  return Array.from({ length: count }, (_, index) => (index + 0.5) / count)
-}
-
-function percent(share: number): string {
-  return `${round(share * 100)}%`
-}
-
-// One node drawn at the origin, in pixels, so it keeps its size and stays round whatever the picture's width.
-function stepperNode(phase: PanePhase, isGate: boolean, isStuck: boolean): string {
-  if (phase.status === 'done') {
-    return `<circle cx="0" cy="11" r="6" fill="${SVG_COLOURS.done}"/><path d="M-3 11l2 2 4-4" stroke="${SVG_COLOURS.check}" stroke-width="1.6" fill="none"/>`
-  }
-
-  if (phase.status === 'now') {
-    const fill = fillOf(phase, isStuck)
-
-    return `<circle cx="0" cy="11" r="9" fill="${fill}" fill-opacity=".25"/><circle cx="0" cy="11" r="6" fill="${fill}"/>`
-  }
-
-  if (isGate) {
-    return `<rect x="-6" y="5" width="12" height="12" transform="rotate(45 0 11)" fill="none" stroke="${SVG_COLOURS.gate}" stroke-width="1.5"/>`
-  }
-
-  return `<circle cx="0" cy="11" r="5.5" fill="none" stroke="${SVG_COLOURS.rest}" stroke-opacity=".7" stroke-width="1.5"/>`
-}
-
-// THE STEPPER of one story: a node per phase on a line, done ✓ green, now blue (amber when stuck), the rest
-// hollow grey, Merge a hollow purple square — the owner's gate. No phase is now unless Terylon said so.
-//
-// WIDE, the picture is as wide as its slot (`width="100%"`, no viewBox) and each node sits at its column's centre
-// as a percentage, the label row's own columns, so the two share one x-scale; the nodes are drawn in pixels about
-// that point and keep their size. COMPACT, a fixed strip with the nodes 24 px apart, never scaled down, and only the
-// phase now labelled under it.
-export function stepper(phases: readonly PanePhase[], labels: readonly string[], options: { isStuck?: boolean; tooltips?: readonly string[] | null; isCompact?: boolean } = {}): Picture {
-  const height = 22
+// THE ROAD: one segment per step in an equal column, done green, now blue (amber when stuck), the owner's gates purple,
+// the rest grey. AS WIDE AS ITS SLOT (`width="100%"`, no viewBox), so each segment keeps its height at any width and
+// sits over the column its name is drawn in. A gate still ahead is its purple at a lower opacity, which reads on both
+// themes where a darker purple would not.
+export function road(steps: readonly PaneRoadStep[], options: { isStuck?: boolean; tooltips?: readonly string[] | null } = {}): Picture {
   const isStuck = options.isStuck === true
-  const isCompact = options.isCompact === true
-  const compactWidth = 28 + (phases.length - 1) * 24
-  const centres = columnCentres(phases.length)
-  const xOf = (index: number) => (isCompact ? `${14 + index * 24}` : percent(centres[index] ?? 0))
-  const lastDone = phases.reduce((found, phase, index) => (phase.status === 'done' || phase.status === 'now' ? index : found), -1)
-  const last = phases.length - 1
-  const parts: string[] = [
-    `<line x1="${xOf(0)}" y1="11" x2="${xOf(last)}" y2="11" stroke="${SVG_COLOURS.rest}" stroke-opacity=".35" stroke-width="2"/>`,
-  ]
-
-  if (lastDone > 0) {
-    parts.push(`<line x1="${xOf(0)}" y1="11" x2="${xOf(lastDone)}" y2="11" stroke="${SVG_COLOURS.done}" stroke-width="2"/>`)
-  }
-
-  phases.forEach((phase, index) => {
+  const share = 100 / Math.max(1, steps.length)
+  const parts = steps.map((step, index) => {
+    const fill = step.status === 'done' ? SVG_COLOURS.roadDone : step.isGate ? SVG_COLOURS.roadGate : step.status === 'now' ? (isStuck ? SVG_COLOURS.stuck : SVG_COLOURS.roadNow) : SVG_COLOURS.roadAhead
+    const opacity = step.isGate && step.status === 'next' ? ' fill-opacity=".45"' : ''
+    const segment = `<rect x="${round(index * share + ROAD_GAP_PERCENT / 2)}%" y="0" width="${round(share - ROAD_GAP_PERCENT)}%" height="${ROAD_HEIGHT}" rx="3" fill="${fill}"${opacity}/>`
     const title = options.tooltips?.[index]
-    const node = `<svg x="${xOf(index)}" y="0" width="1" height="${height}" overflow="visible">${stepperNode(phase, index === last, isStuck)}</svg>`
 
-    parts.push(title === undefined || title === null ? node : `<g><title>${escape(title)}</title>${node}</g>`)
+    return title === undefined || title === null ? segment : `<g><title>${escape(title)}</title>${segment}</g>`
   })
 
-  const source = isCompact
-    ? svg(compactWidth, height, parts.join(''))
-    : `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="${height}">${parts.join('')}</svg>`
-
-  return { source, alt: phasesAlt(phases, labels, isStuck), height }
+  return { source: `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="${ROAD_HEIGHT}">${parts.join('')}</svg>`, alt: roadAlt(steps, isStuck), height: ROAD_HEIGHT }
 }
 
-// A RUNNING ROW's phases: eight segments in a bar, the last one Merge, dashed purple until it is reached.
-export function segments(phases: readonly PanePhase[], labels: readonly string[], isStuck: boolean): Picture {
-  const width = 456
-  const gap = 4
-  const size = (width - gap * (phases.length - 1)) / Math.max(1, phases.length)
-  const parts = phases.map((phase, index) => {
-    const x = round(index * (size + gap))
-    const isGate = index === phases.length - 1
+// THE TERMINAL'S ROAD: the same steps as runs of coloured cells in theme keys, one run per step, as wide as it is given.
+export function roadCells(steps: readonly PaneRoadStep[], columns: number, isStuck = false): { text: string; tone: 'success' | 'suggestion' | 'merged' | 'subtle' | 'warning' }[] {
+  const cells = Math.max(1, Math.floor((columns - (steps.length - 1)) / Math.max(1, steps.length)))
 
-    if (isGate && phase.status === 'next') {
-      return `<rect x="${x}" y="1" width="${round(size)}" height="6" rx="3" fill="none" stroke="${SVG_COLOURS.gate}" stroke-width="1.2" stroke-dasharray="3 2"/>`
-    }
-
-    return `<rect x="${x}" y="1" width="${round(size)}" height="6" rx="3" fill="${fillOf(phase, isStuck)}"${phase.status === 'next' ? ' fill-opacity=".3"' : ''}/>`
-  })
-
-  return { source: svg(width, 8, parts.join('')), alt: segmentsAlt(phases, labels, isStuck), height: 8 }
-}
-
-// THE NARROW DOCK's phases: a dot each, the last the hollow purple ring of Merge.
-export function dots(phases: readonly PanePhase[], labels: readonly string[], isStuck: boolean): Picture {
-  const parts = phases.map((phase, index) => {
-    const x = 4 + index * 16
-
-    if (index === phases.length - 1 && phase.status === 'next') {
-      return `<circle cx="${x}" cy="4" r="3" fill="none" stroke="${SVG_COLOURS.gate}" stroke-width="1.2"/>`
-    }
-
-    return `<circle cx="${x}" cy="4" r="3.5" fill="${fillOf(phase, isStuck)}"${phase.status === 'next' ? ' fill-opacity=".35"' : ''}/>`
-  })
-
-  return { source: svg(Math.max(8, phases.length * 16 - 8), 8, parts.join('')), alt: segmentsAlt(phases, labels, isStuck), height: 8 }
-}
-
-// THE SLOTS GAUGE: a filled box per slot in use, a hollow one per slot free. Small beside the Running heading,
-// wide on the Status tab.
-export function slotsGauge(used: number, slots: number, isWide: boolean): Picture | null {
-  if (slots < 1) {
-    return null
-  }
-
-  const count = Math.min(slots, 12)
-  const width = isWide ? 200 : count * 12 - 2
-  const height = isWide ? 14 : 10
-  const gap = isWide ? 4 : 2
-  const size = (width - gap * (count - 1)) / count
-  const parts = Array.from({ length: count }, (_, index) => {
-    const x = round(index * (size + gap))
-
-    return index < used
-      ? `<rect x="${x}" y="1" width="${round(size)}" height="${height - 2}" rx="${isWide ? 3 : 2}" fill="${SVG_COLOURS.now}"/>`
-      : `<rect x="${x}" y="1.5" width="${round(size)}" height="${height - 3}" rx="${isWide ? 3 : 2}" fill="none" stroke="${SVG_COLOURS.rest}" stroke-opacity=".7" stroke-width="1"/>`
-  })
-
-  return { source: svg(width, height, parts.join('')), alt: `${used} of ${slots} slots in use`, height }
+  return steps.map(step => ({
+    text: '━'.repeat(cells),
+    tone: step.status === 'done' ? 'success' : step.isGate ? 'merged' : step.status === 'now' ? (isStuck ? 'warning' : 'suggestion') : 'subtle',
+  }))
 }
 
 // THE SPEND BAR: what is spent against its limit. No limit, no bar: the pane does not invent one.
-export function spendBar(spent: number, limit: number | null, size: 'small' | 'wide' | 'full', alt: string): Picture | null {
+export function spendBar(spent: number, limit: number | null, alt: string): Picture | null {
   if (limit === null || limit <= 0) {
     return null
   }
 
-  const width = size === 'small' ? 64 : size === 'wide' ? 200 : 456
-  const height = size === 'wide' ? 14 : 6
+  const width = 456
+  const height = 6
   const filled = Math.max(0, Math.min(1, spent / limit)) * width
   const track = `<rect x="0" y="0" width="${width}" height="${height}" rx="3" fill="${SVG_COLOURS.rest}" fill-opacity=".3"/>`
   const bar = filled <= 0 ? '' : `<rect x="0" y="0" width="${round(filled)}" height="${height}" rx="3" fill="${spent > limit ? SVG_COLOURS.stuck : SVG_COLOURS.now}"/>`
@@ -325,16 +222,9 @@ export function planOrder(stories: readonly { index: number; after: readonly num
   return parts.join(' · ')
 }
 
-// THE TERMINAL'S STEPPER: ✓ ✓ ✓ ✓ ● ○ ○ ◇, one glyph per phase, Merge the diamond.
-export function phaseGlyph(phase: PanePhase, isGate: boolean): string {
-  return phase.status === 'done' ? '✓' : phase.status === 'now' ? '●' : isGate ? '◇' : '○'
-}
-
-// THE TERMINAL'S GAUGE: ▰▰▱▱, a cell per slot or per quarter of the limit.
-export function meter(filled: number, cells: number): string {
-  const count = Math.max(0, Math.min(cells, Math.round(filled)))
-
-  return `${'▰'.repeat(count)}${'▱'.repeat(Math.max(0, cells - count))}`
+// A PHASE ON THE TERMINAL: ✓ done, ● now, ○ to come, its gate the diamond.
+export function phaseGlyph(status: PaneRoadStep['status'], isGate: boolean): string {
+  return status === 'done' ? '✓' : status === 'now' ? '●' : isGate ? '◇' : '○'
 }
 
 // A commit or image hash inside a line, drawn in the monospaced face: the line cut around it.

@@ -5,7 +5,7 @@ import { test, expect } from 'claude-code/testing'
 
 import { kindWidth } from '../hooks/register'
 
-import { PANE_PROPS, SESSION, exact, world } from './fixtures'
+import { PANE_PROPS, SESSION, exact, world, pill, toOverview } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -34,6 +34,7 @@ test('a card has air: its rows stand apart from its title on every surface, and 
   // THE SURFACE'S OWN SPACING STEPS on the desktop (S32), whole cells on the terminal.
   for (const [surface, cardGap, padding, rowGap] of [['desktop', 'sm', 'md', 'xs'], ['terminal', 1, 1, 0]] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
+    await pill(ui, 'tab-bell')
     const cards = (await ui.findAll({ type: 'Box' })).filter(box => box.props.borderStyle === 'round')
 
     expect(cards.length).toBeGreaterThanOrEqual(4)
@@ -54,18 +55,14 @@ test('everything sits in a card: no plan, no memory, no proposal is a card with 
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
-  expect(await ui.find({ type: 'Text', text: exact('Plans') })).toBeDefined()
-  expect((await ui.find({ type: 'Text', text: exact('No plan waits.') }))?.props.color).toBe('subtle')
+  await pill(ui, 'tab-memory')
 
-  await ui.press({ key: 'tab-memory' })
-
-  for (const heading of ['Memory', 'Proposals waiting', 'Proposed in this session']) {
+  for (const heading of ['Memory', 'Proposals waiting']) {
     expect((await ui.find({ type: 'Text', text: exact(heading) }))?.props.bold).toBe(true)
   }
 
   expect(await ui.find({ type: 'Text', text: exact('Nothing remembered yet.') })).toBeDefined()
-  expect((await ui.findAll({ type: 'Text', text: exact('Nothing yet.') })).length).toBe(2)
+  expect((await ui.findAll({ type: 'Text', text: exact('Nothing yet.') })).length).toBe(1)
 })
 
 test('the kind column holds "orchestrator" whole, and never grows past fourteen cells', () => {
@@ -74,7 +71,7 @@ test('the kind column holds "orchestrator" whole, and never grows past fourteen 
   expect(kindWidth(['production-follow'])).toBe(14)
 })
 
-test('the bell: a row opens its body, which says what to do, and its own console link sits there', async ($, on) => {
+test('a notice: its card is open with its body, which says what to do and its own console link; a press folds it', async ($, on) => {
   const terylon = world(on)
   terylon.answers.notices_list = BELL
   await $.session.start(SESSION)
@@ -82,19 +79,18 @@ test('the bell: a row opens its body, which says what to do, and its own console
 
   for (const surface of ['desktop', 'terminal'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-bell' })
+    await pill(ui, 'tab-bell')
 
     expect(await ui.find({ type: 'Text', text: /^\s*●?\s*orchestrator\s*$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /EGRESS=off/ })).toBeUndefined()
-    await ui.press({ key: 'notice-90' })
     expect((await ui.find({ type: 'Text', text: /EGRESS=off/ }))?.props.color).toBe('inactive')
+    expect(await ui.find({ key: 'handle-90' })).toBeDefined()
+    await ui.press({ key: 'notice-90' })
+    expect(await ui.find({ key: 'handle-90' })).toBeUndefined()
     await ui.press({ key: 'notice-90' })
 
     expect(await ui.find({ type: 'Link', text: exact('↗') })).toBeUndefined()
-    await ui.press({ key: 'notice-56' })
     expect(await ui.find({ type: 'Text', text: exact('No more than the title.') })).toBeDefined()
-    expect((await ui.find({ type: 'Link', text: 'Notices in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=waiting')
-    await ui.press({ key: 'notice-56' })
+    expect((await ui.findAll({ type: 'Link', text: 'Notices in the console ↗' })).map(link => link.props.href)).toContain('https://terylon.example.ts.net/?view=waiting')
     await ui.unmount()
   }
 })
@@ -106,7 +102,8 @@ test('the machine card shows the newest notice of each key, four different ones'
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-bell' })
+  await pill(ui, 'tab-bell')
+  await ui.press({ key: 'fold-machine' })
 
   const handled = (await ui.findAll({ type: 'Text', text: /^✓ (?!The leader runs)\S/ })).map(line => line.text)
   expect(handled).toHaveLength(4)
@@ -117,23 +114,23 @@ test('the machine card shows the newest notice of each key, four different ones'
   expect(production[0]).toContain('d577b984')
 })
 
-test('a goal opens whole from the goals tab, its stories open, and ‹ comes back to the goals', async ($, on) => {
+test('a goal opens whole from the overview, its stories open, and ‹ comes back to the overview', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   await ui.press({ key: 'goal-3' })
 
   expect(terylon.calls.filter(call => call.tool === 'goal_get').map(call => call.args)).toEqual([{ goal: 3 }])
   expect(await ui.find({ type: 'Text', text: exact('P1 · Agentic OS') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('P1 · open') })).toBeDefined()
-  expect((await ui.find({ key: 'back' }))?.props.label).toBe('‹ Goals')
+  expect((await ui.find({ key: 'back' }))?.props.label).toBe('‹ Overview')
 
   await ui.press({ key: 'goal-story-333' })
   expect(await ui.find({ type: 'Text', text: exact('#333 Direct dispatch') })).toBeDefined()
   await ui.press({ key: 'back' })
   await ui.press({ key: 'back' })
-  expect((await ui.find({ key: 'tab-goals' }))?.props.variant).toBe('primary')
+  expect(await ui.find({ key: 'goal-card-3' })).toBeDefined()
 })

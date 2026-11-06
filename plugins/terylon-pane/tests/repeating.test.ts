@@ -6,7 +6,7 @@ import { test, expect } from 'claude-code/testing'
 
 import { repeatingOf, runDay, taskVersionOf } from '../hooks/queue'
 
-import { BASE, BRIEFING, NARROW_PANE_PROPS, PANE_PROPS, SESSION, exact, hostZoneOffset, lateOnTheLocalDayOf, world } from './fixtures'
+import { BASE, BRIEFING, NARROW_PANE_PROPS, PANE_PROPS, SESSION, exact, hostZoneOffset, lateOnTheLocalDayOf, world, toOverview } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -74,7 +74,7 @@ function undrawable(node: unknown, found: string[] = []): string[] {
 }
 
 async function openGoal12(ui: { press: (query: { key: string }) => Promise<unknown> }) {
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   await ui.press({ key: 'goal-12' })
 }
 
@@ -354,7 +354,7 @@ test('A SETTLED VERSION PLAN leaves the Goals tab, an approved one as a withdraw
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   await terylon.clock.settle()
 
   expect(await ui.find({ key: 'plan-3661' })).toBeUndefined()

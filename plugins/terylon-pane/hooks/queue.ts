@@ -285,6 +285,7 @@ export function questionItems(briefing: Json): PaneQuestionItem[] {
       id: number(question.id) ?? 0,
       about: text(question.about) ?? subjectLabel(subject, ref),
       subject,
+      subjectRef: ref,
       subjectLabel: subjectLabel(subject, ref),
       text: text(question.text) ?? '',
       askedAt: text(question.askedAt),
@@ -296,13 +297,18 @@ export function waitingItems(briefing: Json, base: string): PaneWaitingItem[] {
   const items: PaneWaitingItem[] = []
 
   for (const question of questionItems(briefing)) {
+    // A QUESTION BY ITS SUBJECT'S REF where Terylon names one; else by what it is about, as before refs.
+    const ref = question.subjectRef ?? null
+
     items.push({
       kind: 'question',
       key: `question-${question.id}`,
       target: question.id,
-      title: `${question.about} — ${firstLine(question.text)}`,
+      ref,
+      title: ref === null ? `${question.about} — ${firstLine(question.text)}` : firstLine(question.text),
       detail: question.text,
       console: consoleLink(base, `question&question=${question.id}`),
+      goal: null,
     })
   }
 
@@ -316,9 +322,11 @@ export function waitingItems(briefing: Json, base: string): PaneWaitingItem[] {
         kind: 'accept',
         key: `accept-${id}`,
         target: id,
-        title: `${refOf(story, id)} ${text(story.title) ?? ''}`.trim(),
+        ref: refOf(story, id),
+        title: text(story.title) ?? '',
         detail: COPY.verifiedAccept,
         console: storyLink(base, 'story', story, id),
+        goal: number(story.goal),
       })
       continue
     }
@@ -327,25 +335,29 @@ export function waitingItems(briefing: Json, base: string): PaneWaitingItem[] {
       kind: 'merge',
       key: `merge-${id}`,
       target: id,
-      title: `${refOf(story, id)} ${text(story.title) ?? ''}`.trim(),
+      ref: refOf(story, id),
+      title: text(story.title) ?? '',
       detail: COPY.verifiedWaiting(text(environment?.name) ?? null),
       console: storyLink(base, 'merge', story, id),
+      goal: number(story.goal),
     })
   }
 
   for (const plan of list(briefing.plansWaiting)) {
     const id = number(plan.id) ?? 0
     const taskVersion = taskVersionOf(plan)
-    const label = text(plan.ref) ?? String(id)
     items.push({
       kind: 'plan',
       key: `plan-${id}`,
       target: id,
+      ref: text(plan.ref) ?? COPY.plan(String(id)),
       title: taskVersion === null
-        ? COPY.planTitle(label, text(plan.goalTitle) ?? '', number(plan.stories) ?? 0)
-        : COPY.taskVersionTitle(label, taskVersion.version, taskVersion.title ?? text(plan.goalTitle) ?? ''),
+        ? COPY.planTitle(text(plan.goalTitle) ?? '', number(plan.stories) ?? 0)
+        : COPY.taskVersionTitle(taskVersion.version, taskVersion.title ?? text(plan.goalTitle) ?? ''),
       detail: taskVersion === null ? COPY.planWaiting(estimateOf(plan.estimateUsd)) : COPY.versionWaiting(taskVersion.terms),
       console: planLink(base, plan, id),
+      goal: number(plan.goal),
+      stories: number(plan.stories) ?? 0,
     })
   }
 
@@ -355,9 +367,11 @@ export function waitingItems(briefing: Json, base: string): PaneWaitingItem[] {
       kind: 'blocked',
       key: `blocked-${id}`,
       target: id,
-      title: `${refOf(story, id)} ${text(story.title) ?? ''}`.trim(),
+      ref: refOf(story, id),
+      title: text(story.title) ?? '',
       detail: COPY.blocked(text(story.blockedReason) ?? '?'),
       console: storyLink(base, 'blocked', story, id),
+      goal: number(story.goal),
     })
   }
 
@@ -384,7 +398,7 @@ export function verifiedIds(briefing: Json): ReadonlySet<number> {
   return new Set(list(briefing.storiesVerified).map(story => number(story.id)).filter((id): id is number => id !== null))
 }
 
-export function runningItems(flight: Json, zone: Zone = 0, waiting: ReadonlySet<number> = new Set(), basis: string | null = null): PaneRunningItem[] {
+export function runningItems(flight: Json, zone: Zone = 0, waiting: ReadonlySet<number> = new Set(), basis: string | null = null, at: number | null = null): PaneRunningItem[] {
   return list(flight.stories).filter(story => !NOT_RUNNING_STATES.has(String(story.state ?? '')) && !waiting.has(number(story.id) ?? -1)).map(story => {
     const progress = (story.progress ?? null) as Json | null
     const step = number(progress?.step)
@@ -405,9 +419,19 @@ export function runningItems(flight: Json, zone: Zone = 0, waiting: ReadonlySet<
           : step !== null && steps !== null
             ? `${step}/${steps}`
             : text(story.state) ?? ''
+    const startedAt = Date.parse(String(story.startedAt ?? ''))
 
     return {
       story: number(story.id) ?? 0,
+      ref: refOf(story, number(story.id) ?? 0),
+      goal: number(story.goal),
+      goalRef: text(story.goalRef),
+      // WHAT A GOAL'S CARD SAYS BESIDE ITS REF: how long a run has gone, or the state it stands in.
+      now: stuck !== null
+        ? COPY.stuckSince(clock(stuck.since, zone) ?? '?')
+        : story.state === 'running'
+          ? COPY.storyRunningFor(at === null || Number.isNaN(startedAt) ? null : words.duration(Math.max(0, at - startedAt) / 1000))
+          : COPY.stateText(String(story.state ?? '')),
       title: `${refOf(story, number(story.id) ?? 0)} ${text(story.title) ?? ''}`.trim(),
       detail: `${where} · ${costTight(spentOf(story, basis))}`,
       step: step !== null && steps !== null
@@ -903,7 +927,7 @@ export function questionChoices(question: string): string[] {
   })
 }
 
-export function goalItems(goals: Json, questions: readonly PaneQuestionItem[]): { open: PaneGoalItem[]; closed: PaneGoalItem[] } {
+export function goalItems(goals: Json, questions: readonly PaneQuestionItem[], repeatingOfGoal: (goal: Json) => PaneGoalItem['repeating'] = () => null): { open: PaneGoalItem[]; closed: PaneGoalItem[] } {
   const items = list(goals.goals)
     .map(goal => {
       const id = number(goal.id) ?? 0
@@ -917,6 +941,9 @@ export function goalItems(goals: Json, questions: readonly PaneQuestionItem[]): 
         state: String(goal.state ?? ''),
         questions: questions.filter(question => question.subject === `goal/${id}`).length,
         stories: Object.entries(counts).map(([state, count]) => `${count} ${COPY.stateText(state)}`).join(', '),
+        counts: Object.fromEntries(Object.entries(counts).filter((entry): entry is [string, number] => typeof entry[1] === 'number')),
+        target: text(goal.target),
+        repeating: repeatingOfGoal(goal),
       }
     })
     .sort((first, second) => first.priority.localeCompare(second.priority) || first.id - second.id)
@@ -1106,6 +1133,13 @@ function metricCost(metrics: Json, basis: string | null): string {
   return isKnown ? words.money(metrics.costPerStoryUsd) : tokens === null ? words.COST_NOT_KNOWN_TIGHT : words.tokens(tokens)
 }
 
+// THE OVERVIEW'S 30-DAY LINE: "12 stories · 22 k tokens per story". With no story there is nothing to say a story cost.
+export function monthOf(metrics: Json, basis: string | null = null): string {
+  const stories = number(metrics.stories) ?? 0
+
+  return [COPY.monthStories(stories), ...(stories === 0 ? [] : [COPY.monthCost(metricCost(metrics, basis))])].join(' · ')
+}
+
 function noticeOf(notice: Json, now: number, zone: Zone): PaneNotice {
   const link = text(notice.link)
 
@@ -1150,7 +1184,8 @@ export function bellView(notices: Json, leader: Json | null, metrics: Json | nul
     ? []
     : [
         { value: String(number(metrics.stories) ?? 0), label: COPY.metricStories(number(metrics.stories) ?? 0) },
-        { value: metricCost(metrics, basis), label: COPY.metricCost },
+        // WITH NO STORY THERE IS NOTHING TO SAY A STORY COST.
+        ...((number(metrics.stories) ?? 0) === 0 ? [] : [{ value: metricCost(metrics, basis), label: COPY.metricCost }]),
         { value: String(number(metrics.merged) ?? 0), label: COPY.metricMerged },
         { value: String(number(metrics.opened) ?? 0), label: COPY.metricOpened(number(metrics.opened) ?? 0) },
       ]
