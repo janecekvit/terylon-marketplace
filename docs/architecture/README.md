@@ -136,7 +136,7 @@ what calls for the owner`"]:::terylon
             statusLine["`the status line
 the health of Agentic OS, its worst problem`"]:::terylon
             tabs["`one pane: the overview, and More
-Notices, Memory, Health behind its pills
+Notices, Memory, Health from its head
 opened only by the band or a command;
 each act on a press, never on a draw`"]:::terylon
         end

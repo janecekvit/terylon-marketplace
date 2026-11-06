@@ -15,7 +15,7 @@ export const COPY = {
   refresh: 'Refresh',
   connectedShort: 'connected',
   disconnected: (since: string) => `not answering since ${since}`,
-  // The overview: the machine in a line, the three tiles, the goals, the folds, the 30-day line and the pills.
+  // The overview: the machine in a line, the three tiles, the goals, the folds and the 30-day line.
   overview: 'Overview',
   // The header's way to Notices, Memory and Health: what a person reads there, and on the terminal the whole button.
   navNotices: (count: number) => `Notices ${count}`,

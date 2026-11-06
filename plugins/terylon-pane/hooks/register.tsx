@@ -10,7 +10,8 @@
 //        │      the overview ── tiles · Waiting for you ──▶ question · story · plan
 //        │        │              goals_list · plans_list ──▶ one card per goal, its road from hooks/road.ts ──▶ goal ──▶ story
 //        │        │              folds: Done today · Queued · History; a new goal is goal_add
-//        │        └──▶ pills ──▶ More: Notices · Memory · Health on one page
+//        │        ├──▶ the bell ──▶ Notices over the overview, or a screen where there is no room
+//        │        └──▶ Memory, Health ──▶ More: Health · Memory on one page
 //        └──▶ the done-signal: $.prompt.submit once per story and verdict commit, and a toast, by the story's ref
 //   session start, away > 2 h ──▶ ONE catch-up summary, and the band says it until dismissed
 //   a host proof's subjects ──▶ no prompt, no band count, no catch-up line
@@ -3024,7 +3025,7 @@ function withHash(elements: Elements, line: string, tone?: Tone): unknown {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     // TERYLON COCKPIT'S ONE COMMAND (Terylon S68): /terylon-pane, /terylon and /terylon-memory are gone, not aliased.
-    await $.command.register({ name: 'terylon-cockpit', description: 'Opens Terylon Cockpit: what waits for you, your goals, and Notices, Memory and Health' })
+    await $.command.register({ name: 'terylon-cockpit', description: 'Opens Terylon Cockpit: what waits for you, your goals, and Notices, Memory and Health; test and test off for its test mode' })
     storyTargets.clear()
     // UNATTENDED ONLY WHEN THE ENGINE SAYS SO TWICE: no person at the prompt and nowhere to draw, a -p run or the SDK.
     // An engine that names neither starts a session someone is at.

@@ -62,8 +62,8 @@ const MUTATIONS = [
     {
         name: "the pane opens by itself at session start",
         file: "hooks/register.tsx",
-        find: "  $.clock.after(0, () => tick($, true))\n",
-        replace: "  void $.ui.open({ id: PANE, title: COPY.title })\n  $.clock.after(0, () => tick($, true))\n",
+        find: "  tickedAt = startedAt\n  $.clock.after(0, () => tick($, true))\n",
+        replace: "  tickedAt = startedAt\n  void $.ui.open({ id: PANE, title: COPY.title })\n  $.clock.after(0, () => tick($, true))\n",
     },
     {
         name: "the band draws a waiting count calm",
@@ -105,7 +105,7 @@ const MUTATIONS = [
             },
             {
                 file: "hooks/register.tsx",
-                find: "              onPress: () => toggle($, item.key),\n",
+                find: "              onPress: () => (item.kind === 'question' ? go({ screen: 'question', question: item.target }) : toggle($, item.key)),\n",
                 replace: "              onPress: () => callTerylon($, 'story_merge', {}),\n",
             },
         ],
@@ -211,7 +211,7 @@ const MUTATIONS = [
     {
         name: "a verified story's merge becomes a button",
         file: "hooks/register.tsx",
-        find: "            {shownStory.isVerified && !shownStory.isList && <Link href={storyLink(base, 'merge', storyRef, shownStory.story)} label={COPY.mergeInConsole} />}\n",
+        find: "            {shownStory.isVerified && !shownStory.isList && mergeLink('merge-story', storyLink(base, 'merge', storyRef, shownStory.story), COPY.mergeInConsole)}\n",
         replace: "            {shownStory.isVerified && !shownStory.isList && <Button key=\"act-story-merge\" label=\"Merge\" onPress={() => undefined} />}\n",
     },
     {
@@ -306,20 +306,20 @@ const MUTATIONS = [
     {
         name: "input-rows, which the owner proved, is off again",
         file: "hooks/drawing.ts",
-        find: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: true }",
-        replace: "export const PROOF_DEFAULTS: Proofs = { inputRows: false, hoverReveal: true, svgTooltips: true }",
+        find: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: true, noticesOver: true }",
+        replace: "export const PROOF_DEFAULTS: Proofs = { inputRows: false, hoverReveal: true, svgTooltips: true, noticesOver: true }",
     },
     {
         name: "hover-reveal, which the owner proved, is off again",
         file: "hooks/drawing.ts",
-        find: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: true }",
-        replace: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: false, svgTooltips: true }",
+        find: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: true, noticesOver: true }",
+        replace: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: false, svgTooltips: true, noticesOver: true }",
     },
     {
         name: "svg-tooltips, which the owner proved, is off again",
         file: "hooks/drawing.ts",
-        find: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: true }",
-        replace: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: false }",
+        find: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: true, noticesOver: true }",
+        replace: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: false, noticesOver: true }",
     },
     {
         name: "a word is drawn inside an Svg, where the theme cannot reach it",
@@ -427,8 +427,8 @@ const MUTATIONS = [
     {
         name: "a road is a strip of fixed width again, apart from the names under it",
         file: "hooks/drawing.ts",
-        find: "`<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100%\" height=\"${ROAD_HEIGHT}\">${parts.join('')}</svg>`",
-        replace: "svg(456, ROAD_HEIGHT, parts.join(''))",
+        find: "`<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100%\" height=\"${height}\">${parts.join('')}</svg>`",
+        replace: "svg(456, height, parts.join(''))",
     },
     {
         name: "a blocked story's header says it is running again",
@@ -1432,8 +1432,8 @@ const MUTATIONS = [
     {
         name: "Pause is drawn on the overview again",
         file: "hooks/register.tsx",
-        find: "        <Box flexShrink={0}>{refreshButton}</Box>\n",
-        replace: "        <Box flexShrink={0}>{refreshButton}{current.paused === null && actButton('leader', 'leader_pause', null, { opens: true })}</Box>\n",
+        find: "        {refreshButton}\n      </Box>\n    )\n    const overviewHead = (\n",
+        replace: "        {refreshButton}{current.paused === null && actButton('leader', 'leader_pause', null, { opens: true })}\n      </Box>\n    )\n    const overviewHead = (\n",
     },
     {
         name: "Pause leaves Health",
@@ -1490,10 +1490,10 @@ const MUTATIONS = [
         replace: "  await readOverviewFooter($)\n",
     },
     {
-        name: "a pill no longer opens More",
+        name: "a button of the overview's head no longer opens More",
         file: "hooks/register.tsx",
-        find: "        <Button key=\"tab-status\" label={COPY.pillHealth(hasProblem(current, drawingAsked.off))} onPress={() => openMore($, 'health')} />\n",
-        replace: "        <Button key=\"tab-status\" label={COPY.pillHealth(hasProblem(current, drawingAsked.off))} onPress={() => undefined} />\n",
+        find: "        <Button key=\"tab-status\" label={COPY.navHealth(hasProblem(current, drawingAsked.off))} onPress={() => openMore($, 'health')} />\n",
+        replace: "        <Button key=\"tab-status\" label={COPY.navHealth(hasProblem(current, drawingAsked.off))} onPress={() => undefined} />\n",
     },
     {
         name: "a goal's screen no longer says What next",
@@ -1524,6 +1524,42 @@ const MUTATIONS = [
         file: "hooks/register.tsx",
         find: "        {rowOutcomes}\n",
         replace: "",
+    },
+    {
+        name: "test mode's gate is bypassed: a call reaches the real Terylon",
+        file: "hooks/register.tsx",
+        find: "  if ((await read($, testMode)).isOn) {\n    const now = await $.clock.now()\n    testWorld = testWorld ?? createTestWorld(now)\n",
+        replace: "  if (false) {\n    const now = await $.clock.now()\n    testWorld = testWorld ?? createTestWorld(now)\n",
+    },
+    {
+        name: "test mode writes the shared store: its ticks take the lease and read the events",
+        file: "hooks/register.tsx",
+        find: "    if ((await read($, testMode)).isOn) {\n      return\n    }\n\n    if (!(await isSignaller($, now))) {",
+        replace: "    if (!(await isSignaller($, now))) {",
+    },
+    {
+        name: "test mode posts a signal: what was held goes out at a turn's end",
+        file: "hooks/register.tsx",
+        find: "  // WHAT WAS HELD WAITS: it is real, so it is posted once test mode ends.\n  if ((await read($, testMode)).isOn) {\n    return\n  }\n",
+        replace: "",
+    },
+    {
+        name: "a merge in test mode opens the console for a made-up story",
+        file: "hooks/register.tsx",
+        find: "    const mergeLink = (key: string, href: string, label: string) => (isTestOn\n",
+        replace: "    const mergeLink = (key: string, href: string, label: string) => (false\n",
+    },
+    {
+        name: "Approve on a waiting row acts on its press, the plan unread",
+        file: "hooks/register.tsx",
+        find: "          return <Button key={`open-plan-${item.target}`} label={COPY.actButton.plan_approve} onPress={() => go({ screen: 'plan', plan: item.target })} />\n",
+        replace: "          return actButton(`plan-${item.target}`, 'plan_approve', item.target)\n",
+    },
+    {
+        name: "the head's amber badge is drawn at 0 too",
+        file: "hooks/register.tsx",
+        find: "      const isWaiting = count !== null && count > 0\n",
+        replace: "      const isWaiting = count !== null\n",
     },
 ];
 
