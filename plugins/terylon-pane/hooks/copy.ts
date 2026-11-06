@@ -20,6 +20,7 @@ export const COPY = {
 
   // The overview: the machine in a line, the three tiles, the goals, the folds, the 30-day line and the pills.
   overview: 'Overview',
+  slotsShort: (used: number, slots: number) => `${used}/${slots} slots`,
   tileWaiting: 'waiting for you',
   tileRunning: 'running',
   tileStuck: 'stuck',
@@ -47,7 +48,7 @@ export const COPY = {
   nextStuck: 'Stuck: look at it',
   nextPlan: 'The leader plans it',
   nextDone: 'Nothing left to do',
-  nextQuestion: 'Asks you a question',
+  nextAsks: 'Asks you a question',
   whatNext: 'What next',
   storyRunningFor: (duration: string | null) => (duration === null ? 'running' : `running ${duration}`),
   stuckFlag: (count: number) => `${count} stuck`,
@@ -60,7 +61,6 @@ export const COPY = {
   moreHealth: 'Health',
   machineDid: 'What the machine did',
   memoryTopics: 'Topics',
-  pauseLeader: 'Pause the leader',
   statusRowSlots: 'Slots',
   statusRowCost: 'Cost',
 
@@ -101,14 +101,10 @@ export const COPY = {
   statusMachine: 'Terylon',
   statusSince: (time: string) => `since ${time}`,
   statusLastAnswer: (time: string | null) => (time === null ? 'no answer yet' : `last answer at ${time}`),
-  statusSlots: 'Slots',
   statusSlotsLine: (used: number, slots: number) => `${used} of ${slots} running`,
-  statusSlotsHint: 'policy slots',
-  statusCost: 'Cost',
   statusToday: (running: string, day: string | null) => (day === null ? `${running} today, no daily limit set` : `${running} of the ${day} daily limit today`),
   statusMonth: 'Last 30 days',
   statusProblems: 'Problems',
-  nothingWrong: 'Nothing wrong.',
   howToFix: 'How to fix',
   fixStep: (index: number, text: string) => `${index}. ${text}`,
   fixNotAllowed: ['Add these rules to ~/.claude/settings.json, under "permissions" → "allow":', 'Press Try again.'],
@@ -152,14 +148,10 @@ export const COPY = {
 
   // The queue.
   waiting: 'Waiting for you',
-  waitingHint: 'decide here · merge in the console',
-  waitingHintAccept: 'decide here · accept on its card',
-  waitingHintBoth: 'decide here · merge in the console, accept on its card',
   running: 'Running',
   queued: 'Queued',
   doneToday: 'Done today',
   nothingWaiting: 'Nothing waits for you.',
-  nothingRunning: 'Nothing running.',
   nothingQueued: 'Nothing queued.',
   nothingDone: 'Nothing done today.',
   count: (count: number) => ` · ${count}`,
@@ -174,16 +166,10 @@ export const COPY = {
   kindMerged: 'merged',
   kindAccepted: 'accepted',
   kindStory: 'story',
-  kindRunning: 'running',
-  kindStuck: 'stuck',
   header: (cost: string, dayBudget: string | null, used: number, slots: number) =>
     `running ${cost}${dayBudget === null ? '' : ` of $${dayBudget} today`} · ${used} of ${slots} slots`,
   // The Running heading's two gauges (S32), and what the narrow dock and the terminal say in their place. The cost is
   // the glossary's: "$5.50", or on the setup token "66 k tokens · cost not known", never a $ figure there.
-  gaugeSlots: (used: number, slots: number) => `${used}/${slots} slots`,
-  gaugeSpend: (cost: string, dayBudget: string | null) => (dayBudget === null ? `${cost} today` : `${cost} of ${dayBudget}`),
-  gaugeSpendAlt: (cost: string, dayBudget: string) => `${cost} of ${dayBudget} today`,
-  gaugesNarrow: (used: number, slots: number, cost: string) => `${used}/${slots} · ${cost}`,
   verifiedWaiting: (environment: string | null) =>
     environment === null ? 'verified · waiting for merge' : `verified in ${environment} · waiting for merge`,
   // A plan's estimate as the glossary says it ("~$14"), none where it is $0 or not estimated: never "~$0".
@@ -217,8 +203,6 @@ export const COPY = {
   mergeInConsole: 'Merge in the console ↗',
   mergeShort: 'Merge ↗',
   rowOpen: 'Open',
-  emptyTitle: 'Nothing runs and nothing waits',
-  emptyHint: 'Add a task below, or write a story out with Claude in the session and hand it over whole.',
   quickLabel: 'New task for the leader',
   quickPlaceholder: 'What to do…',
   quickAdd: 'Add',
@@ -349,7 +333,6 @@ export const COPY = {
   nowWorking: 'Now working',
   nowWorkingHint: (agent: string, stage: string) => `${agent} · ${stage}`,
   mainAgent: 'main agent',
-  tokens: (count: string) => `${count} tokens`,
   sinceStart: (hours: string) => `${hours} since start`,
   numberSpent: 'spent',
   numberOfBudget: (budget: string) => `of the story's ${budget}`,
@@ -376,7 +359,6 @@ export const COPY = {
   // A question of the leader's.
   questionOf: (index: number, count: number) => `question ${index} of ${count}`,
   questionMeta: (subject: string, time: string | null) => `${subject} · asked by the leader${time === null ? '' : ` · ${time}`}`,
-  questionCaption: (subject: string, time: string | null) => `${subject} · asked by the leader${time === null ? '' : ` · ${time}`}`.toUpperCase(),
   answerLabel: 'Answer (add what you want)',
   answerSend: 'Answer',
   discussInSession: 'Talk it over with Claude in the session',
@@ -392,9 +374,7 @@ export const COPY = {
 
   // Goals and plans.
   // The Goals tab's two buttons, like Claude Desktop's Active and Archived sessions; the closed goals are History.
-  goalsOpen: 'Open',
   goalsHistory: 'History',
-  goalsHint: 'priority',
   goalQuestions: (count: number) => (count === 1 ? '1 question' : `${count} questions`),
   noOpenGoals: 'No open goals.',
   historyEmpty: 'History is empty.',
@@ -414,7 +394,6 @@ export const COPY = {
   planNote: 'Each story carries its criteria, declared files and estimate; the whole text is in plans_list.',
   planInConsole: 'Plan in the console ↗',
   noPlans: 'No plan waits.',
-  plans: 'Plans',
   newGoal: 'New goal',
   // The new goal's two fields: a short title, at most 200 characters, and its ask, at most 4000 (goal_add).
   goalTitleLabel: 'Title',
@@ -484,7 +463,6 @@ export const COPY = {
   specCancel: 'Cancel',
   specSaved: (sentence: string) => `✓ ${sentence}`,
   specInConsole: 'In the console ↗',
-  specDecisions: 'YOUR DECISIONS ON EARLIER PLANS',
   specDecision: (plan: string, day: string, comment: string | null) => `Plan ${plan} · ${day}${comment === null ? '' : ` · “${comment}”`}`,
   specLoading: 'Loading the specification…',
   specOf: (goal: string) => `Goal ${goal} · specification`,
@@ -517,15 +495,11 @@ export const COPY = {
   loadError: (what: string) => `${what} did not load`,
 
   // Notices and Health.
-  needsYou: 'Needs you',
-  bellHint: 'notices_list',
   machine: 'Machine',
   machineHint: 'lately handled',
   leaderRuns: 'The leader runs',
   leaderPaused: (since: string | null, reason: string | null) =>
     `The leader is paused${since === null ? '' : ` since ${since}`}${reason === null ? '' : ` (${reason})`}`,
-  metrics: 'Last 30 days',
-  metricsHint: 'metrics',
   // ONE STORY, ONE PR OPENED: the operator's walk of 1.1.1 read "1 stories" on the Status tab. The number is the PRs
   // opened over the 30 days, not the PRs open now (Terylon S40, #402).
   metricStories: (count: number) => (count === 1 ? 'story' : 'stories'),
@@ -580,7 +554,6 @@ export const COPY = {
   noGoal: 'No open goal: add a goal on the overview, then the task.',
 
   // The leader's memory.
-  memoryContext: 'what the leader remembers across runs',
   memoryLoading: 'Loading the memory…',
   memoryError: 'The memory did not load',
   memoryOwner: 'About you',

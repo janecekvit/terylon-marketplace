@@ -3,7 +3,7 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { BRIEFING, GATES, PANE_PROPS, SESSION, bandProps, exact, world, pill, toOverview, moreWith } from './fixtures'
+import { BRIEFING, GATES, PANE_PROPS, SESSION, bandProps, exact, world, pill, toOverview, moreWith, toRoot } from './fixtures'
 
 const SURFACES = ['desktop', 'terminal'] as const
 
@@ -11,7 +11,7 @@ const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', 
 
 const GATUS = { id: 117, source: 'gatus', title: 'the page is not well', body: 'gatus says it stopped answering; check the container.', key: 'gatus:answering/the-page', link: null, raisedAt: '2026-10-11T07:26:21Z', handledAt: null }
 
-test('well: ok, the slots and the runs in them, the cost today and over 30 days, nothing wrong, the diagnostics', async ($, on) => {
+test('well: ok, the slots, the cost today and over 30 days, nothing wrong, the diagnostics', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -20,28 +20,21 @@ test('well: ok, the slots and the runs in them, the cost today and over 30 days,
     const ui = await $.ui.mount({ ...PANE, surface })
     await moreWith(ui, 'fold-diagnostics')
 
-    expect((await ui.find({ key: 'tab-status' }))?.props.variant).toBe('primary')
     expect((await ui.find({ type: 'Text', text: exact('all well') }))?.props.color).toBe('success')
     expect(await ui.find({ type: 'Text', text: /^\s*last answer at \d\d:\d\d$/ })).toBeDefined()
-    expect(await ui.find({ key: 'status-refresh' })).toBeDefined()
+    expect(await ui.find({ key: 'refresh' })).toBeDefined()
 
     expect(await ui.find({ type: 'Text', text: exact('2 of 4 running') })).toBeDefined()
-    expect((await ui.find({ key: 'status-story-333' }))?.text).toMatch(/^\s*(?:●\s+)?running\s+#333 Direct dispatch\s+5\/8 · \$2\.10$/)
     expect(await ui.find({ type: 'Text', text: exact('$5.50 of the $20 daily limit today') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('43 stories · $1.10 per story · 0 merged · 1 PR opened') })).toBeDefined()
+    expect(await ui.find({ key: 'status-month' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('43') })).toBeDefined()
 
-    expect(await ui.find({ type: 'Text', text: exact('Problems · 0') })).toBeDefined()
-    expect((await ui.find({ type: 'Text', text: exact('Nothing wrong.') }))?.props.color).toBe('subtle')
+    expect(await ui.find({ type: 'Text', text: /^Problems/ })).toBeUndefined()
 
     expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.19.0') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('TERYLON_URL https://terylon.example.ts.net') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('server plugin:terylon-os:terylon') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Every failure is in claude --debug under terylon-pane:') })).toBeDefined()
-
-    await ui.press({ key: 'status-story-333' })
-    expect((await ui.find({ key: 'back' }))?.props.label).toBe('‹ Health')
-    await ui.press({ key: 'back' })
-    expect((await ui.find({ key: 'tab-status' }))?.props.variant).toBe('primary')
     await ui.unmount()
   }
 })
@@ -88,7 +81,7 @@ test('not answering: since when, the last answer, the reason, and the tailnet an
     await moreWith(ui, 'fold-diagnostics')
 
     expect((await ui.find({ type: 'Text', text: exact('not answering') }))?.props.color).toBe('error')
-    expect(await ui.find({ type: 'Text', text: /^ · since \d\d:\d\d$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^since \d\d:\d\d$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^Reason: .*ETIMEDOUT/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('1. Check the tailnet: tailscale status') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('2. Check TERYLON_URL: https://terylon.example.ts.net') })).toBeDefined()
@@ -110,7 +103,7 @@ test('paused: resuming is the owner\'s gate, a link to the console and never a b
 
     expect((await ui.find({ type: 'Text', text: exact('paused') }))?.props).toMatchObject({ color: 'text', weight: 'semibold' })
     expect(await ui.find({ type: 'Text', text: exact('The leader is paused') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('1. Press Resume, here or on Waiting: the leader continues from its log.') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('1. Press Resume, here or on the overview: the leader continues from its log.') })).toBeDefined()
     // RESUME IS THE OWNER'S ACT ON THE PAUSED CARD (S27): a button, no longer a link to the console.
     expect(await ui.find({ type: 'Link', text: 'Resume in the console ↗' })).toBeUndefined()
     expect((await ui.find({ key: 'act-leader-resume' }))?.props.variant).toBe('primary')
@@ -129,7 +122,7 @@ test('an alert: its own card with the notice\'s body, which says what to do, and
     await moreWith(ui, 'fold-diagnostics')
 
     expect((await ui.find({ type: 'Text', text: exact('1 alert') }))?.props.color).toBe('error')
-    expect((await ui.find({ type: 'Text', text: exact('the page is not well') }))?.props.color).toBe('error')
+    expect((await ui.findAll({ type: 'Text', text: exact('the page is not well') })).map(node => node.props.color)).toContain('error')
     expect(await ui.find({ type: 'Text', text: /^\s*gatus · / })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('gatus says it stopped answering; check the container.') })).toBeDefined()
     expect((await ui.find({ type: 'Link', text: 'Notices in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=waiting&notices=open')
@@ -137,7 +130,7 @@ test('an alert: its own card with the notice\'s body, which says what to do, and
   }
 })
 
-test('the band\'s Open always opens the pane where the owner left it, the queue the first time, a problem or not', async ($, on) => {
+test('the band\'s Open always opens the pane where the owner left it, the overview the first time, a problem or not', async ($, on) => {
   const terylon = world(on)
   terylon.answers.notices_list = { unhandled: 1, notices: [GATUS] }
   await $.session.start(SESSION)
@@ -149,17 +142,17 @@ test('the band\'s Open always opens the pane where the owner left it, the queue 
   expect(terylon.opens).toEqual(['terylon'])
 
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await pane.find({ key: 'tab-queue' }))?.props.variant).toBe('primary')
-  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Health ⚠')
+  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Health ⚠ ›')
 
-  await toOverview(pane)
+  await pill(pane, 'tab-bell')
   await band.press({ key: 'band-open' })
-  expect((await pane.find({ key: 'tab-goals' }))?.props.variant).toBe('primary')
+  expect(await pane.find({ key: 'more-notices' })).toBeDefined()
 
   terylon.answers.notices_list = { unhandled: 0, notices: [] }
   await terylon.clock.advance(30000)
   await band.press({ key: 'band-open' })
   expect((await band.find({ key: 'band-open' }))?.props.label).toBe('Open')
-  expect((await pane.find({ key: 'tab-goals' }))?.props.variant).toBe('primary')
-  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Health')
+  expect(await pane.find({ key: 'more-notices' })).toBeDefined()
+  await toRoot(pane)
+  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Health ›')
 })

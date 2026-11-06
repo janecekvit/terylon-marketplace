@@ -234,6 +234,7 @@ for (const shape of ['before S44', 'after S44'] as const) {
     // A SETTLED PLAN OF A CLOSED GOAL IS A ROW ON ITS SCREEN, A WAITING ONE ITS CARD WITH ITS ACTS.
     await ui.press({ key: 'goal-8' })
     expect(await ui.find({ key: 'goal-plan-144' })).toBeDefined()
+    expect(await ui.find({ key: 'plan-144' })).toBeUndefined()
     await ui.press({ key: 'back' })
     await ui.press({ key: 'goal-5' })
     expect(await ui.find({ key: 'act-plan-145-approve' })).toBeDefined()

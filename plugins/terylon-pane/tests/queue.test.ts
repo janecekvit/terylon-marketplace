@@ -1,11 +1,11 @@
 import { test, expect } from 'claude-code/testing'
 
-import { BRIEFING, PANE_PROPS, SESSION, chipOf, exact, lateOnTheLocalDayOf, pictures, world } from './fixtures'
+import { BRIEFING, FLIGHT, PANE_PROPS, SESSION, chipOf, exact, lateOnTheLocalDayOf, pictures, world } from './fixtures'
 
 // The theme keys the house style allows: a colour is a role, never a hex value.
 const THEME = ['text', 'inactive', 'subtle', 'suggestion', 'success', 'warning', 'error', 'merged', 'userMessageBackground']
 
-test('the queue draws the four groups from Terylon as cards, each row one Button, on the desktop and the terminal', async ($, on) => {
+test('the overview: the machine in a line, three tiles, Waiting for you, a card per goal, the folds and the footer', async ($, on) => {
   const terylon = world(on, { now: lateOnTheLocalDayOf('2026-10-11T12:20:00Z') })
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -14,81 +14,105 @@ test('the queue draws the four groups from Terylon as cards, each row one Button
   for (const surface of ['desktop', 'terminal'] as const) {
     const ui = await $.ui.mount({ plugin: 'terylon-pane', surface, component: 'Pane', requestId: 'terylon', props: PANE_PROPS })
 
-    const tab = await ui.find({ key: 'tab-queue' })
-    expect(tab?.props.label).toBe('Waiting')
-    expect(tab?.props.variant).toBe('primary')
-    expect(tab?.props.hotkey).toBe('1')
-    expect(tab?.text).toBe(surface === 'terminal' ? '● Waiting' : 'Waiting')
-    expect((await ui.find({ key: 'tab-goals' }))?.props.dimColor).toBe(true)
-    expect((await ui.find({ type: 'Link', text: 'terylon' }))?.props.href).toBe('https://terylon.example.ts.net')
-    const connected = await ui.find({ type: 'Text', text: exact('connected · 0 s ago') })
-    expect(connected?.props.color).toBe('subtle')
-    expect(connected?.props.tabular).toBe(true)
+    // THE HEAD: Terylon, a quiet line of health, connection, slots and today's cost, and Refresh.
+    expect((await ui.find({ type: 'Text', text: exact('Terylon') }))?.props).toMatchObject({ size: 'title', weight: 'semibold' })
+    const line = await ui.find({ type: 'Text', text: exact('all well · connected · 2/4 slots · $5.50 of $20 today') })
+    expect(line?.props.color).toBe('subtle')
+    expect(line?.props.tabular).toBe(true)
+    expect((await ui.find({ key: 'refresh' }))?.props.label).toBe('Refresh')
 
-    // ONE ROW, ONE BUTTON (S32): the kind chip, the title, the detail, keyed by the subject's id.
-    expect(await ui.find({ type: 'Text', text: exact('Waiting for you · 3') })).toBeDefined()
-    expect((await ui.find({ type: 'Text', text: exact('decide here · merge in the console') }))?.props.color).toBe('subtle')
+    // NO TAB IS LEFT.
+    expect(await ui.find({ key: 'tab-goals' })).toBeUndefined()
+    expect(await ui.find({ key: 'tab-queue' })).toBeUndefined()
+
+    // ONE ROW, ONE BUTTON (S32): the kind chip, the ref, the title, keyed by the subject's id, and the row's act beside it.
+    expect(await ui.find({ type: 'Text', text: exact('Waiting for you') })).toBeDefined()
     expect((await ui.find({ key: 'question-9' }))?.text).toMatch(/^\s*(?:●\s+)?question\s+#333 — Má mrtvý běh pokračovat od posledního commitu\?$/)
     expect((await ui.find({ key: 'merge-327' }))?.text).toMatch(/^\s*(?:●\s+)?merge\s+#327 Events since the last look · verified in pr-196 · waiting for merge$/)
-    expect((await ui.find({ key: 'plan-41' }))?.text).toMatch(/^\s*(?:●\s+)?plan\s+Plan 41 · Agentic OS · 3 stories$/)
+    expect((await ui.find({ key: 'plan-41' }))?.text).toMatch(/^\s*(?:●\s+)?plan\s+Plan 41 Agentic OS · 3 stories$/)
+    expect((await ui.find({ type: 'Text', text: exact('#327') }))?.props).toMatchObject({ mono: true, color: 'subtle' })
     // THE KIND AS A CHIP: a dot in the kind's colour, the word in inactive, which reads on the chip in both themes.
     expect(await chipOf(ui, 'question-9')).toEqual({ word: 'inactive', dot: 'warning', background: surface === 'desktop' ? 'userMessageBackground' : undefined, size: 'caption' })
     expect((await chipOf(ui, 'merge-327'))?.dot).toBe('merged')
     expect((await chipOf(ui, 'plan-41'))?.dot).toBe('merged')
+    expect((await ui.find({ key: 'answer-9' }))?.props.label).toBe('Answer')
+    expect((await ui.find({ key: 'act-plan-41-approve' }))?.props.label).toBe('Approve')
+    // MERGE IS ONLY EVER A LINK INTO THE CONSOLE.
+    expect((await ui.find({ type: 'Link', text: 'Merge ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=merge&story=327')
+    expect(await ui.find({ type: 'Button', text: /Merge/ })).toBeUndefined()
 
-    expect(await ui.find({ type: 'Text', text: exact('Running · 2') })).toBeDefined()
-    expect((await ui.find({ key: 'story-333' }))?.text).toMatch(/^#333 Direct dispatch\s+5\/8 · \$2\.10$/)
-    expect((await ui.find({ type: 'Text', text: exact('5/8 · $2.10') }))?.props.tabular).toBe(true)
-    expect(await ui.find({ type: 'Text', text: exact('verifying · $3.40') })).toBeDefined()
+    // THE GOALS: a card each, its road, how far it is, each running story one press away, and what next.
+    expect((await ui.find({ key: 'goal-new-open' }))?.props.label).toBe('New goal')
+    expect((await ui.find({ key: 'goal-3' }))?.text).toBe('P1 · Agentic OS')
+    expect(await ui.find({ type: 'Text', text: exact('0 of 4 stories') })).toBeDefined()
+    expect((await ui.find({ key: 'story-333' }))?.text).toMatch(/^#333 running \d+ h/)
+    expect((await ui.find({ key: 'story-329' }))?.text).toBe('#329 verifying')
+    expect(await ui.find({ type: 'Text', text: exact('Merge in the console') })).toBeDefined()
 
     if (surface === 'desktop') {
-      // THE RUNNING HEADING'S GAUGES and THE RUN'S EIGHT SEGMENTS, as Svg with an alt; every word outside it.
+      // THE ROAD, as Svg with an alt; every word outside it.
       const drawn = await pictures(ui)
-      expect(drawn.map(item => item.alt)).toEqual(['2 of 4 slots in use', '$5.50 of $20 today', 'Phase 5 of 8: tests', 'Phase 7 of 8: verified'])
-      expect((await ui.find({ type: 'Text', text: exact('2/4 slots') }))?.props.tabular).toBe(true)
-      expect(await ui.find({ type: 'Text', text: exact('$5.50 of $20') })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: exact('Tests · tester · step 5 of 9') })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: exact('Verified in its PR environment · pr-197') })).toBeDefined()
+      expect(drawn.map(item => item.alt)).toEqual(['Plan, Approve, Build, Verify done; Your merge now; Done to come', 'Plan now; Approve, Build, Verify, Your merge, Done to come'])
     } else {
-      // THE TERMINAL HAS NO Svg: ▰▱ cells for the gauges, ✓●○◇ for the phases, the same words beside them.
+      // THE TERMINAL HAS NO Svg: the road as runs of coloured cells.
       expect(await ui.find({ type: 'Svg' })).toBeUndefined()
-      expect(await ui.find({ type: 'Text', text: exact('▰▰▱▱ 2/4 slots · ▰▱▱▱ $5.50 of $20') })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: exact('✓ ✓ ✓ ✓ ● ○ ○ ◇  Tests · tester · step 5 of 9') })).toBeDefined()
-      expect((await ui.findAll({ type: 'Text', text: exact('● ') })).map(node => node.props.color)).toEqual(['suggestion', 'suggestion'])
-      expect((await ui.findAll({ type: 'Text', text: exact('◇ ') })).every(node => node.props.color === 'subtle')).toBe(true)
+      expect((await ui.findAll({ type: 'Text', text: /^━+$/ })).length).toBe(12)
     }
 
-    expect(await ui.find({ type: 'Text', text: exact('Queued · 2') })).toBeDefined()
+    // THE FOLDS, SHUT: what they hold is a press away.
+    expect((await ui.find({ key: 'fold-queued' }))?.text).toBe('▸ Queued 2')
+    expect(await ui.find({ key: 'queued-328' })).toBeUndefined()
+    await ui.press({ key: 'fold-queued' })
     expect((await ui.find({ key: 'queued-328' }))?.text).toMatch(/^\s*(?:●\s+)?queued\s+#328 Owner's spec and plan\s+after #324$/)
     expect((await ui.find({ type: 'Text', text: exact('tvoje volba') }))?.props).toMatchObject({ color: 'text', weight: 'semibold' })
+    await ui.press({ key: 'fold-queued' })
 
-    expect(await ui.find({ type: 'Text', text: exact('Done today · 1') })).toBeDefined()
+    expect((await ui.find({ key: 'fold-done' }))?.text).toBe('▸ Done today 1')
+    await ui.press({ key: 'fold-done' })
     expect((await chipOf(ui, 'done-341'))?.dot).toBe('success')
     expect((await ui.find({ key: 'done-341' }))?.text).toContain('#341 S10a cleanup')
+    await ui.press({ key: 'fold-done' })
 
-    expect(await ui.find({ key: 'quick-add' })).toBeDefined()
-    const footer = await ui.find({ type: 'Text', text: exact('/terylon-cockpit') })
-    expect(footer?.props.color).toBe('subtle')
-    expect(footer?.props.mono).toBe(true)
+    expect((await ui.find({ key: 'goals-show-closed' }))?.text).toBe('▸ History 1')
+
+    // THE FOOTER: the 30 days in a line and the pills.
+    expect(await ui.find({ type: 'Text', text: exact('Last 30 days 43 stories · $1.10 per story') })).toBeDefined()
+    expect((await ui.find({ key: 'tab-bell' }))?.props.label).toBe('Notices 2 ›')
+    expect((await ui.find({ key: 'tab-memory' }))?.props.label).toBe('Memory 1 ›')
+    expect((await ui.find({ key: 'tab-status' }))?.props.label).toBe('Health ›')
     await ui.unmount()
   }
 })
 
-test('the counts carry their colours in tabular digits: waiting warning, running suggestion, done success', async ($, on) => {
-  const terylon = world(on, { now: lateOnTheLocalDayOf('2026-10-11T12:20:00Z') })
+test('the tiles: a stroke and a coloured number, never a fill; amber is the stuck tile\'s stroke alone', async ($, on) => {
+  const terylon = world(on)
+  terylon.answers.work_in_flight = { ...FLIGHT, stories: [{ ...FLIGHT.stories[0], stuck: { since: '2026-10-11T15:20:00Z', reason: 'no progress' } }, FLIGHT.stories[1]] }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ plugin: 'terylon-pane', surface: 'desktop', component: 'Pane', requestId: 'terylon', props: PANE_PROPS })
-  const counts = await ui.findAll({ type: 'Text', text: /^ · \d$/ })
 
-  expect(counts.map(count => [count.text, count.props.color])).toEqual([[' · 3', 'text'], [' · 2', 'suggestion'], [' · 2', 'inactive'], [' · 1', 'success']])
-  expect(counts.every(count => count.props.tabular === true)).toBe(true)
+  // A TILE'S NUMBER AND ITS WORD, in its drawn children.
+  type Drawn = { props: Record<string, unknown>; children: { props: Record<string, unknown>; text: string }[] }
+  const partsOf = async (key: string) => ((await ui.find({ key })) as unknown as Drawn).children
 
-  // A CARD'S HEADING (S32): semibold at the heading size.
-  const heading = await ui.find({ type: 'Text', text: exact('Waiting for you · 3') })
-  expect(heading?.props.size).toBe('heading')
-  expect(heading?.props.weight).toBe('semibold')
+  for (const [key, stroke, count, color, label] of [['tile-waiting', 'merged', '3', 'merged', 'waiting for you'], ['tile-running', 'subtle', '2', 'suggestion', 'running'], ['tile-stuck', 'warning', '1', 'text', 'stuck']] as const) {
+    const tile = await ui.find({ key })
+    expect(tile?.props).toMatchObject({ borderStyle: 'round', borderColor: stroke })
+    expect(tile?.props.backgroundColor).toBeUndefined()
+    const [number, word] = await partsOf(key)
+    expect(number?.props).toMatchObject({ color, tabular: true, size: 'title', weight: 'semibold' })
+    expect(await ui.find({ type: 'Text', text: exact(count) })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact(label) })).toBeDefined()
+    expect(word?.props.color).toBe('subtle')
+  }
+
+  // NOTHING RUNNING, NOTHING STUCK: quiet numbers and quiet strokes.
+  terylon.answers.work_in_flight = { ...FLIGHT, stories: [] }
+  await ui.press({ key: 'refresh' })
+  expect((await ui.find({ key: 'tile-stuck' }))?.props.borderColor).toBe('subtle')
+  expect((await partsOf('tile-stuck'))[0]?.props.color).toBe('inactive')
+  expect((await partsOf('tile-running'))[0]?.props.color).toBe('inactive')
 })
 
 test('the house style: theme keys only, round cards, a card that waits stroked and never filled, and the kinds as chips on the desktop', async ($, on) => {
@@ -96,6 +120,7 @@ test('the house style: theme keys only, round cards, a card that waits stroked a
   const terylon = world(on, { now: lateOnTheLocalDayOf('2026-10-11T12:20:00Z') })
   await $.session.start(SESSION)
   await terylon.clock.settle()
+  await $.command.run({ command: 'terylon-cockpit', args: '' } as never)
 
   for (const surface of ['desktop', 'terminal'] as const) {
     const ui = await $.ui.mount({ plugin: 'terylon-pane', surface, component: 'Pane', requestId: 'terylon', props: PANE_PROPS })
@@ -111,33 +136,35 @@ test('the house style: theme keys only, round cards, a card that waits stroked a
     }
 
     // NO CARD IS FILLED (the owner's walk of 1.2.0: on a tinted fill the hints, links and chips could not be read).
-    // Only a kind chip has a background, the theme's neutral grey, and only where a surface draws chips.
+    // Only a chip has a background, the theme's neutral grey, and only where a surface draws chips.
     expect(boxes.filter(box => box.props.backgroundColor !== undefined)).toEqual([])
     const chips = texts.filter(text => text.props.backgroundColor !== undefined)
-    expect(chips.map(text => text.text.replace(/[\s●]+/g, ''))).toEqual(surface === 'desktop' ? ['question', 'merge', 'plan', 'queued', 'held', 'merged'] : [])
-    expect(chips.every(text => text.props.backgroundColor === 'userMessageBackground' && text.props.color === 'inactive' && /^\u00a0●\u00a0\S+\u00a0$/.test(text.text))).toBe(true)
+    expect(chips.map(text => text.text.replace(/[●]+/g, '').replace(/[\s\u00a0]+/g, ' ').trim())).toEqual(surface === 'desktop' ? ['question', 'merge', 'plan', 'Your merge', 'Plan'] : [])
+    expect(chips.every(text => text.props.backgroundColor === 'userMessageBackground' && text.props.color === 'inactive' && /^\u00a0●\u00a0.+\u00a0$/.test(text.text))).toBe(true)
 
     const cards = boxes.filter(box => box.props.borderStyle === 'round')
-    expect(cards.length).toBeGreaterThanOrEqual(3)
-    expect(cards.map(box => box.props.borderColor)).toEqual(['warning', 'subtle', 'subtle', 'subtle'])
+    // Terminal at this width: one line of counts in place of the tiles.
+    const tiles = surface === 'desktop' ? ['merged', 'subtle', 'subtle'] : []
+    expect(cards.map(box => box.props.borderColor)).toEqual([...tiles, 'warning', 'subtle', 'subtle'])
     await ui.unmount()
   }
 })
 
-test('a waiting row opens under itself: the whole question and the way to answer it', async ($, on) => {
+test('a waiting row opens under itself: the whole question beside its act', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ plugin: 'terylon-pane', surface: 'desktop', component: 'Pane', requestId: 'terylon', props: PANE_PROPS })
-  expect(await ui.find({ key: 'answer-9' })).toBeUndefined()
+  expect((await ui.find({ key: 'answer-9' }))?.props.label).toBe('Answer')
+  expect(await ui.find({ type: 'Text', text: exact('Má mrtvý běh pokračovat od posledního commitu?') })).toBeUndefined()
 
   await ui.press({ key: 'question-9' })
-  expect((await ui.find({ key: 'answer-9' }))?.props.label).toBe('Answer')
+  expect(await ui.find({ type: 'Text', text: exact('Má mrtvý běh pokračovat od posledního commitu?') })).toBeDefined()
   expect((await ui.find({ type: 'Link', text: 'Answer in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=question&question=9')
 
   await ui.press({ key: 'question-9' })
-  expect(await ui.find({ key: 'answer-9' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: exact('Má mrtvý běh pokračovat od posledního commitu?') })).toBeUndefined()
 })
 
 test('every console link points at the console screen of its subject, never at a gate tool: one press into the row', async ($, on) => {
@@ -147,8 +174,10 @@ test('every console link points at the console screen of its subject, never at a
 
   const ui = await $.ui.mount({ plugin: 'terylon-pane', surface: 'desktop', component: 'Pane', requestId: 'terylon', props: PANE_PROPS })
 
-  // WITH THE HOVER REVEAL TURNED OFF, 1.1.2's way: the console link is in the row's body, a press away.
+  // WITH THE HOVER REVEAL TURNED OFF, 1.1.2's way: the console link is in the row's body, a press away; a merge's own
+  // act is a link already, and into the console, as every merge is.
   expect(await ui.find({ type: 'Link', text: /in the console/ })).toBeUndefined()
+  expect((await ui.find({ type: 'Link', text: 'Merge ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=merge&story=327')
 
   for (const key of ['merge-327', 'plan-41', 'question-9']) {
     await ui.press({ key })
@@ -171,7 +200,7 @@ test('on the phone there is no Input: adding a task posts a request into the ses
   const ui = await $.ui.mount({ plugin: 'terylon-pane', surface: 'mobile', component: 'Pane', requestId: 'terylon', props: PANE_PROPS })
 
   expect(await ui.find({ type: 'Input' })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: exact('Waiting for you · 3') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('Waiting for you') })).toBeDefined()
   await ui.press({ key: 'phone-add' })
   expect(terylon.prompts).toEqual(['Chci přidat úkol lídrovi Terylonu. Zeptej se mě, co a po čem.'])
 })

@@ -9,7 +9,7 @@ import type { On } from 'claude-code'
 
 import { checkTree, storeFileOf, treeLine } from '../hooks/health'
 
-import { BRIEFING, FLIGHT, HOUR, PANE_PROPS, PLANS, SESSION, STORY_327, events, exact, lateOnTheLocalDayOf, storyMoved, world, pill, toOverview, moreWith, unfold } from './fixtures'
+import { BRIEFING, FLIGHT, HOUR, PANE_PROPS, PLANS, SESSION, STORY_327, events, exact, lateOnTheLocalDayOf, storyMoved, world, pill, toOverview, moreWith, unfold, toRoot } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 const SURFACES = ['desktop', 'terminal'] as const
@@ -72,6 +72,7 @@ test('A STORE THAT REFUSES does not stop the done-signal: events_since is called
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
+    await toRoot(ui)
     expect((await ui.find({ key: 'tab-status' }))?.props.label).toContain('⚠')
     await moreWith(ui, 'fold-diagnostics')
 
@@ -125,6 +126,7 @@ test('events_since REFUSED BY CLAUDE CODE: the queue reads, and the Status tab n
     await toOverview(ui)
     // THE QUEUE IS NOT THE PROBLEM: it is drawn, and the Status tab carries the warning.
     expect(await ui.find({ key: 'row-merge-327' })).toBeDefined()
+    await toRoot(ui)
     expect((await ui.find({ key: 'tab-status' }))?.props.label).toContain('⚠')
     await moreWith(ui, 'fold-diagnostics')
 

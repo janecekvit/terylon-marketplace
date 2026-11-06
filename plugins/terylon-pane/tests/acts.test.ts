@@ -439,7 +439,7 @@ test('POLICY: read on Status with its version, edited within policy_get\'s limit
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await pill(ui, 'tab-status')
+  await moreWith(ui, 'fold-policy')
   expect(await ui.find({ type: 'Text', text: exact('version 1 · never changed') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('4 stories') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('$25') })).toBeDefined()

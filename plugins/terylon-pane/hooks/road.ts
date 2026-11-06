@@ -91,7 +91,7 @@ function nextOf(stage: PaneRoadStage, isAccept: boolean, stories: readonly PaneR
   }
 
   if (hasQuestion) {
-    return COPY.nextQuestion
+    return COPY.nextAsks
   }
 
   if (stories.some(story => story.isStuck)) {

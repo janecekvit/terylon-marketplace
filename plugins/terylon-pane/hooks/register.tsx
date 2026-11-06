@@ -69,7 +69,6 @@ import {
   clock,
   consoleLink,
   costBasisOf,
-  costTight,
   deleteLink,
   goalLink,
   dayBudget,
@@ -3222,7 +3221,7 @@ export const register: Register = on => {
     )
     const folds = (key: string, buttons: unknown[]) => <Box key={key} flexDirection="row" gap={look.isGraphic ? 'md' : 1} flexWrap="wrap">{buttons}</Box>
     // TWO CARDS SIDE BY SIDE where the pane is wide; one under the other elsewhere.
-    const twoColumns = (key: string, left: unknown, right: unknown) => (look.isWide
+    const twoColumns = (key: string, left: unknown, right: unknown) => (look.isWide && left !== null && right !== null
       ? (
           <Box key={key} flexDirection="row" gap="sm" alignItems="flex-start">
             <Box flexGrow={1} flexShrink={1} minWidth={0} width={0}>{left}</Box>
@@ -3247,10 +3246,10 @@ export const register: Register = on => {
         : (current.runningTokens ?? null) === null ? null : `${words.tokens(current.runningTokens ?? 0)} today`
 
       return [
-        current.connection === 'connecting' ? COPY.connecting : stateWord(health).word,
-        current.connection === 'ok' ? COPY.connectedShort : isStale ? COPY.disconnected(at(current.failingSince)) : null,
-        COPY.gaugeSlots(current.slotsUsed, current.slots),
-        cost,
+        current.connection === 'connecting' ? COPY.connecting : isStale ? COPY.disconnected(at(current.failingSince)) : stateWord(health).word,
+        current.connection === 'ok' ? COPY.connectedShort : null,
+        current.slots > 0 ? COPY.slotsShort(current.slotsUsed, current.slots) : null,
+        current.fetchedAt === null ? null : cost,
       ].filter(part => part !== null).join(' · ')
     }
     const overviewHead = (
@@ -3772,7 +3771,7 @@ export const register: Register = on => {
         })
         // THE LAST 30 DAYS, in rows, and the Policy and Diagnostics a press away.
         const monthCard = cardOf('status-month', COPY.statusMonth, null, [
-          ...(bellState.metrics.length === 0 ? [quiet(elements, COPY.loading)] : bellState.metrics.map(metric => (
+          ...(bellState.phase === 'loading' ? [quiet(elements, COPY.loading)] : bellState.metrics.map(metric => (
             <Box key={`metric-${metric.label}`} flexDirection="row" justifyContent="space-between" gap={1}>
               <Text>{`${metric.label.slice(0, 1).toUpperCase()}${metric.label.slice(1)}`}</Text>
               <Text color="inactive" tabular>{metric.value}</Text>
@@ -4000,6 +3999,10 @@ export const register: Register = on => {
                 {look.isGraphic && working.spentUsd !== null ? picture(elements, spendBar(working.spentUsd, working.budgetUsd, COPY.spendAlt(words.money(working.spentUsd), words.budget(working.budgetUsd ?? 0)))) : null}
                 {!look.isGraphic && working.fraction !== null ? <Text color="suggestion">{bar(working.fraction)}</Text> : null}
                 {!look.isGraphic ? <Text color="inactive">{working.spend}</Text> : null}
+                <Box key="story-working-acts" flexDirection="row" gap={1} flexWrap="wrap">
+                  {shownStory.canStop && actButton(storyKey, 'story_stop', screen.story)}
+                  <Button key="summarise" label={COPY.summariseInSession} onPress={() => postPrompt($, COPY.summarisePrompt(storyLabel))} />
+                </Box>
               </Box>
             ),
           ])}
@@ -4096,9 +4099,8 @@ export const register: Register = on => {
             {shownStory.isVerified && !shownStory.isList && <Link href={storyLink(base, 'merge', storyRef, shownStory.story)} label={COPY.mergeInConsole} />}
             {shownStory.isVerified && shownStory.isList && actButton(storyKey, 'story_accept', screen.story, { isPrimary: true })}
             {shownStory.isVerified && actButton(storyKey, 'story_return', screen.story, { opens: true })}
-            {shownStory.canStop && actButton(storyKey, 'story_stop', screen.story)}
             {shownStory.canAbandon && actButton(storyKey, 'story_abandon', screen.story, { isDanger: true, opens: true })}
-            <Button key="summarise" label={COPY.summariseInSession} onPress={() => postPrompt($, COPY.summarisePrompt(storyLabel))} />
+            {working === null && <Button key="summarise" label={COPY.summariseInSession} onPress={() => postPrompt($, COPY.summarisePrompt(storyLabel))} />}
             {shownStory.goal !== null && <Button key="story-goal" label={COPY.goalOf(goalLabel ?? String(shownStory.goal))} dimColor onPress={() => go({ screen: 'goal', goal: shownStory.goal ?? 0 })} />}
             {shownStory.pullRequest !== null && <Link href={shownStory.pullRequest.url} label={shownStory.pullRequest.label} />}
             {/* A WORK ITEM IS ONLY EVER THIS LINK, "ADO #n ↗", never the story's name. */}
@@ -4740,20 +4742,22 @@ export const register: Register = on => {
     })
     // A TILE: a stroke and a coloured number, never a fill. Amber is a stroke alone: a stuck count's number is ink.
     const tile = (name: string, count: number, label: string, stroke: 'merged' | 'subtle' | 'warning', numberTone: Tone) => (
-      <Box key={`tile-${name}`} flexGrow={1} flexShrink={1} minWidth={0} width={0} flexDirection="row" alignItems="center" borderStyle="round" borderColor={count > 0 ? stroke : 'subtle'} paddingX={look.isGraphic ? 'md' : 1} paddingY={look.isGraphic ? 'sm' : 0} gap={look.isGraphic ? 'sm' : 1}>
-        <Text key={`tile-${name}-count`} size="title" tabular color={colorOf(count > 0 ? numberTone : 'inactive')} weight="semibold">{String(count)}</Text>
-        <Text key={`tile-${name}-label`} color="subtle" wrap="truncate-end">{label}</Text>
+      <Box key={`tile-${name}`} flexGrow={1} flexShrink={1} minWidth={0} width={look.isGraphic ? 0 : '33%'} flexDirection="row" alignItems="center" borderStyle="round" borderColor={count > 0 ? stroke : 'subtle'} paddingX={look.isGraphic ? 'md' : 1} paddingY={look.isGraphic ? 'sm' : 0} gap={look.isGraphic ? 'sm' : 1}>
+        <Text size="title" tabular color={colorOf(count > 0 ? numberTone : 'inactive')} weight="semibold">{String(count)}</Text>
+        <Text color="subtle" wrap="truncate-end">{label}</Text>
       </Box>
     )
     const tiles = look.isTilesLine
       ? (
-          <Text key="tiles-line" wrap="truncate-end">
-            <Text color={current.waiting.length > 0 ? 'merged' : 'inactive'} weight="semibold" tabular>{COPY.tilesWaiting(current.waiting.length)}</Text>
-            <Text color="subtle">{' · '}</Text>
-            <Text color={current.running.length > 0 ? 'suggestion' : 'inactive'} tabular>{COPY.tilesRunning(current.running.length)}</Text>
-            <Text color="subtle">{' · '}</Text>
-            <Text color={stuckCount > 0 ? 'text' : 'inactive'} weight={stuckCount > 0 ? 'semibold' : undefined} tabular>{COPY.tilesStuck(stuckCount)}</Text>
-          </Text>
+          <Box key="tiles-line">
+            <Text wrap="truncate-end">
+              <Text color={current.waiting.length > 0 ? 'merged' : 'inactive'} weight="semibold" tabular>{COPY.tilesWaiting(current.waiting.length)}</Text>
+              <Text color="subtle">{' · '}</Text>
+              <Text color={current.running.length > 0 ? 'suggestion' : 'inactive'} tabular>{COPY.tilesRunning(current.running.length)}</Text>
+              <Text color="subtle">{' · '}</Text>
+              <Text color={stuckCount > 0 ? 'text' : 'inactive'} weight={stuckCount > 0 ? 'semibold' : undefined} tabular>{COPY.tilesStuck(stuckCount)}</Text>
+            </Text>
+          </Box>
         )
       : (
           <Box key="tiles" flexDirection="row" gap={look.isGraphic ? 'sm' : 1}>
@@ -4802,7 +4806,7 @@ export const register: Register = on => {
 
       return (
         <Box key={`goal-card-${item.goal.id}`} flexDirection="column" borderStyle="round" borderColor={item.stuck > 0 ? 'warning' : 'subtle'} paddingX={look.isGraphic ? 'md' : 1} paddingY={look.isGraphic ? 'sm' : 0} gap={look.isGraphic ? 'sm' : 1}>
-          <Box key="goal-card-title" flexDirection="row" alignItems="center" justifyContent="space-between" gap={1}>
+          <Box key={`goal-card-title-${item.goal.id}`} flexDirection="row" alignItems="center" justifyContent="space-between" gap={1}>
             <Box flexDirection="row" alignItems="center" gap={1} flexShrink={1} minWidth={0} overflow="hidden">
               {item.goal.ref === undefined || item.goal.ref === null ? null : <Box flexShrink={0}><Text mono size="footnote" color="subtle">{item.goal.ref}</Text></Box>}
               <Button key={`goal-${item.goal.id}`} plain onPress={() => go({ screen: 'goal', goal: item.goal.id })}>
@@ -4812,7 +4816,7 @@ export const register: Register = on => {
             <Box flexShrink={0}>{stageChip}</Box>
           </Box>
           {item.road === null ? null : roadDrawing(elements, look, `goal-card-road-${item.goal.id}`, item.road.steps)}
-          <Box key="goal-card-detail" flexDirection={look.isNarrow ? 'column' : 'row'} justifyContent="space-between" gap={1}>
+          <Box key={`goal-card-detail-${item.goal.id}`} flexDirection={look.isNarrow ? 'column' : 'row'} justifyContent="space-between" gap={1}>
             <Box flexDirection="row" flexWrap="wrap" flexShrink={1} minWidth={0} gap={1} alignItems="center">
               <Text color="subtle" size="footnote" tabular>{item.summary}</Text>
               {item.running.map(run => (
