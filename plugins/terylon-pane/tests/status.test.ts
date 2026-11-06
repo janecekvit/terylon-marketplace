@@ -111,7 +111,7 @@ test('paused: resuming is the owner\'s gate, a link to the console and never a b
   }
 })
 
-test('an alert: its own card with the notice\'s body, which says what to do, and the console a link away', async ($, on) => {
+test('an alert is one line on Health, never the notice again: its title and Open in Notices, where its body is', async ($, on) => {
   const terylon = world(on)
   terylon.answers.notices_list = { unhandled: 1, notices: [GATUS] }
   await $.session.start(SESSION)
@@ -122,10 +122,13 @@ test('an alert: its own card with the notice\'s body, which says what to do, and
     await moreWith(ui, 'fold-diagnostics')
 
     expect((await ui.find({ type: 'Text', text: exact('1 alert') }))?.props.color).toBe('error')
-    expect((await ui.findAll({ type: 'Text', text: exact('the page is not well') })).map(node => node.props.color)).toContain('error')
+    expect(await ui.find({ type: 'Text', text: exact('1 notice needs you: the page is not well') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('gatus says it stopped answering; check the container.') })).toBeUndefined()
+    expect((await ui.find({ key: 'health-open-notices' }))?.props.label).toBe('Open in Notices ›')
+    await ui.press({ key: 'health-open-notices' })
     expect(await ui.find({ type: 'Text', text: /^\s*gatus · / })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('gatus says it stopped answering; check the container.') })).toBeDefined()
-    expect((await ui.find({ type: 'Link', text: 'Notices in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=waiting&notices=open')
+    expect((await ui.find({ type: 'Link', text: 'In the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=waiting&notices=open')
     await ui.unmount()
   }
 })

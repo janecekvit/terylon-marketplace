@@ -11,7 +11,7 @@ async function isLoading(ui: { findAll: (query: Record<string, unknown>) => Prom
   return (await ui.findAll({ type: 'Text' })).some(node => /Loading/.test(node.text))
 }
 
-for (const [tab, tool, title] of [['refresh', 'goals_list', 'Goals did not load'], ['tab-bell', 'leader_status', 'Notices did not load']] as const) {
+for (const [tab, tool, title] of [['refresh', 'goals_list', 'Goals did not load'], ['tab-bell', 'notices_list', 'Notices did not load']] as const) {
   test(`${tab}: a call that never answers ends as the screen's error with its reason, never "Loading…" forever`, async ($, on) => {
     const terylon = world(on)
     await $.session.start(SESSION)

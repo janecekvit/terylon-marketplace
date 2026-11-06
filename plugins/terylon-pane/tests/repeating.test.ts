@@ -318,7 +318,7 @@ test('a version plan\'s card says what Approve does to later runs, never "all 0 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await openGoal12(ui)
 
-  expect(await ui.find({ type: 'Text', text: exact('Approve: each later task_run uses version 2.') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('Approve: each later run uses version 2.') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /0 stories|its story|both stories/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: exact(' · version 2 of TEST PR54: sum the amounts') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('up to $1 a run · green runs accepted by themselves') })).toBeDefined()

@@ -133,7 +133,7 @@ test('A VERIFIED LIST STORY WAITS FOR AN ACCEPTANCE: its row, kind and words say
     expect((await ui.find({ key: 'merge-327' }))?.text).toMatch(/merge[\s\S]*verified in pr-196 · waiting for merge/)
 
     // EACH ROW'S ACT IS ITS OWN: Accept on the list story's, the console's link on the repository story's.
-    expect((await ui.find({ key: 'act-story-352-accept' }))?.props.label).toBe('Accept')
+    expect((await ui.find({ key: 'open-story-352' }))?.props.label).toBe('Accept')
     expect((await ui.find({ type: 'Link', text: 'Merge ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=merge&story=327')
 
     await ui.unmount()

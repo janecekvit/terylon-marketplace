@@ -4789,7 +4789,7 @@ export const register: Register = on => {
                 </Box>
               )}
           {goalRoad === null ? null : (
-            <Box key="goal-road" flexDirection="column" borderStyle="round" borderColor="subtle" paddingX={look.isGraphic ? 'md' : 1} paddingY={look.isGraphic ? 'sm' : 0} gap={look.isGraphic ? 'sm' : 1}>
+            <Box key="goal-road" flexDirection="column" borderStyle="round" borderColor="subtle" backgroundColor={look.isGraphic ? CARD_FILL : undefined} paddingX={look.isGraphic ? 'md' : 1} paddingY={look.isGraphic ? 'sm' : 0} gap={look.isGraphic ? 'sm' : 1}>
               {roadDrawing(elements, look, 'goal-road-cells', goalRoad.steps)}
               {roadNames(elements, look, 'goal-road', goalRoad.steps, { onlyNow: look.isNarrow })}
               {nextLine('goal-next', COPY.whatNext, goalNext)}

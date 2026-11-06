@@ -4,6 +4,8 @@
 
 import { test, expect } from 'claude-code/testing'
 
+import { BADGE_FILL, CARD_FILL, WAITING_TILE_FILL } from '../hooks/drawing'
+
 import { BRIEFING, FLIGHT, GOALS, GOAL_QUESTION, METRICS, NARROW_PANE_PROPS, PANE_PROPS, PLANS, SESSION, STORIES, STORY_327, STORY_333, chipOf, exact, openCockpit, pictures, pill, toOverview, toRoot, unfold, world } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon' } as const
@@ -140,7 +142,7 @@ test('the stage\'s chip: purple for a gate, blue while it runs, its word never a
   }
 
   // NO CARD IS FILLED.
-  expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.backgroundColor !== undefined)).toEqual([])
+  expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.backgroundColor !== undefined && ![CARD_FILL, WAITING_TILE_FILL, BADGE_FILL].includes(String(box.props.backgroundColor)))).toEqual([])
 })
 
 test('a goal\'s ref falls back to nothing where Terylon sends none, its stories\' to #id, as today', async ($, on) => {
@@ -287,11 +289,13 @@ test('THE TILES: three boxes on the desktop and a wide terminal, one line of cou
   }
 })
 
-test('A WAITING ROW\'S ACT: Approve and Accept take it on one press, as on their cards; a question opens; merge is only a link', async ($, on) => {
+test('A WAITING ROW\'S ACT: Approve and Accept open their card and take nothing on that press; a question opens; merge is only a link', async ($, on) => {
   const terylon = world(on)
   terylon.answers.briefing = { ...BRIEFING, storiesVerified: [...BRIEFING.storiesVerified, { id: 352, goal: 3, title: 'Weekly cost summary', target: 'list' }], storiesBlocked: [{ id: 87, title: 'Plan the export', blockedReason: 'needs your choice' }] }
   terylon.answers.plan_approve = { accepted: true, sentence: 'Plan 41: 2 approved, 0 dropped.', commandId: 'c1', subjectId: 3 }
   terylon.answers.story_accept = { accepted: true, sentence: 'Story 352 is accepted.', commandId: 'c2', subjectId: 352 }
+  const repository = terylon.answers.story_get as (args: Record<string, unknown>) => Record<string, unknown>
+  terylon.answers.story_get = (args: Record<string, unknown>) => (args.story === 352 ? { ...repository({ story: 327 }), id: 352, title: 'Weekly cost summary', state: 'verified', target: 'list', pullRequest: null } : repository(args))
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
@@ -302,17 +306,25 @@ test('A WAITING ROW\'S ACT: Approve and Accept take it on one press, as on their
   expect(await ui.find({ type: 'Button', text: /Merge/ })).toBeUndefined()
   expect((await ui.find({ key: 'open-story-87' }))?.props.label).toBe('Open')
 
+  // THE ROW KEEPS THE ACT'S WORD, AND ITS PRESS ONLY OPENS THE CARD: a plan is never approved unread.
+  expect((await ui.find({ key: 'open-plan-41' }))?.props.label).toBe('Approve')
+  await ui.press({ key: 'open-plan-41' })
+  expect(callsOf(terylon.calls, 'plan_approve')).toEqual([])
   await ui.press({ key: 'act-plan-41-approve' })
   expect(callsOf(terylon.calls, 'plan_approve').map(call => call.args)).toEqual([{ plan: 41 }])
-  // IT LEAVES THE LIST AT ONCE, THOUGH THE BRIEFING STILL NAMES IT, AND ITS ✓ STAYS.
-  expect(await ui.find({ key: 'plan-41' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: exact('✓ Plan 41: 2 approved, 0 dropped.') })).toBeDefined()
-  expect(await ui.find({ key: 'act-plan-41-queue' })).toBeUndefined()
+  await ui.press({ key: 'back' })
+  // IT LEAVES THE LIST AT ONCE, THOUGH THE BRIEFING STILL NAMES IT.
+  expect(await ui.find({ key: 'plan-41' })).toBeUndefined()
 
+  expect((await ui.find({ key: 'open-story-352' }))?.props.label).toBe('Accept')
+  await ui.press({ key: 'open-story-352' })
+  expect(callsOf(terylon.calls, 'story_accept')).toEqual([])
   await ui.press({ key: 'act-story-352-accept' })
   expect(callsOf(terylon.calls, 'story_accept').map(call => call.args)).toEqual([{ story: 352 }])
-  expect(await ui.find({ key: 'accept-352' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: exact('✓ Story 352 is accepted.') })).toBeDefined()
+  await ui.press({ key: 'back' })
+  expect(await ui.find({ key: 'accept-352' })).toBeUndefined()
 
   await ui.press({ key: 'answer-9' })
   expect(await ui.find({ key: 'answer-send' })).toBeDefined()
@@ -321,16 +333,18 @@ test('A WAITING ROW\'S ACT: Approve and Accept take it on one press, as on their
   expect(await ui.find({ key: 'back' })).toBeDefined()
 })
 
-test('A ROW\'S ACT REFUSED says so under the card, with Terylon\'s sentence and the console as the way round', async ($, on) => {
+test('AN ACT REFUSED ON THE CARD A ROW OPENED says so there, with Terylon\'s sentence and the console as the way round', async ($, on) => {
   const terylon = world(on)
   terylon.answers.plan_approve = { accepted: false, sentence: 'Plan 41 is already approved.', commandId: 'c1', subjectId: null }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, props: PANE_PROPS, surface: 'desktop' })
+  await ui.press({ key: 'open-plan-41' })
   await ui.press({ key: 'act-plan-41-approve' })
   expect(await ui.find({ type: 'Text', text: exact('Plan 41 is already approved.') })).toBeDefined()
-  expect((await ui.find({ type: 'Link', text: 'Plan in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=plan&plan=41')
+  expect((await ui.findAll({ type: 'Link', text: 'Plan in the console ↗' })).map(link => link.props.href)).toContain('https://terylon.example.ts.net/?view=plan&plan=41')
+  await ui.press({ key: 'back' })
   expect(await ui.find({ key: 'plan-41' })).toBeDefined()
 })
 
@@ -374,7 +388,7 @@ test('THE OVERVIEW READS ITS GOALS ON ITS LOAD AND WITH THE POLL WHILE IT IS DRA
   expect(await ui.find({ type: 'Text', text: /Reason: .*ETIMEDOUT/ })).toBeDefined()
 })
 
-test('MORE: Notices, Memory and Health on one page, whichever pill opened it, its sources read at once under the bound of a press', async ($, on) => {
+test('MORE: Health and Memory on one page, whichever button opened it, its sources read at once under the bound of a press', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -385,9 +399,8 @@ test('MORE: Notices, Memory and Health on one page, whichever pill opened it, it
   const pressed = ui.press({ key: 'tab-memory' })
   await terylon.clock.settle()
 
-  // ALL THREE ASKED AT ONCE: Notices drawn while Memory is still not answered.
-  expect(terylon.calls.slice(before).map(call => call.tool)).toEqual(expect.arrayContaining(['notices_list', 'leader_status', 'metrics', 'memory_get']))
-  expect(await ui.find({ key: 'handle-117' })).toBeDefined()
+  // ALL ASKED AT ONCE: Health drawn while Memory is still not answered.
+  expect(terylon.calls.slice(before).map(call => call.tool)).toEqual(expect.arrayContaining(['notices_list', 'metrics', 'memory_get']))
   expect(await ui.find({ type: 'Text', text: exact('Loading the memory…') })).toBeDefined()
   expect(await ui.find({ key: 'status-machine' })).toBeDefined()
 
@@ -397,7 +410,7 @@ test('MORE: Notices, Memory and Health on one page, whichever pill opened it, it
   await pressed
   expect(await ui.find({ type: 'Text', text: exact('The memory did not load') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /did not answer within 8 s/ })).toBeDefined()
-  expect(await ui.find({ key: 'handle-117' })).toBeDefined()
+  expect(await ui.find({ key: 'status-machine' })).toBeDefined()
 
   // ITS OWN TRY AGAIN.
   terylon.hang.delete('memory_get')

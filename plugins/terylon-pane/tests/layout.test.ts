@@ -34,10 +34,10 @@ test('a card has air: its rows stand apart from its title on every surface, and 
   // THE SURFACE'S OWN SPACING STEPS on the desktop (S32), whole cells on the terminal.
   for (const [surface, cardGap, padding, rowGap] of [['desktop', 'sm', 'md', 'xs'], ['terminal', 1, 1, 0]] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await pill(ui, 'tab-bell')
+    await pill(ui, 'tab-status')
     const cards = (await ui.findAll({ type: 'Box' })).filter(box => box.props.borderStyle === 'round')
 
-    expect(cards.length).toBeGreaterThanOrEqual(4)
+    expect(cards.length).toBeGreaterThanOrEqual(2)
     expect(cards.every(box => box.props.gap === cardGap && box.props.paddingX === padding)).toBe(true)
 
     // Each card holds its rows in a column of their own, spaced by the surface.

@@ -46,7 +46,7 @@ function refWorld(on: Parameters<typeof world>[0], options: Parameters<typeof wo
 // ---------------------------------------------------------------------------------------------------- the name
 
 for (const [surface, props, drawnOn] of SURFACES) {
-  test(`${surface}: Terylon Cockpit in full; the overview's pills read Notices · Memory · Health; /terylon-cockpit alone`, async ($, on) => {
+  test(`${surface}: Terylon Cockpit in full; the overview's head reads Notices · Memory · Health; no footer names the command`, async ($, on) => {
     const terylon = world(on)
     await $.session.start(SESSION)
     await terylon.clock.settle()
@@ -59,8 +59,8 @@ for (const [surface, props, drawnOn] of SURFACES) {
     }
 
     expect(labels).toEqual(['Notices 2', 'Memory', 'Health'])
-    // THE ONE COMMAND IS SAID ON THE TERMINAL'S FOOTER, and on More everywhere.
-    expect((await ui.find({ type: 'Text', text: exact('/terylon-cockpit') })) !== undefined).toBe(drawnOn === 'terminal')
+    // NO SCREEN NAMES THE COMMAND.
+    expect(await ui.find({ type: 'Text', text: exact('/terylon-cockpit') })).toBeUndefined()
 
     // NO OLD NAME ANYWHERE, AND NO COMMAND BUT ONE: walked through the overview and More.
     const seen: string[] = wordsOf(await ui.drawn())
@@ -69,12 +69,12 @@ for (const [surface, props, drawnOn] of SURFACES) {
     seen.push(...wordsOf(await ui.drawn()))
     await pill(ui, 'tab-status')
     seen.push(...wordsOf(await ui.drawn()))
-    expect(await ui.find({ type: 'Text', text: exact('/terylon-cockpit') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('/terylon-cockpit') })).toBeUndefined()
 
     // The fixtures' goal is titled "Agentic OS": a title Terylon sent is drawn as it came, so only the pane's words count.
     expect(seen.filter(word => /\b(Queue|Bell|Status)\b|(^|\s)\/terylon(-pane|-memory)?(\s|$)/.test(word))).toEqual([])
     expect(seen.filter(word => /Agentic OS/.test(word) && !/Agentic OS(?! ●| ⚠|:)/.test(word))).toEqual([])
-    expect(seen).toEqual(expect.arrayContaining(['Notices in the console ↗', 'Health ↗']))
+    expect(seen).toEqual(expect.arrayContaining(['Health ↗']))
     await ui.unmount()
   })
 }
@@ -103,7 +103,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
   })
 }
 
-test('Health says the machine Terylon, all well, in its colour, and More links the console\'s notices', async ($, on) => {
+test('Health says the machine Terylon, all well, in its colour, and names no tool', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -113,9 +113,8 @@ test('Health says the machine Terylon, all well, in its colour, and More links t
   expect(await ui.find({ type: 'Text', text: exact('Terylon') })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: exact('all well') }))?.props.color).toBe('success')
 
-  expect((await ui.find({ type: 'Link', text: 'Notices in the console ↗' }))?.props.href).toBe(`${BASE}/?view=waiting&notices=open`)
   expect((await ui.find({ type: 'Link', text: 'Health ↗' }))?.props.href).toBe(`${BASE}/?view=health`)
-  expect(await ui.find({ type: 'Text', text: exact('Mark handled is notice_handle, which decides nothing about work.') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /notice_handle/ })).toBeUndefined()
 })
 
 // ------------------------------------------------------------------------------------------------------- refs

@@ -392,7 +392,7 @@ test('MEMORY: a proposal waits on the Memory tab, old text struck and new, with 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await pill(ui, 'tab-memory')
   expect(await ui.find({ type: 'Text', text: exact('Proposals waiting · 3') })).toBeDefined()
-  expect((await ui.find({ key: 'mem-proposals' }))?.props.borderColor).toBe('warning')
+  expect((await ui.find({ key: 'mem-proposals' }))?.props.borderColor).toBe('merged')
   // The owner's memory holds the same entry, unstruck: the proposal's old text is the struck one.
   expect((await ui.findAll({ type: 'Text', text: exact('Merge potvrzuje passkey.') })).map(node => [node.props.strikethrough, node.props.color])).toContainEqual([true, 'error'])
   expect((await ui.find({ type: 'Text', text: exact('Merge potvrzuje passkey; produkci nasazuje follower.') }))?.props.color).toBe('success')

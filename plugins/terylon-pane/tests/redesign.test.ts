@@ -30,13 +30,14 @@ function hovers(node: unknown): { key: unknown; hover: unknown }[] {
   return [...own, ...(Array.isArray(element.children) ? element.children.flatMap(hovers) : [])]
 }
 
-test('THE PROOFS AS THE OWNER\'S WALK SETTLED THEM: all three proven and on; `no-<name>` the escape hatch', () => {
-  expect(proofsOf(undefined)).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true })
-  expect(proofsOf('')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true })
-  expect(proofsOf('svg-tooltips')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true })
-  expect(proofsOf(' No-Input-Rows, no-hover-reveal ')).toEqual({ inputRows: false, hoverReveal: false, svgTooltips: true })
-  expect(proofsOf('no-svg-tooltips')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: false })
-  expect(proofsOf('all yes true 1 no')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true })
+test('THE PROOFS: on by default; `no-<name>` the escape hatch', () => {
+  expect(proofsOf(undefined)).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true, noticesOver: true })
+  expect(proofsOf('')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true, noticesOver: true })
+  expect(proofsOf('svg-tooltips')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true, noticesOver: true })
+  expect(proofsOf(' No-Input-Rows, no-hover-reveal ')).toEqual({ inputRows: false, hoverReveal: false, svgTooltips: true, noticesOver: true })
+  expect(proofsOf('no-svg-tooltips')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: false, noticesOver: true })
+  expect(proofsOf('no-notices-over')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true, noticesOver: false })
+  expect(proofsOf('all yes true 1 no')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true, noticesOver: true })
 })
 
 test('TURNED OFF, 1.1.2 DRAWS: one-line fields, no hover reveal, no tooltip', async ($, on) => {
@@ -152,7 +153,7 @@ test('svg-tooltips, PROVEN AND ON: a story\'s road is interactive, a title on ea
   expect(road?.isInteractive).toBe(true)
   expect(road?.source.match(/<title>/g)).toHaveLength(8)
   // ITS OWN HEIGHT, given: the interactive frame left to itself drew an empty band around it (the owner's walk).
-  expect(road?.height).toBe(6)
+  expect(road?.height).toBe(5)
   expect((await ui.find({ type: 'Text', text: exact('Tests') }))?.props.color).toBe('suggestion')
 })
 
@@ -167,7 +168,7 @@ test('A DOCK OF ABOUT 435 PX (52 body columns): a story\'s road keeps its height
 
   await ui.press({ key: 'story-333' })
   const [road] = await pictures(ui)
-  expect(road?.source).toMatch(/^<svg [^>]*width="100%" height="6"/)
+  expect(road?.source).toMatch(/^<svg [^>]*width="100%" height="5"/)
   expect(road?.source.match(/<rect /g)?.length).toBe(8)
   expect(road?.isInteractive).toBe(true)
   expect(await ui.find({ key: 'phase-labels' })).toBeUndefined()
@@ -272,7 +273,7 @@ test('Health says the machine in one word, in its colour, its times in tabular d
 
     expect(word?.props).toMatchObject({ weight: 'semibold', color: 'success' })
     expect((await ui.find({ type: 'Text', text: /^\s*last answer at / }))?.props.tabular).toBe(true)
-    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.19.0') }))?.props.mono).toBe(true)
+    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.20.0') }))?.props.mono).toBe(true)
     await ui.unmount()
   }
 })

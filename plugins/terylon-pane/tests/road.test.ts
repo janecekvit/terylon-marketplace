@@ -214,13 +214,13 @@ test('THE ROAD\'S DRAWING: a segment per step in an equal column, fixed colours,
   const steps = roadSteps('approve', false)
   const picture = road(steps)
 
-  expect(picture.source).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" width="100%" height="6">/)
-  expect(picture.height).toBe(6)
+  expect(picture.source).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" width="100%" height="5">/)
+  expect(picture.height).toBe(5)
   expect(picture.alt).toBe('Plan done; Approve now; Build, Verify, Your merge, Done to come')
   expect(picture.source).not.toMatch(/<text|<tspan|<foreignObject/)
   expect(picture.source).not.toContain('<title>')
 
-  const rects = [...picture.source.matchAll(/<rect x="([\d.]+)%" y="0" width="([\d.]+)%" height="6" rx="3" fill="(#[0-9a-f]{6})"( fill-opacity="\.45")?\/>/g)]
+  const rects = [...picture.source.matchAll(/<rect x="([\d.]+)%" y="0" width="([\d.]+)%" height="5" rx="2" fill="(#[0-9a-f]{6})"( fill-opacity="\.(?:28|35)")?\/>/g)]
   expect(rects).toHaveLength(6)
 
   // EACH SEGMENT OVER ITS NAME'S COLUMN, at any width: its share of the width is its column's.
@@ -230,9 +230,9 @@ test('THE ROAD\'S DRAWING: a segment per step in an equal column, fixed colours,
     expect(Math.abs(centre - (index + 0.5) * (100 / 6))).toBeLessThan(0.2)
   })
 
-  // DONE GREEN, A GATE PURPLE, AHEAD GREY; A GATE AHEAD ITS PURPLE AT A LOWER OPACITY.
+  // DONE GREEN, A GATE PURPLE, AHEAD GREY; WHAT IS STILL AHEAD TRANSLUCENT, so it reads dark on dark and light on light.
   expect(rects.map(rect => rect[3])).toEqual([SVG_COLOURS.roadDone, SVG_COLOURS.roadGate, SVG_COLOURS.roadAhead, SVG_COLOURS.roadAhead, SVG_COLOURS.roadGate, SVG_COLOURS.roadAhead])
-  expect(rects.map(rect => rect[4] !== undefined)).toEqual([false, false, false, false, true, false])
+  expect(rects.map(rect => rect[4] !== undefined)).toEqual([false, false, true, true, true, true])
   expect(road(roadSteps('build', false)).source).toContain(SVG_COLOURS.roadNow)
 })
 

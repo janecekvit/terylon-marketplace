@@ -31,7 +31,7 @@ test("the Memory tab shows the leader's memory as stored, a card per file, and t
   expect(await memory.find({ type: 'Link', text: 'Confirm in the console ↗' })).toBeUndefined()
   expect((await memory.find({ type: 'Link', text: "Versions, roll-back and dropped proposals stay in the console's memory browser ↗" }))?.props.href).toBe('https://terylon.example.ts.net/?view=memory')
   expect(await memory.find({ type: 'Text', text: exact('Proposed in this session') })).toBeUndefined()
-  expect(await memory.find({ type: 'Text', text: exact('/terylon-cockpit') })).toBeDefined()
+  expect(await memory.find({ type: 'Text', text: exact('/terylon-cockpit') })).toBeUndefined()
 
   const cards = (await memory.findAll({ type: 'Box' })).filter(box => box.props.borderStyle === 'round')
   expect(cards.length).toBeGreaterThanOrEqual(3)

@@ -92,7 +92,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
 
     const open = strokedCards(await ui.drawn()).flatMap(card => inks(card))
     // ONLY MERGE AND AN ANSWER LINK OUT (S27): a plan's and a blocked story's acts are on their own cards.
-    expect(open.map(ink => ink.text)).toEqual(expect.arrayContaining(['Má mrtvý běh pokračovat od posledního commitu?', 'Answer in the console ↗', 'Merge in the console ↗']))
+    expect(open.map(ink => ink.text)).toEqual(expect.arrayContaining(['Merge in the console ↗']))
     expect(open.map(ink => ink.text)).not.toContain('Unblock in the console ↗')
     expect(unreadable(open)).toEqual([])
     await ui.unmount()
@@ -112,6 +112,8 @@ for (const surface of ['desktop', 'terminal'] as const) {
 
     await pill(ui, 'tab-status')
     await look()
+    await pill(ui, 'tab-bell')
+    await look()
     await toOverview(ui)
     await ui.press({ key: 'goal-3' })
     await look()
@@ -119,9 +121,9 @@ for (const surface of ['desktop', 'terminal'] as const) {
     await ui.press({ key: 'story-333' })
     await look()
 
-    expect(seen.map(ink => ink.text)).toEqual(expect.arrayContaining(['the page is not well', 'Notices in the console ↗', 'Approve starts both stories as the plan orders them.', 'Edit criteria or pick stories in the console ↗', 'Question from the run', 'Answer in the console ↗']))
-    // The alert's title on its problem card in `error`; on its notice's card, a title in `text`.
-    expect(seen.filter(ink => ink.text === 'the page is not well').map(ink => ink.color).sort()).toEqual(['error', 'text'])
+    expect(seen.map(ink => ink.text)).toEqual(expect.arrayContaining(['1 notice needs you: the page is not well', 'the page is not well', 'Notices in the console ↗', 'Approve starts both stories as the plan orders them.', 'Edit criteria or pick stories in the console ↗', 'Question from the run', 'Answer in the console ↗']))
+    // The alert's title on its notice's card alone, in `text`: Health holds a line of it.
+    expect(seen.filter(ink => ink.text === 'the page is not well').map(ink => ink.color)).toEqual(['text'])
     expect(unreadable(seen)).toEqual([])
     await ui.unmount()
 
@@ -147,7 +149,9 @@ test('no card is filled, on any screen: the stroke carries the warning, the pane
   const noneFilled = async () => {
     const fills = (await ui.findAll({ type: 'Box' })).filter(box => box.props.borderStyle === 'round').map(box => box.props.backgroundColor)
 
-    expect(fills.filter(fill => ![CARD_FILL, WAITING_TILE_FILL, BADGE_FILL].includes(String(fill)))).toEqual([])
+    expect(fills.length).toBeGreaterThan(0)
+
+    expect(fills.filter(fill => fill !== undefined && ![CARD_FILL, WAITING_TILE_FILL, BADGE_FILL].includes(String(fill)))).toEqual([])
   }
 
   await noneFilled()
@@ -241,7 +245,7 @@ const WALKS: Walked[] = [
       terylon.answers.briefing = { ...BRIEFING, questionsOpen: [...BRIEFING.questionsOpen, GOAL_QUESTION], unhandledNotices: 2 }
       terylon.answers.work_in_flight = { ...FLIGHT, stories: FLIGHT.stories.map(story => (story.id === 333 ? { ...story, stuck: { since: '2026-10-11T15:20:00Z', reason: 'no progress' } } : story)) }
     },
-    paths: [['question-9'], ['story-333'], ['merge-327', 'open-story-327'], ['question-606'], ['refresh', 'goal-3'], ['refresh', 'goal-new-open'], ['tab-status', 'fold-machine', 'fold-memory-owner', 'fold-policy', 'fold-diagnostics']],
+    paths: [['question-9'], ['story-333'], ['merge-327', 'open-story-327'], ['question-606'], ['refresh', 'goal-3'], ['refresh', 'goal-new-open'], ['tab-bell'], ['tab-status', 'fold-memory-owner', 'fold-policy', 'fold-diagnostics']],
     words: [/^\(1 stuck\)$/, /^question 2 of 2$/, /^! files outside the declaration$/],
   },
   {

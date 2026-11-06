@@ -183,6 +183,7 @@ test('HOW TO FIX NAMES NO BUTTON THAT IS NOT THERE: the rules an act needs end w
 
   const ui = await $.ui.mount(MOUNT)
   await toOverview(ui)
+  await ui.press({ key: 'open-plan-41' })
   terylon.mode.server = 'prompted'
   await ui.press({ key: 'act-plan-41-approve' })
   terylon.mode.server = 'up'
@@ -458,8 +459,8 @@ test('TWO WAITING PLANS OF ONE GOAL are both drawn, each with its own acts, and 
   expect(await ui.find({ key: 'plan-42' })).toBeDefined()
 
   await toOverview(ui)
-  expect(await ui.find({ key: 'act-plan-41-approve' })).toBeDefined()
-  expect(await ui.find({ key: 'act-plan-42-approve' })).toBeDefined()
+  expect(await ui.find({ key: 'open-plan-41' })).toBeDefined()
+  expect(await ui.find({ key: 'open-plan-42' })).toBeDefined()
 
   await toQueue($)
   await toOverview(ui)

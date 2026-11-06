@@ -162,7 +162,7 @@ test('events_since failing on Terylon: the done-signal stopped, since when, its 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await moreWith(ui, 'fold-diagnostics')
   expect(await ui.find({ type: 'Text', text: exact('⚠ The done-signal stopped') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^Since \d\d:\d\d, events_since has not answered as the owner's\./ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Since \d\d:\d\d, Terylon's events have not answered as the owner's\./ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('Reason: no such tool events_since') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('1. Open Health in the console to see why.') })).toBeDefined()
   expect((await ui.findAll({ type: 'Link', text: 'Health ↗' })).length).toBeGreaterThan(0)
@@ -286,7 +286,7 @@ test('THE WATCHDOG: no answer from events_since for more than three ticks while 
   const title = await ui.find({ type: 'Text', text: exact('⚠ The done-signal hears nothing') })
   expect(title?.props.size).toBe('heading')
   expect(title?.props.color).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /^events_since has not answered for 100 s, not once this session, while the overview reads./ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Terylon's events have not answered for 100 s, not once this session, while the overview reads./ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^3\. If it stays, run claude --debug and read the lines under terylon-pane: events:/ })).toBeDefined()
 
   // The call answers: the watchdog's clock starts again, and the problem goes.

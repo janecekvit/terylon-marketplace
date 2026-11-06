@@ -264,7 +264,7 @@ test('the goals on the overview: a card each, the closed ones a press away, a ne
   expect(await ui.find({ key: 'answer-send' })).toBeDefined()
 })
 
-test('More reads the notices, the leader and the metrics; a notice is handled there, the leader paused there', async ($, on) => {
+test('Notices reads the notices and a notice is handled there; More reads the metrics and the leader is paused there', async ($, on) => {
   const terylon = world(on)
   terylon.answers.briefing = { ...BRIEFING, unhandledNotices: 2 }
   await $.session.start(SESSION)
@@ -274,24 +274,24 @@ test('More reads the notices, the leader and the metrics; a notice is handled th
   expect((await ui.find({ key: 'tab-bell' }))?.props.label).toBe('Notices 2')
   await pill(ui, 'tab-bell')
 
-  expect(await ui.find({ type: 'Text', text: exact('Notices · 2') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('Needs you · 2') })).toBeDefined()
   // WHEN IT WAS RAISED, in the host's own zone (#39): 07:26 on a UTC runner, "11. 10." in Prague, where 22:00 UTC is the
   // next day. The expectation is computed as the pane computes it, so it holds in every zone.
   const raised = when(NOTICES.notices.find(notice => notice.id === 117)?.raisedAt, WORLD_NOW, hostZoneOffset(WORLD_NOW))
   expect(raised).toBe(hostZoneOffset(WORLD_NOW) === 0 ? '07:26' : raised)
   expect(raised).toMatch(/^(\d\d:\d\d|yesterday \d\d:\d\d|\d{1,2} [A-Z][a-z]{2} \d\d:\d\d)$/)
-  expect((await ui.find({ key: 'notice-117' }))?.text).toMatch(new RegExp(`^\\s*(?:●\\s+)?diun\\s+A newer docker\\.io/amir20/dozzle:latest is published\\s+${escapeRegExp(raised)} ▾$`))
-  // THE SOURCE AS A CHIP (S32): a fault of the machine in error, everything else inactive.
-  expect((await chipOf(ui, 'notice-117'))?.dot).toBe('inactive')
+  expect(await ui.find({ type: 'Text', text: exact(`A newer docker.io/amir20/dozzle:latest is published`) })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact(`diun · ${raised}`) })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('Nothing was pulled: update the pin when you choose.') })).toBeDefined()
-  await ui.press({ key: 'notice-117' })
-  expect(await ui.find({ type: 'Text', text: exact('Nothing was pulled: update the pin when you choose.') })).toBeUndefined()
 
-  // WHAT THE MACHINE DID, A PRESS AWAY.
-  expect(await ui.find({ type: 'Text', text: exact('✓ The leader runs') })).toBeUndefined()
-  await ui.press({ key: 'fold-machine' })
-  expect(await ui.find({ type: 'Text', text: exact('✓ The leader runs') })).toBeDefined()
+  // WHAT THE MACHINE DID, IN THE OPEN.
+  expect(await ui.find({ type: 'Text', text: exact('What the machine did') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^✓ The backup ran/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('✓ The leader runs') })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /notice_handle/ })).toBeUndefined()
+  expect((await ui.find({ type: 'Link', text: 'In the console ↗' }))?.props.href).toContain('notices=open')
+
+  await pill(ui, 'tab-status')
   // THE 30 DAYS IN ROWS, and no 30-day chart: metrics reports no per-day series.
   for (const [label, value] of [['Stories', '43'], ['Per story', '$1.10'], ['Merged', '0'], ['PR opened', '1']]) {
     expect(await ui.find({ type: 'Text', text: exact(label ?? '') })).toBeDefined()
@@ -302,10 +302,8 @@ test('More reads the notices, the leader and the metrics; a notice is handled th
   // PAUSE IS ON HEALTH; RESUME STANDS ON THE PAUSED CARD.
   expect(await ui.find({ type: 'Link', text: 'Pause the leader ↗' })).toBeUndefined()
   expect((await ui.find({ key: 'act-leader-pause' }))?.props.label).toBe('Pause the leader…')
-  expect(await ui.find({ type: 'Text', text: exact('Mark handled is notice_handle, which decides nothing about work.') })).toBeDefined()
-  expect(await ui.find({ type: 'Link', text: 'Notices in the console ↗' })).toBeDefined()
 
-  for (const tool of ['notices_list', 'leader_status', 'metrics']) {
+  for (const tool of ['notices_list', 'metrics']) {
     expect(terylon.calls.map(call => call.tool)).toContain(tool)
   }
 })
@@ -317,11 +315,18 @@ test('More is a page of the one pane: no second pane opens, every pill opens it,
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
 
-  for (const key of ['tab-bell', 'tab-memory', 'tab-status'] as const) {
+  // NOTICES LIE OVER THE OVERVIEW, and ✕ takes them away.
+  await ui.press({ key: 'tab-bell' })
+  expect(terylon.opens).toEqual([])
+  expect(await ui.find({ key: 'notices' })).toBeDefined()
+  await ui.press({ key: 'notices-close' })
+  expect(await ui.find({ key: 'notices' })).toBeUndefined()
+
+  for (const key of ['tab-memory', 'tab-status'] as const) {
     await ui.press({ key })
     expect(terylon.opens).toEqual([])
 
-    for (const section of ['more-notices', 'more-memory', 'more-health']) {
+    for (const section of ['more-memory', 'more-health']) {
       expect(await ui.find({ key: section })).toBeDefined()
     }
 
@@ -350,5 +355,5 @@ test('/terylon-cockpit is the one command: it opens the pane on the overview; /t
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(await ui.find({ key: 'tiles' })).toBeDefined()
   await pill(ui, 'tab-memory')
-  expect(await ui.find({ type: 'Text', text: exact('/terylon-cockpit') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('/terylon-cockpit') })).toBeUndefined()
 })

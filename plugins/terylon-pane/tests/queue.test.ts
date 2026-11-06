@@ -1,5 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 
+import { BADGE_FILL, BADGE_WORD, CARD_FILL, WAITING_TILE_FILL } from '../hooks/drawing'
+
 import { BRIEFING, FLIGHT, PANE_PROPS, SESSION, chipOf, exact, lateOnTheLocalDayOf, pictures, world } from './fixtures'
 
 // The theme keys the house style allows: a colour is a role, never a hex value.
@@ -36,7 +38,7 @@ test('the overview: the machine in a line, three tiles, Waiting for you, a card 
     expect((await chipOf(ui, 'merge-327'))?.dot).toBe('merged')
     expect((await chipOf(ui, 'plan-41'))?.dot).toBe('merged')
     expect((await ui.find({ key: 'answer-9' }))?.props.label).toBe('Answer')
-    expect((await ui.find({ key: 'act-plan-41-approve' }))?.props.label).toBe('Approve')
+    expect((await ui.find({ key: 'open-plan-41' }))?.props.label).toBe('Approve')
     // MERGE IS ONLY EVER A LINK INTO THE CONSOLE.
     expect((await ui.find({ type: 'Link', text: 'Merge ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=merge&story=327')
     expect(await ui.find({ type: 'Button', text: /Merge/ })).toBeUndefined()
@@ -75,16 +77,16 @@ test('the overview: the machine in a line, three tiles, Waiting for you, a card 
 
     expect((await ui.find({ key: 'goals-show-closed' }))?.text).toBe('▸ History 1')
 
-    // THE FOOTER: the 30 days in a line and the pills.
+    // THE FOOT: the 30 days alone; Notices, Memory and Health are in the head.
     expect(await ui.find({ type: 'Text', text: exact('Last 30 days 43 stories · $1.10 per story') })).toBeDefined()
     expect((await ui.find({ key: 'tab-bell' }))?.props.label).toBe('Notices 2')
-    expect((await ui.find({ key: 'tab-memory' }))?.props.label).toBe('Memory 1 ›')
+    expect((await ui.find({ key: 'tab-memory' }))?.props.label).toBe('Memory 1')
     expect((await ui.find({ key: 'tab-status' }))?.props.label).toBe('Health')
     await ui.unmount()
   }
 })
 
-test('the tiles: a stroke and a coloured number, never a fill; amber is the stuck tile\'s stroke alone', async ($, on) => {
+test('the tiles: a stroke, a coloured number and a card\'s fill, the waiting tile\'s purple; amber is the stuck tile\'s stroke alone', async ($, on) => {
   const terylon = world(on)
   terylon.answers.work_in_flight = { ...FLIGHT, stories: [{ ...FLIGHT.stories[0], stuck: { since: '2026-10-11T15:20:00Z', reason: 'no progress' } }, FLIGHT.stories[1]] }
   await $.session.start(SESSION)
@@ -99,12 +101,12 @@ test('the tiles: a stroke and a coloured number, never a fill; amber is the stuc
   for (const [key, stroke, count, color, label] of [['tile-waiting', 'merged', '3', 'merged', 'waiting for you'], ['tile-running', 'subtle', '2', 'suggestion', 'running'], ['tile-stuck', 'warning', '1', 'text', 'stuck']] as const) {
     const tile = await ui.find({ key })
     expect(tile?.props).toMatchObject({ borderStyle: 'round', borderColor: stroke })
-    expect(tile?.props.backgroundColor).toBeUndefined()
+    expect(tile?.props.backgroundColor).toBe(key === 'tile-waiting' ? WAITING_TILE_FILL : CARD_FILL)
     const [number, word] = await partsOf(key)
     expect(number?.props).toMatchObject({ color, tabular: true, size: 'title', weight: 'semibold' })
     expect(await ui.find({ type: 'Text', text: exact(count) })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact(label) })).toBeDefined()
-    expect(word?.props.color).toBe('subtle')
+    expect(word?.props.color).toBe(key === 'tile-waiting' ? 'inactive' : 'subtle')
   }
 
   // NOTHING RUNNING, NOTHING STUCK: quiet numbers and quiet strokes.
@@ -115,7 +117,7 @@ test('the tiles: a stroke and a coloured number, never a fill; amber is the stuc
   expect((await partsOf('tile-running'))[0]?.props.color).toBe('inactive')
 })
 
-test('the house style: theme keys only, round cards, a card that waits stroked and never filled, and the kinds as chips on the desktop', async ($, on) => {
+test('the house style: theme keys and the one fill of each kind, round cards, a card that waits stroked, and the kinds as chips on the desktop', async ($, on) => {
   // LATE ON THE LOCAL DAY of the merge (#39): "done today" is the host's day, and the merged chip is drawn in every zone.
   const terylon = world(on, { now: lateOnTheLocalDayOf('2026-10-11T12:20:00Z') })
   await $.session.start(SESSION)
@@ -130,27 +132,29 @@ test('the house style: theme keys only, round cards, a card that waits stroked a
     for (const node of [...boxes, ...texts]) {
       for (const color of [node.props.color, node.props.borderColor, node.props.backgroundColor]) {
         if (color !== undefined) {
-          expect(THEME).toContain(color)
+          expect([...THEME, CARD_FILL, WAITING_TILE_FILL, BADGE_FILL, BADGE_WORD]).toContain(color)
         }
       }
     }
 
-    // NO CARD IS FILLED (the owner's walk of 1.2.0: on a tinted fill the hints, links and chips could not be read).
-    // Only a chip has a background, the theme's neutral grey, and only where a surface draws chips.
-    expect(boxes.filter(box => box.props.backgroundColor !== undefined)).toEqual([])
+    // NO CARD TAKES A TINT OF WHAT IT HOLDS (the owner's walk of 1.2.0: on a tinted fill the hints, links and chips could not
+    // be read): every card one faint neutral fill on a graphic surface, and on the terminal no fill at all.
+    const fills = boxes.filter(box => box.props.backgroundColor !== undefined && box.key !== 'tab-bell-badge' && box.key !== 'tab-memory-badge').map(box => box.props.backgroundColor)
+    expect(surface === 'desktop' ? fills.filter(fill => fill !== CARD_FILL && fill !== WAITING_TILE_FILL) : fills).toEqual([])
+    // A text's background is a chip's, the theme's neutral grey, and only where a surface draws chips.
     const chips = texts.filter(text => text.props.backgroundColor !== undefined)
     expect(chips.map(text => text.text.replace(/[●]+/g, '').replace(/[\s\u00a0]+/g, ' ').trim())).toEqual(surface === 'desktop' ? ['question', 'merge', 'plan', 'Your merge', 'Plan'] : [])
     expect(chips.every(text => text.props.backgroundColor === 'userMessageBackground' && text.props.color === 'inactive' && /^\u00a0●\u00a0.+\u00a0$/.test(text.text))).toBe(true)
 
-    const cards = boxes.filter(box => box.props.borderStyle === 'round')
+    const cards = boxes.filter(box => box.props.borderStyle === 'round' && box.props.backgroundColor !== BADGE_FILL)
     // Terminal at this width: one line of counts in place of the tiles.
     const tiles = surface === 'desktop' ? ['merged', 'subtle', 'subtle'] : []
-    expect(cards.map(box => box.props.borderColor)).toEqual([...tiles, 'warning', 'subtle', 'subtle'])
+    expect(cards.map(box => box.props.borderColor)).toEqual([...tiles, 'merged', 'subtle', 'subtle'])
     await ui.unmount()
   }
 })
 
-test('a waiting row opens under itself: the whole question beside its act', async ($, on) => {
+test('a question\'s row does not open and does not repeat its text: one line and Answer, both leading to the question', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -160,10 +164,13 @@ test('a waiting row opens under itself: the whole question beside its act', asyn
   expect(await ui.find({ type: 'Text', text: exact('Má mrtvý běh pokračovat od posledního commitu?') })).toBeUndefined()
 
   await ui.press({ key: 'question-9' })
-  expect(await ui.find({ type: 'Text', text: exact('Má mrtvý běh pokračovat od posledního commitu?') })).toBeDefined()
+  expect(await ui.find({ key: 'answer-text' })).toBeDefined()
   expect((await ui.find({ type: 'Link', text: 'Answer in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=question&question=9')
 
-  await ui.press({ key: 'question-9' })
+  await ui.press({ key: 'back' })
+  await ui.press({ key: 'answer-9' })
+  expect(await ui.find({ key: 'answer-text' })).toBeDefined()
+  await ui.press({ key: 'back' })
   expect(await ui.find({ type: 'Text', text: exact('Má mrtvý běh pokračovat od posledního commitu?') })).toBeUndefined()
 })
 
@@ -179,14 +186,13 @@ test('every console link points at the console screen of its subject, never at a
   expect(await ui.find({ type: 'Link', text: /in the console/ })).toBeUndefined()
   expect((await ui.find({ type: 'Link', text: 'Merge ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=merge&story=327')
 
-  for (const key of ['merge-327', 'plan-41', 'question-9']) {
+  for (const key of ['merge-327', 'plan-41']) {
     await ui.press({ key })
   }
 
   const links = (await ui.findAll({ type: 'Link' })).map(link => String(link.props.href))
 
   expect(links).toContain('https://terylon.example.ts.net/?view=merge&story=327')
-  expect(links).toContain('https://terylon.example.ts.net/?view=question&question=9')
   // A PLAN'S ROW OPENS THE PLAN (S27): its acts are on its card; the row itself no longer links out.
   expect(links).not.toContain('https://terylon.example.ts.net/?view=plan&plan=41')
   expect(await ui.find({ key: 'open-plan-41' })).toBeDefined()
@@ -228,7 +234,7 @@ test('a row longer than its card stays one line: the title is cut inside the one
     const whole = await ui.find({ type: 'Text', text: exact(long) })
     expect(whole?.props.wrap).toBeUndefined()
     expect((await ui.find({ type: 'Link', text: 'Answer in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=question&question=22')
-    await ui.press({ key: 'question-22' })
+    await ui.press({ key: 'back' })
     await ui.unmount()
   }
 })
