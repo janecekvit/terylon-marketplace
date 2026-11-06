@@ -63,5 +63,6 @@ export function kindTone(kind: string): WordTone {
   return KIND_TONES[kind] ?? 'quiet'
 }
 
-// A CARD'S STROKE, by what it holds: one that waits for the owner in `warning`, a problem in `error`, else quiet.
-export const CARD_STROKES = { plain: 'subtle', wait: 'warning', bad: 'error' } as const
+// A CARD'S STROKE, by what it holds: Waiting for you in the gate's purple, one that waits for the owner in `warning`, a
+// problem in `error`, else quiet.
+export const CARD_STROKES = { plain: 'subtle', wait: 'warning', bad: 'error', gate: 'merged' } as const

@@ -15,11 +15,26 @@ export const COPY = {
   refresh: 'Refresh',
   connectedShort: 'connected',
   disconnected: (since: string) => `not answering since ${since}`,
-  // TERYLON COCKPIT'S ONE COMMAND: no other alias.
-  footer: '/terylon-cockpit',
-
   // The overview: the machine in a line, the three tiles, the goals, the folds, the 30-day line and the pills.
   overview: 'Overview',
+  // The header's way to Notices, Memory and Health: what a person reads there, and on the terminal the whole button.
+  navNotices: (count: number) => `Notices ${count}`,
+  navMemory: (count: number | null) => (count === null ? 'Memory' : `Memory ${count}`),
+  navHealth: (hasProblem: boolean) => (hasProblem ? 'Health ⚠' : 'Health'),
+  needsYou: (count: number) => `Needs you · ${count}`,
+  noticesNeedYou: (count: number, title: string) => `${count} ${count === 1 ? 'notice needs' : 'notices need'} you: ${title}`,
+  openInNotices: 'Open in Notices ›',
+  noticesClose: '✕',
+  noticesInConsoleShort: 'In the console ↗',
+  machineMore: (count: number) => `${count} more`,
+  // TEST MODE: said wherever it could be taken for production, in the words of what it is.
+  testHead: 'Terylon · Test mode',
+  testBand: 'Test mode',
+  testStatus: (line: string) => line.replace(/^Terylon/, 'Terylon · Test mode'),
+  testOn: 'Terylon Cockpit is in test mode: made-up data, in this session alone. Nothing the pane does reaches Terylon. Claude\'s own Terylon tools in this chat still do. /terylon-cockpit test off ends it.',
+  testOff: 'Terylon Cockpit is back on live data.',
+  testMerge: 'Test mode: nothing was merged. A real merge is confirmed with your passkey in the console.',
+  testPrompt: 'Test mode: nothing was posted into the chat.',
   slotsShort: (used: number, slots: number) => `${used}/${slots} slots`,
   tileWaiting: 'waiting for you',
   tileRunning: 'running',
@@ -29,9 +44,6 @@ export const COPY = {
   tilesStuck: (count: number) => `${count} stuck`,
   goalsHeading: 'Goals',
   foldRunning: 'Running, goal not found',
-  pillNotices: (count: number) => `Notices ${count} ›`,
-  pillMemory: (count: number | null) => (count === null ? 'Memory ›' : `Memory ${count} ›`),
-  pillHealth: (hasProblem: boolean) => (hasProblem ? 'Health ⚠ ›' : 'Health ›'),
   monthLine: (line: string) => `Last 30 days ${line}`,
   // A goal's card: its road's words, how many of its stories are done, and what comes next.
   road: { plan: 'Plan', approve: 'Approve', build: 'Build', verify: 'Verify', merge: 'Your merge', accept: 'Your accept', done: 'Done' },
@@ -125,7 +137,6 @@ export const COPY = {
   pausedTitle: 'The leader is paused',
   fixPaused: ['Press Resume, here or on the overview: the leader continues from its log.'],
   alertHint: (source: string, time: string) => `${source} · ${time}`,
-  fixAlert: 'What to do is in the notice; handling it is the console\'s.',
   statusDiagnostics: 'Diagnostics',
   diagnosticsVersion: (version: string) => `terylon-pane ${version}`,
   diagnosticsUrl: (url: string) => `TERYLON_URL ${url === '' ? '(not set)' : url}`,
@@ -178,7 +189,7 @@ export const COPY = {
   // A repeating task's version plan (Terylon S43): no stories to count, one version to approve.
   taskVersion: (version: string | null, task: string) => (version === null ? `a new version of ${task}` : `version ${version} of ${task}`),
   taskVersionTitle: (version: string | null, task: string) => (version === null ? `a new version of ${task}` : `version ${version} of ${task}`),
-  approveVersionNote: (version: string | null) => `Approve: each later task_run uses ${version === null ? 'this version' : `version ${version}`}.`,
+  approveVersionNote: (version: string | null) => `Approve: each later run uses ${version === null ? 'this version' : `version ${version}`}.`,
   versionWaiting: (terms: string | null) => (terms === null ? 'to approve' : `to approve · ${terms}`),
   // The task's settled versions, on its card: "Versions: 1 (plan 2536), 2 (plan 2573)".
   repeatingVersions: (versions: readonly { version: string | null; plan: string; isWithdrawn: boolean }[]) =>
@@ -199,7 +210,6 @@ export const COPY = {
   answer: 'Answer',
   answerInConsole: 'Answer in the console ↗',
   openStory: 'Open story',
-  openPlan: 'Open plan',
   mergeInConsole: 'Merge in the console ↗',
   mergeShort: 'Merge ↗',
   rowOpen: 'Open',
@@ -246,7 +256,7 @@ export const COPY = {
   // THE DONE-SIGNAL STOPPED: events_since, or the store that keeps the pane's place, failed. Each kind says its fix.
   eventsNotAllowedTitle: "Claude Code refused the done-signal's call",
   eventsNotAllowedBody:
-    'The overview reads, but Claude Code refused events_since, the call that tells you a story was verified, merged or blocked. Until it passes, nothing is told: no prompt, no toast, no catch-up.',
+    'The overview reads, but Claude Code refused the call that tells you a story was verified, merged or blocked. Until it passes, nothing is told: no prompt, no toast, no catch-up.',
   fixEventsNotAllowed: [
     'Add these rules to ~/.claude/settings.json, under "permissions" → "allow"; events_since must be among them, spelled as below:',
     'If the rule is already there, restart Claude Desktop, so the settings are read again.',
@@ -254,7 +264,7 @@ export const COPY = {
   ],
   eventsStoppedTitle: 'The done-signal stopped',
   eventsStoppedBody: (since: string) =>
-    `Since ${since}, events_since has not answered as the owner's. The overview is current, but a story verified, merged or blocked is not told.`,
+    `Since ${since}, Terylon's events have not answered as the owner's. The overview is current, but a story verified, merged or blocked is not told.`,
   fixEventsStopped: [
     'Open Health in the console to see why.',
     'Press Try again; every poll also tries again.',
@@ -272,7 +282,7 @@ export const COPY = {
   ],
   eventsSilentTitle: 'The done-signal hears nothing',
   eventsSilentBody: (seconds: number, last: string | null) =>
-    `events_since has not answered for ${seconds} s${last === null ? ', not once this session' : `; its last answer was at ${last}`}, while the overview reads. Nothing failed that the pane could see: its events path stopped before the call.`,
+    `Terylon's events have not answered for ${seconds} s${last === null ? ', not once this session' : `; its last answer was at ${last}`}, while the overview reads. Nothing failed that the pane could see: its events path stopped before the call.`,
   fixEventsSilent: [
     'Press Try again.',
     'Restart Claude Desktop.',
@@ -299,7 +309,6 @@ export const COPY = {
   summariseInSession: 'Summarise in the session',
   summarisePrompt: (story: string) =>
     `Shrň mi story ${story} z Terylonu: kde je, co stojí a co potřebuje (story_get, work_in_flight).`,
-  summariseNote: '“Summarise in the session” posts a question into the chat; Claude answers it through story_get. The pane decides nothing.',
   storyInConsole: 'Story in the console ↗',
   storyLoading: 'Loading the story…',
   storyError: 'The story did not load',
@@ -391,7 +400,6 @@ export const COPY = {
   // A plan's order said in words, by its stories' titles: "A; B; C after A" (#35).
   planOrderAlt: (stories: readonly { title: string; after: readonly string[] }[]) =>
     stories.map(story => (story.after.length === 0 ? story.title : `${story.title} after ${story.after.join(' and ')}`)).join('; '),
-  planNote: 'Each story carries its criteria, declared files and estimate; the whole text is in plans_list.',
   planInConsole: 'Plan in the console ↗',
   noPlans: 'No plan waits.',
   newGoal: 'New goal',
@@ -497,9 +505,6 @@ export const COPY = {
   // Notices and Health.
   machine: 'Machine',
   machineHint: 'lately handled',
-  leaderRuns: 'The leader runs',
-  leaderPaused: (since: string | null, reason: string | null) =>
-    `The leader is paused${since === null ? '' : ` since ${since}`}${reason === null ? '' : ` (${reason})`}`,
   // ONE STORY, ONE PR OPENED: the operator's walk of 1.1.1 read "1 stories" on Health. The number is the PRs
   // opened over the 30 days, not the PRs open now (Terylon S40, #402).
   metricStories: (count: number) => (count === 1 ? 'story' : 'stories'),
@@ -510,7 +515,6 @@ export const COPY = {
   monthCost: (cost: string) => `${cost} per story`,
   loadTimedOut: (seconds: number) => `Terylon did not answer within ${seconds} s. Press Refresh to retry.`,
   noticesInConsole: 'Notices in the console ↗',
-  bellNote: 'Mark handled is notice_handle, which decides nothing about work.',
   markHandled: 'Mark handled',
   handling: 'Marking…',
   nothingYet: 'Nothing yet.',
@@ -668,7 +672,7 @@ export const COPY = {
   textTooLong: (limit: number, length: number) => `At most ${limit} characters; this is ${length}.`,
   actPending: (command: string | null) => `The leader did not answer within 10 s. It may have taken the act; Refresh shows where it stands${command === null ? '' : ` (command ${command})`}.`,
   actRefused: (status: number | null) => (status === null ? '✗ Refused' : `✗ Refused (${status})`),
-  actNotAllowed: (tool: string) => `Claude Code refused the pane's call to ${tool}`,
+  actNotAllowed: (act: string) => `Claude Code refused the pane's call to ${act.replace(/…$/, '')}`,
   actNotAllowedBody: (nothing: string, button: string) => `${nothing} Add the pane's rules in ~/.claude/settings.json, then press ${button.replace(/…$/, '')} again.`,
   actFix: 'How to fix',
   actFixNote: 'How to fix opens Health with every rule the pane needs, merge never among them.',

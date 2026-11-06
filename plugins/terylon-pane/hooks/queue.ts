@@ -513,7 +513,7 @@ export function header(flight: Json, policy: Json | null, basis: string | null =
   return COPY.header(costTight(spend(flight, basis)), dayBudget(policy), list(flight.stories).length, number(flight.slots) ?? 0)
 }
 
-// The leader's kill switch, from leader_status or the briefing's copy of it: { at, source, reason } or null.
+// The leader's kill switch, from the briefing: { at, source, reason } or null.
 export function pausedOf(leader: Json | null, isFlightPaused: boolean, zone: Zone = 0): { since: string | null; reason: string | null } | null {
   const paused = (leader?.paused ?? null) as Json | boolean | null
 
@@ -1177,9 +1177,8 @@ function lastOfEachKey(notices: Json[]): Json[] {
     })
 }
 
-export function bellView(notices: Json, leader: Json | null, metrics: Json | null, now: number, zone: Zone = 0, basis: string | null = null): PaneBell {
+export function bellView(notices: Json, metrics: Json | null, now: number, zone: Zone = 0, basis: string | null = null): PaneBell {
   const all = list(notices.notices)
-  const paused = pausedOf(leader, false, zone)
   const rows: { value: string; label: string }[] = metrics === null
     ? []
     : [
@@ -1196,7 +1195,6 @@ export function bellView(notices: Json, leader: Json | null, metrics: Json | nul
     unhandledCount: number(notices.unhandled) ?? all.filter(notice => notice.handledAt == null).length,
     unhandled: all.filter(notice => notice.handledAt == null).map(notice => noticeOf(notice, now, zone)),
     handled: lastOfEachKey(all.filter(notice => notice.handledAt != null)).slice(0, HANDLED_SHOWN).map(notice => noticeOf(notice, now, zone)),
-    leader: paused === null ? { isPaused: false, text: COPY.leaderRuns } : { isPaused: true, text: COPY.leaderPaused(paused.since, paused.reason) },
     metrics: rows,
     handling: null,
     handleSentence: null,

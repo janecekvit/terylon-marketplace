@@ -156,8 +156,10 @@ export type PaneSnapshot = {
 
 export type PaneScreen =
   | { screen: 'queue' }
-  // NOTICES, MEMORY AND HEALTH ON ONE PAGE: `section` is the one its pill scrolls to.
-  | { screen: 'more'; section: 'notices' | 'memory' | 'health' }
+  // HEALTH AND MEMORY ON ONE PAGE: `section` is the one its button scrolls to.
+  | { screen: 'more'; section: 'memory' | 'health' }
+  // NOTICES: a slide-over on the overview where the surface has room, else a screen of its own.
+  | { screen: 'notices' }
   | { screen: 'new-goal' }
   | { screen: 'add' }
   | { screen: 'story'; story: number }
@@ -412,7 +414,6 @@ export type PaneBell = {
   unhandledCount: number
   unhandled: PaneNotice[]
   handled: PaneNotice[]
-  leader: { isPaused: boolean; text: string }
   metrics: { value: string; label: string }[]
   handling: number | null
   handleSentence: string | null
@@ -420,6 +421,9 @@ export type PaneBell = {
 
 // What the overview's footer says: the last 30 days in a line, and how many memory proposals wait. Null before an answer.
 export type PaneOverview = { month: string | null; memoryPending: number | null }
+
+// TEST MODE, this session's alone: whether it is on, and what the last made-up merge said.
+export type PaneTestMode = { isOn: boolean; note: string | null }
 
 export type PaneBand = { text: string; link: string; isAlert: boolean } | null
 
@@ -477,6 +481,7 @@ declare module 'claude-code' {
       goal: PaneGoal | null
       bell: PaneBell
       overview: PaneOverview
+      testMode: PaneTestMode
       open: string[]
       acts: Record<string, PaneAct>
       policyForm: PanePolicyForm

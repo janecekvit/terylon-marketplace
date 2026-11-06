@@ -17,7 +17,7 @@ export const SVG_COLOURS = {
   gate: '#a98bf0',
   roadDone: '#4caf7d',
   roadNow: '#6f9ff0',
-  roadAhead: '#6b6b68',
+  roadAhead: '#8f8d88',
   roadGate: '#8e72d8',
 } as const
 
@@ -37,12 +37,13 @@ export const WIDE_COLUMNS = 88
 //   hover-reveal  a waiting row lights under the pointer and lays its console link over its right edge, never over
 //                 an open row; off: the link sits in the row's body, one press away
 //   svg-tooltips  a phase of a story's road says its stage, role and step under a still pointer; off: the names alone
-export type Proofs = { inputRows: boolean; hoverReveal: boolean; svgTooltips: boolean }
+//   notices-over  Notices slide over the overview's right side where the surface has room; off: an ordinary screen
+export type Proofs = { inputRows: boolean; hoverReveal: boolean; svgTooltips: boolean; noticesOver: boolean }
 
-export const PROOF_NAMES = { inputRows: 'input-rows', hoverReveal: 'hover-reveal', svgTooltips: 'svg-tooltips' } as const
+export const PROOF_NAMES = { inputRows: 'input-rows', hoverReveal: 'hover-reveal', svgTooltips: 'svg-tooltips', noticesOver: 'notices-over' } as const
 
 // What each proof is without a word in TERYLON_PANE_PROOFS: what the owner's walk proved.
-export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: true }
+export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: true, noticesOver: true }
 
 export function proofsOf(value: string | null | undefined): Proofs {
   const named = new Set((value ?? '').split(/[\s,]+/).map(name => name.trim().toLowerCase()).filter(name => name !== ''))
@@ -52,6 +53,7 @@ export function proofsOf(value: string | null | undefined): Proofs {
     inputRows: isOn('inputRows'),
     hoverReveal: isOn('hoverReveal'),
     svgTooltips: isOn('svgTooltips'),
+    noticesOver: isOn('noticesOver'),
   }
 }
 
@@ -62,6 +64,27 @@ export function proofsOf(value: string | null | undefined): Proofs {
 export const CHIP_BACKGROUND = 'userMessageBackground'
 export const CHIP_WORD = 'inactive'
 export const CHIP_DOT = '●'
+
+// THE FILLS, RAW AND TRANSLUCENT, on a graphic surface alone: they lie over a pane the theme paints, so one value reads
+// on both themes. Their alpha is as high as tests/contrast.ts lets every word and link on them stay at 4.5:1: a plain
+// card and a goal's card, and the waiting tile, whose word is `inactive` since `subtle` falls short on it.
+export const CARD_FILL = 'rgba(170,170,170,0.06)'
+export const WAITING_TILE_FILL = 'rgba(107,71,214,0.16)'
+
+// THE SLIDE-OVER: what dims the overview under it, and its own opaque ground. THE GROUND IS A THEME KEY, NOT A RAW COLOUR:
+// no one raw colour holds the theme's words at 4.5:1 on both themes, since dark needs it darker and light needs it
+// lighter than either allows. `inverseText` is black on dark and white on light, and every word and link reads on it.
+export const BACKDROP_FILL = 'rgba(0,0,0,0.35)'
+export const PANEL_GROUND = 'inverseText'
+export const PANEL_WIDTH = '46%'
+
+// A Button takes strings and Text alone as children, so the bell is a glyph where the board draws a stroke.
+export const BELL_GLYPH = '🔔'
+
+// THE BADGE of a count that waits for the owner: raw and the same on both themes, a mark and never an amber word, so it
+// holds 4.5:1 without the theme's `warning`.
+export const BADGE_FILL = '#e0a84e'
+export const BADGE_WORD = '#1b1b1a'
 
 // Below this many body columns the names of a story's eight phases would run together (the owner's walk, a dock of
 // about 435 px): only the phase now is named under its road.
@@ -96,27 +119,30 @@ export function roadAlt(steps: readonly PaneRoadStep[], isStuck = false): string
   ].filter(part => part !== null).join('; ')
 }
 
-// How tall a road is, and the air between its segments as a share of its width.
-const ROAD_HEIGHT = 6
+// How tall a road is on a screen of its own and on the overview's cards, and the air between its segments as a share of
+// its width.
+export const ROAD_HEIGHT = 5
+export const ROAD_CARD_HEIGHT = 4
 const ROAD_GAP_PERCENT = 0.8
 
 // THE ROAD: one segment per step in an equal column, done green, now blue (amber when stuck), the owner's gates purple,
 // the rest grey. AS WIDE AS ITS SLOT (`width="100%"`, no viewBox), so each segment keeps its height at any width and
-// sits over the column its name is drawn in. A gate still ahead is its purple at a lower opacity, which reads on both
-// themes where a darker purple would not.
-export function road(steps: readonly PaneRoadStep[], options: { isStuck?: boolean; tooltips?: readonly string[] | null } = {}): Picture {
+// sits over the column its name is drawn in. WHAT IS STILL AHEAD IS TRANSLUCENT, grey or the gate's purple, so it reads
+// dark on the dark theme and light on the light one, which no fixed colour does.
+export function road(steps: readonly PaneRoadStep[], options: { isStuck?: boolean; tooltips?: readonly string[] | null; height?: number } = {}): Picture {
   const isStuck = options.isStuck === true
+  const height = options.height ?? ROAD_HEIGHT
   const share = 100 / Math.max(1, steps.length)
   const parts = steps.map((step, index) => {
     const fill = step.status === 'done' ? SVG_COLOURS.roadDone : step.isGate ? SVG_COLOURS.roadGate : step.status === 'now' ? (isStuck ? SVG_COLOURS.stuck : SVG_COLOURS.roadNow) : SVG_COLOURS.roadAhead
-    const opacity = step.isGate && step.status === 'next' ? ' fill-opacity=".45"' : ''
-    const segment = `<rect x="${round(index * share + ROAD_GAP_PERCENT / 2)}%" y="0" width="${round(share - ROAD_GAP_PERCENT)}%" height="${ROAD_HEIGHT}" rx="3" fill="${fill}"${opacity}/>`
+    const opacity = step.status !== 'next' ? '' : step.isGate ? ' fill-opacity=".35"' : ' fill-opacity=".28"'
+    const segment = `<rect x="${round(index * share + ROAD_GAP_PERCENT / 2)}%" y="0" width="${round(share - ROAD_GAP_PERCENT)}%" height="${height}" rx="2" fill="${fill}"${opacity}/>`
     const title = options.tooltips?.[index]
 
     return title === undefined || title === null ? segment : `<g><title>${escape(title)}</title>${segment}</g>`
   })
 
-  return { source: `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="${ROAD_HEIGHT}">${parts.join('')}</svg>`, alt: roadAlt(steps, isStuck), height: ROAD_HEIGHT }
+  return { source: `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="${height}">${parts.join('')}</svg>`, alt: roadAlt(steps, isStuck), height }
 }
 
 // THE TERMINAL'S ROAD: the same steps as runs of coloured cells in theme keys, one run per step, as wide as it is given.
