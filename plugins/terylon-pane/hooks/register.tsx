@@ -4944,7 +4944,7 @@ export const register: Register = on => {
         case 'accept':
           return <Button key={`open-story-${item.target}`} label={COPY.actButton.story_accept} onPress={() => go({ screen: 'story', story: item.target })} />
         case 'merge':
-          return mergeLink(`merge-${item.target}`, item.console, COPY.mergeShort)
+          return mergeLink(`merge-act-${item.target}`, item.console, COPY.mergeShort)
         default:
           return <Button key={`open-story-${item.target}`} label={COPY.rowOpen} onPress={() => go({ screen: 'story', story: item.target })} />
       }
