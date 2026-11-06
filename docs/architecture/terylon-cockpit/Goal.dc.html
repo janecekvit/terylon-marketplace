@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cockpit: a goal</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#8ab4f8;text-decoration:none}a:hover{color:#b3cdfa}
+</style>
+</helmet>
+<div style="width: 960px; height: 980px; box-sizing: border-box; padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; background: #1b1b1a; color: #ecebe6; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; line-height: 1.4">
+
+  <div style="display: flex; align-items: center; gap: 12px">
+    <a href="Main.dc.html" style="color: #a3a29b">‹ Overview</a>
+    <div style="flex-grow: 1"></div>
+    <a href="https://claude.ai">In the console ↗</a>
+    <button style="background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 5px 12px; font: inherit">Refresh</button>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 4px">
+    <div style="color: #a3a29b">G-7QK2M · P2 · active</div>
+    <div style="font-size: 20px; font-weight: 600; line-height: 1.25">Household budget</div>
+    <div style="color: #d8d7d0">A monthly sheet of what we spend, by category, from the bank's export.</div>
+  </div>
+
+  <div style="background: #232322; border: 1px solid #383836; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px">
+    <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px">
+      <sc-for list="{{ road }}" as="step" hint-placeholder-count="6">
+        <div style="display: flex; flex-direction: column; gap: 5px">
+          <div style="height: 5px; border-radius: 3px; background: {{ step.bar }}"></div>
+          <div style="font-size: 12px; color: {{ step.text }}; font-weight: {{ step.weight }}">{{ step.name }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display: flex; gap: 8px; align-items: baseline">
+      <div style="color: #a3a29b">What next</div>
+      <div style="font-weight: 500">Plan P-58HFX waits for your approval</div>
+    </div>
+  </div>
+
+  <div style="border: 1px solid #5a4890; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+    <div style="display: flex; justify-content: space-between"><div style="font-weight: 600">Plan P-58HFX · to approve</div><div style="color: #a3a29b">3 stories · about 90 k tokens</div></div>
+    <div style="color: #d8d7d0">Read the bank's export, sort it into categories, and write the monthly sheet.</div>
+    <div style="display: flex; gap: 8px">
+      <button style="background: #ecebe6; color: #1b1b1a; border: 0; border-radius: 6px; padding: 5px 14px; font: inherit; font-weight: 600">Approve</button>
+      <button style="background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 5px 14px; font: inherit">Rethink…</button>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start">
+    <div style="background: #232322; border: 1px solid #383836; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; justify-content: space-between"><div style="font-weight: 600">Stories</div><div style="color: #a3a29b">0 of 3</div></div>
+      <sc-for list="{{ stories }}" as="story" hint-placeholder-count="3">
+        <a href="Story.dc.html" style="display: flex; gap: 10px; align-items: flex-start; color: #ecebe6">
+          <div style="width: 12px; height: 12px; margin-top: 3px; flex-shrink: 0; border-radius: 50%; background: {{ story.dot }}"></div>
+          <div style="min-width: 0">
+            <div>{{ story.title }}</div>
+            <div style="color: {{ story.tone }}; font-size: 12px">{{ story.state }}</div>
+          </div>
+        </a>
+      </sc-for>
+    </div>
+
+    <div style="background: #232322; border: 1px solid #383836; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; justify-content: space-between"><div style="font-weight: 600">Specification · version 2</div><div style="color: #a3a29b">revised today 10:12</div></div>
+      <button style="display: flex; justify-content: space-between; background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 6px 10px; font: inherit"><span style="font-family: Consolas, ui-monospace, monospace; font-size: 12px">overview.md</span><span style="color: #a3a29b">6 KB ›</span></button>
+      <button style="display: flex; justify-content: space-between; background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 6px 10px; font: inherit"><span style="font-family: Consolas, ui-monospace, monospace; font-size: 12px">screens.md</span><span style="color: #a3a29b">11 KB ›</span></button>
+      <div style="display: flex; gap: 10px; align-items: center">
+        <button style="background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 4px 10px; font: inherit">Revise…</button>
+        <button style="background: none; border: 0; padding: 0; color: #8ab4f8; font: inherit">Version 1 ›</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 16px">
+    <button style="background: none; border: 0; padding: 2px 0; color: #a3a29b; font: inherit">▸ Your decisions on earlier plans 1</button>
+    <button style="background: none; border: 0; padding: 2px 0; color: #a3a29b; font: inherit">▸ Add a task</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const stepOf = (name, kind) => ({
+      name,
+      bar: kind === 'done' ? '#58c48a' : kind === 'gateNow' ? '#a88bf0' : kind === 'now' ? '#8ab4f8' : kind === 'gate' ? '#4a3b78' : '#3a3a38',
+      text: kind === 'now' ? '#8ab4f8' : kind === 'gateNow' || kind === 'gate' ? '#c9b1f7' : '#a3a29b',
+      weight: kind === 'now' || kind === 'gateNow' ? 600 : 400,
+    });
+    const storyOf = (title, state) => ({ title, state, dot: '#3f3f3c', tone: '#a3a29b' });
+    return {
+      road: [stepOf('Plan', 'done'), stepOf('Approve', 'gateNow'), stepOf('Build', 'todo'), stepOf('Verify', 'todo'), stepOf('Your merge', 'gate'), stepOf('Done', 'todo')],
+      stories: [
+        storyOf('Read the bank export', 'waits for the plan'),
+        storyOf('Sort into categories', 'waits for the plan'),
+        storyOf('Write the monthly sheet', 'waits for the plan'),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

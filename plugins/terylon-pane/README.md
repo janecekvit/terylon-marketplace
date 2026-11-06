@@ -25,6 +25,8 @@ This is for the owner of a Terylon, working in a **local** session on the PC: th
 
 ## Terylon Cockpit
 
+**How each screen looks is on [its boards](../../docs/architecture/terylon-cockpit/README.md)**, one per screen and one for the test mode: a change to a screen changes its board in the same pull request.
+
 **Terylon S68 renamed the pane Terylon Cockpit and put it on Terylon's tones, words and refs**, as the owner approved its boards (Design · Decisions, Glossary, Tokens, States and Reach on the Terylon Architecture canvas). The plugin id stays `terylon-pane`: the decisions rename the product and its one command, not the plugin the owner's installs, settings, `allowedTools` rules and store key are kept under.
 
 ```

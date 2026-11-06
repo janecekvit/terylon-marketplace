@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cockpit: notices slide-over</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#8ab4f8;text-decoration:none}a:hover{color:#b3cdfa}
+</style>
+</helmet>
+<div style="width: 960px; height: 980px; box-sizing: border-box; position: relative; overflow: hidden; background: #1b1b1a; color: #ecebe6; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; line-height: 1.4">
+
+  <div style="box-sizing: border-box; height: 100%; padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; opacity: 0.35">
+    <div style="display: flex; align-items: center; gap: 12px">
+      <div style="font-size: 20px; font-weight: 600">Terylon</div>
+      <div style="flex-grow: 1; color: #a3a29b">all well · connected · 1/2 slots</div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+      <div style="height: 52px; background: #2a2340; border: 1px solid #5a4890; border-radius: 10px"></div>
+      <div style="height: 52px; background: #232322; border: 1px solid #383836; border-radius: 10px"></div>
+      <div style="height: 52px; background: #232322; border: 1px solid #383836; border-radius: 10px"></div>
+    </div>
+    <div style="height: 150px; border: 1px solid #5a4890; border-radius: 10px"></div>
+    <div style="height: 92px; background: #232322; border: 1px solid #383836; border-radius: 10px"></div>
+    <div style="height: 92px; background: #232322; border: 1px solid #383836; border-radius: 10px"></div>
+    <div style="height: 92px; background: #232322; border: 1px solid #383836; border-radius: 10px"></div>
+  </div>
+
+  <div style="position: absolute; top: 0; right: 0; bottom: 0; width: 440px; box-sizing: border-box; padding: 20px; display: flex; flex-direction: column; gap: 12px; background: #20201f; border-left: 1px solid #4a4a47">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <div style="font-size: 16px; font-weight: 600; flex-grow: 1">Notices</div>
+      <a href="https://claude.ai">In the console ↗</a>
+      <a href="Main.dc.html" aria-label="Close notices" style="background: #2c2c2a; color: #ecebe6; border-radius: 6px; padding: 4px 10px">✕</a>
+    </div>
+
+    <div style="color: #a3a29b; font-weight: 600">Needs you · 1</div>
+    <div style="border: 1px solid #e0a84e; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
+      <div style="font-weight: 600">40-sudo changed on main: yours to apply</div>
+      <div style="color: #a3a29b">host · 6 Nov 06:48</div>
+      <div style="color: #d8d7d0">It decides who gets in or who is root, so nothing applies it by itself.</div>
+      <button style="align-self: flex-start; background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 4px 12px; font: inherit">Mark handled</button>
+    </div>
+
+    <div style="color: #a3a29b; font-weight: 600">What the machine did</div>
+    <div style="background: #232322; border: 1px solid #383836; border-radius: 10px; padding: 10px 14px; display: flex; flex-direction: column; gap: 6px">
+      <div style="display: flex; gap: 8px"><span style="color: #7fd4a4">✓</span><span style="flex-grow: 1">Production is at b7d95c70</span><span style="color: #a3a29b">08:02</span></div>
+      <div style="display: flex; gap: 8px"><span style="color: #7fd4a4">✓</span><span style="flex-grow: 1">Production is at d5b79c65</span><span style="color: #a3a29b">06:49</span></div>
+      <div style="display: flex; gap: 8px"><span style="color: #7fd4a4">✓</span><span style="flex-grow: 1">The host: all well again</span><span style="color: #a3a29b">06:34</span></div>
+      <button style="align-self: flex-start; background: none; border: 0; padding: 2px 0; color: #a3a29b; font: inherit">▸ 1 more</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

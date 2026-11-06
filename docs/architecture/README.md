@@ -177,6 +177,10 @@ stories_list, events_since`"| server
     linkStyle default stroke:#8B949E
 ```
 
+## Boards
+
+[`terylon-cockpit/`](terylon-cockpit/README.md) holds how the pane looks: one board per screen, and its test mode.
+
 ## Articles
 
 | Article | Records |
