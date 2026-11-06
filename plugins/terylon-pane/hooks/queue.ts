@@ -762,7 +762,7 @@ export function storyView(id: number, document: Json, inFlight: Json, question: 
   }
 }
 
-// THE POLICY'S FIELDS (S27), as Terylon main aaf07e8 names them, in the order the Status tab draws them: the path in
+// THE POLICY'S FIELDS (S27), as Terylon main aaf07e8 names them, in the order Health draws them: the path in
 // policy_get's answer (the memory's bounds nest under `memory`), the label, the word a change is said with, whether it
 // is money, and how its value reads. Only the fields policy_get sends are drawn; their ranges are its `limits`.
 export type PolicyField = { key: string; label: string; change: string; isMoney?: boolean; isWhole: boolean; show: (value: number) => string; isMemory?: boolean }
@@ -820,7 +820,7 @@ export function policyFieldLabel(field: PolicyField, policy: Json | null = null)
   return limit === null ? field.label : `${field.label} (${rangeOf(field, limit)})`
 }
 
-// The fields policy_get sent, as the Status tab reads them: one row each, the three memory sizes in one row.
+// The fields policy_get sent, as Health reads them: one row each, the three memory sizes in one row.
 export function policyRows(policy: Json | null): { label: string; value: string }[] {
   if (policy === null) {
     return []
@@ -1153,7 +1153,7 @@ function noticeOf(notice: Json, now: number, zone: Zone): PaneNotice {
   }
 }
 
-// The alerts among the bell's notices, for the Status tab: each with its body, which says what to do.
+// The alerts among the bell's notices, for Health: each with its body, which says what to do.
 export function alertItems(notices: Json, now: number, zone: Zone = 0): PaneNotice[] {
   return list(notices.notices).filter(isAlert).map(notice => noticeOf(notice, now, zone))
 }

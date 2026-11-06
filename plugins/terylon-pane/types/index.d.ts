@@ -46,7 +46,7 @@ export type PaneQueuedItem = { story: number; title: string; detail: string; isH
 export type PaneDoneItem = { story: number; title: string; detail: string; isAccepted: boolean }
 
 // WHY THE DONE-SIGNAL CANNOT RUN: events_since did not answer as the owner's, or the store that keeps the pane's place
-// refused. The kind names the fix the Status tab draws; the reason is the engine's or Terylon's own words.
+// refused. The kind names the fix Health draws; the reason is the engine's or Terylon's own words.
 export type PaneEventsProblem = {
   kind: 'not-allowed' | 'no-server' | 'unreachable' | 'refused' | 'store' | 'failed'
   reason: string
@@ -459,7 +459,7 @@ export type PaneActOutcome = { kind: 'done' | 'pending' | 'refused' | 'not-allow
 // answering, and the last outcome. Keyed by subject: "plan-41", "story-327", "leader", "goal-3", "proposal-5", "policy".
 export type PaneAct = { open: string | null; text: string; busy: string | null; outcome: PaneActOutcome | null }
 
-// The policy's form on the Status tab: whether it is open, and each field as typed.
+// The policy's form on Health: whether it is open, and each field as typed.
 export type PanePolicyForm = { isEditing: boolean; values: Record<string, string> }
 
 declare module 'claude-code' {

@@ -138,10 +138,10 @@ type Json = Record<string, unknown>
 // WHY THE PANE STARTS OVER: the head Terylon's reset answered with, or none where the epoch it sent was refused.
 type Reset = { from: number; head: number | null; refused: string | null }
 
-// The pane's id: ONE pane, the memory one of its tabs. No command the mod registers shares a skill's name: the skill would win (a node test holds it).
+// The pane's id: ONE pane, More a page of it. No command the mod registers shares a skill's name: the skill would win (a node test holds it).
 export const PANE = 'terylon'
 
-// The mod's version, said on the Status tab: a node test holds it to plugin.json.
+// The mod's version, said on Health: a node test holds it to plugin.json.
 export const MOD_VERSION = '1.19.0'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
@@ -159,7 +159,7 @@ const WATCH_MILLISECONDS = 10000
 const CRITERIA_SHOWN = 2
 const TIMELINE_SHOWN = 4
 
-// The Status tab's parts in the order it draws them, as its debug line names them.
+// Health's parts in the order it draws them, as its debug line names them.
 const STATUS_DRAWN = ['machine', 'gauges', 'problems', 'events', 'alerts', 'outcomes', 'policy', 'diagnostics'] as const
 
 // HOW LONG A SCREEN'S LOAD MAY TAKE before it is said as its error: under Desktop's own 10 s bound on a press
@@ -386,10 +386,10 @@ const deletedStories = new Set<number>()
 // WHAT THE PANE KEEPS IN $.store, mirrored here: where a store refuses, the session still reads from its last place and
 // signals each story once, and only a return after Desktop was closed is lost.
 const keptInMemory = new Map<string, unknown>()
-// How often the store refused in this tick's read of the events: the Status tab's problem stays while it is not 0.
+// How often the store refused in this tick's read of the events: Health's problem stays while it is not 0.
 let storeRefusals = 0
 
-// THE PANE'S OWN LOG, the debug lines it wrote last, drawn on the Queue tab under TERYLON_PANE_STATUS=log: a host that
+// THE PANE'S OWN LOG, the debug lines it wrote last, drawn on the overview under TERYLON_PANE_STATUS=log: a host that
 // writes no log the owner can read still shows what the pane did and saw.
 const NOTES_KEPT = 40
 const notes: string[] = []
@@ -782,7 +782,7 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-// WHY THE DONE-SIGNAL CANNOT RUN, on the Status tab until a whole read of the events succeeds; the first failure's time.
+// WHY THE DONE-SIGNAL CANNOT RUN, on Health until a whole read of the events succeeds; the first failure's time.
 async function eventsFailed($: EngineInterface, kind: NonNullable<PaneSnapshot['events']>['kind'], reason: string): Promise<void> {
   const now = await $.clock.now()
   debug($, `stopped (${kind}): ${reason}`)
@@ -881,7 +881,7 @@ async function eventsRefused($: EngineInterface, answered: TerylonAnswer): Promi
   await eventsFailed($, kind, why(answered) || COPY.noServerTitle)
 }
 
-// GOALS DELETED FOR GOOD: dropped from the Goals tab, its plans, the queue's questions and every settled act; an open
+// GOALS DELETED FOR GOOD: dropped from the overview, its plans, the queue's questions and every settled act; an open
 // goal screen of one says so quietly. The stories known under them are dropped with them.
 async function forgetGoals($: EngineInterface, ids: readonly number[]): Promise<void> {
   if (ids.length === 0) {
@@ -1528,7 +1528,7 @@ async function startOver($: EngineInterface, reset: Reset, epoch: string | null,
   await eventsRead($)
 }
 
-// A whole read of the events, and a store that kept it: the Status tab's events problem goes.
+// A whole read of the events, and a store that kept it: Health's events problem goes.
 async function eventsRead($: EngineInterface): Promise<void> {
   if (storeRefusals > 0) {
     return
@@ -1543,7 +1543,7 @@ async function readSnapshot($: EngineInterface): Promise<PaneSnapshot> {
 }
 
 // THE DONE-SIGNAL'S FIELDS, READ BY THEIR TYPE: a value an earlier version kept lacks them, and one of another shape
-// must draw as none rather than throw where the Status tab formats its time.
+// must draw as none rather than throw where Health formats its time.
 function snapshotOf(value: unknown): PaneSnapshot {
   const kept = { ...EMPTY_SNAPSHOT, ...(value !== null && typeof value === 'object' ? (value as Partial<PaneSnapshot>) : {}) }
   const time = (moment: unknown): number | null => (typeof moment === 'number' && Number.isFinite(moment) ? moment : null)
@@ -1576,7 +1576,7 @@ async function readBell($: EngineInterface): Promise<PaneBell> {
   return { ...EMPTY_BELL, ...(await read($, bell)) }
 }
 
-// A story's road's short names: a list story's last phase is Accept, never Merge (#39).
+// A story's road's short names: a list story's last phase is Accept, never Merge.
 function shortLabels(phases: readonly { label: string }[]): readonly string[] {
   return phases.map(phase => COPY.phaseShort(phase.label))
 }
@@ -1706,7 +1706,7 @@ async function openPane($: EngineInterface, screen: PaneScreen): Promise<void> {
   await load($, screen)
 }
 
-// The band's Open: the pane where the owner left it, the queue the first time; never a tab chosen for them.
+// The band's Open: the pane where the owner left it, the overview the first time; never a screen chosen for them.
 async function reopenPane($: EngineInterface): Promise<void> {
   const stack = stackOf(await read($, view))
 
@@ -1927,7 +1927,7 @@ async function readGoalsFromTerylon($: EngineInterface, isQuiet = false): Promis
   })
 }
 
-// HISTORY'S FOLD, PRESSED. With S44 a press of History reads the closed goals, and nothing else ever does.
+// HISTORY'S FOLD, PRESSED. Where goals_list counts them, a press of History reads the closed goals, and nothing else ever does.
 async function showGoals($: EngineInterface, showing: 'open' | 'closed'): Promise<void> {
   await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, showing }))
 
@@ -2279,7 +2279,7 @@ async function readBellFromTerylon($: EngineInterface): Promise<void> {
   }
 }
 
-// A notice marked handled from the Bell tab (#360): notice_handle is a write the owner decided is not a gate, so
+// A notice marked handled on More: notice_handle is a write the owner decided is not a gate, so
 // the pane sends it; the bell and the band drop it at once, and the next poll reads what Terylon published.
 async function handleNotice($: EngineInterface, id: number): Promise<void> {
   await update($, bell, (current: PaneBell): PaneBell => ({ ...current, handling: id, handleSentence: null }))
@@ -3265,7 +3265,7 @@ export const register: Register = on => {
         <Box flexShrink={0}>{refreshButton}</Box>
       </Box>
     )
-    // THE PILLS: each opens More, scrolled to its section. Their keys are the tabs' they replace.
+    // THE PILLS: each opens More, scrolled to its section.
     const overviewState = { ...EMPTY_OVERVIEW, ...(await read($, overview)) }
     const pills = (
       <Box key="pills" flexDirection="row" gap={1} flexShrink={0} flexWrap="wrap">
@@ -3283,7 +3283,7 @@ export const register: Register = on => {
         {look.isGraphic ? null : footer}
       </Box>
     )
-    // A FAULT OF THE MACHINE, for a bell row's chip: an alert source, or a notice the Status tab counts as an alert.
+    // A FAULT OF THE MACHINE, for a bell row's chip: an alert source, or a notice Health counts as an alert.
     const isMachineFault = (notice: { id: number; source: string }) => ALERT_SOURCES.includes(notice.source) || current.alertNotices.some(alert => alert?.id === notice.id)
     // A REASON IS ONE CLEAN LINE, whatever it was handed: no control character, no page of text, never an object.
     // Wrapped, not cut: a store's refusal ends in the file that is the fix.
@@ -3395,7 +3395,7 @@ export const register: Register = on => {
 
             return cardOf(`notice-card-${notice.id}`, rowOf({
               key: `notice-${notice.id}`,
-              // THE SOURCE AS A CHIP (S32): a fault of the machine in error, everything else inactive.
+              // THE SOURCE AS A CHIP: a fault of the machine in error, everything else inactive.
               kind: notice.source,
               kindTone: isMachineFault(notice) ? 'error' : 'inactive',
               kindColumn: sourceColumn,
@@ -3783,7 +3783,7 @@ export const register: Register = on => {
           ]),
         ])
 
-        // PLAIN LINES ALONE: no card, no picture, no button but the tabs, to tell the tab's drawing from its data.
+        // PLAIN LINES ALONE: no card and no picture, to tell Health's drawing from its data.
         const tree = drawingAsked.isMinimal
           ? (
               <Box key="more-health" flexDirection="column" gap={1}>
@@ -3821,7 +3821,7 @@ export const register: Register = on => {
 
         return tree
       } catch (error) {
-        // WHAT NO PART CAUGHT still draws the tabs and says why, so the owner can move on and read the debug log.
+        // WHAT NO PART CAUGHT still says why, so the owner can move on and read the debug log.
         const message = messageOf(error)
         note($, `terylon-pane: Health did not draw: ${message}`)
 
@@ -4626,11 +4626,13 @@ export const register: Register = on => {
                   {shownGoal.ask === null || shownGoal.ask === undefined ? null : <Text color="inactive">{shownGoal.ask}</Text>}
                 </Box>
               )}
-          {goalRoad === null ? null : cardOf('goal-road', <Text weight="semibold">{goalRoad.word}</Text>, null, [
-            roadDrawing(elements, look, 'goal-road-cells', goalRoad.steps),
-            roadNames(elements, look, 'goal-road', goalRoad.steps, { onlyNow: look.isNarrow }),
-            nextLine('goal-next', COPY.whatNext, goalNext),
-          ])}
+          {goalRoad === null ? null : (
+            <Box key="goal-road" flexDirection="column" borderStyle="round" borderColor="subtle" paddingX={look.isGraphic ? 'md' : 1} paddingY={look.isGraphic ? 'sm' : 0} gap={look.isGraphic ? 'sm' : 1}>
+              {roadDrawing(elements, look, 'goal-road-cells', goalRoad.steps)}
+              {roadNames(elements, look, 'goal-road', goalRoad.steps, { onlyNow: look.isNarrow })}
+              {nextLine('goal-next', COPY.whatNext, goalNext)}
+            </Box>
+          )}
           {plans.filter(plan => plan.isProposed).map(plan => planCard(plan, true))}
           {twoColumns('goal-columns', storiesCard, specCard === null && reviseCard === null ? null : [specCard, reviseCard])}
           {specCard === null ? null : actOutcome(specKey, goalLink(base, refItem('goal', screen.goal), screen.goal), COPY.specInConsole)}
@@ -4946,7 +4948,7 @@ export const register: Register = on => {
           {isHistoryOpen && (closedLines ?? goalsState.closed.map(item =>
             rowOf({
               key: `goal-${item.id}`,
-              // THE PRIORITY AS A CHIP (S32): P1 in warning, the others inactive.
+              // THE PRIORITY AS A CHIP: P1 in warning, the others inactive.
               kind: item.priority,
               kindTone: item.priority === 'P1' ? 'warning' : 'inactive',
               kindColumn: 3,

@@ -278,14 +278,14 @@ export const COPY = {
     'Restart Claude Desktop.',
     'If it stays, run claude --debug and read the lines under terylon-pane: events: — the last one says where it stopped.',
   ],
-  // A PART OF THE STATUS TAB THAT DID NOT DRAW: said as a problem, the rest of the tab drawn around it.
+  // A PART OF HEALTH THAT DID NOT DRAW: said as a problem, the rest of the page drawn around it.
   statusPartFailed: (part: string) => `Health's ${part} did not draw`,
   fixStatusPart: [
     'Press Refresh, or go back and open it again.',
     'If it stays, run claude --debug and read the line under terylon-pane: Health',
     'Restart Claude Desktop.',
   ],
-  // THE STATUS TAB DRAWN MINIMAL (TERYLON_PANE_STATUS=minimal): plain lines, to bisect a tab Desktop does not draw.
+  // HEALTH DRAWN MINIMAL (TERYLON_PANE_STATUS=minimal): plain lines, to bisect a part Desktop does not draw.
   statusMinimalMachine: (word: string) => `Terylon: ${word}`,
   paneLogTitle: "The pane's own log",
   paneLogHint: 'TERYLON_PANE_STATUS=log · newest last',
@@ -319,7 +319,7 @@ export const COPY = {
   phases: 'Phases',
   phasesHint: (done: number, all: number) => `${done} of ${all}`,
   phaseAdmitted: 'Admitted to a slot',
-  // The stepper's labels under its nodes (S32), short enough for eight columns: Admitted, then the seven stages, by
+  // A story's road's names (S32), short enough for eight columns: Admitted, then the seven stages, by
   // the phase's own label, since a list story draws no Pull request phase.
   phaseShort: (label: string) => PHASE_SHORT[label] ?? label,
   phaseTooltip: (label: string, role: string | null, status: string, step: string | null) =>
@@ -373,7 +373,7 @@ export const COPY = {
   answerNote: 'An answer approves nothing, it completes the brief; a plan or a story is decided on its own card, and a merge in the console.',
 
   // Goals and plans.
-  // The Goals tab's two buttons, like Claude Desktop's Active and Archived sessions; the closed goals are History.
+  // The closed goals are History, a fold on the overview.
   goalsHistory: 'History',
   goalQuestions: (count: number) => (count === 1 ? '1 question' : `${count} questions`),
   noOpenGoals: 'No open goals.',
@@ -500,7 +500,7 @@ export const COPY = {
   leaderRuns: 'The leader runs',
   leaderPaused: (since: string | null, reason: string | null) =>
     `The leader is paused${since === null ? '' : ` since ${since}`}${reason === null ? '' : ` (${reason})`}`,
-  // ONE STORY, ONE PR OPENED: the operator's walk of 1.1.1 read "1 stories" on the Status tab. The number is the PRs
+  // ONE STORY, ONE PR OPENED: the operator's walk of 1.1.1 read "1 stories" on Health. The number is the PRs
   // opened over the 30 days, not the PRs open now (Terylon S40, #402).
   metricStories: (count: number) => (count === 1 ? 'story' : 'stories'),
   metricCost: 'per story',

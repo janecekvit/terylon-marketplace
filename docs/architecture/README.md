@@ -135,10 +135,10 @@ the owner's thirteen acts; never story_merge`"]:::terylon
 what calls for the owner`"]:::terylon
             statusLine["`the status line
 the health of Agentic OS, its worst problem`"]:::terylon
-            tabs["`one pane, five tabs
-Queue, Goals, Bell, Memory, Status
+            tabs["`one pane: the overview, and More
+Notices, Memory, Health behind its pills
 opened only by the band or a command;
-each act on its subject's card, on a press`"]:::terylon
+each act on a press, never on a draw`"]:::terylon
         end
     end
 
