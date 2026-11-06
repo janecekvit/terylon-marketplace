@@ -361,8 +361,8 @@ const MUTATIONS = [
     {
         name: "a card that waits for the owner is filled again",
         file: "hooks/register.tsx",
-        find: "      borderColor={toneKey}\n",
-        replace: "      borderColor={toneKey}\n      backgroundColor={look.isGraphic && tone !== 'plain' ? toneKey : undefined}\n",
+        find: "      backgroundColor={look.isGraphic ? CARD_FILL : undefined}\n      flexGrow={isFilling ? 1 : undefined}\n",
+        replace: "      backgroundColor={look.isGraphic && tone !== 'plain' ? toneKey : look.isGraphic ? CARD_FILL : undefined}\n      flexGrow={isFilling ? 1 : undefined}\n",
     },
     {
         name: "a card that waits for the owner loses its coloured stroke",
