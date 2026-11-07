@@ -1492,8 +1492,8 @@ const MUTATIONS = [
     {
         name: "a button of the overview's head no longer opens More",
         file: "hooks/register.tsx",
-        find: "        <Button key=\"tab-status\" label={COPY.navHealth(hasProblem(current, drawingAsked.off))} onPress={() => openMore($, 'health')} />\n",
-        replace: "        <Button key=\"tab-status\" label={COPY.navHealth(hasProblem(current, drawingAsked.off))} onPress={() => undefined} />\n",
+        find: "        {navButton('tab-status', COPY.navHealthMemory, isMemoryWaiting || hasProblem(current, drawingAsked.off), () => openMore($))}\n",
+        replace: "        {navButton('tab-status', COPY.navHealthMemory, isMemoryWaiting || hasProblem(current, drawingAsked.off), () => undefined)}\n",
     },
     {
         name: "a goal's screen no longer says What next",
@@ -1556,10 +1556,10 @@ const MUTATIONS = [
         replace: "          return actButton(`plan-${item.target}`, 'plan_approve', item.target)\n",
     },
     {
-        name: "the head's amber badge is drawn at 0 too",
+        name: "the head's amber frame is drawn at 0 too",
         file: "hooks/register.tsx",
-        find: "      const isWaiting = count !== null && count > 0\n",
-        replace: "      const isWaiting = count !== null\n",
+        find: "        <Box key={`${key}-frame`} padding=\"xs\" borderStyle={isWaiting ? 'round' : undefined} borderColor={isWaiting ? HEAD_FRAME : undefined}>\n",
+        replace: "        <Box key={`${key}-frame`} padding=\"xs\" borderStyle=\"round\" borderColor={HEAD_FRAME}>\n",
     },
 ];
 

@@ -10,8 +10,9 @@
 //        │      the overview ── tiles · Waiting for you ──▶ question · story · plan
 //        │        │              goals_list · plans_list ──▶ one card per goal, its road from hooks/road.ts ──▶ goal ──▶ story
 //        │        │              folds: Done today · Queued · History; a new goal is goal_add
-//        │        ├──▶ the bell ──▶ Notices, a screen of its own
-//        │        └──▶ Memory, Health ──▶ More: Health · Memory on one page
+//        │        ├──▶ Notices ──▶ Notices, a screen of its own
+//        │        └──▶ Health & memory ──▶ More: Health · Memory on one page, at its top
+//        │             each framed in amber while something behind it waits; on the terminal a dot before the word
 //        └──▶ the done-signal: $.prompt.submit once per story and verdict commit, and a toast, by the story's ref
 //   session start, away > 2 h ──▶ ONE catch-up summary, and the band says it until dismissed
 //   a host proof's subjects ──▶ no prompt, no band count, no catch-up line
@@ -56,7 +57,7 @@ import type {
 } from '../types'
 
 import { COPY } from './copy'
-import { BADGE_FILL, BADGE_WORD, BELL_GLYPH, CARD_FILL, CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, NARROW_COLUMNS, ROAD_CARD_HEIGHT, WAITING_TILE_FILL, NARROW_TERMINAL_COLUMNS, ROAD_NAMES_COLUMNS, WIDE_COLUMNS, phaseGlyph, planChain, planOrder, proofsOf, road, roadCells, spendBar, splitHash } from './drawing'
+import { CARD_FILL, CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, HEAD_FRAME, HEAD_WAITING_MARK, NARROW_COLUMNS, ROAD_CARD_HEIGHT, WAITING_TILE_FILL, NARROW_TERMINAL_COLUMNS, ROAD_NAMES_COLUMNS, WIDE_COLUMNS, phaseGlyph, planChain, planOrder, proofsOf, road, roadCells, spendBar, splitHash } from './drawing'
 import type { Picture, Proofs } from './drawing'
 import { REASON_WHOLE, alertCount, checkTree, healthLine, plainLine, stateWord, statusDrawingOf, storeFileOf, todayCost, treeLine, typedLine } from './health'
 import type { Health, StatusPart } from './health'
@@ -146,7 +147,7 @@ type Reset = { from: number; head: number | null; refused: string | null }
 export const PANE = 'terylon'
 
 // The mod's version, said on Health: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.20.1'
+export const MOD_VERSION = '1.20.2'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -1755,10 +1756,10 @@ async function loadMore($: EngineInterface): Promise<void> {
   ])
 }
 
-// A button of the overview's head: More, scrolled to the section it names.
-async function openMore($: EngineInterface, section: 'memory' | 'health'): Promise<void> {
-  await show($, { screen: 'more', section }, false)
-  await $.ui.scroll({ to: { key: `more-${section}` }, in: PANE, block: 'nearest' }).catch(() => undefined)
+// A button of the overview's head, and How to fix: More, at its top, where Health stands above Memory.
+async function openMore($: EngineInterface): Promise<void> {
+  await show($, { screen: 'more' }, false)
+  await $.ui.scroll({ to: 'start', in: PANE }).catch(() => undefined)
 }
 
 // The band's button and the commands: the one pane, on the tab asked for, never opened by itself.
@@ -2597,7 +2598,7 @@ async function refreshAct($: EngineInterface, key: string): Promise<void> {
 // How to fix: Health, with every rule the pane needs.
 async function howToFix($: EngineInterface): Promise<void> {
   await update($, rulesAsked, (): boolean => true)
-  await openMore($, 'health')
+  await openMore($)
 }
 
 // THE POLICY: Edit fills the form with what policy_get answered; Save sends only what changed.
@@ -3427,35 +3428,36 @@ export const register: Register = on => {
         current.fetchedAt === null ? null : cost,
       ].filter(part => part !== null).join(' · ')
     }
-    // THE WAY TO NOTICES, MEMORY AND HEALTH, in the overview's head. A Button takes strings and Text alone, so THE BELL IS A
-    // GLYPH, no Svg, and A COUNT THAT WAITS FOR THE OWNER IS A BADGE, a Text on its own fill inside the Button: an amber run
-    // with the number in one dark ink, the same on both themes, and none at 0. The terminal paints no fill: a `warning` dot before
-    // the number, and the word where the desktop draws a bell. A Button's label names it whatever it draws.
+    // THE WAY TO NOTICES AND TO HEALTH & MEMORY, in the overview's head, each Button its plain word. Desktop draws a Button
+    // natively and drops its children, so NOTHING IN A BUTTON CARRIES WHAT WAITS: on a graphic surface an amber frame round
+    // it, and while nothing waits a Box of the same padding with no frame, so the head keeps its place; on the terminal a
+    // `warning` dot before the word. Its label is the word it draws, since Desktop draws the label.
     const overviewState = { ...EMPTY_OVERVIEW, ...(await read($, overview)) }
-    const navButton = (key: string, label: string, glyph: string, name: string, count: number | null, onPress: () => unknown) => {
-      const isWaiting = count !== null && count > 0
+    const navButton = (key: string, name: string, isWaiting: boolean, onPress: () => unknown) => {
+      if (!look.isGraphic) {
+        return (
+          <Button key={key} label={name} onPress={onPress}>
+            {isWaiting && <Text color="warning">{'● '}</Text>}
+            {name}
+          </Button>
+        )
+      }
 
-      // THE BADGE RIGHT AFTER THE GLYPH, on one line: the pair reads as one control, no Box and no border.
-      return look.isGraphic
-        ? (
-            <Button key={key} label={label} onPress={onPress}>
-              {glyph}
-              {isWaiting && <Text color={BADGE_WORD} backgroundColor={BADGE_FILL} size="caption" weight="semibold" tabular>{`\u00a0${count}\u00a0`}</Text>}
-            </Button>
-          )
-        : (
-            <Button key={key} label={label} onPress={onPress}>
-              {`${name} `}
-              {isWaiting && <Text color="warning">{'● '}</Text>}
-              {count === null ? null : <Text tabular>{String(count)}</Text>}
-            </Button>
-          )
+      if (HEAD_WAITING_MARK === 'primary') {
+        return isWaiting ? <Button key={key} label={name} variant="primary" onPress={onPress} /> : <Button key={key} label={name} onPress={onPress} />
+      }
+
+      return (
+        <Box key={`${key}-frame`} padding="xs" borderStyle={isWaiting ? 'round' : undefined} borderColor={isWaiting ? HEAD_FRAME : undefined}>
+          <Button key={key} label={name} onPress={onPress} />
+        </Box>
+      )
     }
+    const isMemoryWaiting = (overviewState.memoryPending ?? 0) > 0
     const nav = (
-      <Box key="overview-nav" flexDirection="row" gap={1} flexShrink={0} flexWrap="wrap">
-        {navButton('tab-bell', COPY.navNotices(current.notices), BELL_GLYPH, COPY.moreNotices, current.notices, () => openNotices($))}
-        {navButton('tab-memory', COPY.navMemory(overviewState.memoryPending), COPY.moreMemory, COPY.moreMemory, overviewState.memoryPending, () => openMore($, 'memory'))}
-        <Button key="tab-status" label={COPY.navHealth(hasProblem(current, drawingAsked.off))} onPress={() => openMore($, 'health')} />
+      <Box key="overview-nav" flexDirection="row" gap={1} flexShrink={0} flexWrap="wrap" alignItems="center">
+        {navButton('tab-bell', COPY.navNotices, current.notices > 0, () => openNotices($))}
+        {navButton('tab-status', COPY.navHealthMemory, isMemoryWaiting || hasProblem(current, drawingAsked.off), () => openMore($))}
         {refreshButton}
       </Box>
     )

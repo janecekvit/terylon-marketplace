@@ -46,7 +46,7 @@ function refWorld(on: Parameters<typeof world>[0], options: Parameters<typeof wo
 // ---------------------------------------------------------------------------------------------------- the name
 
 for (const [surface, props, drawnOn] of SURFACES) {
-  test(`${surface}: Terylon Cockpit in full; the overview's head reads Notices · Memory · Health; no footer names the command`, async ($, on) => {
+  test(`${surface}: Terylon Cockpit in full; the overview's head reads Notices · Health & memory; no footer names the command`, async ($, on) => {
     const terylon = world(on)
     await $.session.start(SESSION)
     await terylon.clock.settle()
@@ -54,11 +54,11 @@ for (const [surface, props, drawnOn] of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, props, surface: drawnOn })
     const labels = []
 
-    for (const key of ['tab-bell', 'tab-memory', 'tab-status']) {
+    for (const key of ['tab-bell', 'tab-status']) {
       labels.push(String((await ui.find({ key }))?.props.label ?? ''))
     }
 
-    expect(labels).toEqual(['Notices 2', 'Memory', 'Health'])
+    expect(labels).toEqual(['Notices', 'Health & memory'])
     // NO SCREEN NAMES THE COMMAND.
     expect(await ui.find({ type: 'Text', text: exact('/terylon-cockpit') })).toBeUndefined()
 

@@ -4,6 +4,8 @@
 import type { On } from 'claude-code'
 import { mock } from 'claude-code/testing'
 
+import { HEAD_FRAME } from '../hooks/drawing'
+
 export const SERVER = 'plugin:terylon-os:terylon'
 
 export const BASE = 'https://terylon.example.ts.net'
@@ -492,12 +494,21 @@ export async function toOverview(ui: Mounted): Promise<void> {
 }
 
 // A button of the overview's head: Notices, or More whose sections are on one page, from the overview.
-export async function pill(ui: Mounted, key: 'tab-bell' | 'tab-memory' | 'tab-status'): Promise<void> {
+export async function pill(ui: Mounted, key: 'tab-bell' | 'tab-status'): Promise<void> {
   if ((await ui.find({ key })) === undefined) {
     await toRoot(ui)
   }
 
   await ui.press({ key })
+}
+
+// WHAT WAITS ON A BUTTON OF THE HEAD: its amber frame on a graphic surface, its warning dot on the terminal; undefined
+// where the head is not drawn.
+export async function marked(ui: Mounted, key: 'tab-bell' | 'tab-status'): Promise<boolean | undefined> {
+  const button = await ui.find({ key }) as { text?: string } | undefined
+  const frame = await ui.find({ key: `${key}-frame` }) as { props?: Record<string, unknown> } | undefined
+
+  return button === undefined ? undefined : frame?.props?.borderColor === HEAD_FRAME || String(button.text ?? '').startsWith('● ')
 }
 
 // A fold opened, where a press on an earlier surface has not opened it already: its state stays across mounts.
@@ -541,7 +552,7 @@ export async function openCockpit($: Engine): Promise<void> {
 export async function openMemoryTab($: Engine & { ui: { mount: (request: never) => Promise<Mounted & { unmount: () => Promise<unknown>; find: (query: { key: string }) => Promise<{ text?: string } | undefined> }> } }): Promise<void> {
   await $.command.run({ command: 'terylon-cockpit', args: '' } as never)
   const pane = await $.ui.mount({ plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS, surface: 'desktop' } as never)
-  await pane.press({ key: 'tab-memory' })
+  await pane.press({ key: 'tab-status' })
 
   for (const key of ['fold-memory-owner', 'fold-memory-topics', 'fold-memory-rules']) {
     if ((await pane.find({ key })) !== undefined) {

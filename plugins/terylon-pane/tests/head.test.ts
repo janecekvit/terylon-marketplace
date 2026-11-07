@@ -1,14 +1,15 @@
-// THE OVERVIEW'S HEAD AND WHAT HANGS OFF IT: the way to Notices, Memory and Health, the amber badge of a count that waits
-// for the owner, Notices as a screen of its own, the thin road and the fills on the graphic surfaces alone.
+// THE OVERVIEW'S HEAD AND WHAT HANGS OFF IT: the way to Notices and to Health & memory, the amber frame round a button
+// while something behind it waits for the owner, Notices as a screen of its own, the thin road and the fills on the
+// graphic surfaces alone.
 
 import { test, expect } from 'claude-code/testing'
 
-import { BADGE_FILL, BADGE_WORD, CARD_FILL, ROAD_CARD_HEIGHT, SVG_COLOURS, WAITING_TILE_FILL, road } from '../hooks/drawing'
+import { CARD_FILL, HEAD_FRAME, HEAD_WAITING_MARK, ROAD_CARD_HEIGHT, SVG_COLOURS, WAITING_TILE_FILL, road } from '../hooks/drawing'
 import { TONE_KEYS } from '../hooks/tones'
 
-import { TEXT_RATIO, contrast, inks, painted } from './contrast'
+import { MARK_RATIO, TEXT_RATIO, contrast, inks, painted } from './contrast'
 import type { Ink, Theme } from './contrast'
-import { BRIEFING, MEMORY, NARROW_PANE_PROPS, PANE_PROPS, SESSION, exact, world } from './fixtures'
+import { BRIEFING, FLIGHT, MEMORY, NARROW_PANE_PROPS, PANE_PROPS, SESSION, exact, world } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -16,20 +17,17 @@ const THEMES: Theme[] = ['dark', 'light']
 
 const WIDE_PROPS = { ...(PANE_PROPS as Record<string, unknown>), bodyColumns: 100 } as never
 
+// The head's two buttons, each with the word it draws.
+const HEAD_BUTTONS = [['tab-bell', 'Notices'], ['tab-status', 'Health & memory']] as const
+
+// The graphic surfaces, where the frame is drawn: the narrow dock follows the desktop.
+const GRAPHIC = [['the desktop', PANE_PROPS], ['the narrow dock', NARROW_PANE_PROPS]] as const
+
 function unreadable(found: readonly Ink[]): string[] {
   return THEMES.flatMap(theme => found.filter(ink => contrast(ink.color, ink.on, theme) < TEXT_RATIO).map(ink => `${theme}: "${ink.text}" in ${ink.color} on ${ink.on}`))
 }
 
-// THE BADGE inside a Button: a Text on the badge's own fill, found by it, since a Button's children carry no key.
-async function badgeIn(ui: { find: (query: { key: string }) => Promise<unknown> }, key: string): Promise<{ type?: string; text?: string; props: Record<string, unknown> } | undefined> {
-  const button = await ui.find({ key }) as { children?: unknown[] } | undefined
-  const children = (button?.children ?? []) as { type?: string; props?: Record<string, unknown>; children?: unknown[] }[]
-  const found = children.find(child => child?.type === 'Text' && child.props?.backgroundColor === BADGE_FILL)
-
-  return found === undefined ? undefined : { ...found, props: found.props ?? {}, text: (found.children ?? []).filter(part => typeof part === 'string').join('') } as never
-}
-
-// A world with this many notices and memory proposals waiting.
+// A world with this many notices and memory proposals waiting, and Health well.
 function waitingWorld(on: Parameters<typeof world>[0], count: number) {
   const terylon = world(on)
 
@@ -40,8 +38,8 @@ function waitingWorld(on: Parameters<typeof world>[0], count: number) {
   return terylon
 }
 
-test('the head holds the status line, then the bell, Memory, Health and Refresh in that order; the foot the 30 days alone', async ($, on) => {
-  const terylon = world(on)
+test('the head holds the status line, then Notices, Health & memory and Refresh in that order, each its plain word; the foot the 30 days alone', async ($, on) => {
+  const terylon = waitingWorld(on, 2)
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
@@ -49,10 +47,13 @@ test('the head holds the status line, then the bell, Memory, Health and Refresh 
     const ui = await $.ui.mount({ ...PANE, surface })
     await ui.press({ key: 'refresh' })
     const navigation = await ui.find({ key: 'overview-nav' })
-    const keys = (await ui.findAll({ type: 'Button' })).map(button => button.key).filter(key => ['tab-bell', 'tab-memory', 'tab-status', 'refresh'].includes(String(key)))
+    const buttons = (await ui.findAll({ type: 'Button' })).filter(button => ['tab-bell', 'tab-memory', 'tab-status', 'refresh'].includes(String(button.key)))
 
     expect(navigation).toBeDefined()
-    expect(keys).toEqual(['tab-bell', 'tab-memory', 'tab-status', 'refresh'])
+    expect(buttons.map(button => button.key)).toEqual(['tab-bell', 'tab-status', 'refresh'])
+    // NO GLYPH, COUNT, BADGE, ⚠ OR › in a label: what waits is drawn round the button, never in it.
+    expect(buttons.map(button => button.props.label)).toEqual(['Notices', 'Health & memory', 'Refresh'])
+    expect(buttons.filter(button => /[0-9⚠›🔔]/u.test(`${String(button.props.label)} ${button.text}`))).toEqual([])
     expect(await ui.find({ key: 'pills' })).toBeUndefined()
     expect((await ui.find({ key: 'overview-foot' }))?.text).toContain('Last 30 days')
     expect((await ui.findAll({ type: 'Button' })).filter(button => /›$/.test(String(button.props.label)))).toEqual([])
@@ -60,84 +61,129 @@ test('the head holds the status line, then the bell, Memory, Health and Refresh 
   }
 })
 
-for (const key of ['tab-bell', 'tab-memory'] as const) {
-  test(`${key} at 0: no badge on the desktop and no dot on the terminal`, async ($, on) => {
-    const terylon = waitingWorld(on, 0)
-    await $.session.start(SESSION)
-    await terylon.clock.settle()
+for (const [key, word] of HEAD_BUTTONS) {
+  for (const [name, props] of GRAPHIC) {
+    test(`${name}: ${word} at 0 draws its Button in a Box of the frame's padding with no frame`, async ($, on) => {
+      const terylon = waitingWorld(on, 0)
+      await $.session.start(SESSION)
+      await terylon.clock.settle()
 
-    const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
-    await desktop.press({ key: 'refresh' })
-    expect(await desktop.find({ key })).toBeDefined()
-    expect(await badgeIn(desktop, key)).toBeUndefined()
-    expect((await desktop.findAll({ type: 'Text' })).filter(text => text.props.backgroundColor === BADGE_FILL)).toEqual([])
-    await desktop.unmount()
+      const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props })
+      await ui.press({ key: 'refresh' })
+      const frame = await ui.find({ key: `${key}-frame` })
 
-    const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    await terminal.press({ key: 'refresh' })
-    const button = await terminal.find({ key })
-    expect(button?.text).toMatch(/ 0$/)
-    expect(button?.text).not.toContain('●')
-    await terminal.unmount()
-  })
+      // ITS PLACE KEPT: the same Box and padding as when it waits, so the head does not move.
+      expect(frame?.type).toBe('Box')
+      expect(frame?.props.padding).toBe('xs')
+      expect(frame?.props.borderStyle).toBeUndefined()
+      expect(frame?.props.borderColor).toBeUndefined()
+      expect((await ui.find({ key }))?.props.label).toBe(word)
+      expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.borderColor === HEAD_FRAME)).toEqual([])
+    })
 
-  test(`${key} at 1: the amber badge inside the Button right after its label on the desktop, one dark ink on both themes, and a warning dot on the terminal`, async ($, on) => {
-    const terylon = waitingWorld(on, 1)
-    await $.session.start(SESSION)
-    await terylon.clock.settle()
+    test(`${name}: ${word} at 1 is framed round in amber, its Button the plain word with nothing inside it`, async ($, on) => {
+      const terylon = waitingWorld(on, 1)
+      await $.session.start(SESSION)
+      await terylon.clock.settle()
 
-    const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
-    await desktop.press({ key: 'refresh' })
-    const drawn = await badgeIn(desktop, key)
-    // A SHORT INLINE COUNT: a Text on its own fill, a space each side, no Box and no border.
-    expect(drawn?.type).toBe('Text')
-    expect(drawn?.props).toMatchObject({ backgroundColor: BADGE_FILL, color: BADGE_WORD })
-    expect(drawn?.props.borderStyle).toBeUndefined()
-    expect(drawn?.text).toBe('\u00a01\u00a0')
-    expect(await desktop.find({ key: `${key}-nav` })).toBeUndefined()
-    expect((await desktop.findAll({ type: 'Box' })).filter(box => box.props.backgroundColor === BADGE_FILL)).toEqual([])
-    // INSIDE THE BUTTON, right after its label, so the pair is one control on one line.
-    expect((await desktop.find({ key }))?.text).toMatch(/\S\u00a01\u00a0$/)
-    const words = inks(drawn)
-    expect(words).toEqual([{ text: '1', color: BADGE_WORD, on: BADGE_FILL, isMark: false }])
-    expect(unreadable(words)).toEqual([])
-    await desktop.unmount()
+      const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props })
+      await ui.press({ key: 'refresh' })
+      const frame = await ui.find({ key: `${key}-frame` }) as unknown as { type: string; text: string; props: Record<string, unknown>; children: { type?: string }[] }
+      const button = await ui.find({ key })
 
-    const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    await terminal.press({ key: 'refresh' })
-    const button = await terminal.find({ key })
-    expect(button?.text).toMatch(/● 1$/)
-    expect(await badgeIn(terminal, key)).toBeUndefined()
-    expect((await terminal.findAll({ type: 'Text', text: /^● $/ })).map(dot => dot.props.color)).toContain('warning')
-    await terminal.unmount()
-  })
+      expect(frame.type).toBe('Box')
+      expect(frame.props).toMatchObject({ borderStyle: 'round', borderColor: HEAD_FRAME, padding: 'xs' })
+      expect(frame.props.backgroundColor).toBeUndefined()
+      // THE BUTTON IS THE FRAME'S ONE CHILD, and holds no child of its own: Desktop would not draw one.
+      expect(frame.children.map(child => child.type)).toEqual(['Button'])
+      expect(frame.text).toBe(word)
+      expect(button?.props.label).toBe(word)
+      expect(button?.props.variant).toBeUndefined()
+      expect(((button as unknown as { children?: unknown[] }).children ?? []).filter(child => typeof child !== 'string')).toEqual([])
+    })
+  }
+
+  for (const count of [1, 0]) {
+    test(`the terminal: ${word} at ${count} is "${count === 0 ? '' : '● '}${word}"${count === 0 ? '' : ', the dot in warning'}, and no frame`, async ($, on) => {
+      const terylon = waitingWorld(on, count)
+      await $.session.start(SESSION)
+      await terylon.clock.settle()
+
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      await ui.press({ key: 'refresh' })
+      const button = await ui.find({ key })
+      const dots = (await ui.findAll({ type: 'Text', text: /^● $/ })).filter(dot => dot.props.color === 'warning')
+
+      expect(button?.props.label).toBe(word)
+      expect(button?.text).toBe(count === 0 ? word : `● ${word}`)
+      expect(dots.length).toBe(count === 0 ? 0 : HEAD_BUTTONS.length)
+      expect(await ui.find({ key: `${key}-frame` })).toBeUndefined()
+      expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.borderColor === HEAD_FRAME)).toEqual([])
+    })
+  }
 }
 
-test('the badge is a mark and no amber word: raw and the same on both themes, the theme\'s warning never its ink', () => {
-  expect(BADGE_FILL).toBe('#e0a84e')
-  expect(BADGE_WORD).toBe('#1b1b1a')
-  expect(TONE_KEYS.wait).toBe('warning')
-
-  for (const theme of THEMES) {
-    expect(painted(BADGE_FILL, theme)).toBe('#e0a84e')
-    expect(contrast(BADGE_WORD, BADGE_FILL, theme)).toBeGreaterThanOrEqual(TEXT_RATIO)
-  }
-})
-
-test('the bell: a glyph on the desktop, its label naming it with the count; the terminal says Notices n', async ($, on) => {
-  const terylon = waitingWorld(on, 2)
+test('Health & memory is framed while Health has a problem, with no memory proposal waiting; Notices is not', async ($, on) => {
+  const terylon = waitingWorld(on, 0)
+  terylon.answers.briefing = { ...BRIEFING, unhandledNotices: 0, leader: { paused: true, pausedAt: '2026-10-11T12:05:00Z', reason: 'Host maintenance tonight.' } }
+  terylon.answers.work_in_flight = { ...FLIGHT, paused: true }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await desktop.find({ key: 'tab-bell' }))?.props.label).toBe('Notices 2')
-  expect((await desktop.find({ key: 'tab-bell' }))?.text).toBe('🔔\u00a02\u00a0')
+  await desktop.press({ key: 'refresh' })
+  expect((await desktop.find({ key: 'tab-status-frame' }))?.props.borderColor).toBe(HEAD_FRAME)
+  expect((await desktop.find({ key: 'tab-bell-frame' }))?.props.borderColor).toBeUndefined()
   await desktop.unmount()
 
   const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect((await terminal.find({ key: 'tab-bell' }))?.props.label).toBe('Notices 2')
-  expect((await terminal.find({ key: 'tab-bell' }))?.text).toBe('Notices ● 2')
-  await terminal.unmount()
+  await terminal.press({ key: 'refresh' })
+  expect((await terminal.find({ key: 'tab-status' }))?.text).toBe('● Health & memory')
+  expect((await terminal.find({ key: 'tab-bell' }))?.text).toBe('Notices')
+})
+
+test('Health & memory is framed while a memory proposal waits, with Health well and no notice', async ($, on) => {
+  const terylon = waitingWorld(on, 0)
+  terylon.answers.memory_get = { ...MEMORY, proposals: (MEMORY.proposals as unknown[]).slice(0, 1) }
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'refresh' })
+  expect((await ui.find({ key: 'tab-status-frame' }))?.props.borderColor).toBe(HEAD_FRAME)
+  expect((await ui.find({ key: 'tab-bell-frame' }))?.props.borderColor).toBeUndefined()
+})
+
+test('the frame is a mark and no amber word: raw and the same on both themes, the theme\'s warning never its ink', () => {
+  expect(HEAD_FRAME).toBe('#e0a84e')
+  expect(HEAD_WAITING_MARK).toBe('frame')
+  expect(TONE_KEYS.wait).toBe('warning')
+
+  for (const theme of THEMES) {
+    expect(painted(HEAD_FRAME, theme)).toBe('#e0a84e')
+  }
+
+  // A MARK'S 3:1 ON THE DARK THEME; on the light one the raw stroke falls short of it, which is what the switch to the
+  // surface's primary button is for.
+  expect(contrast(HEAD_FRAME, 'background', 'dark')).toBeGreaterThanOrEqual(MARK_RATIO)
+})
+
+test('Health & memory opens More at its top: Health first, then Memory, and no button opens Memory alone', async ($, on) => {
+  const terylon = waitingWorld(on, 1)
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'refresh' })
+  expect(await ui.find({ key: 'tab-memory' })).toBeUndefined()
+  await ui.press({ key: 'tab-status' })
+  const keys = (await ui.findAll({ type: 'Box' })).map(box => String(box.key))
+
+  // THE PAGE'S HEAD FIRST, then Health, then Memory: the top it is opened at is Health's.
+  expect(keys.indexOf('more-top')).toBeGreaterThanOrEqual(0)
+  expect(keys.indexOf('more-top')).toBeLessThan(keys.indexOf('more-health'))
+  expect(keys.indexOf('more-health')).toBeLessThan(keys.indexOf('more-memory'))
+  expect(await ui.find({ key: 'act-proposal-5-confirm' })).toBeDefined()
 })
 
 for (const [name, surface, props, env] of [
@@ -317,7 +363,7 @@ test('NO DEVELOPER WORD on a screen a person reads: no tool, no internal, no com
     seen.push(...(await ui.findAll({ type: 'Text' })).map(node => node.text))
   }
 
-  for (const path of [['refresh'], ['tab-bell', 'back'], ['tab-memory', 'tab-queue'], ['tab-status', 'tab-queue'], ['open-plan-41', 'back'], ['story-333', 'back']]) {
+  for (const path of [['refresh'], ['tab-bell', 'back'], ['tab-status', 'tab-queue'], ['open-plan-41', 'back'], ['story-333', 'back']]) {
     await ui.press({ key: path[0] ?? '' })
     await look()
 

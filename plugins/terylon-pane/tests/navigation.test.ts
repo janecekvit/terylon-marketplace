@@ -4,7 +4,7 @@
 import { test, expect } from 'claude-code/testing'
 
 import { when } from '../hooks/queue'
-import { BRIEFING, GOALS, GOAL_QUESTION, NOTICES, PANE_PROPS, SESSION, WORLD_NOW, chipOf, exact, hostZoneOffset, pictures, world, pill, toOverview } from './fixtures'
+import { BRIEFING, GOALS, GOAL_QUESTION, NOTICES, PANE_PROPS, SESSION, WORLD_NOW, chipOf, exact, hostZoneOffset, marked, pictures, world, pill, toOverview } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -271,7 +271,8 @@ test('Notices reads the notices and a notice is handled there; More reads the me
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ key: 'tab-bell' }))?.props.label).toBe('Notices 2')
+  expect((await ui.find({ key: 'tab-bell' }))?.props.label).toBe('Notices')
+  expect(await marked(ui, 'tab-bell')).toBe(true)
   await pill(ui, 'tab-bell')
 
   expect(await ui.find({ type: 'Text', text: exact('Needs you · 2') })).toBeDefined()
@@ -322,18 +323,16 @@ test('More is a page of the one pane: no second pane opens, every pill opens it,
   await ui.press({ key: 'back' })
   expect(await ui.find({ key: 'notices' })).toBeUndefined()
 
-  for (const key of ['tab-memory', 'tab-status'] as const) {
-    await ui.press({ key })
-    expect(terylon.opens).toEqual([])
+  await ui.press({ key: 'tab-status' })
+  expect(terylon.opens).toEqual([])
 
-    for (const section of ['more-memory', 'more-health']) {
-      expect(await ui.find({ key: section })).toBeDefined()
-    }
-
-    expect((await ui.find({ key: 'tab-queue' }))?.props.label).toBe('‹ Overview')
-    await ui.press({ key: 'tab-queue' })
-    expect(await ui.find({ type: 'Text', text: exact('Waiting for you') })).toBeDefined()
+  for (const section of ['more-memory', 'more-health']) {
+    expect(await ui.find({ key: section })).toBeDefined()
   }
+
+  expect((await ui.find({ key: 'tab-queue' }))?.props.label).toBe('‹ Overview')
+  await ui.press({ key: 'tab-queue' })
+  expect(await ui.find({ type: 'Text', text: exact('Waiting for you') })).toBeDefined()
 })
 
 // TERYLON COCKPIT'S ONE COMMAND (Terylon S68): /terylon-cockpit opens the pane on the overview; the three commands it had
@@ -354,6 +353,6 @@ test('/terylon-cockpit is the one command: it opens the pane on the overview; /t
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(await ui.find({ key: 'tiles' })).toBeDefined()
-  await pill(ui, 'tab-memory')
+  await pill(ui, 'tab-status')
   expect(await ui.find({ type: 'Text', text: exact('/terylon-cockpit') })).toBeUndefined()
 })

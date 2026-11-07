@@ -4,7 +4,7 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { BADGE_FILL, CARD_FILL, WAITING_TILE_FILL } from '../hooks/drawing'
+import { CARD_FILL, WAITING_TILE_FILL } from '../hooks/drawing'
 
 import { BRIEFING, FLIGHT, GOALS, GOAL_QUESTION, METRICS, NARROW_PANE_PROPS, PANE_PROPS, PLANS, SESSION, STORIES, STORY_327, STORY_333, chipOf, exact, openCockpit, pictures, pill, toOverview, toRoot, unfold, world } from './fixtures'
 
@@ -142,7 +142,7 @@ test('the stage\'s chip: purple for a gate, blue while it runs, its word never a
   }
 
   // NO CARD IS FILLED.
-  expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.backgroundColor !== undefined && ![CARD_FILL, WAITING_TILE_FILL, BADGE_FILL].includes(String(box.props.backgroundColor)))).toEqual([])
+  expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.backgroundColor !== undefined && ![CARD_FILL, WAITING_TILE_FILL].includes(String(box.props.backgroundColor)))).toEqual([])
 })
 
 test('a goal\'s ref falls back to nothing where Terylon sends none, its stories\' to #id, as today', async ($, on) => {
@@ -396,7 +396,7 @@ test('MORE: Health and Memory on one page, whichever button opened it, its sourc
   const ui = await $.ui.mount({ ...PANE, props: PANE_PROPS, surface: 'desktop' })
   const before = terylon.calls.length
   terylon.hang.add('memory_get')
-  const pressed = ui.press({ key: 'tab-memory' })
+  const pressed = ui.press({ key: 'tab-status' })
   await terylon.clock.settle()
 
   // ALL ASKED AT ONCE: Health drawn while Memory is still not answered.

@@ -3,7 +3,7 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { BRIEFING, GATES, PANE_PROPS, SESSION, bandProps, exact, world, pill, toOverview, moreWith, toRoot } from './fixtures'
+import { BRIEFING, GATES, MEMORY, PANE_PROPS, SESSION, bandProps, exact, marked, world, pill, toOverview, moreWith, toRoot } from './fixtures'
 
 const SURFACES = ['desktop', 'terminal'] as const
 
@@ -31,7 +31,7 @@ test('well: ok, the slots, the cost today and over 30 days, nothing wrong, the d
 
     expect(await ui.find({ type: 'Text', text: /^Problems/ })).toBeUndefined()
 
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.20.1') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.20.2') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('TERYLON_URL https://terylon.example.ts.net') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('server plugin:terylon-os:terylon') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Every failure is in claude --debug under terylon-pane:') })).toBeDefined()
@@ -136,6 +136,8 @@ test('an alert is one line on Health, never the notice again: its title and Open
 test('the band\'s Open always opens the pane where the owner left it, the overview the first time, a problem or not', async ($, on) => {
   const terylon = world(on)
   terylon.answers.notices_list = { unhandled: 1, notices: [GATUS] }
+  // NO MEMORY PROPOSAL WAITS, so Health & memory is framed for Health alone.
+  terylon.answers.memory_get = { ...MEMORY, proposals: [] }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
@@ -145,7 +147,7 @@ test('the band\'s Open always opens the pane where the owner left it, the overvi
   expect(terylon.opens).toEqual(['terylon'])
 
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Health ⚠')
+  expect(await marked(pane, 'tab-status')).toBe(true)
 
   await pill(pane, 'tab-bell')
   await band.press({ key: 'band-open' })
@@ -157,5 +159,5 @@ test('the band\'s Open always opens the pane where the owner left it, the overvi
   expect((await band.find({ key: 'band-open' }))?.props.label).toBe('Open')
   expect(await pane.find({ key: 'notices' })).toBeDefined()
   await toRoot(pane)
-  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Health')
+  expect(await marked(pane, 'tab-status')).toBe(false)
 })

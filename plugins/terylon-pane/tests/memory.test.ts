@@ -10,7 +10,7 @@ test("the Memory tab shows the leader's memory as stored, a card per file, and t
   await terylon.clock.settle()
 
   const memory = await $.ui.mount(MEMORY_MOUNT)
-  await pill(memory, 'tab-memory')
+  await pill(memory, 'tab-status')
   // ABOUT YOU AND THE TOPICS A PRESS AWAY, each with its count.
   expect((await memory.find({ key: 'fold-memory-owner' }))?.text).toBe('▸ About you 2')
   expect((await memory.find({ key: 'fold-memory-topics' }))?.text).toBe('▸ Topics 1')

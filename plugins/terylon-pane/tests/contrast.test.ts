@@ -7,7 +7,7 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { BADGE_FILL, CARD_FILL, CHIP_BACKGROUND, CHIP_WORD, WAITING_TILE_FILL } from '../hooks/drawing'
+import { CARD_FILL, CHIP_BACKGROUND, CHIP_WORD, WAITING_TILE_FILL } from '../hooks/drawing'
 import { KIND_TONES, TONE_KEYS, WARNING_LIGHT, markOf, wordOf } from '../hooks/tones'
 import type { WordTone } from '../hooks/tones'
 
@@ -151,7 +151,7 @@ test('no card is filled, on any screen: the stroke carries the warning, the pane
 
     expect(fills.length).toBeGreaterThan(0)
 
-    expect(fills.filter(fill => fill !== undefined && ![CARD_FILL, WAITING_TILE_FILL, BADGE_FILL].includes(String(fill)))).toEqual([])
+    expect(fills.filter(fill => fill !== undefined && ![CARD_FILL, WAITING_TILE_FILL].includes(String(fill)))).toEqual([])
   }
 
   await noneFilled()
@@ -192,7 +192,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
     terylon.mode.server = 'up'
     await look()
     await ui.press({ key: 'back' })
-    await pill(ui, 'tab-memory')
+    await pill(ui, 'tab-status')
     await look()
 
     expect(seen.map(ink => ink.text)).toEqual(expect.arrayContaining(['Blocked', 'Abandon…', '✗ Refused (409)', 'Story 329 is running; only a blocked story is unblocked.', '⚠', "Claude Code refused the pane's call to story_unblock", 'Old text.', 'New text.']))

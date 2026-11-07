@@ -3,7 +3,7 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { HOUR, PANE_PROPS, SESSION, bandProps, exact, world } from './fixtures'
+import { HOUR, PANE_PROPS, SESSION, bandProps, exact, marked, world } from './fixtures'
 
 const SURFACES = ['desktop', 'terminal'] as const
 
@@ -110,7 +110,7 @@ test('not allowed: the band says Claude Code refused, and Open opens the pane, w
   const pane = await $.ui.mount({ plugin: 'terylon-pane', surface: 'desktop', component: 'Pane', requestId: 'terylon', props: PANE_PROPS })
   expect(await pane.find({ type: 'Text', text: exact("Claude Code refused the pane's call") })).toBeDefined()
   expect((await pane.find({ type: 'Code', text: /permissions/ }))?.props.language).toBe('json')
-  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Health ⚠')
+  expect(await marked(pane, 'tab-status')).toBe(true)
   expect(await pane.find({ type: 'Text', text: /^Reason: / })).toBeDefined()
 })
 

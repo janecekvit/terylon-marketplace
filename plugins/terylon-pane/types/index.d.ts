@@ -156,8 +156,8 @@ export type PaneSnapshot = {
 
 export type PaneScreen =
   | { screen: 'queue' }
-  // HEALTH AND MEMORY ON ONE PAGE: `section` is the one its button scrolls to.
-  | { screen: 'more'; section: 'memory' | 'health' }
+  // HEALTH AND MEMORY ON ONE PAGE, opened at its top.
+  | { screen: 'more' }
   // NOTICES: a slide-over on the overview where the surface has room, else a screen of its own.
   | { screen: 'notices' }
   | { screen: 'new-goal' }
