@@ -24,7 +24,6 @@
 
 A board is drawn in HTML, the pane in what the surface offers, so these are the code's and stand:
 
-- A head button draws its plain word: *Notices*, where the board draws *Notices 1*. Claude Desktop draws a `Button` natively from its label and none of its children, so no count can sit inside one; the frame round it says that something waits.
 - The card fills are fainter than drawn, so every word passes 4.5:1 in both themes: `tests/contrast.ts` holds them.
 - The sample data on the boards is made up.
 
