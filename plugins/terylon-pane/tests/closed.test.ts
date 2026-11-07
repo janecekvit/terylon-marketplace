@@ -167,6 +167,64 @@ test('THE CLOSED LIST, EMPTY: it says so quietly, in either shape; with closedCo
   expect((await ui.find({ type: 'Text', text: exact('History is empty.') }))?.props.color).toBe('subtle')
 })
 
+test('HISTORY 0 AFTER A RESET: the fold open on goals read before, closedCount 0 says History is empty, reads nothing and never loads', async ($, on) => {
+  const terylon = world(on)
+  terylon.answers.goals_list = s44(2)
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount(MOUNT)
+  await toOverview(ui)
+  await ui.press({ key: 'goals-show-closed' })
+  expect(await ui.find({ key: 'goal-8' })).toBeDefined()
+  expect(closedReads(terylon.calls).length).toBe(1)
+
+  // TERYLON RESET TO FACTORY DEFAULTS: nothing closed any more, said by the next read of the goals.
+  terylon.answers.goals_list = s44(0, [])
+  await ui.press({ key: 'refresh' })
+  expect((await ui.find({ key: 'goals-show-closed' }))?.text).toBe('▾ History 0')
+  expect((await ui.find({ type: 'Text', text: exact('History is empty.') }))?.props.color).toBe('subtle')
+  expect(await ui.find({ type: 'Text', text: exact('Loading the closed goals…') })).toBeUndefined()
+  expect(await ui.find({ key: 'goal-8' })).toBeUndefined()
+
+  // SHUT AND OPENED AGAIN, and through the poll: still empty, and still nothing read.
+  await ui.press({ key: 'goals-show-closed' })
+  await ui.press({ key: 'goals-show-closed' })
+  await terylon.clock.advance(30000)
+  await terylon.clock.settle()
+  expect(await ui.find({ type: 'Text', text: exact('History is empty.') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('Loading the closed goals…') })).toBeUndefined()
+  expect(closedReads(terylon.calls).length).toBe(1)
+})
+
+test('PRESSED BEFORE THE GOALS ANSWER: the fold never sits on Loading; past the bound it says why with Try again, which reads them', async ($, on) => {
+  const terylon = world(on)
+  terylon.answers.goals_list = s44(2)
+  terylon.hang.add('goals_list')
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount(MOUNT)
+  const pressed = ui.press({ key: 'goals-show-closed' })
+  await terylon.clock.settle()
+  expect(await ui.find({ type: 'Text', text: exact('Loading the closed goals…') })).toBeUndefined()
+
+  // THE GOALS' OWN READ IS BOUNDED, and the fold says what became of it.
+  await terylon.clock.advance(8000)
+  await terylon.clock.settle()
+  await pressed
+  expect((await ui.find({ key: 'goals-show-closed' }))?.text).toMatch(/^▾ History/)
+  expect(await ui.find({ type: 'Text', text: exact('Loading the closed goals…') })).toBeUndefined()
+  expect((await ui.find({ key: 'goals-closed-retry' }))?.props.label).toBe('Try again')
+  expect(closedReads(terylon.calls)).toEqual([])
+
+  terylon.hang.delete('goals_list')
+  await ui.press({ key: 'goals-closed-retry' })
+  expect(await ui.find({ key: 'goal-8' })).toBeDefined()
+  expect(await ui.find({ key: 'goals-closed-retry' })).toBeUndefined()
+  expect(closedReads(terylon.calls).length).toBe(1)
+})
+
 test('THE CLOSED LIST, LOADING AND FAILED: a quiet line while it loads; Terylon\'s sentence and Try again when it fails', async ($, on) => {
   const terylon = world(on)
   terylon.answers.goals_list = s44(2)

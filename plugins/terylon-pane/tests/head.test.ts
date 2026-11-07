@@ -1,9 +1,9 @@
 // THE OVERVIEW'S HEAD AND WHAT HANGS OFF IT: the way to Notices, Memory and Health, the amber badge of a count that waits
-// for the owner, Notices over the overview, the thin road and the fills on the graphic surfaces alone.
+// for the owner, Notices as a screen of its own, the thin road and the fills on the graphic surfaces alone.
 
 import { test, expect } from 'claude-code/testing'
 
-import { BACKDROP_FILL, BADGE_FILL, BADGE_WORD, CARD_FILL, PANEL_GROUND, PANEL_WIDTH, ROAD_CARD_HEIGHT, SVG_COLOURS, WAITING_TILE_FILL, road } from '../hooks/drawing'
+import { BADGE_FILL, BADGE_WORD, CARD_FILL, ROAD_CARD_HEIGHT, SVG_COLOURS, WAITING_TILE_FILL, road } from '../hooks/drawing'
 import { TONE_KEYS } from '../hooks/tones'
 
 import { TEXT_RATIO, contrast, inks, painted } from './contrast'
@@ -18,6 +18,15 @@ const WIDE_PROPS = { ...(PANE_PROPS as Record<string, unknown>), bodyColumns: 10
 
 function unreadable(found: readonly Ink[]): string[] {
   return THEMES.flatMap(theme => found.filter(ink => contrast(ink.color, ink.on, theme) < TEXT_RATIO).map(ink => `${theme}: "${ink.text}" in ${ink.color} on ${ink.on}`))
+}
+
+// THE BADGE inside a Button: a Text on the badge's own fill, found by it, since a Button's children carry no key.
+async function badgeIn(ui: { find: (query: { key: string }) => Promise<unknown> }, key: string): Promise<{ type?: string; text?: string; props: Record<string, unknown> } | undefined> {
+  const button = await ui.find({ key }) as { children?: unknown[] } | undefined
+  const children = (button?.children ?? []) as { type?: string; props?: Record<string, unknown>; children?: unknown[] }[]
+  const found = children.find(child => child?.type === 'Text' && child.props?.backgroundColor === BADGE_FILL)
+
+  return found === undefined ? undefined : { ...found, props: found.props ?? {}, text: (found.children ?? []).filter(part => typeof part === 'string').join('') } as never
 }
 
 // A world with this many notices and memory proposals waiting.
@@ -51,7 +60,7 @@ test('the head holds the status line, then the bell, Memory, Health and Refresh 
   }
 })
 
-for (const [key, badge] of [['tab-bell', 'tab-bell-badge'], ['tab-memory', 'tab-memory-badge']] as const) {
+for (const key of ['tab-bell', 'tab-memory'] as const) {
   test(`${key} at 0: no badge on the desktop and no dot on the terminal`, async ($, on) => {
     const terylon = waitingWorld(on, 0)
     await $.session.start(SESSION)
@@ -59,7 +68,9 @@ for (const [key, badge] of [['tab-bell', 'tab-bell-badge'], ['tab-memory', 'tab-
 
     const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
     await desktop.press({ key: 'refresh' })
-    expect(await desktop.find({ key: badge })).toBeUndefined()
+    expect(await desktop.find({ key })).toBeDefined()
+    expect(await badgeIn(desktop, key)).toBeUndefined()
+    expect((await desktop.findAll({ type: 'Text' })).filter(text => text.props.backgroundColor === BADGE_FILL)).toEqual([])
     await desktop.unmount()
 
     const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -70,17 +81,23 @@ for (const [key, badge] of [['tab-bell', 'tab-bell-badge'], ['tab-memory', 'tab-
     await terminal.unmount()
   })
 
-  test(`${key} at 1: the amber badge beside the Button on the desktop, one dark ink on both themes, and a warning dot on the terminal`, async ($, on) => {
+  test(`${key} at 1: the amber badge inside the Button right after its label on the desktop, one dark ink on both themes, and a warning dot on the terminal`, async ($, on) => {
     const terylon = waitingWorld(on, 1)
     await $.session.start(SESSION)
     await terylon.clock.settle()
 
     const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
     await desktop.press({ key: 'refresh' })
-    const drawn = await desktop.find({ key: badge })
-    expect(drawn?.props).toMatchObject({ backgroundColor: BADGE_FILL, borderStyle: 'round' })
-    expect(drawn?.text).toBe('1')
-    // BESIDE THE BUTTON, since a Button takes strings and Text alone.
+    const drawn = await badgeIn(desktop, key)
+    // A SHORT INLINE COUNT: a Text on its own fill, a space each side, no Box and no border.
+    expect(drawn?.type).toBe('Text')
+    expect(drawn?.props).toMatchObject({ backgroundColor: BADGE_FILL, color: BADGE_WORD })
+    expect(drawn?.props.borderStyle).toBeUndefined()
+    expect(drawn?.text).toBe('\u00a01\u00a0')
+    expect(await desktop.find({ key: `${key}-nav` })).toBeUndefined()
+    expect((await desktop.findAll({ type: 'Box' })).filter(box => box.props.backgroundColor === BADGE_FILL)).toEqual([])
+    // INSIDE THE BUTTON, right after its label, so the pair is one control on one line.
+    expect((await desktop.find({ key }))?.text).toMatch(/\S\u00a01\u00a0$/)
     const words = inks(drawn)
     expect(words).toEqual([{ text: '1', color: BADGE_WORD, on: BADGE_FILL, isMark: false }])
     expect(unreadable(words)).toEqual([])
@@ -90,7 +107,7 @@ for (const [key, badge] of [['tab-bell', 'tab-bell-badge'], ['tab-memory', 'tab-
     await terminal.press({ key: 'refresh' })
     const button = await terminal.find({ key })
     expect(button?.text).toMatch(/● 1$/)
-    expect(await terminal.find({ key: badge })).toBeUndefined()
+    expect(await badgeIn(terminal, key)).toBeUndefined()
     expect((await terminal.findAll({ type: 'Text', text: /^● $/ })).map(dot => dot.props.color)).toContain('warning')
     await terminal.unmount()
   })
@@ -114,7 +131,7 @@ test('the bell: a glyph on the desktop, its label naming it with the count; the 
 
   const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await desktop.find({ key: 'tab-bell' }))?.props.label).toBe('Notices 2')
-  expect((await desktop.find({ key: 'tab-bell' }))?.text).toBe('🔔')
+  expect((await desktop.find({ key: 'tab-bell' }))?.text).toBe('🔔\u00a02\u00a0')
   await desktop.unmount()
 
   const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -123,54 +140,13 @@ test('the bell: a glyph on the desktop, its label naming it with the count; the 
   await terminal.unmount()
 })
 
-test('NOTICES OVER THE OVERVIEW: a panel at top, right and bottom on a relative parent, a dim backdrop, ✕ takes it away', async ($, on) => {
-  const terylon = world(on)
-  await $.session.start(SESSION)
-  await terylon.clock.settle()
-
-  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-bell' })
-
-  expect((await ui.find({ key: 'notices-over' }))?.props.position).toBe('relative')
-  expect((await ui.find({ key: 'notices-backdrop' }))?.props).toMatchObject({ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: BACKDROP_FILL })
-  expect((await ui.find({ key: 'notices-panel' }))?.props).toMatchObject({ position: 'absolute', top: 0, right: 0, bottom: 0, width: PANEL_WIDTH, backgroundColor: PANEL_GROUND })
-  // THE OVERVIEW LIES UNDER IT, and the panel holds its way out, the console, Needs you and What the machine did.
-  expect(await ui.find({ key: 'tiles' })).toBeDefined()
-  expect((await ui.find({ key: 'notices-close' }))?.props.label).toBe('✕')
-  expect((await ui.find({ type: 'Link', text: exact('In the console ↗') }))?.props.href).toContain('notices=open')
-  expect(await ui.find({ type: 'Text', text: exact('Needs you · 2') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: exact('What the machine did') })).toBeDefined()
-  expect(await ui.find({ key: 'handle-117' })).toBeDefined()
-  expect(await ui.find({ key: 'back' })).toBeUndefined()
-
-  await ui.press({ key: 'notices-close' })
-  expect(await ui.find({ key: 'notices-panel' })).toBeUndefined()
-  expect(await ui.find({ key: 'tiles' })).toBeDefined()
-})
-
-test('every word and link on the panel reads on its own ground in both themes, and no one raw colour could', async ($, on) => {
-  const terylon = world(on)
-  await $.session.start(SESSION)
-  await terylon.clock.settle()
-
-  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-bell' })
-  const found = inks(await ui.find({ key: 'notices-panel' }))
-
-  expect(found.map(ink => ink.text)).toEqual(expect.arrayContaining(['Needs you · 2', 'What the machine did', 'In the console ↗']))
-  expect(unreadable(found)).toEqual([])
-
-  // WHY A THEME KEY: not one opaque grey holds `text` at 4.5:1 on both themes.
-  const greys = Array.from({ length: 256 }, (_, value) => `#${value.toString(16).padStart(2, '0').repeat(3)}`)
-  expect(greys.filter(grey => THEMES.every(theme => contrast('text', grey, theme) >= TEXT_RATIO))).toEqual([])
-})
-
 for (const [name, surface, props, env] of [
+  ['the desktop', 'desktop', PANE_PROPS, {}],
+  ['the desktop with notices-over named', 'desktop', PANE_PROPS, { TERYLON_PANE_PROOFS: 'notices-over' }],
   ['the terminal', 'terminal', PANE_PROPS, {}],
   ['the narrow dock', 'desktop', NARROW_PANE_PROPS, {}],
-  ['the desktop with the proof off', 'desktop', PANE_PROPS, { TERYLON_PANE_PROOFS: 'no-notices-over' }],
 ] as const) {
-  test(`${name}: Notices are an ordinary screen with ‹ Overview, no panel and no backdrop`, async ($, on) => {
+  test(`${name}: Notices are an ordinary screen with ‹ Overview and Refresh, nothing laid over the overview`, async ($, on) => {
     const terylon = world(on, { env })
     await $.session.start(SESSION)
     await terylon.clock.settle()
@@ -178,17 +154,42 @@ for (const [name, surface, props, env] of [
     const ui = await $.ui.mount({ ...PANE, surface, props })
     await ui.press({ key: 'tab-bell' })
 
+    // NO PANEL, NO BACKDROP and nothing drawn absolute: the overview is not under it.
+    expect(await ui.find({ key: 'notices-over' })).toBeUndefined()
     expect(await ui.find({ key: 'notices-panel' })).toBeUndefined()
     expect(await ui.find({ key: 'notices-backdrop' })).toBeUndefined()
+    expect(await ui.find({ key: 'notices-close' })).toBeUndefined()
+    expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.position !== undefined)).toEqual([])
     expect(await ui.find({ key: 'tiles' })).toBeUndefined()
+    // ITS HEAD AS MORE'S: ‹ Overview, then Refresh.
+    const head = (await ui.findAll({ type: 'Button' })).map(button => String(button.key)).filter(key => ['back', 'refresh'].includes(key))
+    expect(head).toEqual(['back', 'refresh'])
+    expect(await ui.find({ key: 'notices-top' })).toBeDefined()
     expect((await ui.find({ key: 'back' }))?.props.label).toBe('‹ Overview')
-    expect(await ui.find({ key: 'handle-117' })).toBeDefined()
+    // ITS CARDS: the console, Needs you, each notice with Mark handled, and What the machine did.
+    expect((await ui.find({ type: 'Link', text: exact('In the console ↗') }))?.props.href).toContain('notices=open')
+    expect(await ui.find({ type: 'Text', text: exact('Needs you · 2') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('What the machine did') })).toBeDefined()
+    expect((await ui.find({ key: 'handle-117' }))?.props.label).toBe('Mark handled')
     await ui.press({ key: 'back' })
     expect(await ui.find({ key: 'tab-bell' })).toBeDefined()
   })
 }
 
-test('MARK HANDLED in the panel moves the notice out of Needs you, its call sent on the press', async ($, on) => {
+test('every word and link on the Notices screen reads on the pane\'s own background in both themes', async ($, on) => {
+  const terylon = world(on)
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'tab-bell' })
+  const found = inks(await ui.find({ key: 'notices' }))
+
+  expect(found.map(ink => ink.text)).toEqual(expect.arrayContaining(['Needs you · 2', 'What the machine did', 'In the console ↗']))
+  expect(unreadable(found)).toEqual([])
+})
+
+test('MARK HANDLED on the Notices screen moves the notice out of Needs you, its call sent on the press', async ($, on) => {
   const terylon = world(on)
   terylon.answers.notice_handle = { accepted: true, sentence: 'Handled.' }
   await $.session.start(SESSION)
@@ -301,7 +302,7 @@ test('MORE IS HEALTH AND MEMORY: Health first, no notice on it, and an alert a l
 
   await ui.press({ key: 'health-open-notices' })
   expect(await ui.find({ key: 'handle-117' })).toBeDefined()
-  await ui.press({ key: 'notices-close' })
+  await ui.press({ key: 'back' })
   expect(await ui.find({ key: 'tiles' })).toBeDefined()
 })
 
@@ -316,7 +317,7 @@ test('NO DEVELOPER WORD on a screen a person reads: no tool, no internal, no com
     seen.push(...(await ui.findAll({ type: 'Text' })).map(node => node.text))
   }
 
-  for (const path of [['refresh'], ['tab-bell', 'notices-close'], ['tab-memory', 'tab-queue'], ['tab-status', 'tab-queue'], ['open-plan-41', 'back'], ['story-333', 'back']]) {
+  for (const path of [['refresh'], ['tab-bell', 'back'], ['tab-memory', 'tab-queue'], ['tab-status', 'tab-queue'], ['open-plan-41', 'back'], ['story-333', 'back']]) {
     await ui.press({ key: path[0] ?? '' })
     await look()
 

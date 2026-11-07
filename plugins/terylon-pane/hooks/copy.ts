@@ -24,7 +24,6 @@ export const COPY = {
   needsYou: (count: number) => `Needs you · ${count}`,
   noticesNeedYou: (count: number, title: string) => `${count} ${count === 1 ? 'notice needs' : 'notices need'} you: ${title}`,
   openInNotices: 'Open in Notices ›',
-  noticesClose: '✕',
   noticesInConsoleShort: 'In the console ↗',
   machineMore: (count: number) => `${count} more`,
   // TEST MODE: said wherever it could be taken for production, in the words of what it is.
@@ -394,6 +393,7 @@ export const COPY = {
   closedLoading: 'Loading the closed goals…',
   closedChanged: 'The closed goals changed since they were read.',
   closedReadAgain: 'Read them again',
+  closedRead: 'Read the closed goals',
   plan: (plan: string) => `Plan ${plan}`,
   planStoryDetail: (size: string, estimate: string | null, after: string | null) =>
     [size, estimate, after === null ? null : `after ${after}`].filter(part => part !== null).join(' · '),

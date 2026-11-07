@@ -67,8 +67,6 @@ async function walk(ui: { press: (query: { key: string }) => Promise<unknown>; f
     }
   }
   const backHome = async () => {
-    await press('notices-close')
-
     while ((await ui.find({ key: 'back' })) !== undefined) {
       await press('back')
     }
@@ -271,11 +269,11 @@ test('THE ACTS WORK IN MEMORY: Approve moves its goal to Build, Accept moves the
   await ui.press({ key: 'tab-bell' })
   expect(await ui.find({ type: 'Text', text: exact('Needs you · 2') })).toBeDefined()
   await ui.press({ key: 'handle-3' })
-  await ui.press({ key: 'notices-close' })
+  await ui.press({ key: 'back' })
   await ui.press({ key: 'tab-bell' })
   expect(await ui.find({ key: 'handle-3' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: exact('Needs you · 1') })).toBeDefined()
-  await ui.press({ key: 'notices-close' })
+  await ui.press({ key: 'back' })
 
   await ui.press({ key: 'tab-memory' })
   await ui.press({ key: 'act-proposal-5-drop' })
@@ -359,6 +357,48 @@ test('OFF: the live pane again, on live data, with nothing made-up left, and tes
   expect(await ui.find({ key: 'plan-41' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('Terylon') })).toBeDefined()
 })
+
+test('TERYLON_PANE_TEST_MODE=on starts the session in test mode with the pane shut, and test off ends it for this session', async ($, on) => {
+  const terylon = world(on, { env: { TERYLON_PANE_TEST_MODE: 'on' } })
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+  await terylon.clock.advance(60000)
+
+  // MADE-UP FROM THE FIRST TICK: no call reached the real Terylon, nothing was posted, and no pane opened by itself.
+  expect(terylon.calls).toEqual([])
+  expect(terylon.prompts).toEqual([])
+  expect(terylon.opens).toEqual([])
+  expect(terylon.statuses.at(-1)).toMatch(/^Terylon · Test mode/)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'refresh' })
+  expect(await ui.find({ type: 'Text', text: exact('Terylon · Test mode') })).toBeDefined()
+  expect(await ui.find({ key: 'plan-58' })).toBeDefined()
+  expect(terylon.calls).toEqual([])
+
+  // OFF FOR THIS SESSION, whatever the environment still says.
+  expect(await testModeOff($)).toEqual({ text: 'Terylon Cockpit is back on live data.' })
+  await terylon.clock.settle()
+  await ui.press({ key: 'refresh' })
+  expect(await ui.find({ key: 'plan-58' })).toBeUndefined()
+  expect(await ui.find({ key: 'plan-41' })).toBeDefined()
+  expect(terylon.calls.map(call => call.tool)).toEqual(expect.arrayContaining(['work_in_flight', 'briefing']))
+  expect(terylon.statuses.at(-1)).not.toMatch(/Test mode/)
+})
+
+for (const value of [null, 'off', 'ON', ' on', '1']) {
+  test(`TERYLON_PANE_TEST_MODE ${value === null ? 'unset' : JSON.stringify(value)} changes nothing: the live pane on live data`, async ($, on) => {
+    const terylon = world(on, value === null ? {} : { env: { TERYLON_PANE_TEST_MODE: value } })
+    await $.session.start(SESSION)
+    await terylon.clock.settle()
+
+    expect(terylon.calls.map(call => call.tool)).toEqual(expect.arrayContaining(['work_in_flight', 'briefing']))
+    expect(terylon.statuses.at(-1)).not.toMatch(/Test mode/)
+    const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    expect(await ui.find({ type: 'Text', text: exact('Terylon') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('Terylon · Test mode') })).toBeUndefined()
+  })
+}
 
 test('/terylon-cockpit alone opens the pane as ever, test mode or not; a word it does not know opens it too', async ($, on) => {
   const terylon = world(on)

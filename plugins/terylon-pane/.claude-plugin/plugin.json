@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "terylon-pane",
   "displayName": "Terylon Cockpit",
-  "version": "1.20.0",
+  "version": "1.20.1",
   "description": "Terylon Cockpit: the Terylon band, status line and pane in Claude Desktop, a mod opened by /terylon-cockpit: what waits for you above the prompt, the health of Terylon and today's cost in the status line, and one pane: an overview of what waits and every goal's road, with Notices, Memory and Health a press away, every subject by its ref and every figure in Terylon's words. It answers the leader's questions, adds tasks and goals, and takes the owner's acts on their cards; it never merges. Requires terylon-os.",
   "author": {
     "name": "Vít Janeček"

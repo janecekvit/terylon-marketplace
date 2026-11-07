@@ -37,13 +37,12 @@ export const WIDE_COLUMNS = 88
 //   hover-reveal  a waiting row lights under the pointer and lays its console link over its right edge, never over
 //                 an open row; off: the link sits in the row's body, one press away
 //   svg-tooltips  a phase of a story's road says its stage, role and step under a still pointer; off: the names alone
-//   notices-over  Notices slide over the overview's right side where the surface has room; off: an ordinary screen
-export type Proofs = { inputRows: boolean; hoverReveal: boolean; svgTooltips: boolean; noticesOver: boolean }
+export type Proofs = { inputRows: boolean; hoverReveal: boolean; svgTooltips: boolean }
 
-export const PROOF_NAMES = { inputRows: 'input-rows', hoverReveal: 'hover-reveal', svgTooltips: 'svg-tooltips', noticesOver: 'notices-over' } as const
+export const PROOF_NAMES = { inputRows: 'input-rows', hoverReveal: 'hover-reveal', svgTooltips: 'svg-tooltips' } as const
 
 // What each proof is without a word in TERYLON_PANE_PROOFS: what the owner's walk proved.
-export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: true, noticesOver: true }
+export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: true }
 
 export function proofsOf(value: string | null | undefined): Proofs {
   const named = new Set((value ?? '').split(/[\s,]+/).map(name => name.trim().toLowerCase()).filter(name => name !== ''))
@@ -53,7 +52,6 @@ export function proofsOf(value: string | null | undefined): Proofs {
     inputRows: isOn('inputRows'),
     hoverReveal: isOn('hoverReveal'),
     svgTooltips: isOn('svgTooltips'),
-    noticesOver: isOn('noticesOver'),
   }
 }
 
@@ -70,13 +68,6 @@ export const CHIP_DOT = '●'
 // card and a goal's card, and the waiting tile, whose word is `inactive` since `subtle` falls short on it.
 export const CARD_FILL = 'rgba(140,140,140,0.035)'
 export const WAITING_TILE_FILL = 'rgba(107,71,214,0.16)'
-
-// THE SLIDE-OVER: what dims the overview under it, and its own opaque ground. THE GROUND IS A THEME KEY, NOT A RAW COLOUR:
-// no one raw colour holds the theme's words at 4.5:1 on both themes, since dark needs it darker and light needs it
-// lighter than either allows. `inverseText` is black on dark and white on light, and every word and link reads on it.
-export const BACKDROP_FILL = 'rgba(0,0,0,0.35)'
-export const PANEL_GROUND = 'inverseText'
-export const PANEL_WIDTH = '46%'
 
 // A Button takes strings and Text alone as children, so the bell is a glyph where the board draws a stroke.
 export const BELL_GLYPH = '🔔'

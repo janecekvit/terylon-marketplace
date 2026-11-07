@@ -31,13 +31,14 @@ function hovers(node: unknown): { key: unknown; hover: unknown }[] {
 }
 
 test('THE PROOFS: on by default; `no-<name>` the escape hatch', () => {
-  expect(proofsOf(undefined)).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true, noticesOver: true })
-  expect(proofsOf('')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true, noticesOver: true })
-  expect(proofsOf('svg-tooltips')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true, noticesOver: true })
-  expect(proofsOf(' No-Input-Rows, no-hover-reveal ')).toEqual({ inputRows: false, hoverReveal: false, svgTooltips: true, noticesOver: true })
-  expect(proofsOf('no-svg-tooltips')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: false, noticesOver: true })
-  expect(proofsOf('no-notices-over')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true, noticesOver: false })
-  expect(proofsOf('all yes true 1 no')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true, noticesOver: true })
+  expect(proofsOf(undefined)).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true })
+  expect(proofsOf('')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true })
+  expect(proofsOf('svg-tooltips')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true })
+  expect(proofsOf(' No-Input-Rows, no-hover-reveal ')).toEqual({ inputRows: false, hoverReveal: false, svgTooltips: true })
+  expect(proofsOf('no-svg-tooltips')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: false })
+  // NOTICES ARE A SCREEN, NOT A PROOF: its old names turn nothing on or off.
+  expect(proofsOf('no-notices-over notices-over')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true })
+  expect(proofsOf('all yes true 1 no')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true })
 })
 
 test('TURNED OFF, 1.1.2 DRAWS: one-line fields, no hover reveal, no tooltip', async ($, on) => {
@@ -273,7 +274,7 @@ test('Health says the machine in one word, in its colour, its times in tabular d
 
     expect(word?.props).toMatchObject({ weight: 'semibold', color: 'success' })
     expect((await ui.find({ type: 'Text', text: /^\s*last answer at / }))?.props.tabular).toBe(true)
-    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.20.0') }))?.props.mono).toBe(true)
+    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.20.1') }))?.props.mono).toBe(true)
     await ui.unmount()
   }
 })

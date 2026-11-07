@@ -7,7 +7,7 @@
 | Board | Draws |
 |---|---|
 | `Main.dc.html` | the overview: the head with the bell, *Memory* and *Health*, three tiles, *Waiting for you*, a card and a road per goal, the folds, the 30-day line |
-| `Notices.dc.html` | Notices as a panel over the overview, and what the machine did |
+| `Notices.dc.html` | Notices, a screen of its own with *‹ Overview* and *Refresh* at its head: what needs you, each with *Mark handled*, and what the machine did |
 | `Goal.dc.html` | a goal: its road and what next, a plan at the gate, stories, the specification |
 | `Story.dc.html` | a story: its phases as a road, what is working now, the question, criteria, what happened |
 | `More.dc.html` | Health and Memory, where a notice is one line that leads to Notices |
@@ -18,12 +18,14 @@
 
 `/terylon-cockpit test` answers every call the pane makes from made-up data and `/terylon-cockpit test off` returns to live data. It sends nothing to Terylon, posts nothing into the chat, and leaves the store the sessions share as it was, so other sessions go on. **It covers the pane alone: Claude's own Terylon tools in that chat still reach the real Terylon.**
 
+**`TERYLON_PANE_TEST_MODE=on`**, in the `env` of `~/.claude/settings.json`, starts every session in test mode without the command, and `/terylon-cockpit test off` still ends it for that session; any other value, or none, changes nothing. **While it is set, every session's pane is in test mode and posts no real done-signal**, so unset it once the review is done.
+
 ## Where the code differs from a board
 
 A board is drawn in HTML, the pane in what the surface offers, so these are the code's and stand:
 
-- The bell is a glyph beside a badge, because a `Button` takes only text children.
-- The card fills are fainter than drawn, and the panel's ground is a theme key, so every word passes 4.5:1 in both themes: `tests/contrast.ts` holds them.
+- The bell is a glyph, and a count that waits is a short amber run right after it inside the same `Button`, because a `Button` takes only strings and `Text`.
+- The card fills are fainter than drawn, so every word passes 4.5:1 in both themes: `tests/contrast.ts` holds them.
 - The sample data on the boards is made up.
 
 ## Format

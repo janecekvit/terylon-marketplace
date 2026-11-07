@@ -10,7 +10,7 @@
 //        │      the overview ── tiles · Waiting for you ──▶ question · story · plan
 //        │        │              goals_list · plans_list ──▶ one card per goal, its road from hooks/road.ts ──▶ goal ──▶ story
 //        │        │              folds: Done today · Queued · History; a new goal is goal_add
-//        │        ├──▶ the bell ──▶ Notices over the overview, or a screen where there is no room
+//        │        ├──▶ the bell ──▶ Notices, a screen of its own
 //        │        └──▶ Memory, Health ──▶ More: Health · Memory on one page
 //        └──▶ the done-signal: $.prompt.submit once per story and verdict commit, and a toast, by the story's ref
 //   session start, away > 2 h ──▶ ONE catch-up summary, and the band says it until dismissed
@@ -56,7 +56,7 @@ import type {
 } from '../types'
 
 import { COPY } from './copy'
-import { BACKDROP_FILL, BADGE_FILL, BADGE_WORD, BELL_GLYPH, CARD_FILL, CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, NARROW_COLUMNS, PANEL_GROUND, PANEL_WIDTH, ROAD_CARD_HEIGHT, WAITING_TILE_FILL, NARROW_TERMINAL_COLUMNS, ROAD_NAMES_COLUMNS, WIDE_COLUMNS, phaseGlyph, planChain, planOrder, proofsOf, road, roadCells, spendBar, splitHash } from './drawing'
+import { BADGE_FILL, BADGE_WORD, BELL_GLYPH, CARD_FILL, CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, NARROW_COLUMNS, ROAD_CARD_HEIGHT, WAITING_TILE_FILL, NARROW_TERMINAL_COLUMNS, ROAD_NAMES_COLUMNS, WIDE_COLUMNS, phaseGlyph, planChain, planOrder, proofsOf, road, roadCells, spendBar, splitHash } from './drawing'
 import type { Picture, Proofs } from './drawing'
 import { REASON_WHOLE, alertCount, checkTree, healthLine, plainLine, stateWord, statusDrawingOf, storeFileOf, todayCost, treeLine, typedLine } from './health'
 import type { Health, StatusPart } from './health'
@@ -146,7 +146,7 @@ type Reset = { from: number; head: number | null; refused: string | null }
 export const PANE = 'terylon'
 
 // The mod's version, said on Health: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.20.0'
+export const MOD_VERSION = '1.20.1'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -1733,12 +1733,12 @@ async function readOverviewFooter($: EngineInterface): Promise<void> {
   }, async () => undefined)
 }
 
-// NOTICES lie over the overview, so what it needs is read with them: a reopened pane draws both.
+// NOTICES, a screen of its own like More: the bell is all it reads.
 async function loadNotices($: EngineInterface): Promise<void> {
-  await Promise.all([loadBell($), loadOverview($)])
+  await loadBell($)
 }
 
-// The bell: Notices over the overview, whichever screen it was asked from, so ✕ and ‹ Overview lead back to it.
+// The bell: Notices, whichever screen it was asked from, so ‹ Overview leads back to the overview.
 async function openNotices($: EngineInterface): Promise<void> {
   const screen: PaneScreen = { screen: 'notices' }
 
@@ -1783,8 +1783,8 @@ async function noteInTestMode($: EngineInterface, sentence: string): Promise<voi
 
 // /terylon-cockpit test, and test off: everything the pane read and everything drawn starts over, so nothing made-up
 // stays behind in live data, nor the other way round. THE SHARED STORE IS NOT TOUCHED, and what this session held for it
-// stays in memory: leaving, the pane stands where it stood.
-async function setTestMode($: EngineInterface, isOn: boolean): Promise<void> {
+// stays in memory: leaving, the pane stands where it stood. `isOpened` false enters it without opening the pane.
+async function setTestMode($: EngineInterface, isOn: boolean, isOpened = true): Promise<void> {
   const now = await $.clock.now()
 
   if ((await read($, testMode)).isOn !== isOn) {
@@ -1824,7 +1824,9 @@ async function setTestMode($: EngineInterface, isOn: boolean): Promise<void> {
     }
   }
 
-  await openPane($, QUEUE)
+  if (isOpened) {
+    await openPane($, QUEUE)
+  }
 }
 
 async function toggle($: EngineInterface, key: string): Promise<void> {
@@ -2032,21 +2034,46 @@ async function readGoalsFromTerylon($: EngineInterface, isQuiet = false): Promis
     }
 
     // AFTER S44: what a press of History read is kept while closedCount says the same; never read again from here.
-    const isKept = current.closedFrom === 'terylon' && current.closedCount === closedCount && current.closedPhase !== 'idle'
+    const isKept = current.closedFrom === 'terylon' && current.closedCount === closedCount && current.closedPhase !== 'idle' && (current.closedPhase !== 'loading' || closedGoalsRead !== null)
+    // NOTHING CLOSED needs no read: History says it is empty, whether it is open or shut.
+    const closedPhase = closedCount === 0 ? 'ok' : current.showing === 'closed' ? 'changed' : 'idle'
 
     return isKept
       ? { ...read_, closedCount, closedFrom: 'terylon' }
-      : { ...read_, closed: [], closedCount, closedFrom: 'terylon', closedPhase: current.showing === 'closed' && closedCount > 0 ? 'changed' : 'idle', closedSentence: null }
+      : { ...read_, closed: [], closedCount, closedFrom: 'terylon', closedPhase, closedSentence: null }
   })
 }
+
+// THE READ OF THE CLOSED GOALS this load of the module has in flight: a 'loading' the store kept with none is a read
+// that was lost, and is never drawn or waited on.
+let closedGoalsRead: Promise<void> | null = null
 
 // HISTORY'S FOLD, PRESSED. Where goals_list counts them, a press of History reads the closed goals, and nothing else ever does.
 async function showGoals($: EngineInterface, showing: 'open' | 'closed'): Promise<void> {
   await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, showing }))
 
-  const current = await readGoals($)
+  if (showing === 'open') {
+    return
+  }
 
-  if (showing === 'open' || current.closedFrom !== 'terylon' || current.closedPhase === 'loading') {
+  let current = await readGoals($)
+
+  // PRESSED BEFORE THE GOALS WERE READ: they are read first, under their bound, so the fold knows what to say.
+  if (current.closedFrom !== 'terylon' && current.phase !== 'ok') {
+    await loadGoals($)
+    current = await readGoals($)
+  }
+
+  // BEFORE S44 the goals' own read filled History; one that failed says why under the fold too.
+  if (current.closedFrom !== 'terylon') {
+    if (current.closedPhase !== 'ok') {
+      await update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, closedPhase: 'error', closedSentence: state.sentence ?? COPY.loadError(COPY.goalsHistory) }))
+    }
+
+    return
+  }
+
+  if (current.closedPhase === 'loading' && closedGoalsRead !== null) {
     return
   }
 
@@ -2057,7 +2084,13 @@ async function showGoals($: EngineInterface, showing: 'open' | 'closed'): Promis
   }
 
   await update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, closedPhase: 'loading', closedSentence: null }))
-  await bounded($, 'closed goals', () => readClosedGoals($), sentence => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, closedPhase: 'error', closedSentence: sentence })))
+  closedGoalsRead = bounded($, 'closed goals', () => readClosedGoals($), sentence => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, closedPhase: 'error', closedSentence: sentence })))
+
+  try {
+    await closedGoalsRead
+  } finally {
+    closedGoalsRead = null
+  }
 }
 
 async function readClosedGoals($: EngineInterface): Promise<void> {
@@ -3033,6 +3066,13 @@ export const register: Register = on => {
     isUnattended = e.isInteractive === false && (e.surface === null || e.surface === undefined)
     debug($, `this session starts with isInteractive ${String(e.isInteractive)}, surface ${String(e.surface)}: ${isUnattended ? 'nobody is at it' : 'someone is at it'}`)
     sessionFolder = typeof e.cwd === 'string' && e.cwd.trim() !== '' ? e.cwd : sessionFolder
+
+    // TEST MODE FROM THE ENVIRONMENT: TERYLON_PANE_TEST_MODE=on starts the session in it, once, without opening the pane;
+    // /terylon-cockpit test off still ends it. Any other value, or none, changes nothing.
+    if (!isStarted && (await $.env.get('TERYLON_PANE_TEST_MODE')) === 'on') {
+      await setTestMode($, true, false)
+    }
+
     await start($, e.cwd)
     ensurePoll($, 'session.start')
 
@@ -3224,7 +3264,7 @@ export const register: Register = on => {
     const shown = await read($, open)
     const now = await $.clock.now()
 
-    if (screen.screen === 'queue' || screen.screen === 'notices') {
+    if (screen.screen === 'queue') {
       overviewDrawnAt = now
     }
 
@@ -3388,23 +3428,20 @@ export const register: Register = on => {
       ].filter(part => part !== null).join(' · ')
     }
     // THE WAY TO NOTICES, MEMORY AND HEALTH, in the overview's head. A Button takes strings and Text alone, so THE BELL IS A
-    // GLYPH, no Svg, and A COUNT THAT WAITS FOR THE OWNER IS A BADGE BESIDE ITS BUTTON, no Box in it: an amber mark with the
-    // number in one dark ink, the same on both themes, and none at 0. The terminal paints no Box: a `warning` dot before
+    // GLYPH, no Svg, and A COUNT THAT WAITS FOR THE OWNER IS A BADGE, a Text on its own fill inside the Button: an amber run
+    // with the number in one dark ink, the same on both themes, and none at 0. The terminal paints no fill: a `warning` dot before
     // the number, and the word where the desktop draws a bell. A Button's label names it whatever it draws.
     const overviewState = { ...EMPTY_OVERVIEW, ...(await read($, overview)) }
     const navButton = (key: string, label: string, glyph: string, name: string, count: number | null, onPress: () => unknown) => {
       const isWaiting = count !== null && count > 0
 
+      // THE BADGE RIGHT AFTER THE GLYPH, on one line: the pair reads as one control, no Box and no border.
       return look.isGraphic
         ? (
-            <Box key={`${key}-nav`} flexDirection="row" alignItems="center" gap="xs">
-              <Button key={key} label={label} onPress={onPress}>{glyph}</Button>
-              {isWaiting && (
-                <Box key={`${key}-badge`} borderStyle="round" borderColor={BADGE_FILL} backgroundColor={BADGE_FILL} paddingX="xs">
-                  <Text color={BADGE_WORD} size="caption" weight="semibold" tabular>{String(count)}</Text>
-                </Box>
-              )}
-            </Box>
+            <Button key={key} label={label} onPress={onPress}>
+              {glyph}
+              {isWaiting && <Text color={BADGE_WORD} backgroundColor={BADGE_FILL} size="caption" weight="semibold" tabular>{`\u00a0${count}\u00a0`}</Text>}
+            </Button>
           )
         : (
             <Button key={key} label={label} onPress={onPress}>
@@ -3534,8 +3571,8 @@ export const register: Register = on => {
     }
 
     // NOTICES: Needs you, each notice on a card of its own, then What the machine did, its latest in the open and the rest a
-    // press away. Its way back is ✕ over the overview and ‹ Overview on a screen of its own.
-    const noticesSection = async (closing: unknown): Promise<unknown> => {
+    // press away. Its way back is the screen's ‹ Overview.
+    const noticesSection = async (): Promise<unknown> => {
       const bellState = await readBell($)
       const isMachineOpen = shown.includes('fold-machine')
       const machineShown = isMachineOpen ? bellState.handled : bellState.handled.slice(0, MACHINE_SHOWN)
@@ -3545,10 +3582,7 @@ export const register: Register = on => {
         <Box key="notices" flexDirection="column" gap={1}>
           <Box key="notices-head" flexDirection="row" justifyContent="space-between" alignItems="center" gap={1} flexWrap="wrap">
             <Text size="heading" weight="semibold">{COPY.moreNotices}</Text>
-            <Box flexDirection="row" alignItems="center" gap={1} flexWrap="wrap">
-              <Link href={consoleLink(base, 'bell')} label={COPY.noticesInConsoleShort} />
-              {closing}
-            </Box>
+            <Link href={consoleLink(base, 'bell')} label={COPY.noticesInConsoleShort} />
           </Box>
           {bellState.phase === 'ok' && <Text weight="semibold" color="inactive">{COPY.needsYou(bellState.unhandledCount)}</Text>}
           {bellState.phase === 'loading' && quiet(elements, COPY.loading)}
@@ -3984,30 +4018,18 @@ export const register: Register = on => {
       }
     }
 
-    // NOTICES OVER THE OVERVIEW where the pane has room and the host's drawing is proved, its panel's own ground under it;
-    // an ordinary screen with ‹ Overview on the terminal, on the narrow dock and with the proof off.
-    const isNoticesOver = screen.screen === 'notices' && look.isGraphic && !look.isNarrow && look.proofs.noticesOver
-
-    if (screen.screen === 'notices' && !isNoticesOver) {
+    // NOTICES, AN ORDINARY SCREEN on every surface, as More is: ‹ Overview and Refresh at its head.
+    if (screen.screen === 'notices') {
       return (
         <Box flexDirection="column" gap={1}>
-          {backButton}
-          {await part('notices', () => noticesSection(null))}
+          <Box key="notices-top" flexDirection="row" justifyContent="space-between" gap={1}>
+            {backButton}
+            {refreshButton}
+          </Box>
+          {await part('notices', noticesSection)}
         </Box>
       )
     }
-
-    const withNotices = async (overviewTree: unknown): Promise<unknown> => (!isNoticesOver
-      ? overviewTree
-      : (
-          <Box key="notices-over" position="relative" flexDirection="column">
-            {overviewTree}
-            <Box key="notices-backdrop" position="absolute" top={0} right={0} bottom={0} left={0} backgroundColor={BACKDROP_FILL} />
-            <Box key="notices-panel" position="absolute" top={0} right={0} bottom={0} width={PANEL_WIDTH} flexDirection="column" borderStyle="round" borderColor="subtle" backgroundColor={PANEL_GROUND} paddingX="md" paddingY="sm">
-              {await part('notices', () => noticesSection(<Button key="notices-close" label={COPY.noticesClose} dimColor onPress={() => back($)} />))}
-            </Box>
-          </Box>
-        ))
 
     // MORE: Health and Memory on one page; ‹ Overview from the head's buttons, ‹ back from a card's How to fix.
     if (screen.screen === 'more') {
@@ -4025,13 +4047,13 @@ export const register: Register = on => {
       )
     }
 
-    if (problemCard !== null && !isStale && (screen.screen === 'queue' || isNoticesOver)) {
-      return withNotices(
+    if (problemCard !== null && !isStale && screen.screen === 'queue') {
+      return (
         <Box flexDirection="column" gap={1}>
           {overviewHead}
           {problemCard}
           {overviewFoot}
-        </Box>,
+        </Box>
       )
     }
 
@@ -5009,13 +5031,19 @@ export const register: Register = on => {
         </Box>
       )
     }
-    const closedLines = goalsState.closedPhase === 'loading' || goalsState.closedPhase === 'idle'
-      ? [quiet(elements, COPY.closedLoading)]
-      : goalsState.closedPhase === 'error'
-        ? [reason(goalsState.closedSentence), <Button key="goals-closed-retry" label={COPY.retry} onPress={() => showGoals($, 'closed')} />]
-        : goalsState.closedPhase === 'changed'
-          ? [quiet(elements, COPY.closedChanged), <Button key="goals-closed-retry" label={COPY.closedReadAgain} onPress={() => showGoals($, 'closed')} />]
-          : goalsState.closed.length === 0 ? [quiet(elements, COPY.historyEmpty)] : null
+    // HISTORY NEVER SITS ON LOADING: the line stands only while a read runs, under its bound; a count of 0 is empty with
+    // nothing called, and a read nothing runs, one a reload of the module lost, is a press away.
+    const closedLines = goalsState.closedPhase === 'error'
+      ? [reason(goalsState.closedSentence), <Button key="goals-closed-retry" label={COPY.retry} onPress={() => showGoals($, 'closed')} />]
+      : goalsState.closedPhase === 'changed'
+        ? [quiet(elements, COPY.closedChanged), <Button key="goals-closed-retry" label={COPY.closedReadAgain} onPress={() => showGoals($, 'closed')} />]
+        : goalsState.closedCount === 0 && goalsState.closed.length === 0
+          ? [quiet(elements, COPY.historyEmpty)]
+          : goalsState.closedPhase === 'loading' && closedGoalsRead !== null
+            ? [quiet(elements, COPY.closedLoading)]
+            : goalsState.closedPhase !== 'ok'
+              ? [<Button key="goals-closed-retry" label={COPY.closedRead} onPress={() => showGoals($, 'closed')} />]
+              : goalsState.closed.length === 0 ? [quiet(elements, COPY.historyEmpty)] : null
     const isDoneOpen = shown.includes('fold-done')
     const isQueuedOpen = shown.includes('fold-queued')
     // OPEN UNTIL IT IS SHUT: nothing running is ever hidden, so a story no goal could be found for stands in the open.
@@ -5139,14 +5167,14 @@ export const register: Register = on => {
       </Box>
     )
 
-    return withNotices(overviewDrawing)
+    return overviewDrawing
     })()
 
     // TEST MODE IS SAID ON EVERY SCREEN: its head names it on the overview, this line elsewhere, and the sentence of what
     // a press did not do on any.
     const testing = await read($, testMode)
     const screenNow = stackOf(await read($, view)).at(-1) ?? QUEUE
-    const testLine = !testing.isOn ? null : testing.note ?? (screenNow.screen === 'queue' || screenNow.screen === 'notices' ? null : COPY.testBand)
+    const testLine = !testing.isOn ? null : testing.note ?? (screenNow.screen === 'queue' ? null : COPY.testBand)
 
     if (testLine === null) {
       return drawn as never

@@ -306,20 +306,20 @@ const MUTATIONS = [
     {
         name: "input-rows, which the owner proved, is off again",
         file: "hooks/drawing.ts",
-        find: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: true, noticesOver: true }",
-        replace: "export const PROOF_DEFAULTS: Proofs = { inputRows: false, hoverReveal: true, svgTooltips: true, noticesOver: true }",
+        find: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: true }",
+        replace: "export const PROOF_DEFAULTS: Proofs = { inputRows: false, hoverReveal: true, svgTooltips: true }",
     },
     {
         name: "hover-reveal, which the owner proved, is off again",
         file: "hooks/drawing.ts",
-        find: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: true, noticesOver: true }",
-        replace: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: false, svgTooltips: true, noticesOver: true }",
+        find: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: true }",
+        replace: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: false, svgTooltips: true }",
     },
     {
         name: "svg-tooltips, which the owner proved, is off again",
         file: "hooks/drawing.ts",
-        find: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: true, noticesOver: true }",
-        replace: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: false, noticesOver: true }",
+        find: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: true }",
+        replace: "export const PROOF_DEFAULTS: Proofs = { inputRows: true, hoverReveal: true, svgTooltips: false }",
     },
     {
         name: "a word is drawn inside an Svg, where the theme cannot reach it",

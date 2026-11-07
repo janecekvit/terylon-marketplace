@@ -476,10 +476,6 @@ type Mounted = {
 
 // ‹ back to the overview from wherever the pane is.
 export async function toRoot(ui: Mounted): Promise<void> {
-  if ((await ui.find({ key: 'notices-close' })) !== undefined) {
-    await ui.press({ key: 'notices-close' })
-  }
-
   while ((await ui.find({ key: 'back' })) !== undefined) {
     await ui.press({ key: 'back' })
   }

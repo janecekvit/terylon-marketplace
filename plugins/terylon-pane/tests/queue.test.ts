@@ -139,14 +139,14 @@ test('the house style: theme keys and the one fill of each kind, round cards, a 
 
     // NO CARD TAKES A TINT OF WHAT IT HOLDS (the owner's walk of 1.2.0: on a tinted fill the hints, links and chips could not
     // be read): every card one faint neutral fill on a graphic surface, and on the terminal no fill at all.
-    const fills = boxes.filter(box => box.props.backgroundColor !== undefined && box.key !== 'tab-bell-badge' && box.key !== 'tab-memory-badge').map(box => box.props.backgroundColor)
+    const fills = boxes.filter(box => box.props.backgroundColor !== undefined).map(box => box.props.backgroundColor)
     expect(surface === 'desktop' ? fills.filter(fill => fill !== CARD_FILL && fill !== WAITING_TILE_FILL) : fills).toEqual([])
     // A text's background is a chip's, the theme's neutral grey, and only where a surface draws chips.
-    const chips = texts.filter(text => text.props.backgroundColor !== undefined)
+    const chips = texts.filter(text => text.props.backgroundColor !== undefined && text.props.backgroundColor !== BADGE_FILL)
     expect(chips.map(text => text.text.replace(/[●]+/g, '').replace(/[\s\u00a0]+/g, ' ').trim())).toEqual(surface === 'desktop' ? ['question', 'merge', 'plan', 'Your merge', 'Plan'] : [])
     expect(chips.every(text => text.props.backgroundColor === 'userMessageBackground' && text.props.color === 'inactive' && /^\u00a0●\u00a0.+\u00a0$/.test(text.text))).toBe(true)
 
-    const cards = boxes.filter(box => box.props.borderStyle === 'round' && box.props.backgroundColor !== BADGE_FILL)
+    const cards = boxes.filter(box => box.props.borderStyle === 'round')
     // Terminal at this width: one line of counts in place of the tiles.
     const tiles = surface === 'desktop' ? ['merged', 'subtle', 'subtle'] : []
     expect(cards.map(box => box.props.borderColor)).toEqual([...tiles, 'merged', 'subtle', 'subtle'])

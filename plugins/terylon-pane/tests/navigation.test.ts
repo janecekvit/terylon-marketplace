@@ -315,11 +315,11 @@ test('More is a page of the one pane: no second pane opens, every pill opens it,
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
 
-  // NOTICES LIE OVER THE OVERVIEW, and ✕ takes them away.
+  // NOTICES ARE A SCREEN OF THE ONE PANE, and ‹ Overview leads back.
   await ui.press({ key: 'tab-bell' })
   expect(terylon.opens).toEqual([])
   expect(await ui.find({ key: 'notices' })).toBeDefined()
-  await ui.press({ key: 'notices-close' })
+  await ui.press({ key: 'back' })
   expect(await ui.find({ key: 'notices' })).toBeUndefined()
 
   for (const key of ['tab-memory', 'tab-status'] as const) {
