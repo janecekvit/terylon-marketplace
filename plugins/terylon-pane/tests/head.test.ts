@@ -4,7 +4,7 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { CARD_FILL, HEAD_FRAME, HEAD_WAITING_MARK, ROAD_CARD_HEIGHT, SVG_COLOURS, WAITING_TILE_FILL, road } from '../hooks/drawing'
+import { CARD_FILL, HEAD_FRAME, HEAD_FRAME_AT_REST, HEAD_WAITING_MARK, ROAD_CARD_HEIGHT, SVG_COLOURS, WAITING_TILE_FILL, road } from '../hooks/drawing'
 import { TONE_KEYS } from '../hooks/tones'
 
 import { MARK_RATIO, TEXT_RATIO, contrast, inks, painted } from './contrast'
@@ -63,7 +63,7 @@ test('the head holds the status line, then Notices, Health & memory and Refresh 
 
 for (const [key, word] of HEAD_BUTTONS) {
   for (const [name, props] of GRAPHIC) {
-    test(`${name}: ${word} at 0 draws its Button in a Box of the frame's padding with no frame`, async ($, on) => {
+    test(`${name}: ${word} at 0 draws its Button in the frame at rest, grey`, async ($, on) => {
       const terylon = waitingWorld(on, 0)
       await $.session.start(SESSION)
       await terylon.clock.settle()
@@ -74,9 +74,9 @@ for (const [key, word] of HEAD_BUTTONS) {
 
       // ITS PLACE KEPT: the same Box and padding as when it waits, so the head does not move.
       expect(frame?.type).toBe('Box')
-      expect(frame?.props.padding).toBe('xs')
-      expect(frame?.props.borderStyle).toBeUndefined()
-      expect(frame?.props.borderColor).toBeUndefined()
+      expect(frame?.props.padding).toBeUndefined()
+      expect(frame?.props.borderStyle).toBe('round')
+      expect(frame?.props.borderColor).toBe(HEAD_FRAME_AT_REST)
       expect((await ui.find({ key }))?.props.label).toBe(word)
       expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.borderColor === HEAD_FRAME)).toEqual([])
     })
@@ -92,7 +92,7 @@ for (const [key, word] of HEAD_BUTTONS) {
       const button = await ui.find({ key })
 
       expect(frame.type).toBe('Box')
-      expect(frame.props).toMatchObject({ borderStyle: 'round', borderColor: HEAD_FRAME, padding: 'xs' })
+      expect(frame.props).toMatchObject({ borderStyle: 'round', borderColor: HEAD_FRAME })
       expect(frame.props.backgroundColor).toBeUndefined()
       // THE BUTTON IS THE FRAME'S ONE CHILD, and holds no child of its own: Desktop would not draw one.
       expect(frame.children.map(child => child.type)).toEqual(['Button'])
@@ -133,7 +133,7 @@ test('Health & memory is framed while Health has a problem, with no memory propo
   const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await desktop.press({ key: 'refresh' })
   expect((await desktop.find({ key: 'tab-status-frame' }))?.props.borderColor).toBe(HEAD_FRAME)
-  expect((await desktop.find({ key: 'tab-bell-frame' }))?.props.borderColor).toBeUndefined()
+  expect((await desktop.find({ key: 'tab-bell-frame' }))?.props.borderColor).toBe(HEAD_FRAME_AT_REST)
   await desktop.unmount()
 
   const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -151,7 +151,7 @@ test('Health & memory is framed while a memory proposal waits, with Health well 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'refresh' })
   expect((await ui.find({ key: 'tab-status-frame' }))?.props.borderColor).toBe(HEAD_FRAME)
-  expect((await ui.find({ key: 'tab-bell-frame' }))?.props.borderColor).toBeUndefined()
+  expect((await ui.find({ key: 'tab-bell-frame' }))?.props.borderColor).toBe(HEAD_FRAME_AT_REST)
 })
 
 test('the frame is a mark and no amber word: raw and the same on both themes, the theme\'s warning never its ink', () => {

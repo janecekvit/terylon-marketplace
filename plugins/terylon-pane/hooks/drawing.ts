@@ -73,6 +73,8 @@ export const WAITING_TILE_FILL = 'rgba(107,71,214,0.16)'
 // themes, a mark and never an amber word. Desktop draws a Button natively and drops its children, so the signal is
 // drawn round the Button, never in it.
 export const HEAD_FRAME = '#e0a84e'
+// The same frame at rest: the theme's quiet grey, so the head buttons look alike and only the colour changes.
+export const HEAD_FRAME_AT_REST = 'subtle'
 // HOW A WAITING HEAD BUTTON IS MARKED on a graphic surface: the frame, or, should the frame not read live, the
 // surface's own primary button.
 export const HEAD_WAITING_MARK: 'frame' | 'primary' = 'frame'

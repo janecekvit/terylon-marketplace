@@ -1432,8 +1432,8 @@ const MUTATIONS = [
     {
         name: "Pause is drawn on the overview again",
         file: "hooks/register.tsx",
-        find: "        {refreshButton}\n      </Box>\n    )\n    const overviewHead = (\n",
-        replace: "        {refreshButton}{current.paused === null && actButton('leader', 'leader_pause', null, { opens: true })}\n      </Box>\n    )\n    const overviewHead = (\n",
+        find: "        {look.isGraphic && HEAD_WAITING_MARK === 'frame' ? framed('refresh', false, refreshButton) : refreshButton}\n      </Box>\n    )\n    const overviewHead = (\n",
+        replace: "        {look.isGraphic && HEAD_WAITING_MARK === 'frame' ? framed('refresh', false, refreshButton) : refreshButton}{current.paused === null && actButton('leader', 'leader_pause', null, { opens: true })}\n      </Box>\n    )\n    const overviewHead = (\n",
     },
     {
         name: "Pause leaves Health",
@@ -1558,8 +1558,8 @@ const MUTATIONS = [
     {
         name: "the head's amber frame is drawn at 0 too",
         file: "hooks/register.tsx",
-        find: "        <Box key={`${key}-frame`} padding=\"xs\" borderStyle={isWaiting ? 'round' : undefined} borderColor={isWaiting ? HEAD_FRAME : undefined}>\n",
-        replace: "        <Box key={`${key}-frame`} padding=\"xs\" borderStyle=\"round\" borderColor={HEAD_FRAME}>\n",
+        find: "      <Box key={`${key}-frame`} borderStyle=\"round\" borderColor={isWaiting ? HEAD_FRAME : HEAD_FRAME_AT_REST}>\n",
+        replace: "      <Box key={`${key}-frame`} borderStyle=\"round\" borderColor={HEAD_FRAME}>\n",
     },
 ];
 

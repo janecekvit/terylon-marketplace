@@ -6,7 +6,7 @@
 
 | Board | Draws |
 |---|---|
-| `Main.dc.html` | the overview: the head with *Notices* and *Health & memory*, each framed in amber while something waits, and *Refresh*; three tiles, *Waiting for you*, a card and a road per goal, the folds, the 30-day line |
+| `Main.dc.html` | the overview: the head with *Notices* and *Health & memory*, and *Refresh*, each in a frame that is grey at rest and amber while something waits; three tiles, *Waiting for you*, a card and a road per goal, the folds, the 30-day line |
 | `Notices.dc.html` | Notices, a screen of its own with *‹ Overview* and *Refresh* at its head: what needs you, each with *Mark handled*, and what the machine did |
 | `Goal.dc.html` | a goal: its road and what next, a plan at the gate, stories, the specification |
 | `Story.dc.html` | a story: its phases as a road, what is working now, the question, criteria, what happened |

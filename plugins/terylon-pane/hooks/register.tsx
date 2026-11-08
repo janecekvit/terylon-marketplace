@@ -57,7 +57,7 @@ import type {
 } from '../types'
 
 import { COPY } from './copy'
-import { CARD_FILL, CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, HEAD_FRAME, HEAD_WAITING_MARK, NARROW_COLUMNS, ROAD_CARD_HEIGHT, WAITING_TILE_FILL, NARROW_TERMINAL_COLUMNS, ROAD_NAMES_COLUMNS, WIDE_COLUMNS, phaseGlyph, planChain, planOrder, proofsOf, road, roadCells, spendBar, splitHash } from './drawing'
+import { CARD_FILL, CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, HEAD_FRAME, HEAD_FRAME_AT_REST, HEAD_WAITING_MARK, NARROW_COLUMNS, ROAD_CARD_HEIGHT, WAITING_TILE_FILL, NARROW_TERMINAL_COLUMNS, ROAD_NAMES_COLUMNS, WIDE_COLUMNS, phaseGlyph, planChain, planOrder, proofsOf, road, roadCells, spendBar, splitHash } from './drawing'
 import type { Picture, Proofs } from './drawing'
 import { REASON_WHOLE, alertCount, checkTree, healthLine, plainLine, stateWord, statusDrawingOf, storeFileOf, todayCost, treeLine, typedLine } from './health'
 import type { Health, StatusPart } from './health'
@@ -147,7 +147,7 @@ type Reset = { from: number; head: number | null; refused: string | null }
 export const PANE = 'terylon'
 
 // The mod's version, said on Health: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.20.2'
+export const MOD_VERSION = '1.20.3'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -3429,10 +3429,16 @@ export const register: Register = on => {
       ].filter(part => part !== null).join(' · ')
     }
     // THE WAY TO NOTICES AND TO HEALTH & MEMORY, in the overview's head, each Button its plain word. Desktop draws a Button
-    // natively and drops its children, so NOTHING IN A BUTTON CARRIES WHAT WAITS: on a graphic surface an amber frame round
-    // it, and while nothing waits a Box of the same padding with no frame, so the head keeps its place; on the terminal a
-    // `warning` dot before the word. Its label is the word it draws, since Desktop draws the label.
+    // natively and drops its children, so NOTHING IN A BUTTON CARRIES WHAT WAITS: on a graphic surface each head button,
+    // Refresh too, sits in a round frame that is always drawn, grey at rest and amber while something waits, so only its
+    // colour changes and the head never moves; on the terminal a `warning` dot before the word. Its label is the word it
+    // draws, since Desktop draws the label.
     const overviewState = { ...EMPTY_OVERVIEW, ...(await read($, overview)) }
+    const framed = (key: string, isWaiting: boolean, button: unknown) => (
+      <Box key={`${key}-frame`} borderStyle="round" borderColor={isWaiting ? HEAD_FRAME : HEAD_FRAME_AT_REST}>
+        {button as never}
+      </Box>
+    )
     const navButton = (key: string, name: string, isWaiting: boolean, onPress: () => unknown) => {
       if (!look.isGraphic) {
         return (
@@ -3447,18 +3453,14 @@ export const register: Register = on => {
         return isWaiting ? <Button key={key} label={name} variant="primary" onPress={onPress} /> : <Button key={key} label={name} onPress={onPress} />
       }
 
-      return (
-        <Box key={`${key}-frame`} padding="xs" borderStyle={isWaiting ? 'round' : undefined} borderColor={isWaiting ? HEAD_FRAME : undefined}>
-          <Button key={key} label={name} onPress={onPress} />
-        </Box>
-      )
+      return framed(key, isWaiting, <Button key={key} label={name} onPress={onPress} />)
     }
     const isMemoryWaiting = (overviewState.memoryPending ?? 0) > 0
     const nav = (
       <Box key="overview-nav" flexDirection="row" gap={1} flexShrink={0} flexWrap="wrap" alignItems="center">
         {navButton('tab-bell', COPY.navNotices, current.notices > 0, () => openNotices($))}
         {navButton('tab-status', COPY.navHealthMemory, isMemoryWaiting || hasProblem(current, drawingAsked.off), () => openMore($))}
-        {refreshButton}
+        {look.isGraphic && HEAD_WAITING_MARK === 'frame' ? framed('refresh', false, refreshButton) : refreshButton}
       </Box>
     )
     const overviewHead = (
