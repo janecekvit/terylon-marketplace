@@ -35,6 +35,34 @@ const AUTHORING_SKILLS =
 ];
 const FEATURE_STANDARD = path.join(REPOSITORY_ROOT, "plugins", "terylon-product", "skills", "create-feature", "references", "feature-standard.md");
 const FAKE_GH = path.join(__dirname, "fake-gh.js");
+const CREATE_FEATURE_SKILL = AUTHORING_SKILLS[1];
+const BOARD_REFERENCE = path.join(REPOSITORY_ROOT, "plugins", "terylon-product", "skills", "create-feature", "references", "feature-board.md");
+const BOARD_TEMPLATE = path.join(REPOSITORY_ROOT, "plugins", "terylon-product", "skills", "create-feature", "references", "feature-board.html");
+const FORGE_OPS_SKILLS =
+[
+    path.join(REPOSITORY_ROOT, "plugins", "terylon-ado", "skills", "forge-ops", "SKILL.md"),
+    path.join(REPOSITORY_ROOT, "plugins", "terylon-github", "skills", "forge-ops", "SKILL.md"),
+];
+
+// The board's six sections, in order: the template's <section> ids and the Markdown board's headings.
+const BOARD_SECTION_IDS = ["status", "today-beside-after", "instead", "reach", "decisions", "measured"];
+const BOARD_MARKDOWN_HEADINGS =
+[
+    "## Status strip",
+    "## 1. Today beside after",
+    "## 2. What each part gets instead",
+    "## 3. Who reaches what",
+    "## 4. The owner's decisions",
+    "## 5. What each step measured",
+];
+
+// What a board that must draw from disk may not carry: a script of its own, the canvas's conditional
+// element, an interactive control, or anything fetched. The one font stylesheet a canvas allows is a
+// copy-time addition and is not in the template.
+const BOARD_FORBIDDEN_PATTERN = /<script|sc-if|<button|<input|<iframe|\bsrc=|https?:\/\//i;
+
+// A colour literal: a hex colour, or an rgb()/hsl() call.
+const COLOUR_LITERAL_PATTERN = /#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(/g;
 
 // The recipes pipe through `gh --jq`, which fake-gh.js hands to the real jq. Without jq on PATH the
 // tests that run such a recipe skip and say why; in CI a missing jq fails them instead, so a skip
@@ -475,4 +503,197 @@ test("teeth: passing the issue number where the database id belongs links nothin
     assert.notStrictEqual(result.status, 0);
     assert.match(result.stderr, /HTTP 404/);
     assert.deepStrictEqual(readState(directory).issues[0].subIssues, []);
+});
+
+// ---------------------------------------------------------------------------------------------
+// The Feature's design board — the board's standard, its template, and the attachment the port
+// carries it with. The template is read, not rendered: what it must not contain is what would stop
+// it drawing from disk, and that is a property of the text.
+// ---------------------------------------------------------------------------------------------
+
+function withoutHtmlComments(html)
+{
+    return html.replace(/<!--[\s\S]*?-->/g, "");
+}
+
+// The token block, between the markers the canvas's own generator writes and the template keeps.
+function tokenBlock(html)
+{
+    const match = html.match(/\/\* tokens:[\s\S]*?\/\* \/tokens \*\//);
+
+    assert.ok(match !== null, "the token block's markers are missing");
+
+    return match[0];
+}
+
+test("both forge-ops bodies offer attach-work-item-file, in their catalog and as a recipe", () =>
+{
+    for (const reference of [ADO_REFERENCE, GITHUB_REFERENCE])
+    {
+        assert.ok(section(readText(reference), "### `attach-work-item-file`").trim().length > 0, `${reference} has no recipe`);
+    }
+
+    for (const skill of FORGE_OPS_SKILLS)
+    {
+        assert.match(readText(skill), /^\| `attach-work-item-file` \|/m, `${skill} does not list the operation`);
+    }
+});
+
+test("create-feature draws the board, attaches it through the port and says what happens when it cannot", () =>
+{
+    const body = withoutFrontmatter(readText(CREATE_FEATURE_SKILL));
+
+    assert.match(body, /feature-board\.md/, "the skill does not point at the board's standard");
+    assert.match(body, /feature-board\.html/, "the skill does not point at the board's template");
+    assert.match(body, /`attach-work-item-file`/, "the skill does not name the port's operation");
+    assert.match(body, /not attached/i, "the skill does not say how a refused attachment is reported");
+    assert.doesNotMatch(body, /\bPNG\b|playwright|screenshot/i, "the board is Markdown and HTML, never a rendered picture");
+});
+
+test("the board's standard and its template carry the same six sections, in the same order", () =>
+{
+    const template = readText(BOARD_TEMPLATE);
+    const sectionIds = [...withoutHtmlComments(template).matchAll(/<section id="([^"]+)"/g)].map((match) => match[1]);
+
+    assert.deepStrictEqual(sectionIds, BOARD_SECTION_IDS);
+
+    const skeleton = readText(BOARD_REFERENCE).match(/```markdown\n([\s\S]*?)```/);
+
+    assert.ok(skeleton !== null, "the standard has no Markdown skeleton");
+
+    const headings = skeleton[1].split("\n").filter((line) => line.startsWith("## "));
+
+    assert.deepStrictEqual(headings, BOARD_MARKDOWN_HEADINGS);
+    assert.match(skeleton[1], /Nothing measured yet\./, "a board drawn at creation must say nothing was measured");
+});
+
+test("the board template draws from disk: no script, no sc-if, no control, nothing fetched", () =>
+{
+    const template = withoutHtmlComments(readText(BOARD_TEMPLATE));
+    const forbidden = template.split("\n").filter((line) => BOARD_FORBIDDEN_PATTERN.test(line));
+
+    assert.deepStrictEqual(forbidden, []);
+});
+
+test("the board template is 1440 wide and light and dark from one token block, with no colour outside it", () =>
+{
+    const template = withoutHtmlComments(readText(BOARD_TEMPLATE));
+    const tokens = tokenBlock(template);
+    const outside = template.replace(tokens, "");
+
+    assert.match(outside, /\.t\{width:1440px/, "the board's root is not 1440 wide");
+    assert.match(tokens, /@media \(prefers-color-scheme:dark\)/, "no dark values for the system's dark scheme");
+    assert.match(tokens, /\.t\.dark/, "the dark theme cannot be forced");
+    assert.match(tokens, /\.t\.light/, "the light theme cannot be forced");
+    assert.deepStrictEqual(outside.match(COLOUR_LITERAL_PATTERN), null, "a colour is set outside the tokens");
+    assert.match(template, /<div class="t">/, "the root class the tokens hang on is missing");
+});
+
+// Runs the attach recipe as written, then the read-back. `transform` breaks the recipe.
+function attachWorkItemFile(directory, inputs, transform)
+{
+    const [attachRecipe, readBackRecipe] = recipe("attach-work-item-file");
+
+    fileSystem.writeFileSync(path.join(directory, inputs.fileName), inputs.content);
+
+    const script =
+    [
+        "set -eo pipefail",
+        "OWNER=contoso",
+        "REPO=widgets",
+        "ISSUE=" + inputs.issue,
+        "FILE_NAME=" + shellQuote(inputs.fileName),
+        "FILE=" + shellQuote(inputs.fileName),
+        "COMMENT=" + shellQuote(inputs.comment),
+        (transform || ((text) => text))(attachRecipe),
+        "echo '--- read back'",
+        readBackRecipe,
+    ].join("\n");
+
+    return runBash(directory, script);
+}
+
+const BOARD_FIXTURE =
+{
+    issue: 7,
+    fileName: "feature-7-board.md",
+    comment: "Design board, 2026-11-08, create-feature@1.8.0",
+    content: "# Admins can audit who changed a setting\n\n## Status strip\n\n| Story | State |\n|---|---|\n| not broken down yet | - |\n",
+};
+
+function featureFixture()
+{
+    return createFixture(
+    {
+        nextNumber: 8,
+        issues: [{ number: 7, title: "Admins can audit who changed a setting", body: "", state: "OPEN", labels: ["feature"], subIssues: [] }],
+    });
+}
+
+function readBackUrls(result)
+{
+    return (result.stdout.split("--- read back\n")[1] || "").trim().split("\n").filter(Boolean);
+}
+
+test("the board is attached as one comment opened by its marker, and read back", { skip: JQ_SKIP }, () =>
+{
+    const directory = featureFixture();
+    const result = attachWorkItemFile(directory, BOARD_FIXTURE);
+
+    assert.strictEqual(result.status, 0, result.stderr);
+
+    const comments = readState(directory).issues[0].comments;
+
+    assert.strictEqual(comments.length, 1);
+    assert.ok(comments[0].body.startsWith("<!-- attached-file: feature-7-board.md -->\n"), "the comment does not open with the file's marker");
+    assert.ok(comments[0].body.includes(BOARD_FIXTURE.comment));
+    assert.ok(comments[0].body.endsWith(BOARD_FIXTURE.content), "the file's text is not the comment's");
+    assert.deepStrictEqual(readBackUrls(result), [`https://github.com/contoso/widgets/issues/7#issuecomment-${comments[0].id}`]);
+});
+
+test("a second run replaces the board's comment instead of adding another", { skip: JQ_SKIP }, () =>
+{
+    const directory = featureFixture();
+
+    attachWorkItemFile(directory, BOARD_FIXTURE);
+
+    const result = attachWorkItemFile(directory, { ...BOARD_FIXTURE, content: BOARD_FIXTURE.content + "\n## 1. Today beside after\n" });
+    const comments = readState(directory).issues[0].comments;
+
+    assert.strictEqual(result.status, 0, result.stderr);
+    assert.strictEqual(comments.length, 1, "a re-run added a second comment");
+    assert.ok(comments[0].body.includes("## 1. Today beside after"), "the comment still holds the first run's board");
+    assert.ok(readLog(directory).some((call) => call[0] === "api" && call.includes("PATCH")), "the re-run did not PATCH");
+});
+
+test("a file GitHub cannot carry as a comment is refused before any call", () =>
+{
+    const directory = featureFixture();
+    const result = attachWorkItemFile(directory, { ...BOARD_FIXTURE, fileName: "feature-7-board.html", content: "<!doctype html>" });
+
+    assert.notStrictEqual(result.status, 0);
+    assert.match(result.stderr, /Markdown or text file only/);
+    assert.deepStrictEqual(readLog(directory), []);
+});
+
+test("teeth: sending the body with -f posts the literal path, and the read-back finds no board", { skip: JQ_SKIP }, () =>
+{
+    const directory = featureFixture();
+    const result = attachWorkItemFile(directory, BOARD_FIXTURE, (text) => text.replace(/-F body=@/g, "-f body=@"));
+    const comments = readState(directory).issues[0].comments;
+
+    assert.strictEqual(result.status, 0, result.stderr);
+    assert.deepStrictEqual(comments.map((comment) => comment.body), ["@attachment.md"]);
+    assert.deepStrictEqual(readBackUrls(result), [], "a board that was not attached was read back as attached");
+});
+
+test("teeth: without the marker lookup, a second run leaves two boards on the Feature", { skip: JQ_SKIP }, () =>
+{
+    const directory = featureFixture();
+    const withoutLookup = (text) => text.replace(/COMMENT_ID=\$\(.*\)/, "COMMENT_ID=");
+
+    attachWorkItemFile(directory, BOARD_FIXTURE, withoutLookup);
+    attachWorkItemFile(directory, BOARD_FIXTURE, withoutLookup);
+
+    assert.strictEqual(readState(directory).issues[0].comments.length, 2);
 });

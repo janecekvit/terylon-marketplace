@@ -36,7 +36,7 @@ What each forge's support rests on:
 ## What it contains
 
 - **`create-user-story`** — from a short brief and a parent Feature it creates a User Story **grounded in the real codebase**: concrete files, functions and integration points found in the repo, not generic phrasing. The story is created under the parent and inherits both `AreaPath` and `IterationPath`.
-- **`create-feature`** — writing, reviewing and validating Feature work items against the Terylon standard (`references/feature-standard.md`): Problem → User needs → Design & proposal → UX → Requirements → Acceptance criteria → Out of scope.
+- **`create-feature`** — writing, reviewing and validating Feature work items against the Terylon standard (`references/feature-standard.md`): Problem → User needs → Design & proposal → UX → Requirements → Acceptance criteria → Out of scope. Every Feature it writes carries its design board (`references/feature-board.md`): an HTML page in light and dark, copied into the repository's architecture canvas where one exists, and the same board in Markdown, attached to the Feature through the port's `attach-work-item-file`.
 
 ## Dependencies
 

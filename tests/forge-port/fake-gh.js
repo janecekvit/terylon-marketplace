@@ -9,6 +9,8 @@
 //   - `gh issue create --label X` fails when label X does not exist in the repository
 //   - `gh api .../sub_issues -f sub_issue_id=N` sends a string; the API rejects it (422)
 //   - `sub_issue_id` must be an issue's database id; an issue number is not one (404)
+//   - an issue comment's `body` sent as `-f body=@file` is the literal text `@file`, as the real
+//     CLI sends it; only `-F` reads the file
 //
 // State lives in the JSON file named by FAKE_GH_STATE, and every invocation is appended to the
 // file named by FAKE_GH_LOG, one JSON array of arguments per line, so a test can read back what
@@ -26,6 +28,14 @@ const DATABASE_ID_OFFSET = 900000000;
 const ISSUE_ENDPOINT_PATTERN = /^repos\/([^/]+)\/([^/]+)\/issues\/([0-9]+)$/;
 const SUB_ISSUES_ENDPOINT_PATTERN = /^repos\/([^/]+)\/([^/]+)\/issues\/([0-9]+)\/sub_issues$/;
 const PARENT_ENDPOINT_PATTERN = /^repos\/([^/]+)\/([^/]+)\/issues\/([0-9]+)\/parent$/;
+const ISSUE_COMMENTS_ENDPOINT_PATTERN = /^repos\/([^/]+)\/([^/]+)\/issues\/([0-9]+)\/comments$/;
+const COMMENT_ENDPOINT_PATTERN = /^repos\/([^/]+)\/([^/]+)\/issues\/comments\/([0-9]+)$/;
+
+// A comment's id is offset like a database id, so it can never be mistaken for an issue number.
+const COMMENT_ID_OFFSET = 700000000;
+
+// The options that take no value. Every other option takes the next argument as its value.
+const BOOLEAN_OPTIONS = ["paginate"];
 
 function fail(message, exitCode)
 {
@@ -43,7 +53,7 @@ function writeState(state)
     fileSystem.writeFileSync(process.env.FAKE_GH_STATE, JSON.stringify(state, null, 2));
 }
 
-// Returns { positional: [], options: { name: [values] } }. Every option here takes a value.
+// Returns { positional: [], options: { name: [values] } }. Every option but BOOLEAN_OPTIONS takes a value.
 function parseOptions(argumentList)
 {
     const positional = [];
@@ -57,7 +67,7 @@ function parseOptions(argumentList)
         {
             const name = argument.replace(/^-+/, "");
             options[name] = options[name] || [];
-            options[name].push(argumentList[++index]);
+            options[name].push(BOOLEAN_OPTIONS.includes(name) ? true : argumentList[++index]);
         }
         else
         {
@@ -122,9 +132,48 @@ function asIssueJson(state, issue)
         state: issue.state,
         labels: issue.labels.map((name) => ({ name })),
         url: `https://github.com/${state.owner}/${state.repository}/issues/${issue.number}`,
-        comments: [],
+        comments: (issue.comments || []).map((comment) => ({ id: comment.id, body: comment.body, author: { login: "e2e-stub" } })),
         assignees: [],
     };
+}
+
+function asCommentJson(state, issueNumber, comment)
+{
+    return {
+        id: comment.id,
+        body: comment.body,
+        html_url: `https://github.com/${state.owner}/${state.repository}/issues/${issueNumber}#issuecomment-${comment.id}`,
+        user: { login: "e2e-stub" },
+    };
+}
+
+// The `body` field of a comment write: `-F body=@path` reads the file, as gh does; `-f` sends the text as it is.
+function commentBody(typedFields, stringFields)
+{
+    const typed = typedFields.find((field) => field.startsWith("body="));
+
+    if (typed !== undefined)
+    {
+        const value = typed.slice("body=".length);
+
+        return value.startsWith("@") ? fileSystem.readFileSync(value.slice(1), "utf8") : value;
+    }
+
+    const literal = stringFields.find((field) => field.startsWith("body="));
+
+    return literal === undefined ? undefined : literal.slice("body=".length);
+}
+
+function requireCommentBody(typedFields, stringFields)
+{
+    const body = commentBody(typedFields, stringFields);
+
+    if (body === undefined)
+    {
+        fail("gh: Invalid request. \"body\" wasn't supplied. (HTTP 422)");
+    }
+
+    return body;
 }
 
 function commandLabel(subcommand, rest)
@@ -237,8 +286,57 @@ function commandApi(rest)
     const typedFields = options.F || [];
     const stringFields = options.f || [];
     const isWrite = typedFields.length + stringFields.length > 0;
+    const method = last(options, "X") || last(options, "method") || (isWrite ? "POST" : "GET");
 
-    let match = endpoint.match(SUB_ISSUES_ENDPOINT_PATTERN);
+    let match = endpoint.match(ISSUE_COMMENTS_ENDPOINT_PATTERN);
+
+    if (match !== null)
+    {
+        const issue = findIssueByNumber(state, match[3]);
+
+        issue.comments = issue.comments || [];
+
+        if (method === "GET")
+        {
+            emit(issue.comments.map((comment) => asCommentJson(state, issue.number, comment)), options);
+            return;
+        }
+
+        state.nextCommentId = (state.nextCommentId || 0) + 1;
+
+        const comment = { id: COMMENT_ID_OFFSET + state.nextCommentId, body: requireCommentBody(typedFields, stringFields) };
+
+        issue.comments.push(comment);
+        writeState(state);
+        emit(asCommentJson(state, issue.number, comment), options);
+        return;
+    }
+
+    match = endpoint.match(COMMENT_ENDPOINT_PATTERN);
+
+    if (match !== null)
+    {
+        const commentId = Number(match[3]);
+        const issue = state.issues.find((candidate) => (candidate.comments || []).some((comment) => comment.id === commentId));
+
+        if (issue === undefined)
+        {
+            fail("gh: Not Found (HTTP 404)");
+        }
+
+        const comment = issue.comments.find((candidate) => candidate.id === commentId);
+
+        if (method === "PATCH")
+        {
+            comment.body = requireCommentBody(typedFields, stringFields);
+            writeState(state);
+        }
+
+        emit(asCommentJson(state, issue.number, comment), options);
+        return;
+    }
+
+    match = endpoint.match(SUB_ISSUES_ENDPOINT_PATTERN);
 
     if (match !== null)
     {

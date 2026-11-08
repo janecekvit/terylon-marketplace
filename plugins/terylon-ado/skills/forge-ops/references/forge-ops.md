@@ -67,6 +67,8 @@ The remote server keeps the **action-based tools** of the local server's 2.9.0 c
 | `wit_work_item_write` | `create`, `update`, `update_batch`, `add_child` | `workItemType`, `fields[]`, `id`, `updates[]`, `parentId`, `items[]` |
 | `wit_work_item_comment_write` | `add`, `update` | `workItemId`, `text`, `commentId` (for `update`), `format?` |
 | `wit_work_item_link_write` | `link`, `unlink`, `link_to_pull_request`, `add_artifact_link` | `updates[]`, `projectId` / `repositoryId` (**GUIDs**), `pullRequestId`, `workItemId` |
+| `wit_work_item_attachment_upload` | — (no action) | `project`, `fileName` (a name, not a path), `contentBase64` (standard Base64, **≤ 20 MB decoded**) |
+| `wit_work_item_attachment_link` | — (no action) | `project`, `workItemId`, `attachmentUrl` (from the upload), `comment?` |
 
 ### `wit_work_item` — the parameter name changes per action
 
@@ -345,6 +347,16 @@ The `- 1` is load-bearing: this side stores the end one past the last covered li
 
 - **Acceptance criteria belong in `Microsoft.VSTS.Common.AcceptanceCriteria`.** It is the field named for them and the one a reader looks at. Set its `format` to `"Markdown"` as well — it defaults to HTML independently of `System.Description`, so a story can easily end up with a Markdown description and an HTML criteria field whose checkboxes are dead. Do not duplicate the list into the description: two copies drift, and nothing marks which is current.
 - **Gotcha (blast radius):** title edits are higher blast-radius than description edits — the caller confirms a title change separately. The confirm-before-write decision and any footer stay caller-side (this engine never stamps a footer, §16).
+
+### `attach-work-item-file`
+
+- **In:** `project`, `id` (the work item), `fileName`, the file's local path, and a one-line `comment`. **Out:** the attachment's `url`, read back from the item.
+- **Tools:** `wit_work_item_attachment_upload`, then `wit_work_item_attachment_link`, then `wit_work_item(action="get")` with `expand="relations"`. **Consumers:** create-feature.
+- **Recipe:** encode the file as standard Base64 on one line (`base64 -w 0 <file>`; no `data:` prefix, never Base64URL) and upload it with `project`, `fileName`, `contentBase64`. The upload answers with an `attachmentUrl` and **attaches nothing**: link it with `project`, `workItemId: <id>`, `attachmentUrl`, `comment`, which adds an `AttachedFile` relation to the item.
+- **Verify by reading the item back**: among its `relations`, one with `rel: "AttachedFile"` and `url` equal to the `attachmentUrl`. The link response is trimmed (§3) and is not evidence; a relation not found is reported **not attached**.
+- **Gotcha (two calls, one effect):** an upload that is never linked leaves an orphan in the attachment store and nothing on the item. A refused link is reported as such, with the upload's URL, never as attached.
+- **Gotcha (no replace):** a second run with the same `fileName` adds a second `AttachedFile` relation beside the first; the server offers no replace. The `comment` carries the date and the caller's version, so the newest is the one a reader takes. Removing an older relation is not part of this recipe.
+- The tools take no `action` parameter, unlike the rest of the surface; an `action` is an unknown parameter and rejects the call (§3).
 
 ### `create-pull-request`
 
@@ -837,7 +849,7 @@ Every caller that delegates its ADO recipes to this file:
 
 - `create-pr`, `review-pr`, `write-pr-description`, `address-pr-comments`, `update-pr-checklist`, `update-work-item-checklist` and the `pr-reviewer` agent (all terylon-forge) — load this skill by name.
 - `create-user-story` (terylon-product) — loads `forge-ops` by name.
-- `create-feature` (terylon-product) — loads `forge-ops` by name.
+- `create-feature` (terylon-product) — loads `forge-ops` by name; the one consumer of `attach-work-item-file`.
 - `develop` (terylon-dev) — loads `forge-ops` by name.
 
 Each caller still issues its own `mcp__ado__*` calls, each with `orgName`, following these recipes; delegation centralizes the **knowledge**, not the calls. The footer/version is always resolved by the calling skill (§16).

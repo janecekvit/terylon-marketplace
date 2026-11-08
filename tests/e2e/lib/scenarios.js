@@ -48,6 +48,11 @@ const FEATURE_BRIEF = [
 // The seven fields of the Feature standard, in order. Matched loosely: ADO escapes & as &amp;.
 const FEATURE_SECTIONS = ["Problem", "User needs", "Design", "UX", "Requirements", "Acceptance criteria", "Out of scope"];
 
+// The Feature's design board, as the Markdown attached to it: the six sections of feature-board.md, in order.
+const BOARD_SECTIONS = ["Status strip", "Today beside after", "What each part gets instead", "Who reaches what", "The owner's decisions", "What each step measured"];
+const BOARD_FILE_PATTERN = /^feature-\d+-board\.md$/;
+const BOARD_MARKER_PATTERN = /^<!-- attached-file: (feature-\d+-board\.md) -->/;
+
 // A sentence that says a forge's server cannot be reached, in the words a model might use.
 const UNREACHABLE_PATTERN = /unreachable|not reachable|could not (connect|reach|start)|couldn't (connect|reach)|failed to (connect|start)|not connected|isn't connected|is not available|unavailable|no .*tools .*(available|present)|tools are (absent|not available|missing)/i;
 
@@ -193,7 +198,7 @@ function headlessTurn(context, scenario, turn, options)
 
 // --- what counts as a write on each stand-in ------------------------------------------------
 
-const ADO_WRITE_TOOLS = ["wit_work_item_write", "wit_work_item_link_write", "wit_work_item_comment_write"];
+const ADO_WRITE_TOOLS = ["wit_work_item_write", "wit_work_item_link_write", "wit_work_item_comment_write", "wit_work_item_attachment_upload", "wit_work_item_attachment_link"];
 
 function adoWrites(scenario)
 {
@@ -341,6 +346,23 @@ function storyOnGithub(context)
     check("author", "github-story: the parent is read back after the link", log.some((call) => call[0] === "api" && /issues\/7\/sub_issues$/.test(call[1]) && !call.includes("-F")), "");
 }
 
+// The board attached to the created Feature: exactly one, its six sections in order, and nothing measured
+// at creation. `boards` are the attached texts; `names` says what was found, for the report.
+function checkBoard(context, name, boards, names)
+{
+    const { check } = context;
+
+    check("author", `${name}: one design board is attached to the Feature`, boards.length === 1, `boards: ${boards.length} (${names})`);
+
+    if (boards.length === 1)
+    {
+        const order = inOrder(boards[0], BOARD_SECTIONS);
+
+        check("author", `${name}: the board carries its six sections, in order`, order === null, order || "");
+        check("author", `${name}: the board measured nothing at creation`, /nothing measured yet/i.test(boards[0]), "");
+    }
+}
+
 function featureOn(context, forge)
 {
     const name = `${forge}-feature`;
@@ -374,6 +396,10 @@ function featureOn(context, forge)
 
             check("author", `${name}: the description is Markdown`, created[0].formats["System.Description"] === "markdown", `format ${created[0].formats["System.Description"]}`);
             check("author", `${name}: every section of the standard is present, in order`, order === null, order || "");
+
+            const boards = (created[0].attachments || []).map((url) => state.attachments[url]).filter((attachment) => BOARD_FILE_PATTERN.test(attachment.fileName));
+
+            checkBoard(context, name, boards.map((attachment) => attachment.content), boards.map((attachment) => attachment.fileName).join(", "));
         }
     }
     else
@@ -389,6 +415,10 @@ function featureOn(context, forge)
 
             check("author", `${name}: the feature label is attached`, created[0].labels.includes("feature"), created[0].labels.join(", "));
             check("author", `${name}: every section of the standard is present, in order`, order === null, order || "");
+
+            const boards = (created[0].comments || []).filter((comment) => BOARD_MARKER_PATTERN.test(comment.body));
+
+            checkBoard(context, name, boards.map((comment) => comment.body), boards.map((comment) => comment.body.match(BOARD_MARKER_PATTERN)[1]).join(", "));
         }
     }
 }

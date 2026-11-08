@@ -67,6 +67,7 @@ The adapter therefore **registers no MCP server at all**, and a repository that 
 | `create-work-item` | `gh label create` for any missing label, then `gh issue create --title --body-file --label` — the body composed from the work-item keys |
 | `link-work-item-parent` | `gh api repos/{owner}/{repo}/issues/{n}/sub_issues -F sub_issue_id=<database-id>` |
 | `update-work-item` | `gh issue edit <n> --body-file <path>` |
+| `attach-work-item-file` | an issue comment opened by a marker naming the file — `gh api …/issues/{n}/comments`, or `-X PATCH …/issues/comments/{id}` on a re-run; Markdown or text only |
 | `create-pull-request` | `gh pr create --base --head --title --body-file` |
 | `list-linked-items` | `gh pr view <n> --json closingIssuesReferences` |
 | `link-work-item-to-pull-request` | a closing keyword in the PR body — `Closes #N` |
@@ -81,7 +82,7 @@ The adapter therefore **registers no MCP server at all**, and a repository that 
 
 Read `references/forge-ops.md` for each operation's exact arguments, JSON shape and gotchas.
 
-## The six asymmetries a transport must not paper over
+## The seven asymmetries a transport must not paper over
 
 These are where the two bodies genuinely differ. The port declares the difference; this table says which side GitHub is on.
 
@@ -92,6 +93,7 @@ These are where the two bodies genuinely differ. The port declares the differenc
 | Item type | a **label**, plus the sub-issue relation for hierarchy | nothing enforces it. A missing label is a convention violation, not an API error, so it fails silently |
 | Line breaks | soft-wrapped by the renderer | the "never hard-wrap" rule still holds. It is right on both, for different reasons |
 | Planning, estimate, priority | **not carried** — no area, iteration, points or priority field | a caller that drops them silently loses what the draft said. It names them before the write, and nothing invents a milestone or a label to stand in |
+| Attachments | **a comment**, opened by a marker naming the file — the API cannot attach a file to an issue | a caller that reports a file attached reads the comment back first, and a file that is neither Markdown nor text is refused, never sent as something else |
 | Thread status | resolvable only through **GraphQL** | the REST comment object has no status field. A transport asking for one gets nothing and must not read that as "unresolved" |
 
 **Identifiers are the other place to be careful.** GitHub carries two numbers for the same issue — the `number` a human sees and the `id` the database uses — and the sub-issue endpoint wants the second. Passing the first is accepted-looking and wrong.
@@ -112,4 +114,5 @@ These are where the two bodies genuinely differ. The port declares the differenc
 5. `update-pr-description` replaces only the caller's marked region; content outside it survives.
 6. `create-work-item` produces an issue whose body carries the acceptance-criteria section as a markdown task list. The recipes as written are exercised against a stand-in `gh` by `node --test tests/forge-port/forge-port.test.js` in the marketplace repository, and were confirmed live on 2026-10-05 against the marketplace's own GitHub repository: the story's criteria landed as an interactive task list under `## Acceptance criteria`.
 7. `link-work-item-parent` establishes the sub-issue relation, and it is verified by reading the parent back rather than from the create response.
-8. `build-pr-diff` produces the same output as the Azure DevOps body for the same branch — it is git, and nothing about it is forge-specific.
+8. `attach-work-item-file` writes one comment opened by the file's marker, and a second run replaces it rather than adding another — exercised against the stand-in `gh` by the same test file.
+9. `build-pr-diff` produces the same output as the Azure DevOps body for the same branch — it is git, and nothing about it is forge-specific.

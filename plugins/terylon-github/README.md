@@ -30,7 +30,7 @@ terylon-core .................. delegate-to-repo-agents, measure-token-spend
 
 **Skill:**
 
-- **`forge-ops`** — the GitHub body of the port. The same operations its Azure DevOps sibling implements, written as `gh` invocations: URL parsing, repository identity, pull request and issue metadata, diff recipes, review-thread reconstruction, inline-comment anchoring, label and sub-issue mechanics, eligibility flags and prior-run detection. Knowledge only: the caller issues its own commands and stamps its own footer.
+- **`forge-ops`** — the GitHub body of the port. The same operations its Azure DevOps sibling implements, written as `gh` invocations: URL parsing, repository identity, pull request and issue metadata, diff recipes, review-thread reconstruction, inline-comment anchoring, label and sub-issue mechanics, a file attached to an issue as a comment opened by its marker, eligibility flags and prior-run detection. Knowledge only: the caller issues its own commands and stamps its own footer.
 
 **No MCP server.** This plugin ships no `.mcp.json`, so a repository that enables it pays no tool schemas and configures no token.
 
@@ -53,7 +53,7 @@ That is the entire configuration. There is **no organisation environment variabl
 | Context cost | none until a command runs | every tool schema, every session |
 | Coverage | `gh api` reaches all of REST and GraphQL | the tools the server chose to expose |
 
-`gh api` is the reach-through for what the first-class commands do not cover — review-comment threads, sub-issues, and resolving a thread through GraphQL.
+`gh api` is the reach-through for what the first-class commands do not cover — review-comment threads, sub-issues, issue comments written as attachments, and resolving a thread through GraphQL.
 
 ## Which forge a run targets
 

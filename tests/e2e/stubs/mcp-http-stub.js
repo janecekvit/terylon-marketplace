@@ -93,6 +93,13 @@ function present(state, id, withRelations)
         {
             result.relations.push({ rel: "System.LinkTypes.Hierarchy-Forward", url: `https://dev.azure.com/${organisation}/_apis/wit/workItems/${child}`, attributes: { name: "Child" } });
         }
+
+        for (const attachmentUrl of item.attachments || [])
+        {
+            const attachment = state.attachments[attachmentUrl];
+
+            result.relations.push({ rel: "AttachedFile", url: attachmentUrl, attributes: { name: attachment.fileName, comment: attachment.comment } });
+        }
     }
 
     return result;
@@ -183,7 +190,13 @@ const PARAMETERS =
     wit_work_item_link_write: { orgName: { type: "string" }, project: { type: "string" }, projectId: { type: "string" }, repositoryId: { type: "string" }, pullRequestId: { type: "number" }, workItemId: { type: "number" }, updates: { type: "array", items: LINK } },
     wit_work_item_comment_write: { orgName: { type: "string" }, project: { type: "string" }, workItemId: { type: "number" }, commentId: { type: "number" }, text: { type: "string" }, format: { type: "string" } },
     repo_repository: { orgName: { type: "string" }, project: { type: "string" }, repositoryNameOrId: { type: "string" } },
+    wit_work_item_attachment_upload: { orgName: { type: "string" }, project: { type: "string" }, fileName: { type: "string" }, contentBase64: { type: "string" } },
+    wit_work_item_attachment_link: { orgName: { type: "string" }, project: { type: "string" }, workItemId: { type: "number" }, attachmentUrl: { type: "string" }, comment: { type: "string" } },
 };
+
+// The attachment tools are the remote surface's two without an `action`: one parameter more and the real
+// server refuses the call, so the stub does too.
+const BASE64_PATTERN = /^[A-Za-z0-9+/\s]*={0,2}\s*$/;
 
 // Refuses what typed validation refuses: an array passed as a string, a number passed as text.
 // A numeric string is accepted for a number, as the real server's coercion does.
@@ -347,6 +360,67 @@ const TOOLS =
             return { id: "00000000-0000-0000-0000-000000000001", name: input.repositoryNameOrId || "widgets", project: { name: input.project || "Fixture" } };
         },
     },
+    wit_work_item_attachment_upload:
+    {
+        description: "Upload file content to the work item attachment store. This does not attach the file to a work item: pass the returned attachmentUrl to wit_work_item_attachment_link. Takes project, fileName (a name, not a path) and contentBase64 (standard Base64, no data URI prefix).",
+        handle(state, input)
+        {
+            if (input.action !== undefined)
+            {
+                throw new Error("MCP error -32602: Invalid arguments for tool wit_work_item_attachment_upload: Unrecognized key: \"action\"");
+            }
+
+            if (typeof input.fileName !== "string" || /[\\/]/.test(input.fileName))
+            {
+                throw new Error("MCP error -32602: fileName must be a file name only, not a path");
+            }
+
+            if (typeof input.contentBase64 !== "string" || input.contentBase64.startsWith("data:") || !BASE64_PATTERN.test(input.contentBase64))
+            {
+                throw new Error("MCP error -32602: contentBase64 must be standard Base64, without a data URI prefix");
+            }
+
+            state.attachments = state.attachments || {};
+            state.nextAttachment = (state.nextAttachment || 0) + 1;
+
+            const attachmentId = `00000000-0000-0000-0000-${String(state.nextAttachment).padStart(12, "0")}`;
+            const attachmentUrl = `https://dev.azure.com/${organisation}/_apis/wit/attachments/${attachmentId}?fileName=${encodeURIComponent(input.fileName)}`;
+
+            state.attachments[attachmentUrl] = { fileName: input.fileName, content: Buffer.from(input.contentBase64, "base64").toString("utf8") };
+
+            return { id: attachmentId, attachmentUrl };
+        },
+    },
+    wit_work_item_attachment_link:
+    {
+        description: "Link an attachment uploaded by wit_work_item_attachment_upload to a work item, as an AttachedFile relation. Takes project, workItemId, attachmentUrl and an optional comment.",
+        handle(state, input)
+        {
+            if (input.action !== undefined)
+            {
+                throw new Error("MCP error -32602: Invalid arguments for tool wit_work_item_attachment_link: Unrecognized key: \"action\"");
+            }
+
+            const item = state.items[String(input.workItemId)];
+            const attachment = (state.attachments || {})[input.attachmentUrl];
+
+            if (item === undefined)
+            {
+                throw new Error(`TF401232: Work item ${input.workItemId} does not exist, or you do not have permissions to read it.`);
+            }
+
+            if (attachment === undefined)
+            {
+                throw new Error("TF401019: the attachment URL names no uploaded attachment");
+            }
+
+            attachment.comment = input.comment;
+            item.attachments = item.attachments || [];
+            item.attachments.push(input.attachmentUrl);
+
+            return { id: Number(input.workItemId), relations: [{ rel: "AttachedFile", url: input.attachmentUrl }] };
+        },
+    },
 };
 
 function listTools()
@@ -355,13 +429,14 @@ function listTools()
     {
         name,
         description: tool.description,
-        inputSchema:
-        {
-            type: "object",
-            properties: { action: { type: "string", enum: tool.actions }, ...(PARAMETERS[name] || {}) },
-            required: ["action"],
-            additionalProperties: true,
-        },
+        inputSchema: tool.actions === undefined
+            ? { type: "object", properties: { ...(PARAMETERS[name] || {}) }, additionalProperties: false }
+            : {
+                type: "object",
+                properties: { action: { type: "string", enum: tool.actions }, ...(PARAMETERS[name] || {}) },
+                required: ["action"],
+                additionalProperties: true,
+            },
     }));
 }
 
