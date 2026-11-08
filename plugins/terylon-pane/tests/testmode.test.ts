@@ -310,7 +310,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     await ui.press({ key: 'refresh' })
     expect(await ui.find({ type: 'Link', text: /Merge/ })).toBeUndefined()
-    expect((await ui.findAll({ type: 'Link' })).filter(link => !String(link.props.href).startsWith('https://test-mode.invalid'))).toEqual([])
+    expect((await ui.findAll({ type: 'Link' })).filter(link => new URL(String(link.props.href)).host !== 'test-mode.invalid')).toEqual([])
 
     await ui.press({ key: 'merge-act-204' })
     expect(await ui.find({ type: 'Text', text: exact('Test mode: nothing was merged. A real merge is confirmed with your passkey in the console.') })).toBeDefined()
