@@ -69,16 +69,6 @@ export const CHIP_DOT = '●'
 export const CARD_FILL = 'rgba(140,140,140,0.035)'
 export const WAITING_TILE_FILL = 'rgba(107,71,214,0.16)'
 
-// THE FRAME of a head button while something behind it waits for the owner: a round stroke, raw and the same on both
-// themes, a mark and never an amber word. Desktop draws a Button natively and drops its children, so the signal is
-// drawn round the Button, never in it.
-export const HEAD_FRAME = '#e0a84e'
-// The same frame at rest: the theme's quiet grey, so the head buttons look alike and only the colour changes.
-export const HEAD_FRAME_AT_REST = 'subtle'
-// HOW A WAITING HEAD BUTTON IS MARKED on a graphic surface: the frame, or, should the frame not read live, the
-// surface's own primary button.
-export const HEAD_WAITING_MARK: 'frame' | 'primary' = 'frame'
-
 // Below this many body columns the names of a story's eight phases would run together (the owner's walk, a dock of
 // about 435 px): only the phase now is named under its road.
 export const ROAD_NAMES_COLUMNS = 60

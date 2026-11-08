@@ -52,7 +52,7 @@ test('an alert is a fault of the machine; the briefing, the questions, a newer i
 
 test('in a session: the status line counts the alerts, the band says them and its Open opens the pane as always', async ($, on) => {
   const terylon = world(on)
-  // NO MEMORY PROPOSAL WAITS, so Health & memory is framed for Health alone.
+  // NO MEMORY PROPOSAL WAITS, so System is marked for Health alone.
   terylon.answers.memory_get = { ...MEMORY, proposals: [] }
   terylon.answers.notices_list = {
     unhandled: 3,

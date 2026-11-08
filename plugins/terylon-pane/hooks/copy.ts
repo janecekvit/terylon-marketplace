@@ -1,5 +1,5 @@
 // Terylon Cockpit's own words, in English: the interface, as the operator chose it, in Terylon's
-// glossary since Terylon S68 (Design · Glossary): the overview, Notices and Health & memory, every subject by its ref,
+// glossary since Terylon S68 (Design · Glossary): the overview, Notices and System, every subject by its ref,
 // every figure through hooks/words.ts. What Terylon sends (story titles, the leader's questions, memory entries, rules)
 // is drawn in the language it came in, untranslated. The prompts the pane posts into the session are the owner's words
 // to Claude, in Czech; no word drawn on a surface is Czech.
@@ -17,9 +17,9 @@ export const COPY = {
   disconnected: (since: string) => `not answering since ${since}`,
   // The overview: the machine in a line, the three tiles, the goals, the folds and the 30-day line.
   overview: 'Overview',
-  // The header's way to Notices and to Health and Memory, in plain words: what waits is drawn round the button.
+  // The header's way to Notices and to System, in plain words: what waits makes the button primary, never a word in it.
   navNotices: 'Notices',
-  navHealthMemory: 'Health & memory',
+  navSystem: 'System',
   needsYou: (count: number) => `Needs you · ${count}`,
   noticesNeedYou: (count: number, title: string) => `${count} ${count === 1 ? 'notice needs' : 'notices need'} you: ${title}`,
   openInNotices: 'Open in Notices ›',

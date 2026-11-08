@@ -40,7 +40,7 @@ test('A STORE THAT REFUSES does not stop the done-signal: events_since is called
   on('store.get', async () => ({ deny: STORE_REFUSAL }) as never)
   on('store.set', async () => ({ deny: STORE_REFUSAL }) as never)
   const terylon = world(on, { store: null })
-  // NO MEMORY PROPOSAL WAITS, so Health & memory is framed for Health alone.
+  // NO MEMORY PROPOSAL WAITS, so System is marked for Health alone.
   terylon.answers.memory_get = { ...MEMORY, proposals: [] }
   let moved: Record<string, unknown>[] = []
   terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), moved.filter(event => Number(event.seq) > Number(args.since)), 18100)
@@ -112,7 +112,7 @@ test('A STORE THAT NEVER ANSWERS holds no poll: the next tick reads the queue an
 
 test('events_since REFUSED BY CLAUDE CODE: the queue reads, and the Status tab names the done-signal, its reason and the allow rules', async ($, on) => {
   const terylon = world(on, { store: { lastSeq: 18100, lastSeenAt: Date.parse('2026-10-11T21:59:00Z') } })
-  // NO MEMORY PROPOSAL WAITS, so Health & memory is framed for Health alone.
+  // NO MEMORY PROPOSAL WAITS, so System is marked for Health alone.
   terylon.answers.memory_get = { ...MEMORY, proposals: [] }
   terylon.denied.set('events_since', NOT_ALLOWED)
   await $.session.start(SESSION)
@@ -369,7 +369,7 @@ test('A PART OF THE STATUS TAB THAT THROWS is one problem with its reason and st
     expect(await ui.find({ type: 'Text', text: exact('Terylon') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Slots') })).toBeDefined()
     expect(await ui.find({ key: 'fold-policy' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.20.3') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.20.4') })).toBeDefined()
     await ui.unmount()
   }
   expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith("terylon-pane: Health's alerts did not draw: "))).toBe(true)
@@ -461,7 +461,7 @@ test('TERYLON_PANE_STATUS=minimal draws Health as plain lines alone: no card, no
     await pill(ui, 'tab-status')
     expect(await ui.find({ type: 'Text', text: exact('Terylon: all well') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Problems: 0') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.20.3') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.20.4') })).toBeDefined()
     expect(await ui.findAll({ type: 'Svg' })).toEqual([])
     expect(await ui.find({ type: 'Text', text: exact('Terylon') })).toBeUndefined()
     await ui.unmount()
@@ -559,7 +559,7 @@ test('DIAGNOSTICS SAYS THE DONE-SIGNAL AS KEPT, each value with its type, as pla
 test('⚠ MATCHES THE LIST: a part TERYLON_PANE_STATUS leaves out lights no ⚠ on the tab', async ($, on) => {
   seedSnapshot(on, { ...SNAPSHOT_1_8_3, events: { kind: 'store', reason: STORE_REFUSAL, since: Date.parse('2026-10-11T21:50:00Z') } })
   const terylon = world(on, { env: { TERYLON_PANE_STATUS: 'no-events' } })
-  // NO MEMORY PROPOSAL WAITS, so Health & memory is framed for Health alone.
+  // NO MEMORY PROPOSAL WAITS, so System is marked for Health alone.
   terylon.answers.memory_get = { ...MEMORY, proposals: [] }
   await $.session.start(SESSION)
 

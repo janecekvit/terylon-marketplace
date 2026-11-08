@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
-import { CARD_FILL, HEAD_FRAME, WAITING_TILE_FILL } from '../hooks/drawing'
+import { CARD_FILL, WAITING_TILE_FILL } from '../hooks/drawing'
 
 import { BRIEFING, FLIGHT, PANE_PROPS, SESSION, chipOf, exact, lateOnTheLocalDayOf, marked, pictures, world } from './fixtures'
 
@@ -77,10 +77,10 @@ test('the overview: the machine in a line, three tiles, Waiting for you, a card 
 
     expect((await ui.find({ key: 'goals-show-closed' }))?.text).toBe('▸ History 1')
 
-    // THE FOOT: the 30 days alone; Notices and Health & memory are in the head, each marked for what waits behind it.
+    // THE FOOT: the 30 days alone; Notices and System are in the head, each marked for what waits behind it.
     expect(await ui.find({ type: 'Text', text: exact('Last 30 days 43 stories · $1.10 per story') })).toBeDefined()
     expect((await ui.find({ key: 'tab-bell' }))?.props.label).toBe('Notices')
-    expect((await ui.find({ key: 'tab-status' }))?.props.label).toBe('Health & memory')
+    expect((await ui.find({ key: 'tab-status' }))?.props.label).toBe('System')
     expect(await marked(ui, 'tab-bell')).toBe(true)
     expect(await marked(ui, 'tab-status')).toBe(true)
     await ui.unmount()
@@ -133,7 +133,7 @@ test('the house style: theme keys and the one fill of each kind, round cards, a 
     for (const node of [...boxes, ...texts]) {
       for (const color of [node.props.color, node.props.borderColor, node.props.backgroundColor]) {
         if (color !== undefined) {
-          expect([...THEME, CARD_FILL, WAITING_TILE_FILL, HEAD_FRAME]).toContain(color)
+          expect([...THEME, CARD_FILL, WAITING_TILE_FILL]).toContain(color)
         }
       }
     }
@@ -147,7 +147,7 @@ test('the house style: theme keys and the one fill of each kind, round cards, a 
     expect(chips.map(text => text.text.replace(/[●]+/g, '').replace(/[\s\u00a0]+/g, ' ').trim())).toEqual(surface === 'desktop' ? ['question', 'merge', 'plan', 'Your merge', 'Plan'] : [])
     expect(chips.every(text => text.props.backgroundColor === 'userMessageBackground' && text.props.color === 'inactive' && /^\u00a0●\u00a0.+\u00a0$/.test(text.text))).toBe(true)
 
-    const cards = boxes.filter(box => box.props.borderStyle === 'round' && !String(box.key).endsWith('-frame'))
+    const cards = boxes.filter(box => box.props.borderStyle === 'round')
     // Terminal at this width: one line of counts in place of the tiles.
     const tiles = surface === 'desktop' ? ['merged', 'subtle', 'subtle'] : []
     expect(cards.map(box => box.props.borderColor)).toEqual([...tiles, 'merged', 'subtle', 'subtle'])

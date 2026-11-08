@@ -1432,8 +1432,8 @@ const MUTATIONS = [
     {
         name: "Pause is drawn on the overview again",
         file: "hooks/register.tsx",
-        find: "        {look.isGraphic && HEAD_WAITING_MARK === 'frame' ? framed('refresh', false, refreshButton) : refreshButton}\n      </Box>\n    )\n    const overviewHead = (\n",
-        replace: "        {look.isGraphic && HEAD_WAITING_MARK === 'frame' ? framed('refresh', false, refreshButton) : refreshButton}{current.paused === null && actButton('leader', 'leader_pause', null, { opens: true })}\n      </Box>\n    )\n    const overviewHead = (\n",
+        find: "        {refreshButton}\n      </Box>\n    )\n    const overviewHead = (\n",
+        replace: "        {refreshButton}{current.paused === null && actButton('leader', 'leader_pause', null, { opens: true })}\n      </Box>\n    )\n    const overviewHead = (\n",
     },
     {
         name: "Pause leaves Health",
@@ -1492,8 +1492,8 @@ const MUTATIONS = [
     {
         name: "a button of the overview's head no longer opens More",
         file: "hooks/register.tsx",
-        find: "        {navButton('tab-status', COPY.navHealthMemory, isMemoryWaiting || hasProblem(current, drawingAsked.off), () => openMore($))}\n",
-        replace: "        {navButton('tab-status', COPY.navHealthMemory, isMemoryWaiting || hasProblem(current, drawingAsked.off), () => undefined)}\n",
+        find: "        {navButton('tab-status', COPY.navSystem, isMemoryWaiting || hasProblem(current, drawingAsked.off), () => openMore($))}\n",
+        replace: "        {navButton('tab-status', COPY.navSystem, isMemoryWaiting || hasProblem(current, drawingAsked.off), () => undefined)}\n",
     },
     {
         name: "a goal's screen no longer says What next",
@@ -1556,10 +1556,10 @@ const MUTATIONS = [
         replace: "          return actButton(`plan-${item.target}`, 'plan_approve', item.target)\n",
     },
     {
-        name: "the head's amber frame is drawn at 0 too",
+        name: "a head button is primary with nothing waiting",
         file: "hooks/register.tsx",
-        find: "      <Box key={`${key}-frame`} borderStyle=\"round\" borderColor={isWaiting ? HEAD_FRAME : HEAD_FRAME_AT_REST}>\n",
-        replace: "      <Box key={`${key}-frame`} borderStyle=\"round\" borderColor={HEAD_FRAME}>\n",
+        find: "      return isWaiting ? <Button key={key} label={name} variant=\"primary\" onPress={onPress} /> : <Button key={key} label={name} onPress={onPress} />\n",
+        replace: "      return <Button key={key} label={name} variant=\"primary\" onPress={onPress} />\n",
     },
 ];
 

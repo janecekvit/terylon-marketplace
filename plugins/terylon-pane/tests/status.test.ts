@@ -31,7 +31,7 @@ test('well: ok, the slots, the cost today and over 30 days, nothing wrong, the d
 
     expect(await ui.find({ type: 'Text', text: /^Problems/ })).toBeUndefined()
 
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.20.3') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.20.4') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('TERYLON_URL https://terylon.example.ts.net') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('server plugin:terylon-os:terylon') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Every failure is in claude --debug under terylon-pane:') })).toBeDefined()
@@ -136,7 +136,7 @@ test('an alert is one line on Health, never the notice again: its title and Open
 test('the band\'s Open always opens the pane where the owner left it, the overview the first time, a problem or not', async ($, on) => {
   const terylon = world(on)
   terylon.answers.notices_list = { unhandled: 1, notices: [GATUS] }
-  // NO MEMORY PROPOSAL WAITS, so Health & memory is framed for Health alone.
+  // NO MEMORY PROPOSAL WAITS, so System is marked for Health alone.
   terylon.answers.memory_get = { ...MEMORY, proposals: [] }
   await $.session.start(SESSION)
   await terylon.clock.settle()
