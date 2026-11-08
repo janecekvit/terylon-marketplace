@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
-import { GATES, PANE_PROPS, SESSION, exact, world, pill, openMemoryTab } from './fixtures'
+import { GATES, PANE_PROPS, SESSION, exact, world, pill, openMemoryTab, foldOf } from './fixtures'
 
 const MEMORY_MOUNT = { plugin: 'terylon-pane', surface: 'desktop', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -12,8 +12,8 @@ test("the Memory tab shows the leader's memory as stored, a card per file, and t
   const memory = await $.ui.mount(MEMORY_MOUNT)
   await pill(memory, 'tab-status')
   // ABOUT YOU AND THE TOPICS A PRESS AWAY, each with its count.
-  expect((await memory.find({ key: 'fold-memory-owner' }))?.text).toBe('▸ About you 2')
-  expect((await memory.find({ key: 'fold-memory-topics' }))?.text).toBe('▸ Topics 1')
+  expect((await foldOf(memory, 'fold-memory-owner'))).toBe('▸ About you 2')
+  expect((await foldOf(memory, 'fold-memory-topics'))).toBe('▸ Topics 1')
   expect(await memory.find({ type: 'Text', text: exact('Píše česky; kód anglicky.') })).toBeUndefined()
   await memory.press({ key: 'fold-memory-owner' })
   await memory.press({ key: 'fold-memory-topics' })

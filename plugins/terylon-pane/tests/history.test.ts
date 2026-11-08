@@ -7,7 +7,7 @@ import { test, expect } from 'claude-code/testing'
 
 import { deleteLink } from '../hooks/queue'
 
-import { BASE, BRIEFING, NARROW_PANE_PROPS, PANE_PROPS, PLANS, SESSION, events, exact, refusal, storyMoved, world, toOverview, toAddTask } from './fixtures'
+import { BASE, BRIEFING, NARROW_PANE_PROPS, PANE_PROPS, PLANS, SESSION, events, exact, refusal, storyMoved, world, toOverview, toAddTask, foldOf } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 const SURFACES = [['desktop', PANE_PROPS, 'desktop'], ['terminal', PANE_PROPS, 'terminal'], ['narrow dock', NARROW_PANE_PROPS, 'desktop']] as const
@@ -54,7 +54,7 @@ for (const [surface, props, drawnOn] of SURFACES) {
 
     const ui = await $.ui.mount({ ...PANE, props, surface: drawnOn })
     await toOverview(ui)
-    expect((await ui.find({ key: 'goals-show-closed' }))?.text).toBe('▸ History 2')
+    expect((await foldOf(ui, 'goals-show-closed'))).toBe('▸ History 2')
     expect(await ui.find({ type: 'Text', text: /Closed/ })).toBeUndefined()
     // UNDER OPEN, NO DELETE…: only a goal in History is deleted.
     expect(await ui.findAll({ type: 'Link', text: DELETE_LINK })).toHaveLength(0)
@@ -79,7 +79,7 @@ for (const [surface, props, drawnOn] of SURFACES) {
 
     const ui = await $.ui.mount({ ...PANE, props, surface: drawnOn })
     await toOverview(ui)
-    expect((await ui.find({ key: 'goals-show-closed' }))?.text).toBe('▸ History 0')
+    expect((await foldOf(ui, 'goals-show-closed'))).toBe('▸ History 0')
     await ui.press({ key: 'goals-show-closed' })
     expect((await ui.find({ type: 'Text', text: exact('History is empty.') }))?.props.color).toBe('subtle')
     expect(await ui.findAll({ type: 'Link', text: DELETE_LINK })).toHaveLength(0)
@@ -108,7 +108,7 @@ for (const [surface, props, drawnOn] of SURFACES) {
     await ui.press({ key: 'back' })
     expect(await ui.find({ key: 'goal-8' })).toBeUndefined()
     expect(await ui.find({ key: 'goal-5' })).toBeDefined()
-    expect((await ui.find({ key: 'goals-show-closed' }))?.text).toBe('▾ History 1')
+    expect((await foldOf(ui, 'goals-show-closed'))).toBe('▾ History 1')
 
     // A LIST READ RIGHT AFTER THE DELETION, still naming it, does not bring it back.
     await ui.press({ key: 'goals-show-closed' })
@@ -184,7 +184,7 @@ test('GOALDELETED IN THE FEED: the goal and its plans leave every list, its stor
   expect(terylon.toasts.join('\n')).not.toContain('#400')
 
   expect(await ui.find({ key: 'goal-8' })).toBeUndefined()
-  expect((await ui.find({ key: 'goals-show-closed' }))?.text).toBe('▾ History 1')
+  expect((await foldOf(ui, 'goals-show-closed'))).toBe('▾ History 1')
 
   // THE NEXT POLL AND A REFRESH, the lists still lagging, bring nothing of it back, and nothing posts for it.
   await terylon.clock.advance(30000)

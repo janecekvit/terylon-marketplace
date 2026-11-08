@@ -70,10 +70,19 @@ a{color:#8ab4f8;text-decoration:none}a:hover{color:#b3cdfa}
         </div>
       </div>
     </sc-for>
-    <div style="display: flex; gap: 16px">
-      <button style="background: none; border: 0; padding: 2px 0; color: #a3a29b; font: inherit">▸ Done today 1</button>
-      <button style="background: none; border: 0; padding: 2px 0; color: #a3a29b; font: inherit">▸ Queued 0</button>
-      <button style="background: none; border: 0; padding: 2px 0; color: #a3a29b; font: inherit">▸ History 12</button>
+    <div style="display: flex; flex-wrap: wrap; gap: 8px">
+      <button aria-expanded="true" style="background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 5px 12px; font: inherit">Done today 1</button>
+      <button aria-expanded="false" style="background: #2c2c2a; color: #a3a29b; border: 0; border-radius: 6px; padding: 5px 12px; font: inherit">Queued 0</button>
+      <button aria-expanded="false" style="background: #2c2c2a; color: #a3a29b; border: 0; border-radius: 6px; padding: 5px 12px; font: inherit">History 12</button>
+    </div>
+    <div style="background: #232322; border: 1px solid #383836; border-radius: 10px; padding: 10px 14px; display: flex; flex-direction: column; gap: 7px">
+      <div style="font-weight: 600">Done today <span style="color: #a3a29b; font-weight: 400">· 1</span></div>
+      <a href="Story.dc.html" style="display: flex; align-items: center; gap: 10px; color: #ecebe6">
+        <span style="background: #1c3326; color: #8fd9ad; border-radius: 99px; padding: 1px 8px; font-size: 11px; flex-shrink: 0">merged</span>
+        <span style="color: #a3a29b; font-family: Consolas, ui-monospace, monospace; font-size: 12px; flex-shrink: 0">S-8KD2P</span>
+        <span style="flex-grow: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">The day's statistics sent by mail</span>
+        <span style="color: #a3a29b; flex-shrink: 0">merged 14:20</span>
+      </a>
     </div>
   </div>
 

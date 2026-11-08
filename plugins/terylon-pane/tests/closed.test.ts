@@ -4,7 +4,7 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { NARROW_PANE_PROPS, PANE_PROPS, PLANS, SESSION, exact, refusal, toOverview, world } from './fixtures'
+import { NARROW_PANE_PROPS, PANE_PROPS, PLANS, SESSION, exact, refusal, toOverview, world, foldOf } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 const MOUNT = { ...PANE, surface: 'desktop' } as const
@@ -39,7 +39,7 @@ for (const [surface, props] of [['desktop', PANE_PROPS], ['terminal', PANE_PROPS
     await toOverview(ui)
 
     // BEFORE S44, the fixture's full list: two open goals and one dropped.
-    expect((await ui.find({ key: 'goals-show-closed' }))?.text).toBe('▸ History 1')
+    expect((await foldOf(ui, 'goals-show-closed'))).toBe('▸ History 1')
     expect(await ui.find({ key: 'goals-show-open' })).toBeUndefined()
     expect(await ui.find({ key: 'goal-3' })).toBeDefined()
     expect(await ui.find({ key: 'goal-11' })).toBeDefined()
@@ -47,7 +47,7 @@ for (const [surface, props] of [['desktop', PANE_PROPS], ['terminal', PANE_PROPS
 
     // HISTORY, PRESSED: the closed goals under the fold, the open goals still drawn above it.
     await ui.press({ key: 'goals-show-closed' })
-    expect((await ui.find({ key: 'goals-show-closed' }))?.text).toBe('▾ History 1')
+    expect((await foldOf(ui, 'goals-show-closed'))).toBe('▾ History 1')
     expect((await ui.find({ key: 'goal-1' }))?.text).toContain('Old')
     expect(await ui.find({ key: 'goal-3' })).toBeDefined()
     // A CLOSED GOAL'S TITLE IS DIM, by the engine's own dimming and not by a colour alone, which Desktop drew bright.
@@ -68,7 +68,7 @@ test('BEFORE S44: with no closedCount the closed goals are counted and filtered 
 
   const ui = await $.ui.mount(MOUNT)
   await toOverview(ui)
-  expect((await ui.find({ key: 'goals-show-closed' }))?.text).toBe('▸ History 2')
+  expect((await foldOf(ui, 'goals-show-closed'))).toBe('▸ History 2')
 
   await ui.press({ key: 'goals-show-closed' })
   expect(await ui.find({ key: 'goal-8' })).toBeDefined()
@@ -85,7 +85,7 @@ test('AFTER S44: History · M is closedCount, and the closed goals are read only
 
   const ui = await $.ui.mount(MOUNT)
   await toOverview(ui)
-  expect((await ui.find({ key: 'goals-show-closed' }))?.text).toBe('▸ History 4')
+  expect((await foldOf(ui, 'goals-show-closed'))).toBe('▸ History 4')
 
   // THE POLL, AND A REFRESH OF THE TAB, READ THE OPEN GOALS ONLY.
   for (let poll = 0; poll < 3; poll += 1) {
@@ -102,7 +102,7 @@ test('AFTER S44: History · M is closedCount, and the closed goals are read only
   expect(closedReads(terylon.calls).length).toBe(1)
   expect((await ui.find({ key: 'goal-8' }))?.text).toContain('TEST: earlier output')
   expect(await ui.find({ key: 'goal-5' })).toBeDefined()
-  expect((await ui.find({ key: 'goals-show-closed' }))?.text).toBe('▾ History 4')
+  expect((await foldOf(ui, 'goals-show-closed'))).toBe('▾ History 4')
 
   // KEPT UNTIL THE NEXT PRESS: the poll and a refresh with closedCount unchanged read nothing more.
   await terylon.clock.advance(30000)
@@ -138,7 +138,7 @@ test('AFTER S44: a poll that changes closedCount drops the closed goals read bef
 
   terylon.answers.goals_list = s44(3, [{ id: 11, title: 'Household budget', priority: 2, state: 'done', stories: {} }, ...CLOSED_GOALS])
   await ui.press({ key: 'refresh' })
-  expect((await ui.find({ key: 'goals-show-closed' }))?.text).toBe('▾ History 3')
+  expect((await foldOf(ui, 'goals-show-closed'))).toBe('▾ History 3')
   expect(await ui.find({ key: 'goal-8' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: exact('The closed goals changed since they were read.') })).toBeDefined()
   expect(closedReads(terylon.calls).length).toBe(1)
@@ -156,14 +156,14 @@ test('THE CLOSED LIST, EMPTY: it says so quietly, in either shape; with closedCo
 
   const ui = await $.ui.mount(MOUNT)
   await toOverview(ui)
-  expect((await ui.find({ key: 'goals-show-closed' }))?.text).toBe('▸ History 0')
+  expect((await foldOf(ui, 'goals-show-closed'))).toBe('▸ History 0')
   await ui.press({ key: 'goals-show-closed' })
   expect((await ui.find({ type: 'Text', text: exact('History is empty.') }))?.props.color).toBe('subtle')
   expect(closedReads(terylon.calls)).toEqual([])
 
   terylon.answers.goals_list = { goals: OPEN_GOALS }
   await ui.press({ key: 'refresh' })
-  expect((await ui.find({ key: 'goals-show-closed' }))?.text).toBe('▾ History 0')
+  expect((await foldOf(ui, 'goals-show-closed'))).toBe('▾ History 0')
   expect((await ui.find({ type: 'Text', text: exact('History is empty.') }))?.props.color).toBe('subtle')
 })
 
@@ -182,7 +182,7 @@ test('HISTORY 0 AFTER A RESET: the fold open on goals read before, closedCount 0
   // TERYLON RESET TO FACTORY DEFAULTS: nothing closed any more, said by the next read of the goals.
   terylon.answers.goals_list = s44(0, [])
   await ui.press({ key: 'refresh' })
-  expect((await ui.find({ key: 'goals-show-closed' }))?.text).toBe('▾ History 0')
+  expect((await foldOf(ui, 'goals-show-closed'))).toBe('▾ History 0')
   expect((await ui.find({ type: 'Text', text: exact('History is empty.') }))?.props.color).toBe('subtle')
   expect(await ui.find({ type: 'Text', text: exact('Loading the closed goals…') })).toBeUndefined()
   expect(await ui.find({ key: 'goal-8' })).toBeUndefined()
@@ -213,7 +213,7 @@ test('PRESSED BEFORE THE GOALS ANSWER: the fold never sits on Loading; past the 
   await terylon.clock.advance(8000)
   await terylon.clock.settle()
   await pressed
-  expect((await ui.find({ key: 'goals-show-closed' }))?.text).toMatch(/^▾ History/)
+  expect((await foldOf(ui, 'goals-show-closed'))).toMatch(/^▾ History/)
   expect(await ui.find({ type: 'Text', text: exact('Loading the closed goals…') })).toBeUndefined()
   expect((await ui.find({ key: 'goals-closed-retry' }))?.props.label).toBe('Try again')
   expect(closedReads(terylon.calls)).toEqual([])

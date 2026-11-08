@@ -9,7 +9,7 @@ import type { On } from 'claude-code'
 
 import { checkTree, storeFileOf, treeLine } from '../hooks/health'
 
-import { BRIEFING, FLIGHT, HOUR, MEMORY, PANE_PROPS, PLANS, SESSION, STORY_327, events, exact, lateOnTheLocalDayOf, storyMoved, world, pill, toOverview, moreWith, unfold, toRoot, marked } from './fixtures'
+import { BRIEFING, FLIGHT, HOUR, MEMORY, PANE_PROPS, PLANS, SESSION, STORY_327, events, exact, lateOnTheLocalDayOf, storyMoved, world, pill, toOverview, moreWith, unfold, toRoot, marked, foldOf } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 const SURFACES = ['desktop', 'terminal'] as const
@@ -247,7 +247,7 @@ test('DONE TODAY: an accepted list story says accepted, a merged one merged', as
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
     await unfold(ui, 'fold-done')
-    expect((await ui.find({ key: 'fold-done' }))?.text).toBe('▾ Done today 3')
+    expect((await foldOf(ui, 'fold-done'))).toBe('▾ Done today 3')
     expect((await ui.find({ key: 'done-341' }))?.text).toMatch(/merged\s+#341 S10a cleanup/)
     expect((await ui.find({ key: 'done-94' }))?.text).toMatch(/accepted\s+#94 Weekly cost summary/)
     expect((await ui.find({ key: 'done-94' }))?.text).not.toMatch(/merged/)
@@ -369,7 +369,7 @@ test('A PART OF THE STATUS TAB THAT THROWS is one problem with its reason and st
     expect(await ui.find({ type: 'Text', text: exact('Terylon') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Slots') })).toBeDefined()
     expect(await ui.find({ key: 'fold-policy' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.20.4') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.20.5') })).toBeDefined()
     await ui.unmount()
   }
   expect(terylon.logs.some(log => log.to === 'debug' && log.text.startsWith("terylon-pane: Health's alerts did not draw: "))).toBe(true)
@@ -461,7 +461,7 @@ test('TERYLON_PANE_STATUS=minimal draws Health as plain lines alone: no card, no
     await pill(ui, 'tab-status')
     expect(await ui.find({ type: 'Text', text: exact('Terylon: all well') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Problems: 0') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.20.4') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.20.5') })).toBeDefined()
     expect(await ui.findAll({ type: 'Svg' })).toEqual([])
     expect(await ui.find({ type: 'Text', text: exact('Terylon') })).toBeUndefined()
     await ui.unmount()

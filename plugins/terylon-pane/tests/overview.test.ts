@@ -6,7 +6,7 @@ import { test, expect } from 'claude-code/testing'
 
 import { CARD_FILL, WAITING_TILE_FILL } from '../hooks/drawing'
 
-import { BRIEFING, FLIGHT, GOALS, GOAL_QUESTION, METRICS, NARROW_PANE_PROPS, PANE_PROPS, PLANS, SESSION, STORIES, STORY_327, STORY_333, chipOf, exact, openCockpit, pictures, pill, toOverview, toRoot, unfold, world } from './fixtures'
+import { BRIEFING, FLIGHT, GOALS, GOAL_QUESTION, METRICS, NARROW_PANE_PROPS, PANE_PROPS, PLANS, SESSION, STORIES, STORY_327, STORY_333, chipOf, exact, openCockpit, pictures, pill, toOverview, toRoot, unfold, world, foldOf } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon' } as const
 
@@ -165,7 +165,7 @@ for (const [surface, props, drawnOn] of SURFACES) {
     await openCockpit($)
 
     const ui = await $.ui.mount({ ...PANE, props, surface: drawnOn })
-    expect((await ui.find({ key: 'fold-running' }))?.text).toBe('▾ Running, goal not found 1')
+    expect((await foldOf(ui, 'fold-running'))).toBe('▾ Running, goal not found 1')
     expect((await ui.find({ key: 'story-400' }))?.text).toMatch(/^S-LOST1 Under no open goal/)
     // THE OTHERS STAND ON THEIR GOAL'S CARD, under the same key.
     expect((await ui.find({ key: 'story-333' }))?.text).toMatch(/^#333 running/)
@@ -173,7 +173,7 @@ for (const [surface, props, drawnOn] of SURFACES) {
     // A PRESS SHUTS THE FOLD AND ANOTHER OPENS IT; THE COUNT ALWAYS SAYS IT.
     await ui.press({ key: 'fold-running' })
     expect(await ui.find({ key: 'story-400' })).toBeUndefined()
-    expect((await ui.find({ key: 'fold-running' }))?.text).toBe('▸ Running, goal not found 1')
+    expect((await foldOf(ui, 'fold-running'))).toBe('▸ Running, goal not found 1')
     await ui.press({ key: 'fold-running' })
 
     await ui.press({ key: 'story-400' })
@@ -574,7 +574,7 @@ test('a fold stays open across a walk, and each says what it holds', async ($, o
   await unfold(ui, 'fold-queued')
   await ui.press({ key: 'queued-328' })
   await ui.press({ key: 'back' })
-  expect((await ui.find({ key: 'fold-queued' }))?.text).toBe('▾ Queued 2')
+  expect((await foldOf(ui, 'fold-queued'))).toBe('▾ Queued 2')
   expect(await ui.find({ key: 'queued-328' })).toBeDefined()
 })
 

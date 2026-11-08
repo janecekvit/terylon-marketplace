@@ -2,7 +2,7 @@ import { test, expect } from 'claude-code/testing'
 
 import { CARD_FILL, WAITING_TILE_FILL } from '../hooks/drawing'
 
-import { BRIEFING, FLIGHT, PANE_PROPS, SESSION, chipOf, exact, lateOnTheLocalDayOf, marked, pictures, world } from './fixtures'
+import { BRIEFING, FLIGHT, PANE_PROPS, SESSION, chipOf, exact, lateOnTheLocalDayOf, marked, pictures, world, foldOf } from './fixtures'
 
 // The theme keys the house style allows: a colour is a role, never a hex value.
 const THEME = ['text', 'inactive', 'subtle', 'suggestion', 'success', 'warning', 'error', 'merged', 'userMessageBackground']
@@ -62,20 +62,20 @@ test('the overview: the machine in a line, three tiles, Waiting for you, a card 
     }
 
     // THE FOLDS, SHUT: what they hold is a press away.
-    expect((await ui.find({ key: 'fold-queued' }))?.text).toBe('▸ Queued 2')
+    expect((await foldOf(ui, 'fold-queued'))).toBe('▸ Queued 2')
     expect(await ui.find({ key: 'queued-328' })).toBeUndefined()
     await ui.press({ key: 'fold-queued' })
     expect((await ui.find({ key: 'queued-328' }))?.text).toMatch(/^\s*(?:●\s+)?queued\s+#328 Owner's spec and plan\s+after #324$/)
     expect((await ui.find({ type: 'Text', text: exact('tvoje volba') }))?.props).toMatchObject({ color: 'text', weight: 'semibold' })
     await ui.press({ key: 'fold-queued' })
 
-    expect((await ui.find({ key: 'fold-done' }))?.text).toBe('▸ Done today 1')
+    expect((await foldOf(ui, 'fold-done'))).toBe('▸ Done today 1')
     await ui.press({ key: 'fold-done' })
     expect((await chipOf(ui, 'done-341'))?.dot).toBe('success')
     expect((await ui.find({ key: 'done-341' }))?.text).toContain('#341 S10a cleanup')
     await ui.press({ key: 'fold-done' })
 
-    expect((await ui.find({ key: 'goals-show-closed' }))?.text).toBe('▸ History 1')
+    expect((await foldOf(ui, 'goals-show-closed'))).toBe('▸ History 1')
 
     // THE FOOT: the 30 days alone; Notices and System are in the head, each marked for what waits behind it.
     expect(await ui.find({ type: 'Text', text: exact('Last 30 days 43 stories · $1.10 per story') })).toBeDefined()

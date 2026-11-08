@@ -723,8 +723,8 @@ const MUTATIONS = [
     {
         name: "History's fold shut still draws the closed goals",
         file: "hooks/register.tsx",
-        find: "{isHistoryOpen && (closedLines ?? goalsState.closed.map(item =>",
-        replace: "{(closedLines ?? goalsState.closed.map(item =>",
+        find: "{isHistoryOpen && foldCard('goals-closed-card'",
+        replace: "{foldCard('goals-closed-card'",
     },
     {
         name: "a closed goal's title is drawn as bright as an open one's again",

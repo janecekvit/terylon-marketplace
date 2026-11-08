@@ -147,7 +147,7 @@ type Reset = { from: number; head: number | null; refused: string | null }
 export const PANE = 'terylon'
 
 // The mod's version, said on Health: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.20.4'
+export const MOD_VERSION = '1.20.5'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -3388,13 +3388,18 @@ export const register: Register = on => {
       : <Link href={href} label={label} />)
     const refreshButton = <Button key="refresh" label={COPY.refresh} dimColor onPress={async () => { await tick($, true); await load($, screen) }} />
     const backButton = <Button key="back" label={backLabel(stack)} dimColor onPress={() => back($)} />
-    // A FOLD: its word and its count, ▸ shut and ▾ open, in the quiet tone of what is not asked of the owner yet.
-    const foldButton = (key: string, label: string, isOpen: boolean, onPress: () => unknown = () => toggle($, key)) => (
-      <Button key={key} plain onPress={onPress}>
-        <Text color="subtle">{`${isOpen ? '▾' : '▸'} ${label}`}</Text>
-      </Button>
-    )
+    // A FOLD: a real Button of its word and its count, drawn dim while shut and at full strength while open. The terminal
+    // draws a Button with no state of its own, so there it stays plain, ▸ shut and ▾ open, in the quiet tone.
+    const foldButton = (key: string, label: string, isOpen: boolean, onPress: () => unknown = () => toggle($, key)) => (look.isGraphic
+      ? <Button key={key} label={label} dimColor={isOpen ? undefined : true} onPress={onPress} />
+      : (
+          <Button key={key} plain onPress={onPress}>
+            <Text color="subtle">{`${isOpen ? '▾' : '▸'} ${label}`}</Text>
+          </Button>
+        ))
     const folds = (key: string, buttons: unknown[]) => <Box key={key} flexDirection="row" gap={look.isGraphic ? 'md' : 1} flexWrap="wrap">{buttons}</Box>
+    // AN OPEN FOLD'S CARD: the fold's word and count its heading, its rows inside, one card per fold.
+    const foldCard = (key: string, label: string, count: number, rows: unknown[]) => cardOf(key, headingOf(label, count), null, rows)
     // TWO CARDS SIDE BY SIDE where the pane is wide, each column a column, so its card takes the column's whole width and
     // none sits at the width of its words; one under the other elsewhere.
     const twoColumns = (key: string, left: unknown, right: unknown) => (look.isWide && left !== null && right !== null
@@ -5095,7 +5100,8 @@ export const register: Register = on => {
             foldButton('fold-queued', `${COPY.queued} ${current.queued.length}`, isQueuedOpen),
             foldButton('goals-show-closed', `${COPY.goalsHistory} ${goalsState.closedCount}`, isHistoryOpen, () => showGoals($, isHistoryOpen ? 'open' : 'closed')),
           ])}
-          {isElsewhereOpen && elsewhere.map(item =>
+          {/* EACH OPEN FOLD ITS OWN CARD, stacked in the folds' order. */}
+          {isElsewhereOpen && elsewhere.length > 0 && foldCard('fold-running-card', COPY.foldRunning, elsewhere.length, elsewhere.map(item =>
             rowOf({
               key: `story-${item.story}`,
               kind: null,
@@ -5110,8 +5116,8 @@ export const register: Register = on => {
                   {(item.stageLine ?? item.step) !== null && <Text color="inactive" size="footnote" wrap="truncate-end">{item.stageLine ?? item.step}</Text>}
                 </Box>
               ),
-            }))}
-          {isDoneOpen && (current.doneToday.length === 0 ? quiet(elements, COPY.nothingDone) : current.doneToday.map(item =>
+            })))}
+          {isDoneOpen && foldCard('fold-done-card', COPY.doneToday, current.doneToday.length, current.doneToday.length === 0 ? [quiet(elements, COPY.nothingDone)] : current.doneToday.map(item =>
             rowOf({
               key: `done-${item.story}`,
               kind: item.isAccepted === true ? COPY.kindAccepted : COPY.kindMerged,
@@ -5121,7 +5127,7 @@ export const register: Register = on => {
               detail: item.detail,
               onPress: () => go({ screen: 'story', story: item.story }),
             })))}
-          {isQueuedOpen && (current.queued.length === 0 ? quiet(elements, COPY.nothingQueued) : current.queued.map(item =>
+          {isQueuedOpen && foldCard('fold-queued-card', COPY.queued, current.queued.length, current.queued.length === 0 ? [quiet(elements, COPY.nothingQueued)] : current.queued.map(item =>
             rowOf({
               key: `queued-${item.story}`,
               kind: item.isHeld ? COPY.kindHeld : COPY.kindQueued,
@@ -5130,7 +5136,7 @@ export const register: Register = on => {
               detailTone: item.isHeld ? 'attention' : 'subtle',
               onPress: () => go({ screen: 'story', story: item.story }),
             })))}
-          {isHistoryOpen && (closedLines ?? goalsState.closed.map(item =>
+          {isHistoryOpen && foldCard('goals-closed-card', COPY.goalsHistory, goalsState.closedCount, closedLines ?? goalsState.closed.map(item =>
             rowOf({
               key: `goal-${item.id}`,
               // THE PRIORITY AS A CHIP: P1 in warning, the others inactive.

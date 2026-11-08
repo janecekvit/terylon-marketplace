@@ -509,10 +509,31 @@ export async function marked(ui: Mounted, key: 'tab-bell' | 'tab-status'): Promi
 }
 
 // A fold opened, where a press on an earlier surface has not opened it already: its state stays across mounts.
-export async function unfold(ui: { find: (query: { key: string }) => Promise<{ text?: string } | undefined> ; press: (query: { key: string }) => Promise<unknown> }, key: string): Promise<void> {
-  if (!String((await ui.find({ key }))?.text ?? '').includes('▾')) {
+export async function unfold(ui: { find: (query: { key: string }) => Promise<{ text?: string; props?: Record<string, unknown> } | undefined> ; press: (query: { key: string }) => Promise<unknown> }, key: string): Promise<void> {
+  if (!isFoldOpen(await ui.find({ key }))) {
     await ui.press({ key })
   }
+}
+
+// A FOLD'S STATE AS DRAWN: on the terminal its ▾, on a graphic surface a Button that is not dim.
+export function isFoldOpen(button: { text?: string; props?: Record<string, unknown> } | undefined): boolean {
+  if (button === undefined) {
+    return false
+  }
+
+  return button.props?.plain === true ? String(button.text ?? '').startsWith('▾') : button.props?.dimColor !== true
+}
+
+// A FOLD AS ITS STATE AND ITS WORDS, read alike on every surface: "▾ History 1" open, "▸ History 1" shut; undefined
+// where it is not drawn.
+export async function foldOf(ui: { find: (query: { key: string }) => Promise<{ text?: string; props?: Record<string, unknown> } | undefined> }, key: string): Promise<string | undefined> {
+  const button = await ui.find({ key })
+
+  if (button === undefined) {
+    return undefined
+  }
+
+  return button.props?.plain === true ? String(button.text ?? '') : `${isFoldOpen(button) ? '▾' : '▸'} ${String(button.text ?? '')}`
 }
 
 // More, with a fold of it open: Health's Policy or Diagnostics, Notices' What the machine did, Memory's About you…

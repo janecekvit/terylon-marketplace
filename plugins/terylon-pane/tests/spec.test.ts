@@ -7,7 +7,7 @@
 import { test, expect } from 'claude-code/testing'
 
 import { inks, strokedCards } from './contrast'
-import { GOALS, NARROW_PANE_PROPS, PANE_PROPS, SESSION, exact, leaderRefusal, refusal, world, toOverview, toNewGoal, unfold } from './fixtures'
+import { GOALS, NARROW_PANE_PROPS, PANE_PROPS, SESSION, exact, leaderRefusal, refusal, world, toOverview, toNewGoal, unfold, foldOf } from './fixtures'
 
 const OVERVIEW = '# Overview\n\nKeep the budget in one file.\n'
 const NOTES = '# Notes\n\nThe bank exports CSV.\n'
@@ -173,7 +173,7 @@ for (const { name, surface, props } of SURFACES) {
     expect((await ui.find({ key: 'spec-revise' }))?.props.label).toBe('Revise…')
     expect((await ui.findAll({ type: 'Link' })).some(link => link.props.label === 'Goal in the console ↗' && String(link.props.href).endsWith('/?view=goal&goal=92'))).toBe(true)
     await unfold(ui, 'fold-decisions')
-    expect((await ui.find({ key: 'fold-decisions' }))?.text).toBe('▾ Your decisions on earlier plans 1')
+    expect((await foldOf(ui, 'fold-decisions'))).toBe('▾ Your decisions on earlier plans 1')
     expect(await ui.find({ type: 'Text', text: exact('Plan 7 · 5 Oct · “Split the export from the import”') })).toBeDefined()
     expect(await ui.find({ key: 'spec-replan' })).toBeUndefined()
 
