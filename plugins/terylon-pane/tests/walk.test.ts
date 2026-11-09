@@ -3,7 +3,7 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { GOAL_QUESTION, BRIEFING, PANE_PROPS, SESSION, exact, world } from './fixtures'
+import { GOAL_QUESTION, BRIEFING, PANE_PROPS, SESSION, exact, world, pill, toOverview, toRoot } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -11,8 +11,8 @@ async function isLoading(ui: { findAll: (query: Record<string, unknown>) => Prom
   return (await ui.findAll({ type: 'Text' })).some(node => /Loading/.test(node.text))
 }
 
-for (const [tab, tool, title] of [['tab-goals', 'goals_list', 'Goals did not load'], ['tab-bell', 'leader_status', 'Notices did not load']] as const) {
-  test(`${tab}: a call that never answers ends as the tab's error with its reason, never "Loading…" forever`, async ($, on) => {
+for (const [tab, tool, title] of [['refresh', 'goals_list', 'Goals did not load'], ['tab-bell', 'notices_list', 'Notices did not load']] as const) {
+  test(`${tab}: a call that never answers ends as the screen's error with its reason, never "Loading…" forever`, async ($, on) => {
     const terylon = world(on)
     await $.session.start(SESSION)
     await terylon.clock.settle()
@@ -35,7 +35,7 @@ for (const [tab, tool, title] of [['tab-goals', 'goals_list', 'Goals did not loa
 
     // PRESSED AGAIN, it loads: nothing is left stuck.
     terylon.hang.delete(tool)
-    await ui.press({ key: 'tab-queue' })
+    await toRoot(ui)
     await ui.press({ key: tab })
     await terylon.clock.settle()
     expect(await isLoading(ui)).toBe(false)
@@ -59,15 +59,15 @@ test('a goals or bell value an earlier version of the mod left behind is replace
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   await terylon.clock.settle()
   expect(await isLoading(ui)).toBe(false)
   expect(await ui.find({ type: 'Text', text: exact('P1 · Agentic OS') })).toBeDefined()
 
-  await ui.press({ key: 'tab-bell' })
+  await pill(ui, 'tab-bell')
   await terylon.clock.settle()
   expect(await isLoading(ui)).toBe(false)
-  expect(await ui.find({ key: 'notice-117' })).toBeDefined()
+  expect(await ui.find({ key: 'notice-card-117' })).toBeDefined()
 })
 
 test('the same prompt is posted into the chat once, however often it is pressed', async ($, on) => {
@@ -77,7 +77,6 @@ test('the same prompt is posted into the chat once, however often it is pressed'
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'question-606' })
   await ui.press({ key: 'answer-606' })
   // A DOUBLE CLICK, then a press a moment later.
   await Promise.all([ui.press({ key: 'answer-discuss' }), ui.press({ key: 'answer-discuss' })])
@@ -100,7 +99,6 @@ test('an answer is sent once while it is being sent, however often Send is press
   terylon.hang.add('question_answer')
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'question-606' })
   await ui.press({ key: 'answer-606' })
   await ui.input({ key: 'answer-text', text: 'vzhled webu na mobilu', kind: 'change' })
   // A DOUBLE CLICK: both presses dispatched before the screen draws "sending".
@@ -112,15 +110,19 @@ test('an answer is sent once while it is being sent, however often Send is press
   expect(sent).toEqual([{ server: 'plugin:terylon-os:terylon', tool: 'question_answer', args: { question: 606, answer: 'vzhled webu na mobilu' } }])
 })
 
-test('one story and one PR opened are said in the singular on the Status tab and the Bell', async ($, on) => {
+test('one story and one PR opened are said in the singular on the overview and Health', async ($, on) => {
   const terylon = world(on)
   terylon.answers.metrics = { stories: 1, opened: 1, merged: 0, costPerStoryUsd: 46.44, rows: [] }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
+  await toOverview(ui)
   await terylon.clock.settle()
-  expect(await ui.find({ type: 'Text', text: exact('1 story · $46.44 per story · 0 merged · 1 PR opened') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('Last 30 days 1 story · $46.44 per story') })).toBeDefined()
+  await pill(ui, 'tab-status')
+  await terylon.clock.settle()
+  expect(await ui.find({ type: 'Text', text: exact('Story') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('PR opened') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /1 stories|1 PRs opened|open PR/ })).toBeUndefined()
 })

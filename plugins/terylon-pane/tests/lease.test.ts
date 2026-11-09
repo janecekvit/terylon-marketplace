@@ -5,7 +5,7 @@
 import { test, expect } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { PANE_PROPS, SESSION, WORLD_NOW, events, exact, storyMoved, world } from './fixtures'
+import { PANE_PROPS, SESSION, WORLD_NOW, events, exact, storyMoved, world, pill, moreWith } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 const BAND = { plugin: 'terylon-pane', surface: 'desktop', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 3, bodyColumns: 80, scroll: { top: 0, bodyRows: 3 }, view: {} } } as never
@@ -50,7 +50,7 @@ function movingTerylon(terylon: ReturnType<typeof world>): { moved: Record<strin
 
 async function diagnosticsLine($: Parameters<Parameters<typeof test>[1]>[0], text: string | RegExp): Promise<boolean> {
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
+  await moreWith(ui, 'fold-diagnostics')
   const found = await ui.find({ type: 'Text', text: typeof text === 'string' ? exact(text) : text })
   await ui.unmount()
 
@@ -75,7 +75,7 @@ test('ANOTHER SESSION HOLDS THE LEASE: this one reads no events and posts nothin
   expect(await diagnosticsLine($, /^signaller: another \(ession-b\) since \d\d:\d\d$/)).toBe(true)
   // Not reading the events is no silence: the watchdog says nothing.
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
+  await moreWith(ui, 'fold-diagnostics')
   expect(await ui.find({ type: 'Text', text: /^events_since has not answered/ })).toBeUndefined()
 })
 
@@ -265,7 +265,7 @@ test('NO SIGNALLER FOR LONGER THAN A LEASE is a problem on the Status tab with i
   await terylon.clock.advance(30000)
   await terylon.clock.advance(30000)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
+  await moreWith(ui, 'fold-diagnostics')
   expect(await ui.find({ type: 'Text', text: exact('⚠ No session is posting the done-signal') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^1\. Type in the Claude session you work in/ })).toBeDefined()
 

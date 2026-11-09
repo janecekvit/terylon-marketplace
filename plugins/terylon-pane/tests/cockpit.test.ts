@@ -1,5 +1,5 @@
 // TERYLON COCKPIT (Terylon S68): the pane renamed and put on Terylon's tones, words and refs, as the owner approved its
-// boards. Its one command, its tabs Waiting · Goals · Notices · Memory · Health, the band's Notices, Terylon all well on
+// boards. Its one command, the overview with its pills Notices · Memory · Health, the band's Notices, Terylon all well on
 // the status line; every subject by its ref and the console's ?view= addresses; the setup token's tokens and its
 // phrase, never a $ figure; and a host proof's subjects told nowhere. Each on the desktop, the narrow dock and the
 // terminal where it is drawn.
@@ -9,7 +9,7 @@ import { test, expect } from 'claude-code/testing'
 import { goalItems, planItems, storyView } from '../hooks/queue'
 import * as words from '../hooks/words'
 
-import { BASE, BRIEFING, FLIGHT, HOUR, NARROW_PANE_PROPS, PANE_PROPS, SESSION, STORIES, STORY_327, WORLD_NOW, bandProps, chipOf, events, exact, lateOnTheLocalDayOf, storyMoved, world } from './fixtures'
+import { BASE, BRIEFING, FLIGHT, HOUR, NARROW_PANE_PROPS, PANE_PROPS, SESSION, STORIES, STORY_327, WORLD_NOW, bandProps, chipOf, events, exact, lateOnTheLocalDayOf, storyMoved, world, pill, toOverview, unfold } from './fixtures'
 import { LIVE_GOAL, LIVE_PLAN, LIVE_STORY, REF_BRIEFING, REF_FLIGHT, REF_GOAL_3, REF_PLANS, REF_STORIES, REF_STORY_327, REF_STORY_333, SETUP_BRIEFING, SETUP_FLIGHT, SETUP_STORIES } from './shapes'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon' } as const
@@ -46,7 +46,7 @@ function refWorld(on: Parameters<typeof world>[0], options: Parameters<typeof wo
 // ---------------------------------------------------------------------------------------------------- the name
 
 for (const [surface, props, drawnOn] of SURFACES) {
-  test(`${surface}: Terylon Cockpit in full; its tabs read Waiting · Goals · Notices · Memory · Health; /terylon-cockpit alone`, async ($, on) => {
+  test(`${surface}: Terylon Cockpit in full; the overview's head reads Notices · System; no footer names the command`, async ($, on) => {
     const terylon = world(on)
     await $.session.start(SESSION)
     await terylon.clock.settle()
@@ -54,25 +54,27 @@ for (const [surface, props, drawnOn] of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, props, surface: drawnOn })
     const labels = []
 
-    for (const key of ['tab-queue', 'tab-goals', 'tab-bell', 'tab-memory', 'tab-status']) {
+    for (const key of ['tab-bell', 'tab-status']) {
       labels.push(String((await ui.find({ key }))?.props.label ?? ''))
     }
 
-    expect(labels).toEqual(['Waiting', 'Goals', 'Notices · 2', 'Memory', 'Health'])
-    expect(await ui.find({ type: 'Text', text: exact('/terylon-cockpit') })).toBeDefined()
+    expect(labels).toEqual(['Notices', 'System'])
+    // NO SCREEN NAMES THE COMMAND.
+    expect(await ui.find({ type: 'Text', text: exact('/terylon-cockpit') })).toBeUndefined()
 
-    // NO OLD NAME ON ANY TAB, AND NO COMMAND BUT ONE: walked through every tab.
-    const seen: string[] = []
+    // NO OLD NAME ANYWHERE, AND NO COMMAND BUT ONE: walked through the overview and More.
+    const seen: string[] = wordsOf(await ui.drawn())
 
-    for (const key of ['tab-queue', 'tab-goals', 'tab-bell', 'tab-memory', 'tab-status']) {
-      await ui.press({ key })
-      seen.push(...wordsOf(await ui.drawn()))
-    }
+    await toOverview(ui)
+    seen.push(...wordsOf(await ui.drawn()))
+    await pill(ui, 'tab-status')
+    seen.push(...wordsOf(await ui.drawn()))
+    expect(await ui.find({ type: 'Text', text: exact('/terylon-cockpit') })).toBeUndefined()
 
     // The fixtures' goal is titled "Agentic OS": a title Terylon sent is drawn as it came, so only the pane's words count.
     expect(seen.filter(word => /\b(Queue|Bell|Status)\b|(^|\s)\/terylon(-pane|-memory)?(\s|$)/.test(word))).toEqual([])
     expect(seen.filter(word => /Agentic OS/.test(word) && !/Agentic OS(?! ●| ⚠|:)/.test(word))).toEqual([])
-    expect(seen).toEqual(expect.arrayContaining(['Notices in the console ↗', 'Health ↗']))
+    expect(seen).toEqual(expect.arrayContaining(['Health ↗']))
     await ui.unmount()
   })
 }
@@ -101,20 +103,18 @@ for (const surface of ['desktop', 'terminal'] as const) {
   })
 }
 
-test('Health says the machine Terylon, all well, in its colour, and the Notices tab links the console\'s notices', async ($, on) => {
+test('Health says the machine Terylon, all well, in its colour, and names no tool', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, props: PANE_PROPS, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
-  expect(await ui.find({ type: 'Text', text: exact('TERYLON') })).toBeDefined()
+  await pill(ui, 'tab-status')
+  expect(await ui.find({ type: 'Text', text: exact('Terylon') })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: exact('all well') }))?.props.color).toBe('success')
 
-  await ui.press({ key: 'tab-bell' })
-  expect((await ui.find({ type: 'Link', text: 'Notices in the console ↗' }))?.props.href).toBe(`${BASE}/?view=waiting&notices=open`)
   expect((await ui.find({ type: 'Link', text: 'Health ↗' }))?.props.href).toBe(`${BASE}/?view=health`)
-  expect(await ui.find({ type: 'Text', text: exact('Mark handled is notice_handle, which decides nothing about work. Pause and Resume are on Waiting and Health.') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /notice_handle/ })).toBeUndefined()
 })
 
 // ------------------------------------------------------------------------------------------------------- refs
@@ -127,8 +127,10 @@ for (const [surface, props, drawnOn] of SURFACES) {
 
     const ui = await $.ui.mount({ ...PANE, props, surface: drawnOn })
     expect((await ui.find({ key: 'merge-327' }))?.text).toMatch(/^\s*(?:●\s+)?merge\s+S-C7Y32 Events since the last look · verified in pr-196 · waiting for merge$/)
-    expect((await ui.find({ key: 'plan-41' }))?.text).toMatch(/^\s*(?:●\s+)?plan\s+Plan P-Y46G7 · Agentic OS · 3 stories$/)
+    expect((await ui.find({ key: 'plan-41' }))?.text).toMatch(/^\s*(?:●\s+)?plan\s+P-Y46G7 Agentic OS · 3 stories$/)
     expect((await ui.find({ key: 'story-333' }))?.text).toMatch(/^S-BD6XS Direct dispatch/)
+    await unfold(ui, 'fold-queued')
+    await unfold(ui, 'fold-done')
     expect((await ui.find({ key: 'queued-328' }))?.text).toMatch(/S-01234 Owner's spec and plan/)
     expect((await ui.find({ key: 'done-341' }))?.text).toMatch(/S-HTMX6 S10a cleanup/)
     expect(wordsOf(await ui.drawn()).filter(word => /#(327|333|328|341)\b/.test(word))).toEqual([])
@@ -164,7 +166,7 @@ for (const [surface, props, drawnOn] of SURFACES) {
     expect((await ui.find({ key: 'goal-story-333' }))?.text).toMatch(/S-BD6XS Direct dispatch/)
     expect((await ui.find({ type: 'Link', text: 'Goal in the console ↗' }))?.props.href).toBe(`${BASE}/?view=goal&goal=G-GQGTA`)
     await ui.press({ key: 'goal-story-333' })
-    expect((await ui.find({ key: 'back' }))?.props.label).toBe('‹ Goal G-GQGTA')
+    expect((await ui.find({ key: 'back' }))?.props.label).toBe('‹ G-GQGTA')
 
     // THE PROMPT A STORY POSTS NAMES IT BY ITS REF.
     await ui.press({ key: 'summarise' })
@@ -249,14 +251,15 @@ for (const [surface, props, drawnOn] of SURFACES) {
     await terylon.clock.settle()
 
     const ui = await $.ui.mount({ ...PANE, props, surface: drawnOn })
+    await unfold(ui, 'fold-done')
     const seen = wordsOf(await ui.drawn())
+    // THE OVERVIEW'S HEAD: today's tokens, never a $.
+    expect(await ui.find({ type: 'Text', text: exact('all well · connected · 2/4 slots · 66 k tokens today') })).toBeDefined()
     // A ROW, A TIGHT PLACE: its tokens and the phrase's short form; the narrow dock drops a row's detail.
     if (surface !== 'narrow dock') {
       expect((await ui.find({ key: 'done-341' }))?.text).toMatch(/66 k tokens · cost not known$/)
       expect((await ui.find({ key: 'story-333' }))?.text).toMatch(/5\/8 · 48 k tokens · cost not known$/)
     }
-
-    expect(seen.some(word => /66 k tokens · cost not known/.test(word))).toBe(true)
 
     await ui.press({ key: 'story-333' })
     seen.push(...wordsOf(await ui.drawn()))
@@ -271,7 +274,7 @@ for (const [surface, props, drawnOn] of SURFACES) {
     }
 
     await ui.press({ key: 'back' })
-    await ui.press({ key: 'tab-status' })
+    await pill(ui, 'tab-status')
     seen.push(...wordsOf(await ui.drawn()))
     expect(await ui.find({ type: 'Text', text: exact('66 k tokens today · cost not known on the setup token') })).toBeDefined()
 
@@ -388,8 +391,8 @@ for (const surface of ['desktop', 'terminal'] as const) {
     expect((await chipOf(ui, 'plan-41'))?.dot).toBe('merged')
     expect((await chipOf(ui, 'question-9'))?.dot).toBe('warning')
     expect((await chipOf(ui, 'blocked-87'))?.dot).toBe('error')
+    await unfold(ui, 'fold-done')
     expect((await chipOf(ui, 'done-341'))?.dot).toBe('success')
-    expect((await ui.find({ type: 'Text', text: exact(' · 1') }))?.props.color).toBe('success')
 
     await ui.press({ key: 'merge-327' })
     await ui.press({ key: 'open-story-327' })
@@ -405,8 +408,7 @@ test('a plan the briefing names by number alone is drawn on Waiting by the ref p
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, props: PANE_PROPS, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
-  await ui.press({ key: 'tab-queue' })
+  await toOverview(ui)
   await terylon.clock.advance(30_000)
   await terylon.clock.settle()
 
@@ -422,7 +424,7 @@ test('a list story merged is told accepted on its goal\'s stories, as the glossa
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, props: PANE_PROPS, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   await ui.press({ key: 'goal-3' })
 
   const row = await ui.find({ key: 'goal-story-401' })
@@ -438,7 +440,8 @@ test('a plan whose stories wait for none draws no chain: its order is its rows',
 
   for (const surface of ['desktop', 'terminal'] as const) {
     const ui = await $.ui.mount({ ...PANE, props: PANE_PROPS, surface })
-    await ui.press({ key: 'tab-goals' })
+    await toOverview(ui)
+    await ui.press({ key: 'goal-3' })
     expect(await ui.find({ key: 'plan-41' })).toBeDefined()
     expect(await ui.find({ key: 'plan-41-chain' })).toBeUndefined()
     await ui.unmount()

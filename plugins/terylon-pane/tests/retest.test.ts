@@ -3,7 +3,7 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { PANE_PROPS, SESSION, chipOf, exact, pictures, world } from './fixtures'
+import { PANE_PROPS, SESSION, chipOf, exact, pictures, world, toOverview, toAddTask } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 const MOUNT = { ...PANE, surface: 'desktop' } as const
@@ -17,6 +17,7 @@ const TITLE = 'Health: a Check now button'
 type Form = { input: (input: never) => Promise<unknown>; press: (input: never) => Promise<unknown>; select: (input: never) => Promise<unknown> }
 
 async function openNewTask(ui: Form, goal: number): Promise<void> {
+  await toAddTask(ui)
   await ui.input({ key: 'quick-add', text: TITLE, kind: 'change' } as never)
   await ui.press({ key: 'quick-open' } as never)
   await ui.select({ key: 'add-goal', value: String(goal) } as never)
@@ -131,8 +132,9 @@ test('A VERIFIED LIST STORY WAITS FOR AN ACCEPTANCE: its row, kind and words say
     // A REPOSITORY STORY KEEPS ITS MERGE: the row, its kind and its link to the console.
     expect((await ui.find({ key: 'merge-327' }))?.text).toMatch(/merge[\s\S]*verified in pr-196 · waiting for merge/)
 
-    // THE CARD'S HINT names both, as both wait.
-    expect(await ui.find({ type: 'Text', text: exact('decide here · merge in the console, accept on its card') })).toBeDefined()
+    // EACH ROW'S ACT IS ITS OWN: Accept on the list story's, the console's link on the repository story's.
+    expect((await ui.find({ key: 'open-story-352' }))?.props.label).toBe('Accept')
+    expect((await ui.find({ type: 'Link', text: 'Merge ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=merge&story=327')
 
     await ui.unmount()
   }
@@ -213,7 +215,8 @@ test('THE PLAN CARD DRAWS NO STRAY SIZE NODE: the size is said once, on its stor
 
   for (const surface of ['desktop', 'terminal'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-goals' })
+    await toOverview(ui)
+    await ui.press({ key: 'goal-3' })
     expect((await ui.find({ key: 'plan-145-story-360' }))?.text).toMatch(/^\s*(?:●\s+)?1\s+TEST 6: one story\s+M$/)
     // ONE STORY HAS NO ORDER: no chain is drawn, and no size stands beside it.
     expect(await ui.find({ key: 'plan-145-chain' })).toBeUndefined()
@@ -229,7 +232,8 @@ test('A PLAN OF SEVERAL STORIES draws its order alone: each size is on its story
 
   for (const surface of ['desktop', 'terminal'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-goals' })
+    await toOverview(ui)
+    await ui.press({ key: 'goal-3' })
     expect(await ui.find({ key: 'plan-41-chain' })).toBeDefined()
     // THE ONLY ARROWS ARE THE ORDER'S: the chain is an Svg on the desktop, "1 → 2" on the terminal.
     expect((await ui.findAll({ type: 'Text' })).map(node => node.text).filter(words => words.includes('→'))).toEqual(surface === 'desktop' ? [] : ['1 → 2'])

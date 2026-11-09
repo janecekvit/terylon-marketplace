@@ -28,14 +28,14 @@ On 2026-10-21 the operator decided that merge alone carries enough risk to need 
 |---|---|---|
 | Approve · Rethink… | `plan_approve` · `plan_rethink` | a plan that waits |
 | Return… · Unblock · Abandon… · Stop · Accept | `story_return` · `story_unblock` · `story_abandon` · `story_stop` · `story_accept` | a story, by its state |
-| Pause… · Resume | `leader_pause` · `leader_resume` | the queue, the Status tab |
+| Pause the leader… · Resume | `leader_pause` · `leader_resume` | Health; Resume on the paused card, on the overview and Health |
 | Drop goal… | `goal_drop` | an open goal |
 | Confirm · Drop | `memory_confirm` · `memory_drop` | a memory proposal |
-| Edit · Save | `policy_save` | the policy, on the Status tab |
+| Edit · Save | `policy_save` | the policy, on Health |
 | **Merge in the console ↗** | **never**: `story_merge` | a story verified in a repository |
 
 - An act calls its tool only when the owner presses it, never when a card is drawn.
-- A row in *Waiting for you* opens its subject; the act is on the subject's card.
+- A row in *Waiting for you* opens its subject. Since the overview of 1.19.0 it also ends in its act, the owner's redesign: *Approve* and *Accept* are taken on that press, as on the subject's card, and merge stays a link into the console.
 - Every outcome is said on the card: Terylon's answer, Terylon's refusal word for word with the console as the way round, or Claude Code's refusal with the rules to add.
 
 ## Consequences

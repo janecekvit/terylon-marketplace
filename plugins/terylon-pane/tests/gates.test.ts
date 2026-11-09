@@ -14,14 +14,17 @@ const PATHS: string[][] = [
   ['story-333', 'story-goal'],
   ['story-329'],
   ['merge-327', 'open-story-327'],
-  ['question-9', 'answer-9'],
-  ['question-606', 'answer-606'],
+  ['answer-9'],
+  ['question-606'],
   ['plan-41', 'open-plan-41'],
-  ['tab-goals'],
-  ['tab-goals', 'goal-3'],
+  ['goal-3'],
+  ['goal-3', 'fold-add-task'],
+  ['goal-new-open'],
+  ['goals-show-closed'],
   ['tab-bell'],
-  ['tab-memory'],
-  ['tab-memory', 'mem-edit-0-0'],
+  ['tab-bell'],
+  ['tab-status', 'fold-memory-owner', 'mem-edit-0-0'],
+  ['tab-status', 'fold-policy'],
 ]
 
 test('the guard refuses every one of the owner\'s gates, and allows no gate in its own list', () => {
@@ -50,7 +53,7 @@ test(`pressing every Button on every screen of the ${surface} surface calls no g
 
   {
     const pane = await $.ui.mount({ plugin: 'terylon-pane', surface, component: 'Pane', requestId: 'terylon', props: PANE_PROPS })
-    const paths = surface === 'mobile' ? PATHS : [...PATHS, ['quick-open'], ['quick-open', 'add-send']]
+    const paths = surface === 'mobile' ? PATHS.filter(path => !path.includes('goal-new-open')) : [...PATHS, ['goal-3', 'quick-open'], ['goal-3', 'quick-open', 'add-send']]
 
     for (const path of paths) {
       await $.command.run({ command: 'terylon-cockpit', args: '' } as never)
@@ -67,7 +70,7 @@ test(`pressing every Button on every screen of the ${surface} surface calls no g
       }
 
       // What leaves the screen goes last, so everything on it is pressed while it is still drawn.
-      const leaving = (key: string) => key === 'back' || key.startsWith('tab-')
+      const leaving = (key: string) => key === 'back' || key === 'refresh' || key.startsWith('tab-')
       const keys = (await pane.findAll({ type: 'Button' }))
         .map(button => button.key)
         .filter((key): key is string => key !== undefined)

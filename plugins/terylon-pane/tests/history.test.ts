@@ -7,7 +7,7 @@ import { test, expect } from 'claude-code/testing'
 
 import { deleteLink } from '../hooks/queue'
 
-import { BASE, NARROW_PANE_PROPS, PANE_PROPS, PLANS, SESSION, events, exact, refusal, storyMoved, world } from './fixtures'
+import { BASE, BRIEFING, NARROW_PANE_PROPS, PANE_PROPS, PLANS, SESSION, events, exact, refusal, storyMoved, world, toOverview, toAddTask, foldOf } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 const SURFACES = [['desktop', PANE_PROPS, 'desktop'], ['terminal', PANE_PROPS, 'terminal'], ['narrow dock', NARROW_PANE_PROPS, 'desktop']] as const
@@ -27,7 +27,7 @@ const CLOSED_GOALS = [
   { id: 5, title: 'Merge proof', priority: 3, state: 'dropped', stories: { abandoned: 1 } },
 ]
 
-// Plan 144 is goal 8's, still proposed, so History draws it: it leaves with its goal.
+// Plan 144 is goal 8's, still proposed: it leaves with its goal.
 const PLAN_144 = { id: 144, goal: 8, goalTitle: 'TEST: earlier output', state: 'proposed', estimateUsd: 4, comment: null, stories: [{ id: 400, title: 'Old work', criteria: [], after: [], size: 'M', estimateUsd: 2 }] }
 
 // The feed's one transition for a deleted goal, as Terylon S47 sends it: no title, none of its earlier transitions.
@@ -53,8 +53,8 @@ for (const [surface, props, drawnOn] of SURFACES) {
     await terylon.clock.settle()
 
     const ui = await $.ui.mount({ ...PANE, props, surface: drawnOn })
-    await ui.press({ key: 'tab-goals' })
-    expect((await ui.find({ key: 'goals-show-closed' }))?.props.label).toBe('History · 2')
+    await toOverview(ui)
+    expect((await foldOf(ui, 'goals-show-closed'))).toBe('▸ History 2')
     expect(await ui.find({ type: 'Text', text: /Closed/ })).toBeUndefined()
     // UNDER OPEN, NO DELETE…: only a goal in History is deleted.
     expect(await ui.findAll({ type: 'Link', text: DELETE_LINK })).toHaveLength(0)
@@ -78,8 +78,8 @@ for (const [surface, props, drawnOn] of SURFACES) {
     await terylon.clock.settle()
 
     const ui = await $.ui.mount({ ...PANE, props, surface: drawnOn })
-    await ui.press({ key: 'tab-goals' })
-    expect((await ui.find({ key: 'goals-show-closed' }))?.props.label).toBe('History · 0')
+    await toOverview(ui)
+    expect((await foldOf(ui, 'goals-show-closed'))).toBe('▸ History 0')
     await ui.press({ key: 'goals-show-closed' })
     expect((await ui.find({ type: 'Text', text: exact('History is empty.') }))?.props.color).toBe('subtle')
     expect(await ui.findAll({ type: 'Link', text: DELETE_LINK })).toHaveLength(0)
@@ -94,7 +94,7 @@ for (const [surface, props, drawnOn] of SURFACES) {
     await terylon.clock.settle()
 
     const ui = await $.ui.mount({ ...PANE, props, surface: drawnOn })
-    await ui.press({ key: 'tab-goals' })
+    await toOverview(ui)
     await ui.press({ key: 'goals-show-closed' })
     // DELETED IN THE CONSOLE meanwhile: closedCount says so, while the closed list read right after still names it.
     terylon.answers.goals_list = s44(1)
@@ -108,10 +108,10 @@ for (const [surface, props, drawnOn] of SURFACES) {
     await ui.press({ key: 'back' })
     expect(await ui.find({ key: 'goal-8' })).toBeUndefined()
     expect(await ui.find({ key: 'goal-5' })).toBeDefined()
-    expect((await ui.find({ key: 'goals-show-closed' }))?.props.label).toBe('History · 1')
+    expect((await foldOf(ui, 'goals-show-closed'))).toBe('▾ History 1')
 
     // A LIST READ RIGHT AFTER THE DELETION, still naming it, does not bring it back.
-    await ui.press({ key: 'goals-show-open' })
+    await ui.press({ key: 'goals-show-closed' })
     await ui.press({ key: 'goals-show-closed' })
     expect(await ui.find({ key: 'goal-8' })).toBeUndefined()
   })
@@ -129,7 +129,7 @@ for (const [surface, props, drawnOn] of SURFACES) {
     expect(await ui.find({ key: 'story-error' })).toBeUndefined()
     expect(await ui.find({ key: 'back' })).toBeDefined()
     await ui.press({ key: 'back' })
-    expect(await ui.find({ key: 'tab-queue' })).toBeDefined()
+    expect(await ui.find({ key: 'tab-status' })).toBeDefined()
   })
 
   test(`${surface}: size S is offered beside M, L and XL, M stays the default, and S is what tasks_add sends`, async ($, on) => {
@@ -138,6 +138,7 @@ for (const [surface, props, drawnOn] of SURFACES) {
     await terylon.clock.settle()
 
     const ui = await $.ui.mount({ ...PANE, props, surface: drawnOn })
+    await toAddTask(ui)
     await ui.input({ key: 'quick-add', text: 'A small fix' })
     expect((await ui.find({ key: 'add-size' }))?.props.options).toEqual([{ value: 'S', label: 'S' }, { value: 'M', label: 'M' }, { value: 'L', label: 'L' }, { value: 'XL', label: 'XL' }])
     expect((await ui.find({ key: 'add-size' }))?.props.value).toBe('M')
@@ -164,10 +165,12 @@ test('GOALDELETED IN THE FEED: the goal and its plans leave every list, its stor
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   await ui.press({ key: 'goals-show-closed' })
   expect(await ui.find({ key: 'goal-8' })).toBeDefined()
-  expect(await ui.find({ key: 'plan-144' })).toBeDefined()
+  await ui.press({ key: 'goal-8' })
+  expect(await ui.find({ key: 'act-plan-144-approve' })).toBeDefined()
+  await ui.press({ key: 'back' })
 
   // title: null, the goal by `goal`: parsed as it comes. closedCount says the deletion; the closed list lags.
   terylon.answers.goals_list = s44(1)
@@ -181,17 +184,15 @@ test('GOALDELETED IN THE FEED: the goal and its plans leave every list, its stor
   expect(terylon.toasts.join('\n')).not.toContain('#400')
 
   expect(await ui.find({ key: 'goal-8' })).toBeUndefined()
-  expect(await ui.find({ key: 'plan-144' })).toBeUndefined()
-  expect((await ui.find({ key: 'goals-show-closed' }))?.props.label).toBe('History · 1')
+  expect((await foldOf(ui, 'goals-show-closed'))).toBe('▾ History 1')
 
   // THE NEXT POLL AND A REFRESH, the lists still lagging, bring nothing of it back, and nothing posts for it.
   await terylon.clock.advance(30000)
   await ui.press({ key: 'refresh' })
-  await ui.press({ key: 'goals-show-open' })
+  await ui.press({ key: 'goals-show-closed' })
   await ui.press({ key: 'goals-show-closed' })
   expect(await ui.find({ key: 'goal-5' })).toBeDefined()
   expect(await ui.find({ key: 'goal-8' })).toBeUndefined()
-  expect(await ui.find({ key: 'plan-144' })).toBeUndefined()
   expect(terylon.prompts).toHaveLength(1)
   expect(deleteCalls(terylon)).toEqual([])
 })
@@ -205,7 +206,7 @@ test('GOALDELETED IN THE FEED, the goal open on screen: its screen says so quiet
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   await ui.press({ key: 'goals-show-closed' })
   await ui.press({ key: 'goal-8' })
   expect(await ui.find({ type: 'Text', text: exact('Goal 8') })).toBeDefined()
@@ -239,19 +240,20 @@ test('A PENDING SIGNAL OF A STORY DELETED WITH ITS GOAL does not post: story_get
   expect(terylon.toasts).toEqual([])
 })
 
-test('GOALDELETED, BEFORE S44: an open goal\'s plan leaves the Goals tab, though plans_list still names it', async ($, on) => {
+test('GOALDELETED, BEFORE S44: an open goal leaves the overview, its road gone, though both lists still name it', async ($, on) => {
   const terylon = world(on)
   let moved: Record<string, unknown>[] = []
   terylon.answers.events_since = (args: Record<string, unknown>) => events(Number(args.since), moved.filter(event => Number(event.seq) > Number(args.since)), Math.max(18100, ...moved.map(event => Number(event.seq))))
-  // The full list, no closedCount: a plan stays on the tab unless its goal is among the closed ones.
+  // The full list, no closedCount.
   terylon.answers.goals_list = { goals: [...OPEN_GOALS, { id: 12, title: 'Household budget', priority: 2, state: 'open', stories: {} }] }
   terylon.answers.plans_list = { plans: [...PLANS.plans, { ...PLAN_144, id: 150, goal: 12, goalTitle: 'Household budget' }] }
+  terylon.answers.briefing = { ...BRIEFING, plansWaiting: [...BRIEFING.plansWaiting, { id: 150, goal: 12, goalTitle: 'Household budget', stories: 1, estimateUsd: 2 }] }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
-  expect(await ui.find({ key: 'plan-150' })).toBeDefined()
+  await toOverview(ui)
+  expect(await ui.find({ key: 'goal-12' })).toBeDefined()
 
   // Deleted while open; both lists lag and still name it.
   moved = [goalDeleted(18101, 12)]
@@ -260,8 +262,14 @@ test('GOALDELETED, BEFORE S44: an open goal\'s plan leaves the Goals tab, though
   await ui.press({ key: 'refresh' })
 
   expect(await ui.find({ key: 'goal-12' })).toBeUndefined()
-  expect(await ui.find({ key: 'plan-150' })).toBeUndefined()
+  expect(await ui.find({ key: 'goal-3' })).toBeDefined()
   expect(await ui.find({ key: 'plan-41' })).toBeDefined()
+
+  // ITS PLAN'S CARD IS GONE WITH IT, though a read of the plans still names it: a row the briefing still lists opens nothing to act on.
+  await ui.press({ key: 'plan-150' })
+  await ui.press({ key: 'open-plan-150' })
+  expect(await ui.find({ key: 'act-plan-150-approve' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: exact('No plan waits.') })).toBeDefined()
 })
 
 test('AFTER A RESET, a goal deleted in the old history hides nothing: a new goal 8 is listed and its story signals', async ($, on) => {
@@ -298,7 +306,7 @@ test('AFTER A RESET, a goal deleted in the old history hides nothing: a new goal
   expect(terylon.logs.some(log => log.to === 'debug' && log.text.includes('was reset'))).toBe(true)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   expect((await ui.find({ key: 'goal-8' }))?.text).toContain('New budget')
 
   moved = [{ ...storyMoved(6, 4, 'First of the new', 'verified'), goal: 8 }]

@@ -135,10 +135,10 @@ the owner's thirteen acts; never story_merge`"]:::terylon
 what calls for the owner`"]:::terylon
             statusLine["`the status line
 the health of Agentic OS, its worst problem`"]:::terylon
-            tabs["`one pane, five tabs
-Queue, Goals, Bell, Memory, Status
+            tabs["`one pane: the overview, and More
+Notices, Memory, Health from its head
 opened only by the band or a command;
-each act on its subject's card, on a press`"]:::terylon
+each act on a press, never on a draw`"]:::terylon
         end
     end
 
@@ -176,6 +176,10 @@ stories_list, events_since`"| server
     style terylon fill:#2563EB1A,stroke:#2563EB,color:#3770ED,stroke-dasharray:3 3
     linkStyle default stroke:#8B949E
 ```
+
+## Boards
+
+[`terylon-cockpit/`](terylon-cockpit/README.md) holds how the pane looks: one board per screen, and its test mode.
 
 ## Articles
 

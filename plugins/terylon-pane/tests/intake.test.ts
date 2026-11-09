@@ -3,7 +3,7 @@
 
 import { test, expect } from 'claude-code/testing'
 
-import { BRIEFING, GOAL_QUESTION, PANE_PROPS, SESSION, exact, world } from './fixtures'
+import { BRIEFING, GOAL_QUESTION, PANE_PROPS, SESSION, exact, world, toNewGoal } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -16,7 +16,7 @@ test('the new goal line steers toward a direction, and an added goal says the le
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toNewGoal(ui)
 
   expect((await ui.find({ type: 'Text', text: exact(STEERING) }))?.props.color).toBe('subtle')
   expect(await ui.find({ type: 'Text', text: /makes a plan of the goal, which you approve/ })).toBeUndefined()
@@ -35,7 +35,7 @@ test('a leader whose own answer already steers is not said twice', async ($, on)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toNewGoal(ui)
   await ui.input({ key: 'goal-draft', text: 'create an Excel file with the costs', kind: 'change' })
   await ui.press({ key: 'goal-add' })
 
@@ -49,7 +49,6 @@ test('every answered question is confirmed and its field cleared, the second as 
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'question-9' })
   await ui.press({ key: 'answer-9' })
   await ui.input({ key: 'answer-text', text: 'Ano, od posledního commitu.', kind: 'change' })
   await ui.press({ key: 'answer-send' })
@@ -77,7 +76,6 @@ test('a refused answer keeps its text and says why in the same place', async ($,
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'question-9' })
   await ui.press({ key: 'answer-9' })
   await ui.input({ key: 'answer-text', text: 'Ano, od posledního commitu.', kind: 'submit' })
 

@@ -6,7 +6,7 @@ import { test, expect } from 'claude-code/testing'
 
 import { SVG_COLOURS, proofsOf } from '../hooks/drawing'
 
-import { BRIEFING, GOAL_QUESTION, MID_PANE_PROPS, NARROW_PANE_PROPS, PANE_PROPS, SESSION, bandProps, exact, pictures, world } from './fixtures'
+import { BRIEFING, GOAL_QUESTION, MID_PANE_PROPS, NARROW_PANE_PROPS, PANE_PROPS, SESSION, bandProps, exact, pictures, world, pill, toOverview, toAddTask, moreWith, unfold, toNewGoal } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -30,12 +30,14 @@ function hovers(node: unknown): { key: unknown; hover: unknown }[] {
   return [...own, ...(Array.isArray(element.children) ? element.children.flatMap(hovers) : [])]
 }
 
-test('THE PROOFS AS THE OWNER\'S WALK SETTLED THEM: all three proven and on; `no-<name>` the escape hatch', () => {
+test('THE PROOFS: on by default; `no-<name>` the escape hatch', () => {
   expect(proofsOf(undefined)).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true })
   expect(proofsOf('')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true })
   expect(proofsOf('svg-tooltips')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true })
   expect(proofsOf(' No-Input-Rows, no-hover-reveal ')).toEqual({ inputRows: false, hoverReveal: false, svgTooltips: true })
   expect(proofsOf('no-svg-tooltips')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: false })
+  // NOTICES ARE A SCREEN, NOT A PROOF: its old names turn nothing on or off.
+  expect(proofsOf('no-notices-over notices-over')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true })
   expect(proofsOf('all yes true 1 no')).toEqual({ inputRows: true, hoverReveal: true, svgTooltips: true })
 })
 
@@ -57,13 +59,13 @@ test('TURNED OFF, 1.1.2 DRAWS: one-line fields, no hover reveal, no tooltip', as
   expect(stepper?.source).not.toContain('<title>')
 
   await ui.press({ key: 'back' })
-  await ui.press({ key: 'question-606' })
   await ui.press({ key: 'answer-606' })
   const field = await ui.find({ key: 'answer-text' })
   expect(field?.props.rows).toBeUndefined()
   expect(field?.props.autoFocus).toBe(true)
 
   await ui.press({ key: 'back' })
+  await toAddTask(ui)
   await ui.input({ key: 'quick-add', text: 'Health: a Check now button' })
   expect((await ui.find({ key: 'add-criteria' }))?.props.rows).toBeUndefined()
   expect((await ui.find({ key: 'add-criteria' }))?.props.placeholder).toBe('Separate them with semicolons, or the leader writes them')
@@ -75,11 +77,11 @@ test('input-rows, PROVEN AND ON: the answer takes four rows, the criteria three,
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'question-9' })
   await ui.press({ key: 'answer-9' })
   expect((await ui.find({ key: 'answer-text' }))?.props.rows).toBe(4)
 
   await ui.press({ key: 'back' })
+  await toAddTask(ui)
   await ui.input({ key: 'quick-add', text: 'Health: a Check now button' })
   expect((await ui.find({ key: 'add-criteria' }))?.props.rows).toBe(3)
   expect((await ui.find({ key: 'add-criteria' }))?.props.placeholder).toBe('One per line, or the leader writes them')
@@ -96,18 +98,16 @@ test('ONE WAY TO SEND AN ANSWER on the desktop: the Answer button, and no submit
 
   for (const [surface, label] of [['desktop', ''], ['terminal', 'answer']] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-queue' })
-    await ui.press({ key: 'question-9' })
+    await toOverview(ui)
     await ui.press({ key: 'answer-9' })
     expect((await ui.find({ key: 'answer-text' }))?.props.submitLabel).toBe(label)
     expect((await ui.findAll({ type: 'Button', text: /^Answer$/ })).map(button => button.key)).toEqual(['answer-send'])
     await ui.press({ key: 'back' })
-    await ui.press({ key: 'question-9' })
     await ui.unmount()
   }
 })
 
-test('hover-reveal, PROVEN AND ON: a waiting row lights and shows its console link beside its press, a link and never a button', async ($, on) => {
+test('hover-reveal, PROVEN AND ON: a question\'s row lights and shows its console link beside its press, a link and never a button', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -115,27 +115,25 @@ test('hover-reveal, PROVEN AND ON: a waiting row lights and shows its console li
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   // A hover is not among a found element's props: it is read off the drawn tree.
   const hovered = hovers(await ui.drawn())
-  expect(hovered.filter(node => node.key === 'row-merge-327').map(node => node.hover)).toEqual([{ backgroundColor: 'userMessageBackgroundHover' }])
+  expect(hovered.filter(node => node.key === 'row-question-9').map(node => node.hover)).toEqual([{ backgroundColor: 'userMessageBackgroundHover' }])
 
   // The reveal is not keyed: a keyed Box drawn "none" would be a hover scope the pointer can never be over.
-  // ONLY MERGE AND AN ANSWER LINK OUT (S27): the plan's row reveals nothing, its acts are on its card.
+  // A MERGE'S ACT IS ITS LINK ALREADY, and a plan's act is its own: only a question reveals one.
   // BESIDE THE PRESS, NEVER OVER IT: laid over the row's right edge, the link covered the question's own text.
   const reveals = await revealsIn(ui)
-  expect(reveals).toHaveLength(2)
+  expect(reveals).toHaveLength(1)
   expect(reveals.every(box => box.key === undefined && box.props.flexShrink === 0)).toBe(true)
   expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.position === 'absolute')).toEqual([])
-  expect(hovered.filter(node => node.key === undefined).map(node => node.hover)).toEqual([{ display: 'flex' }, { display: 'flex' }])
-  expect((await ui.findAll({ type: 'Link' })).map(link => link.text)).toEqual(expect.arrayContaining(['Answer in the console ↗', 'Merge in the console ↗']))
+  expect(hovered.filter(node => node.key === undefined).map(node => node.hover)).toEqual([{ display: 'flex' }])
+  expect((await ui.findAll({ type: 'Link' })).map(link => link.text)).toEqual(expect.arrayContaining(['Answer in the console ↗', 'Merge ↗']))
   expect((await ui.findAll({ type: 'Link' })).map(link => link.text)).not.toContain('Approve in the console ↗')
-  expect((await ui.find({ type: 'Link', text: 'Merge in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=merge&story=327')
-  expect(await ui.find({ type: 'Button', text: /Merge|Approve/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Button', text: /Merge/ })).toBeUndefined()
 
-  // NO REVEAL OVER AN OPEN ROW (the owner's walk of 1.2.0): it covered the question; the body carries the link.
+  // A QUESTION'S ROW NEVER OPENS: a press leads to the question, whose own screen links the console.
   await ui.press({ key: 'question-9' })
-  expect(await revealsIn(ui)).toHaveLength(1)
   expect((await ui.findAll({ type: 'Link', text: 'Answer in the console ↗' }))).toHaveLength(1)
-  await ui.press({ key: 'question-9' })
-  expect(await revealsIn(ui)).toHaveLength(2)
+  await ui.press({ key: 'back' })
+  expect(await revealsIn(ui)).toHaveLength(1)
   await ui.unmount()
 
   // THE TERMINAL HAS NO POINTER TO HOVER: the row draws as 1.1.2 there, whatever is proven.
@@ -144,7 +142,7 @@ test('hover-reveal, PROVEN AND ON: a waiting row lights and shows its console li
   expect(hovers(await terminal.drawn())).toEqual([])
 })
 
-test('svg-tooltips, PROVEN AND ON: the stepper is interactive, a title on each node, at its own height, its labels under it', async ($, on) => {
+test('svg-tooltips, PROVEN AND ON: a story\'s road is interactive, a title on each segment, at its own height, its names under it', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -152,29 +150,28 @@ test('svg-tooltips, PROVEN AND ON: the stepper is interactive, a title on each n
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'story-333' })
 
-  const [stepper] = await pictures(ui)
-  expect(stepper?.isInteractive).toBe(true)
-  expect(stepper?.source.match(/<title>/g)).toHaveLength(8)
+  const [road] = await pictures(ui)
+  expect(road?.isInteractive).toBe(true)
+  expect(road?.source.match(/<title>/g)).toHaveLength(8)
   // ITS OWN HEIGHT, given: the interactive frame left to itself drew an empty band around it (the owner's walk).
-  expect(stepper?.height).toBe(22)
+  expect(road?.height).toBe(5)
   expect((await ui.find({ type: 'Text', text: exact('Tests') }))?.props.color).toBe('suggestion')
 })
 
-test('A DOCK OF ABOUT 435 PX (52 body columns): the stepper keeps its nodes\' size, only the phase now named under it', async ($, on) => {
+test('A DOCK OF ABOUT 435 PX (52 body columns): a story\'s road keeps its height, only the phase now named under it', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: MID_PANE_PROPS })
-  // The rest of the pane is drawn as wide: the rows keep their detail, the gauges their pictures.
+  // The rest of the pane is drawn as wide: the rows keep their detail.
   expect((await ui.find({ key: 'story-333' }))?.text).toMatch(/5\/8 · \$2\.10$/)
-  expect((await pictures(ui)).map(item => item.alt)).toContain('2 of 4 slots in use')
 
   await ui.press({ key: 'story-333' })
-  const [stepper] = await pictures(ui)
-  expect(stepper?.source).toMatch(/^<svg [^>]*width="196" height="22"/)
-  expect(stepper?.source.match(/<circle cx="[^"]*" cy="11" r="6"/g)?.length).toBeGreaterThanOrEqual(5)
-  expect(stepper?.isInteractive).toBe(true)
+  const [road] = await pictures(ui)
+  expect(road?.source).toMatch(/^<svg [^>]*width="100%" height="5"/)
+  expect(road?.source.match(/<rect /g)?.length).toBe(8)
+  expect(road?.isInteractive).toBe(true)
   expect(await ui.find({ key: 'phase-labels' })).toBeUndefined()
   const now = await ui.find({ type: 'Text', text: exact('Tests') })
   expect(now?.props).toMatchObject({ color: 'suggestion', weight: 'semibold' })
@@ -187,7 +184,7 @@ test('A DOCK OF ABOUT 435 PX (52 body columns): the stepper keeps its nodes\' si
   expect((await pictures(wide))[0]?.source).toMatch(/^<svg [^>]*width="100%"/)
 })
 
-test('svg-tooltips, named: each node of the stepper says its stage, role and state, and only what Terylon reports', async ($, on) => {
+test('svg-tooltips, named: each segment of a story\'s road says its stage, role and state, and only what Terylon reports', async ($, on) => {
   const terylon = world(on, { env: { TERYLON_PANE_PROOFS: 'svg-tooltips' } })
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -217,7 +214,7 @@ test('NO WORD INSIDE AN Svg, and only the fixed colours the light theme reads: e
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const seen: { source: string; alt: string; height: unknown }[] = [...(await pictures(ui))]
 
-  for (const path of [['story-333'], ['back', 'merge-327', 'open-story-327'], ['back', 'tab-goals'], ['tab-status']]) {
+  for (const path of [['story-333'], ['back', 'merge-327', 'open-story-327'], ['back', 'refresh'], ['goal-3'], ['back', 'tab-status']]) {
     for (const key of path) {
       await ui.press({ key })
     }
@@ -225,7 +222,7 @@ test('NO WORD INSIDE AN Svg, and only the fixed colours the light theme reads: e
     seen.push(...(await pictures(ui)))
   }
 
-  expect(seen.length).toBeGreaterThanOrEqual(8)
+  expect(seen.length).toBeGreaterThanOrEqual(7)
 
   for (const picture of seen) {
     expect(picture.alt.trim()).not.toBe('')
@@ -240,43 +237,44 @@ test('NO WORD INSIDE AN Svg, and only the fixed colours the light theme reads: e
   }
 })
 
-test('THE NARROW DOCK, below 44 body columns: rows drop their detail, the phases shrink to dots, the gauges to numbers', async ($, on) => {
+test('THE NARROW DOCK, below 44 body columns: rows drop their detail, the tiles are one line of counts, a goal names its stage alone', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: NARROW_PANE_PROPS })
   expect((await ui.find({ key: 'story-333' }))?.text).toBe('#333 Direct dispatch')
+  await unfold(ui, 'fold-queued')
   expect((await ui.find({ key: 'queued-328' }))?.text).toMatch(/^\s*(?:●\s+)?queued\s+#328 Owner's spec and plan$/)
-  expect(await ui.find({ type: 'Text', text: exact('you decide in the console') })).toBeUndefined()
-  expect((await ui.find({ type: 'Text', text: exact('2/4 · $5.50') }))?.props.tabular).toBe(true)
+  expect(await ui.find({ key: 'tiles' })).toBeUndefined()
+  expect(await ui.find({ key: 'tiles-line' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('3 waiting · 2 running · 0 stuck') })).toBeDefined()
+  await ui.press({ key: 'fold-queued' })
 
   const drawn = await pictures(ui)
-  expect(drawn.map(item => item.alt)).toEqual(['Phase 5 of 8: tests', 'Phase 7 of 8: verified'])
-  expect(drawn.every(item => item.source.includes('<circle') && !item.source.includes('<rect'))).toBe(true)
+  expect(drawn.map(item => item.alt)).toEqual(['Admitted, Plan, Develop, Review done; Tests now; Pull req., Verified, Merge to come', 'Admitted, Plan, Develop, Review, Tests, Pull req. done; Verified now; Merge to come'])
 
-  // The Status tab stacks its slots and cost; a wide pane sets them side by side.
-  await ui.press({ key: 'tab-status' })
-  expect(await ui.find({ key: 'status-gauges' })).toBeUndefined()
+  // Health stacks its two cards; a wide pane sets them side by side.
+  await pill(ui, 'tab-status')
+  expect(await ui.find({ key: 'status-cards' })).toBeUndefined()
   await ui.unmount()
-  const wide = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await wide.find({ key: 'status-gauges' })).toBeDefined()
-  expect((await pictures(wide)).map(item => item.alt)).toEqual(['2 of 4 slots in use', '$5.50 of the $20 daily limit today'])
+  const wide = await $.ui.mount({ ...PANE, surface: 'desktop', props: { ...(PANE_PROPS as Record<string, unknown>), bodyColumns: 120 } as never })
+  expect(await wide.find({ key: 'status-cards' })).toBeDefined()
 })
 
-test('the Status tab says the machine in one word, large, in its colour, its times in tabular digits', async ($, on) => {
+test('Health says the machine in one word, in its colour, its times in tabular digits', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   for (const surface of ['desktop', 'terminal'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-status' })
+    await moreWith(ui, 'fold-diagnostics')
     const word = await ui.find({ type: 'Text', text: exact('all well') })
 
-    expect(word?.props).toMatchObject({ size: 'title', weight: 'semibold', color: 'success' })
+    expect(word?.props).toMatchObject({ weight: 'semibold', color: 'success' })
     expect((await ui.find({ type: 'Text', text: /^\s*last answer at / }))?.props.tabular).toBe(true)
-    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.18.1') }))?.props.mono).toBe(true)
+    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.20.5') }))?.props.mono).toBe(true)
     await ui.unmount()
   }
 })
@@ -287,7 +285,7 @@ test('the New goal card says a goal is a general direction, in the words of the 
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toNewGoal(ui)
   expect((await ui.find({ key: 'goal-new' }))?.props.borderStyle).toBe('round')
   expect(await ui.find({ type: 'Text', text: exact('A goal is a general direction. A concrete ask — a file, a document, one change — becomes a task under a goal. The leader asks its questions first, then makes a plan you approve.') })).toBeDefined()
 })
@@ -298,6 +296,7 @@ test('THE NEW TASK: goal, after and size are Selects over tasks_add, and what is
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await toAddTask(ui)
   await ui.input({ key: 'quick-add', text: 'Health: a Check now button' })
 
   expect((await ui.find({ key: 'add-goal' }))?.props.options).toEqual([{ value: '3', label: 'P1 · Agentic OS' }, { value: '11', label: 'Test z telefonu' }])
@@ -322,7 +321,7 @@ test('THE S27 SLOTS (#27) ARE FILLED: the story\'s acts and its links on one pla
 
   for (const surface of ['desktop', 'terminal'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-queue' })
+    await toOverview(ui)
     await ui.press({ key: 'story-333' })
 
     const slot = await ui.find({ key: 'story-actions' })
@@ -331,26 +330,8 @@ test('THE S27 SLOTS (#27) ARE FILLED: the story\'s acts and its links on one pla
     expect(await ui.find({ type: 'Button', text: /Merge/ })).toBeUndefined()
     expect((await ui.find({ type: 'Link', text: 'Story in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=story&story=333')
 
-    await ui.press({ key: 'back' })
-    await ui.press({ key: 'tab-bell' })
-    expect((await ui.find({ key: 'leader-actions' }))?.props.borderStyle).toBeUndefined()
     await ui.unmount()
   }
-})
-
-test('the tabs: a digit each while the pane holds the keyboard, the bell\'s count and the Status warning as chips', async ($, on) => {
-  const terylon = world(on)
-  terylon.answers.briefing = { ...BRIEFING, unhandledNotices: 2 }
-  terylon.mode.server = 'up'
-  await $.session.start(SESSION)
-  await terylon.clock.settle()
-
-  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  const keys = ['tab-queue', 'tab-goals', 'tab-bell', 'tab-memory', 'tab-status']
-  expect((await Promise.all(keys.map(key => ui.find({ key })))).map(tab => tab?.props.hotkey)).toEqual(['1', '2', '3', '4', '5'])
-  expect((await ui.find({ key: 'tab-bell' }))?.text).toBe('Notices 2')
-  const count = await ui.find({ type: 'Text', text: exact('2') })
-  expect(count?.props).toMatchObject({ tabular: true, color: 'text', weight: 'semibold' })
 })
 
 test('THE BAND IS UNCHANGED BUT FOR ITS DIGITS: the same words and colours, every number tabular, still one row', async ($, on) => {

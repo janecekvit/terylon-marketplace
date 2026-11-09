@@ -7,7 +7,7 @@
 import { test, expect } from 'claude-code/testing'
 
 import { inks, strokedCards } from './contrast'
-import { GOALS, NARROW_PANE_PROPS, PANE_PROPS, SESSION, exact, leaderRefusal, refusal, world } from './fixtures'
+import { GOALS, NARROW_PANE_PROPS, PANE_PROPS, SESSION, exact, leaderRefusal, refusal, world, toOverview, toNewGoal, unfold, foldOf } from './fixtures'
 
 const OVERVIEW = '# Overview\n\nKeep the budget in one file.\n'
 const NOTES = '# Notes\n\nThe bank exports CSV.\n'
@@ -108,7 +108,7 @@ for (const { name, surface, props } of SURFACES) {
     await terylon.clock.settle()
 
     const ui = await $.ui.mount({ plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props, surface })
-    await ui.press({ key: 'tab-goals' })
+    await toNewGoal(ui)
 
     expect(terylon.listed).toContain('.')
     expect(await ui.find({ type: 'Text', text: exact('Specification (optional)') })).toBeDefined()
@@ -131,7 +131,7 @@ for (const { name, surface, props } of SURFACES) {
     await terylon.clock.settle()
 
     const ui = await $.ui.mount({ plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props, surface })
-    await ui.press({ key: 'tab-goals' })
+    await toNewGoal(ui)
     await ui.press({ key: 'spec-new-add-overview.md' })
     await ui.press({ key: 'spec-new-add-notes.md' })
 
@@ -161,7 +161,7 @@ for (const { name, surface, props } of SURFACES) {
     await terylon.clock.settle()
 
     const ui = await $.ui.mount({ plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props, surface })
-    await ui.press({ key: 'tab-goals' })
+    await toOverview(ui)
     await ui.press({ key: 'goal-92' })
 
     expect(await ui.find({ type: 'Text', text: exact('Specification · version 2') })).toBeDefined()
@@ -171,15 +171,17 @@ for (const { name, surface, props } of SURFACES) {
     expect((await ui.find({ key: 'spec-version-1' }))?.props.label).toBe('Version 1 ›')
     expect(await ui.find({ key: 'spec-version-2' })).toBeUndefined()
     expect((await ui.find({ key: 'spec-revise' }))?.props.label).toBe('Revise…')
-    expect((await ui.findAll({ type: 'Link' })).some(link => link.props.label === 'In the console ↗' && String(link.props.href).endsWith('/?view=goal&goal=92'))).toBe(true)
-    expect(await ui.find({ type: 'Text', text: exact('YOUR DECISIONS ON EARLIER PLANS') })).toBeDefined()
+    expect((await ui.findAll({ type: 'Link' })).some(link => link.props.label === 'Goal in the console ↗' && String(link.props.href).endsWith('/?view=goal&goal=92'))).toBe(true)
+    await unfold(ui, 'fold-decisions')
+    expect((await foldOf(ui, 'fold-decisions'))).toBe('▾ Your decisions on earlier plans 1')
     expect(await ui.find({ type: 'Text', text: exact('Plan 7 · 5 Oct · “Split the export from the import”') })).toBeDefined()
     expect(await ui.find({ key: 'spec-replan' })).toBeUndefined()
 
-    // UNDER THE HEADER, ABOVE THE STORIES.
+    // UNDER THE HEADER AND THE ROAD, BESIDE THE STORIES.
     const keys = (await ui.findAll({ type: 'Box' })).map(box => box.key)
-    expect(keys.indexOf('goal-head')).toBeLessThan(keys.indexOf('goal-spec'))
-    expect(keys.indexOf('goal-spec')).toBeLessThan(keys.indexOf('goal-stories'))
+    expect(keys.indexOf('goal-head')).toBeLessThan(keys.indexOf('goal-road'))
+    expect(keys.indexOf('goal-road')).toBeLessThan(keys.indexOf('goal-stories'))
+    expect(keys.indexOf('goal-stories')).toBeLessThan(keys.indexOf('goal-spec'))
   })
 
   test(`${name}: the re-plan notice is a stroked card that waits, its words never amber; goal_replan only on the press`, async ($, on) => {
@@ -189,7 +191,7 @@ for (const { name, surface, props } of SURFACES) {
     await terylon.clock.settle()
 
     const ui = await $.ui.mount({ plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props, surface })
-    await ui.press({ key: 'tab-goals' })
+    await toOverview(ui)
     await ui.press({ key: 'goal-92' })
 
     expect((await ui.find({ key: 'spec-replan-notice' }))?.props.borderColor).toBe('warning')
@@ -215,7 +217,7 @@ for (const { name, surface, props } of SURFACES) {
     await terylon.clock.settle()
 
     const ui = await $.ui.mount({ plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props, surface })
-    await ui.press({ key: 'tab-goals' })
+    await toOverview(ui)
     await ui.press({ key: 'goal-92' })
     await ui.press({ key: 'spec-revise' })
 
@@ -246,7 +248,7 @@ test('a file opens read-only as Markdown through spec_get {goal}, and an older v
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   await ui.press({ key: 'goal-92' })
   await ui.press({ key: 'spec-file-overview.md' })
 
@@ -272,7 +274,7 @@ test('a goal with no specification draws nothing new, and reads no specification
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   await ui.press({ key: 'goal-11' })
 
   expect(await ui.find({ key: 'goal-stories' })).toBeDefined()
@@ -297,7 +299,7 @@ test('over the caps, a name Terylon refuses, or a file that cannot be read: the 
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toNewGoal(ui)
   await ui.input({ key: 'goal-draft', text: 'Household budget', kind: 'change' })
   const pick = async (folder: string, names: readonly string[]) => {
     for (const attached of await ui.findAll({ type: 'Button' })) {
@@ -337,7 +339,7 @@ test('another folder that cannot be listed says so in the engine\'s words, and t
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS, surface: 'terminal' })
-  await ui.press({ key: 'tab-goals' })
+  await toNewGoal(ui)
   await ui.input({ key: 'spec-new-folder', text: '/nowhere', kind: 'submit' })
 
   expect((await ui.find({ type: 'Text', text: /^\/nowhere could not be read: .*ENOENT/ }))?.props.color).toBe('error')
@@ -354,7 +356,7 @@ test('B puts a request in the chat, in Czech: the typed title and ask, the .md f
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toNewGoal(ui)
   await ui.input({ key: 'goal-draft', text: 'Household budget', kind: 'change' })
   await ui.input({ key: 'goal-ask', text: 'Keep the budget in one file.', kind: 'change' })
   await ui.press({ key: 'spec-in-session' })
@@ -376,7 +378,7 @@ test("Terylon's refusals are said word for word: a secret in goal_add, a newer v
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toNewGoal(ui)
   await ui.press({ key: 'spec-new-add-notes.md' })
   await ui.input({ key: 'goal-draft', text: 'Household budget', kind: 'change' })
   await ui.press({ key: 'goal-add' })
@@ -384,6 +386,7 @@ test("Terylon's refusals are said word for word: a secret in goal_add, a newer v
   expect((await ui.find({ type: 'Text', text: exact(SECRET) }))?.props.color).toBe('error')
   expect(await ui.find({ key: 'spec-new-remove-notes.md' })).toBeDefined()
 
+  await toOverview(ui)
   await ui.press({ key: 'goal-92' })
   await ui.press({ key: 'spec-revise' })
   await ui.press({ key: 'revise-save' })

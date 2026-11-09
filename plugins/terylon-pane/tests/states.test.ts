@@ -23,7 +23,8 @@ test('frame E: no terylon server tells the owner to install the plugin, and asks
 
   terylon.mode.server = 'up'
   await ui.press({ key: 'retry' })
-  expect(await ui.find({ type: 'Text', text: exact('Running · 2') })).toBeDefined()
+  expect(await ui.find({ key: 'tile-running' })).toBeDefined()
+  expect(await ui.find({ key: 'story-333' })).toBeDefined()
 })
 
 test('frame G: unreachable keeps the last state, says it is stale and why, and retries each minute', async ($, on) => {
@@ -40,10 +41,9 @@ test('frame G: unreachable keeps the last state, says it is stale and why, and r
   expect(await ui.find({ type: 'Text', text: /^Showing the state of \d\d:\d\d\. Work on the homelab goes on\.$/ })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: /Reason: .*fetch failed: connect ETIMEDOUT/ }))?.props.color).toBe('subtle')
   expect(await ui.find({ type: 'Text', text: /tailscale status and TERYLON_URL/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: exact('Running · 2 (stale)') })).toBeDefined()
-  expect((await ui.find({ type: 'Text', text: /^not answering since / }))?.props.color).toBe('error')
-  expect(await ui.find({ type: 'Text', text: exact('Adding a task waits for the connection; what you typed stays.') })).toBeDefined()
-  expect(await ui.find({ key: 'quick-add' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: exact('Waiting for you (stale)') })).toBeDefined()
+  expect(await ui.find({ key: 'story-333' })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /not answering since / }))?.props.color).toBe('error')
 
   const before = terylon.calls.length
   await terylon.clock.advance(30000)
@@ -82,7 +82,7 @@ test('frame H: refused as not the owner, and Terylon returning an error, each sa
   expect((await ui.find({ type: 'Link', text: 'Health ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=health')
 })
 
-test('frame F: an empty queue keeps every card, each saying quietly that it is empty, and invites a task', async ($, on) => {
+test('frame F: an empty overview keeps its card and its folds, each saying quietly that it is empty, and invites a goal', async ($, on) => {
   const terylon = world(on)
   terylon.answers.briefing = { plansWaiting: [], questionsOpen: [], storiesVerified: [], storiesBlocked: [] }
   terylon.answers.work_in_flight = { slots: 4, paused: false, stories: [] }
@@ -91,12 +91,17 @@ test('frame F: an empty queue keeps every card, each saying quietly that it is e
   await terylon.clock.settle()
 
   const ui = await $.ui.mount(MOUNT)
-  for (const line of ['Nothing waits for you.', 'Nothing running.', 'Nothing queued.', 'Nothing done today.']) {
+  expect((await ui.find({ type: 'Text', text: exact('Nothing waits for you.') }))?.props.color).toBe('subtle')
+  await ui.press({ key: 'fold-queued' })
+  await ui.press({ key: 'fold-done' })
+
+  for (const line of ['Nothing queued.', 'Nothing done today.']) {
     expect((await ui.find({ type: 'Text', text: exact(line) }))?.props.color).toBe('subtle')
   }
 
-  expect(await ui.find({ type: 'Text', text: exact('Waiting for you · 0') })).toBeDefined()
-  expect(await ui.find({ key: 'quick-add' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('Waiting for you') })).toBeDefined()
+  expect(await ui.find({ key: 'goal-new-open' })).toBeDefined()
+  expect(await ui.find({ key: 'story-333' })).toBeUndefined()
 })
 
 test('connecting, before the first answer, is drawn', async ($, on) => {
@@ -104,7 +109,7 @@ test('connecting, before the first answer, is drawn', async ($, on) => {
   await $.session.start(SESSION)
 
   const ui = await $.ui.mount(MOUNT)
-  expect(await ui.find({ type: 'Text', text: exact('connecting…') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^connecting…/ })).toBeDefined()
 })
 
 test('frame I: a call Claude Code did not allow is said as that, with the rules to add, never as the tailnet', async ($, on) => {
@@ -139,7 +144,8 @@ test('frame I: a call Claude Code did not allow is said as that, with the rules 
 
   terylon.mode.server = 'up'
   await ui.press({ key: 'retry' })
-  expect(await ui.find({ type: 'Text', text: exact('Running · 2') })).toBeDefined()
+  expect(await ui.find({ key: 'tile-running' })).toBeDefined()
+  expect(await ui.find({ key: 'story-333' })).toBeDefined()
 })
 
 test('frame I: the default mode refusal, which cannot ask the person, is the same state', async ($, on) => {

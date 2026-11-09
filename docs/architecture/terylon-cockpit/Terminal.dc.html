@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cockpit in the CLI</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 960px; height: 860px; box-sizing: border-box; padding: 20px 24px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; background: #e9e7e1; color: #2b2a28; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; line-height: 1.4">
+
+  <div style="display: flex; flex-direction: column; gap: 10px; min-width: 0">
+    <div style="font-size: 15px; font-weight: 600">1 · Lesser form: the same order, in cells</div>
+    <div style="background: #111110; color: #d8d7d0; border-radius: 8px; padding: 12px 14px; font-family: Consolas, ui-monospace, monospace; font-size: 12px; line-height: 1.5; flex-grow: 1; display: flex; flex-direction: column; gap: 10px; overflow: hidden">
+      <div><span style="font-weight: 700; color: #ecebe6">Terylon</span> <span style="color: #8f8e87">all well · 1/2 slots</span></div>
+      <div><span style="color: #e0a84e">●</span> Notices 1 · <span style="color: #e0a84e">●</span> Memory 1 · Health · Refresh</div>
+      <div><span style="color: #c9b1f7; font-weight: 700">4 waiting</span> · <span style="color: #8ab4f8">1 running</span> · <span style="color: #e0a84e">1 stuck</span></div>
+      <div style="border: 1px solid #5a4890; border-radius: 6px; padding: 6px 8px; display: flex; flex-direction: column">
+        <div style="font-weight: 700">Waiting for you</div>
+        <sc-for list="{{ waiting }}" as="item" hint-placeholder-count="4">
+          <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><span style="color: {{ item.tone }}">{{ item.kind }}</span> {{ item.title }}</div>
+        </sc-for>
+      </div>
+      <div style="font-weight: 700">Goals</div>
+      <sc-for list="{{ goals }}" as="goal" hint-placeholder-count="3">
+        <div style="border: 1px solid #383836; border-radius: 6px; padding: 6px 8px; display: flex; flex-direction: column">
+          <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ goal.title }} <span style="color: {{ goal.tone }}">{{ goal.stage }}</span></div>
+          <div style="white-space: nowrap; overflow: hidden; letter-spacing: 0"><sc-for list="{{ goal.cells }}" as="cell" hint-placeholder-count="6"><span style="color: {{ cell.tone }}">━━━━━━ </span></sc-for></div>
+          <div style="color: #8f8e87; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ goal.next }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div>Same order and the same acts as Desktop. No drawn road or gauges, only coloured cells. A narrow terminal gets one line of counts. Desktop's drawing never waits for this.</div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 10px; min-width: 0">
+    <div style="font-size: 15px; font-weight: 600">2 · Off: the band and a pointer</div>
+    <div style="background: #111110; color: #d8d7d0; border-radius: 8px; padding: 12px 14px; font-family: Consolas, ui-monospace, monospace; font-size: 12px; line-height: 1.5; flex-grow: 1; display: flex; flex-direction: column; gap: 10px">
+      <div style="color: #8f8e87">&gt; /terylon-cockpit</div>
+      <div>The Cockpit draws in Claude Desktop. Here: 4 waiting, 1 running, 1 stuck.</div>
+      <div style="margin-top: auto; border-top: 1px solid #383836; padding-top: 6px">Terylon · <span style="color: #c9b1f7">Waiting 4</span> · Running 1 · Notices 1</div>
+    </div>
+    <div>The pane stays closed in a terminal. The band, the status line and the done-signals keep working. The terminal tests go away, so a Desktop change costs less. The owner's acts are then in Desktop or the console only.</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":860}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const DONE = '#58c48a', NOW = '#8ab4f8', TODO = '#4a4a47', GATE = '#8e72d8';
+    const GATES = [1, 4];
+    const cellsAt = stage => [0, 1, 2, 3, 4, 5].map(index => ({
+      tone: index < stage ? DONE : index === stage ? (GATES.includes(index) ? GATE : NOW) : GATES.includes(index) ? '#5a4890' : TODO,
+    }));
+    return {
+      waiting: [
+        { kind: 'question', title: 'Which of the two price columns…', tone: '#e8c07a' },
+        { kind: 'plan', title: 'Household budget: 3 stories', tone: '#c9b1f7' },
+        { kind: 'accept', title: 'Take your time: verified', tone: '#c9b1f7' },
+        { kind: 'merge', title: 'Slots fit the machine', tone: '#c9b1f7' },
+      ],
+      goals: [
+        { title: 'Household budget', stage: 'Approve', tone: '#c9b1f7', cells: cellsAt(1), next: 'Waits for your approval' },
+        { title: 'Take your time', stage: 'Build', tone: '#8ab4f8', cells: cellsAt(2), next: 'Asks you a question' },
+        { title: 'Slots fit the machine', stage: 'Your merge', tone: '#c9b1f7', cells: cellsAt(4), next: 'Merge in the console' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

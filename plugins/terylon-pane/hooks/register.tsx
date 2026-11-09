@@ -7,12 +7,12 @@
 //        ├──▶ the status line, the machine's health and cost: Terylon ● all well · $x of $y today · a/b slots, or on the
 //        │      setup token its tokens and "cost not known on the setup token", never a $ figure
 //        ├──▶ the pane, opened by the band or /terylon-cockpit, never by itself:
-//        │      Waiting ── Waiting for you ──▶ question (question_answer) · story · plan
-//        │        │        Running · Queued · Done today ──▶ story ──▶ goal ──▶ story …
-//        │      Goals ──── goals_list · plans_list ──▶ goal · plan ──▶ story; a new goal is goal_add
-//        │      Notices ── notices_list · leader_status · metrics; Mark handled is notice_handle
-//        │      Memory ─── memory_get; an edit is memory_propose, confirmed in the console
-//        │      Health ─── the machine, its slots and cost, every problem and its fix, the policy
+//        │      the overview ── tiles · Waiting for you ──▶ question · story · plan
+//        │        │              goals_list · plans_list ──▶ one card per goal, its road from hooks/road.ts ──▶ goal ──▶ story
+//        │        │              folds: Done today · Queued · History; a new goal is goal_add
+//        │        ├──▶ Notices ──▶ Notices, a screen of its own
+//        │        └──▶ System ──▶ More: Health · Memory on one page, at its top
+//        │             each the primary button while something behind it waits; on the terminal a dot before the word
 //        └──▶ the done-signal: $.prompt.submit once per story and verdict commit, and a toast, by the story's ref
 //   session start, away > 2 h ──▶ ONE catch-up summary, and the band says it until dismissed
 //   a host proof's subjects ──▶ no prompt, no band count, no catch-up line
@@ -21,8 +21,8 @@
 // The mod holds no rule the endpoint does not: every decision is a Link to the console.
 //
 // THE DRAWING is S32's (#25), on the 2.1.304 mod API: a row is one Button, type has a size and a weight, numbers
-// are tabular, the phases, slots and spend are Svg (hooks/drawing.ts), the pickers are Selects, the allow rules
-// Code. What 2.1.304 declares but Desktop has not proven sits behind TERYLON_PANE_PROOFS and draws 1.1.2 until named.
+// are tabular, a road and the spend are Svg (hooks/drawing.ts), the pickers are Selects, the allow rules Code. What
+// 2.1.304 declares but Desktop has not proven sits behind TERYLON_PANE_PROOFS and draws 1.1.2 until named.
 
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
@@ -35,6 +35,7 @@ import type {
   PaneAnswer,
   PaneBand,
   PaneBell,
+  PaneGoalCard,
   PaneGoal,
   PaneGoals,
   PaneRepeating,
@@ -42,7 +43,10 @@ import type {
   PaneRevise,
   PanePlan,
   PaneMemory,
+  PaneOverview,
+  PaneTestMode,
   PanePolicyForm,
+  PaneRoadStep,
   PaneScreen,
   PaneSnapshot,
   PaneSpecFile,
@@ -53,13 +57,16 @@ import type {
 } from '../types'
 
 import { COPY } from './copy'
-import { CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, NARROW_COLUMNS, STEPPER_COLUMNS, dots, meter, phaseGlyph, planChain, planOrder, proofsOf, segments, slotsGauge, spendBar, splitHash, stepper } from './drawing'
+import { CARD_FILL, CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, NARROW_COLUMNS, ROAD_CARD_HEIGHT, WAITING_TILE_FILL, NARROW_TERMINAL_COLUMNS, ROAD_NAMES_COLUMNS, WIDE_COLUMNS, phaseGlyph, planChain, planOrder, proofsOf, road, roadCells, spendBar, splitHash } from './drawing'
 import type { Picture, Proofs } from './drawing'
-import { ALERT_SOURCES, REASON_WHOLE, alertCount, checkTree, healthLine, plainLine, stateWord, statusDrawingOf, storeFileOf, todayCost, treeLine, typedLine } from './health'
+import { REASON_WHOLE, alertCount, checkTree, healthLine, plainLine, stateWord, statusDrawingOf, storeFileOf, todayCost, treeLine, typedLine } from './health'
 import type { Health, StatusPart } from './health'
 import { MISSING_SERVER, NEEDS_TEXT, NOT_ALLOWED, SERVER_CANDIDATES, TEXT_LIMITS, actArguments, allowRules, assertPaneTool, isSendable, readResult } from './terylon'
 import type { TerylonAnswer } from './terylon'
-import { CARD_STROKES, kindTone, markOf, wordOf } from './tones'
+import { createTestWorld, testAnswer } from './testmode'
+import type { TestWorld } from './testmode'
+import { goalCardsOf, isClosedGoal, phaseSteps, repeatingWords, roadOf, roadPlansOf, roadStoriesOf, storyNext } from './road'
+import { CARD_STROKES, kindTone, markOf } from './tones'
 import * as words from './words'
 import {
   alertItems,
@@ -67,7 +74,6 @@ import {
   clock,
   consoleLink,
   costBasisOf,
-  costTight,
   deleteLink,
   goalLink,
   dayBudget,
@@ -81,6 +87,7 @@ import {
   isListStory,
   isRepositoryTarget,
   list,
+  monthOf,
   number,
   pausedOf,
   planItems,
@@ -90,6 +97,7 @@ import {
   policyProblems,
   policyRows,
   policyValue,
+  planLink,
   POLICY_FIELDS,
   proposalItems,
   questionChoices,
@@ -135,11 +143,11 @@ type Json = Record<string, unknown>
 // WHY THE PANE STARTS OVER: the head Terylon's reset answered with, or none where the epoch it sent was refused.
 type Reset = { from: number; head: number | null; refused: string | null }
 
-// The pane's id: ONE pane, the memory one of its tabs. No command the mod registers shares a skill's name: the skill would win (a node test holds it).
+// The pane's id: ONE pane, More a page of it. No command the mod registers shares a skill's name: the skill would win (a node test holds it).
 export const PANE = 'terylon'
 
-// The mod's version, said on the Status tab: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.18.1'
+// The mod's version, said on Health: a node test holds it to plugin.json.
+export const MOD_VERSION = '1.20.5'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -154,9 +162,11 @@ const WATCH_MILLISECONDS = 10000
 
 // How many criteria and timeline rows a story shows before "další N ▾".
 const CRITERIA_SHOWN = 2
+// What the machine did: its latest in the open, the rest a press away.
+const MACHINE_SHOWN = 3
 const TIMELINE_SHOWN = 4
 
-// The Status tab's parts in the order it draws them, as its debug line names them.
+// Health's parts in the order it draws them, as its debug line names them.
 const STATUS_DRAWN = ['machine', 'gauges', 'problems', 'events', 'alerts', 'outcomes', 'policy', 'diagnostics'] as const
 
 // HOW LONG A SCREEN'S LOAD MAY TAKE before it is said as its error: under Desktop's own 10 s bound on a press
@@ -207,6 +217,7 @@ const EMPTY_SNAPSHOT: PaneSnapshot = {
   running: [],
   queued: [],
   doneToday: [],
+  stories: [],
   questions: [],
   events: null,
   eventsAnsweredAt: null,
@@ -246,7 +257,14 @@ const ABSOLUTE_PATH = /^([A-Za-z]:)?[\\/]/
 
 const EMPTY_PICKER: PaneSpecPicker = { folder: '', listedFolder: SESSION_FOLDER, phase: 'idle', sentence: null, listed: [], attached: [] }
 
-const EMPTY_BELL: PaneBell = { phase: 'loading', sentence: null, unhandledCount: 0, unhandled: [], handled: [], leader: { isPaused: false, text: '' }, metrics: [], handling: null, handleSentence: null }
+const EMPTY_OVERVIEW: PaneOverview = { month: null, memoryPending: null }
+
+const EMPTY_TEST_MODE: PaneTestMode = { isOn: false, note: null }
+
+// Where a console link of a made-up subject leads while test mode is on: nowhere, never the real console.
+const TEST_CONSOLE = 'https://test-mode.invalid'
+
+const EMPTY_BELL: PaneBell = { phase: 'loading', sentence: null, unhandledCount: 0, unhandled: [], handled: [], metrics: [], handling: null, handleSentence: null }
 
 const snapshot = atom({ plugin: 'terylon-pane', key: 'snapshot' } as const, EMPTY_SNAPSHOT)
 const view = atom({ plugin: 'terylon-pane', key: 'view' } as const, { stack: [QUEUE] } as PaneView)
@@ -259,6 +277,7 @@ const answer = atom({ plugin: 'terylon-pane', key: 'answer' } as const, null as 
 const goals = atom({ plugin: 'terylon-pane', key: 'goals' } as const, EMPTY_GOALS)
 const goal = atom({ plugin: 'terylon-pane', key: 'goal' } as const, null as PaneGoal | null)
 const bell = atom({ plugin: 'terylon-pane', key: 'bell' } as const, EMPTY_BELL)
+const overview = atom({ plugin: 'terylon-pane', key: 'overview' } as const, EMPTY_OVERVIEW)
 const open = atom({ plugin: 'terylon-pane', key: 'open' } as const, [] as string[])
 const acts = atom({ plugin: 'terylon-pane', key: 'acts' } as const, {} as Record<string, PaneAct>)
 const policyForm = atom({ plugin: 'terylon-pane', key: 'policyForm' } as const, EMPTY_POLICY_FORM)
@@ -267,6 +286,11 @@ const rulesAsked = atom({ plugin: 'terylon-pane', key: 'rulesAsked' } as const, 
 const specPicker = atom({ plugin: 'terylon-pane', key: 'specPicker' } as const, EMPTY_PICKER)
 const revise = atom({ plugin: 'terylon-pane', key: 'revise' } as const, null as PaneRevise | null)
 const specView = atom({ plugin: 'terylon-pane', key: 'specView' } as const, null as PaneSpecView | null)
+// TEST MODE, this session's alone: in $.state and never in $.store, so no other session hears of it.
+const testMode = atom({ plugin: 'terylon-pane', key: 'testMode' } as const, EMPTY_TEST_MODE)
+
+// TEST MODE'S MADE-UP TERYLON, in memory: lost on a reload and made anew, gone when test mode ends.
+let testWorld: TestWorld | null = null
 
 // What the last answers were: the module's own, lost on a reload and refilled by the next poll.
 let lastFlight: Json = {}
@@ -379,10 +403,10 @@ const deletedStories = new Set<number>()
 // WHAT THE PANE KEEPS IN $.store, mirrored here: where a store refuses, the session still reads from its last place and
 // signals each story once, and only a return after Desktop was closed is lost.
 const keptInMemory = new Map<string, unknown>()
-// How often the store refused in this tick's read of the events: the Status tab's problem stays while it is not 0.
+// How often the store refused in this tick's read of the events: Health's problem stays while it is not 0.
 let storeRefusals = 0
 
-// THE PANE'S OWN LOG, the debug lines it wrote last, drawn on the Queue tab under TERYLON_PANE_STATUS=log: a host that
+// THE PANE'S OWN LOG, the debug lines it wrote last, drawn on the overview under TERYLON_PANE_STATUS=log: a host that
 // writes no log the owner can read still shows what the pane did and saw.
 const NOTES_KEPT = 40
 const notes: string[] = []
@@ -466,6 +490,14 @@ function policyAfterSave(answer: Json, now: number): Json {
 async function callTerylon($: EngineInterface, tool: string, args: Record<string, unknown> = {}): Promise<TerylonAnswer> {
   assertPaneTool(tool)
 
+  // TEST MODE'S ONE GATE: this is the single route to $.mcp.call, and with it on every call is answered here.
+  if ((await read($, testMode)).isOn) {
+    const now = await $.clock.now()
+    testWorld = testWorld ?? createTestWorld(now)
+
+    return testAnswer(testWorld, tool, args, now)
+  }
+
   let missing = 0
   let reason = ''
 
@@ -514,6 +546,10 @@ function why(answered: TerylonAnswer): string {
 }
 
 async function baseUrl($: EngineInterface): Promise<string> {
+  if ((await read($, testMode)).isOn) {
+    return TEST_CONSOLE
+  }
+
   return ((await $.env.get('TERYLON_URL')) ?? '').replace(/\/+$/, '')
 }
 
@@ -569,8 +605,9 @@ async function watchEvents($: EngineInterface): Promise<void> {
 // THE STATUS LINE: the worst of the machine's health, or its spend when all is well.
 async function showHealth($: EngineInterface): Promise<void> {
   const current = await readSnapshot($)
+  const line = healthLine(healthOf(current, zoneOffset))
 
-  $.ui.status(healthLine(healthOf(current, zoneOffset)))
+  $.ui.status((await read($, testMode)).isOn ? COPY.testStatus(line) : line)
 }
 
 async function failed($: EngineInterface, answered: TerylonAnswer, tool: string, now: number): Promise<void> {
@@ -650,7 +687,7 @@ async function refresh($: EngineInterface): Promise<boolean> {
 
   const base = await baseUrl($)
   const offset = zoneOffset
-  const running = runningItems(lastFlight, offset, verifiedIds(lastBriefing), costBasis)
+  const running = runningItems(lastFlight, offset, verifiedIds(lastBriefing), costBasis, now)
   const spent = spend(lastFlight, costBasis)
   const inFlight = new Set(running.map(item => item.story))
   const paused = pausedOf((lastBriefing.leader ?? null) as Json | null, lastFlight.paused === true, offset)
@@ -681,6 +718,7 @@ async function refresh($: EngineInterface): Promise<boolean> {
     running,
     queued: queuedItems(queuedStories, inFlight, paused === null && running.length < slots),
     doneToday: doneTodayItems(lastStories, now, offset, costBasis),
+    stories: roadStories(now),
     // THE DONE-SIGNAL'S PROBLEM IS ITS OWN: a good read of the queue says nothing of events_since or the store.
     events: current.events ?? null,
     eventsAnsweredAt: current.eventsAnsweredAt ?? null,
@@ -696,6 +734,11 @@ async function refresh($: EngineInterface): Promise<boolean> {
   await showHealth($)
 
   return true
+}
+
+// Every story of the last answers as a goal's road reads it, an act the owner just took laid over a read that lags.
+function roadStories(now: number) {
+  return roadStoriesOf(lastStories, lastFlight, lastBriefing, costBasis, (id, state) => settledState(`story-${id}`, state, now))
 }
 
 // WHY AN APPROVED STORY HAS NOT STARTED (the owner's walk of 1.5.0, #35): story_get carries a held story's reason as
@@ -769,7 +812,7 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-// WHY THE DONE-SIGNAL CANNOT RUN, on the Status tab until a whole read of the events succeeds; the first failure's time.
+// WHY THE DONE-SIGNAL CANNOT RUN, on Health until a whole read of the events succeeds; the first failure's time.
 async function eventsFailed($: EngineInterface, kind: NonNullable<PaneSnapshot['events']>['kind'], reason: string): Promise<void> {
   const now = await $.clock.now()
   debug($, `stopped (${kind}): ${reason}`)
@@ -868,7 +911,7 @@ async function eventsRefused($: EngineInterface, answered: TerylonAnswer): Promi
   await eventsFailed($, kind, why(answered) || COPY.noServerTitle)
 }
 
-// GOALS DELETED FOR GOOD: dropped from the Goals tab, its plans, the queue's questions and every settled act; an open
+// GOALS DELETED FOR GOOD: dropped from the overview, its plans, the queue's questions and every settled act; an open
 // goal screen of one says so quietly. The stories known under them are dropped with them.
 async function forgetGoals($: EngineInterface, ids: readonly number[]): Promise<void> {
   if (ids.length === 0) {
@@ -1129,6 +1172,11 @@ async function flushHeld($: EngineInterface): Promise<void> {
     return
   }
 
+  // WHAT WAS HELD WAITS: it is real, so it is posted once test mode ends.
+  if ((await read($, testMode)).isOn) {
+    return
+  }
+
   isPolling = true
 
   try {
@@ -1278,6 +1326,9 @@ let isStarted = false
 const pollTimers: { cancel?: () => void }[] = []
 let tickedAt = 0
 export const POLL_STALLED_MILLISECONDS = 2 * POLL_MS
+// When the pane last drew the overview, and whether the poll is reading its goals.
+let overviewDrawnAt = 0
+let isGoalsPolling = false
 
 async function start($: EngineInterface, cwd: string): Promise<void> {
   if (isStarted) {
@@ -1350,6 +1401,13 @@ async function tick($: EngineInterface, isStart: boolean): Promise<void> {
       return
     }
 
+    pollGoals($, now)
+
+    // TEST MODE TAKES NO PART IN THE SIGNALS: no lease and no read of the shared store, and other sessions keep working.
+    if ((await read($, testMode)).isOn) {
+      return
+    }
+
     if (!(await isSignaller($, now))) {
       return
     }
@@ -1378,6 +1436,23 @@ async function tick($: EngineInterface, isStart: boolean): Promise<void> {
       $.clock.after(0, () => flushHeld($))
     }
   }
+}
+
+// THE OVERVIEW'S GOALS FOLLOW THE POLL WHILE IT IS DRAWN: on a timer of its own, so a read held for good never holds the
+// events path, and never for a pane nobody has open, which draws nothing.
+function pollGoals($: EngineInterface, now: number): void {
+  if (isGoalsPolling || now - overviewDrawnAt > POLL_STALLED_MILLISECONDS) {
+    return
+  }
+
+  isGoalsPolling = true
+  $.clock.after(0, async () => {
+    try {
+      await bounded($, 'goals', () => readGoalsFromTerylon($, true), async () => undefined)
+    } finally {
+      isGoalsPolling = false
+    }
+  })
 }
 
 // What moved since the last look: the done-signal, or one catch-up summary after a long time away.
@@ -1493,7 +1568,7 @@ async function startOver($: EngineInterface, reset: Reset, epoch: string | null,
   await eventsRead($)
 }
 
-// A whole read of the events, and a store that kept it: the Status tab's events problem goes.
+// A whole read of the events, and a store that kept it: Health's events problem goes.
 async function eventsRead($: EngineInterface): Promise<void> {
   if (storeRefusals > 0) {
     return
@@ -1508,7 +1583,7 @@ async function readSnapshot($: EngineInterface): Promise<PaneSnapshot> {
 }
 
 // THE DONE-SIGNAL'S FIELDS, READ BY THEIR TYPE: a value an earlier version kept lacks them, and one of another shape
-// must draw as none rather than throw where the Status tab formats its time.
+// must draw as none rather than throw where Health formats its time.
 function snapshotOf(value: unknown): PaneSnapshot {
   const kept = { ...EMPTY_SNAPSHOT, ...(value !== null && typeof value === 'object' ? (value as Partial<PaneSnapshot>) : {}) }
   const time = (moment: unknown): number | null => (typeof moment === 'number' && Number.isFinite(moment) ? moment : null)
@@ -1541,7 +1616,7 @@ async function readBell($: EngineInterface): Promise<PaneBell> {
   return { ...EMPTY_BELL, ...(await read($, bell)) }
 }
 
-// The stepper's short labels: a list story's last phase is Accept, never Merge (#39).
+// A story's road's short names: a list story's last phase is Accept, never Merge.
 function shortLabels(phases: readonly { label: string }[]): readonly string[] {
   return phases.map(phase => COPY.phaseShort(phase.label))
 }
@@ -1572,6 +1647,13 @@ async function bounded($: EngineInterface, what: string, work: () => Promise<voi
 // THE PANE'S OWN PROMPTS, ONCE: the same text is not posted again within a minute, however often it is pressed.
 const postedAt = new Map<string, number>()
 async function postPrompt($: EngineInterface, text: string): Promise<void> {
+  // A MADE-UP SUBJECT NEVER REACHES THE CHAT, where Claude's own tools reach the real Terylon.
+  if ((await read($, testMode)).isOn) {
+    await noteInTestMode($, COPY.testPrompt)
+
+    return
+  }
+
   const now = await $.clock.now()
   const last = postedAt.get(text)
 
@@ -1584,18 +1666,18 @@ async function postPrompt($: EngineInterface, text: string): Promise<void> {
   await $.prompt.submit({ text })
 }
 
+// THE SCREENS 1.18 HAD AS TABS, in a stack an earlier version kept across a reload: the overview and More hold them now.
+const RETIRED_SCREENS: readonly string[] = ['goals', 'bell', 'memory', 'status']
+
 function stackOf(value: PaneView): PaneScreen[] {
-  return Array.isArray(value.stack) && value.stack.length > 0 ? value.stack : [QUEUE]
+  const stack = Array.isArray(value.stack) ? value.stack.filter(screen => !RETIRED_SCREENS.includes(screen.screen)) : []
+
+  return stack.length > 0 ? stack : [QUEUE]
 }
 
-// NAVIGATION: a stack of screens. A tab starts it over, a row pushes, ‹ pops back to where the owner came from.
-async function show($: EngineInterface, screen: PaneScreen, isTab: boolean): Promise<void> {
-  await update($, view, (current: PaneView): PaneView => ({ stack: isTab ? [screen] : [...stackOf(current), screen] }))
-
-  // THE GOALS TAB STARTS OVER ON OPEN; ‹ back to it keeps the list the owner left.
-  if (isTab && screen.screen === 'goals') {
-    await update($, goals, (current: PaneGoals): PaneGoals => ({ ...EMPTY_GOALS, ...current, showing: 'open' }))
-  }
+// NAVIGATION: a stack of screens with the overview at its root. A row pushes, ‹ pops back to where the owner came from.
+async function show($: EngineInterface, screen: PaneScreen, isRoot: boolean): Promise<void> {
+  await update($, view, (current: PaneView): PaneView => ({ stack: isRoot ? [screen] : [...stackOf(current), screen] }))
   await leaveActs($)
   await load($, screen)
 }
@@ -1610,41 +1692,142 @@ async function back($: EngineInterface): Promise<void> {
 
 async function load($: EngineInterface, screen: PaneScreen): Promise<void> {
   switch (screen.screen) {
+    case 'queue':
+      return loadOverview($)
     case 'story':
       return openStory($, screen.story)
     case 'question':
       return openQuestion($, screen.question)
-    case 'goals':
     case 'plan':
       return loadGoals($)
+    case 'new-goal':
+      return openNewGoal($)
     case 'goal':
       return openGoal($, screen.goal)
     case 'spec':
       return openSpec($, screen.goal, screen.version, screen.file)
-    case 'bell':
-      return loadBell($)
-    case 'memory':
-      return openMemory($)
-    case 'status':
-      return loadBell($)
+    case 'more':
+      return loadMore($)
+    case 'notices':
+      return loadNotices($)
     default:
       return undefined
   }
 }
 
-// The band's button and the commands: the one pane, on the tab asked for, never opened by itself.
-async function openPane($: EngineInterface, screen: PaneScreen): Promise<void> {
-  await update($, view, (): PaneView => ({ stack: [screen] }))
-  await $.ui.open({ id: PANE, title: COPY.title })
+// WHAT THE OVERVIEW NEEDS BESIDE THE POLL: the goals and their plans, and for its footer the 30 days and the memory's
+// proposals. Read at once, each under the bound of a press.
+async function loadOverview($: EngineInterface): Promise<void> {
+  await Promise.all([loadGoals($), readOverviewFooter($)])
+}
+
+async function readOverviewFooter($: EngineInterface): Promise<void> {
+  await bounded($, 'the overview', async () => {
+    const [metrics, memoryAnswer] = await Promise.all([callTerylon($, 'metrics'), callTerylon($, 'memory_get')])
+
+    await update($, overview, (current: PaneOverview): PaneOverview => ({
+      ...EMPTY_OVERVIEW,
+      ...current,
+      month: metrics.kind === 'ok' ? monthOf(metrics.value, costBasis ?? costBasisOf(metrics.value)) : current?.month ?? null,
+      memoryPending: memoryAnswer.kind === 'ok' ? list(memoryAnswer.value.proposals).length : current?.memoryPending ?? null,
+    }))
+  }, async () => undefined)
+}
+
+// NOTICES, a screen of its own like More: the bell is all it reads.
+async function loadNotices($: EngineInterface): Promise<void> {
+  await loadBell($)
+}
+
+// The bell: Notices, whichever screen it was asked from, so ‹ Overview leads back to the overview.
+async function openNotices($: EngineInterface): Promise<void> {
+  const screen: PaneScreen = { screen: 'notices' }
+
+  await update($, view, (): PaneView => ({ stack: [QUEUE, screen] }))
+  await leaveActs($)
   await load($, screen)
 }
 
-// The band's Open: the pane where the owner left it, the queue the first time; never a tab chosen for them.
+// MORE: Health and Memory on one page, what they read fetched at once under Desktop's 10 s bound on a press.
+async function loadMore($: EngineInterface): Promise<void> {
+  await Promise.all([
+    loadBell($),
+    bounded($, 'the memory', () => openMemory($), sentence => update($, memory, (current: PaneMemory): PaneMemory => ({ ...EMPTY_MEMORY, ...current, phase: 'error', sentence }))),
+  ])
+}
+
+// A button of the overview's head, and How to fix: More, at its top, where Health stands above Memory.
+async function openMore($: EngineInterface): Promise<void> {
+  await show($, { screen: 'more' }, false)
+  await $.ui.scroll({ to: 'start', in: PANE }).catch(() => undefined)
+}
+
+// The band's button and the commands: the one pane, on the tab asked for, never opened by itself.
+async function openPane($: EngineInterface, screen: PaneScreen): Promise<void> {
+  await update($, view, (): PaneView => ({ stack: [screen] }))
+  await $.ui.open({ id: PANE, title: (await read($, testMode)).isOn ? COPY.testHead : COPY.title })
+  await load($, screen)
+}
+
+// The band's Open: the pane where the owner left it, the overview the first time; never a screen chosen for them.
 async function reopenPane($: EngineInterface): Promise<void> {
   const stack = stackOf(await read($, view))
 
-  await $.ui.open({ id: PANE, title: COPY.title })
+  await $.ui.open({ id: PANE, title: (await read($, testMode)).isOn ? COPY.testHead : COPY.title })
   await load($, stack[stack.length - 1] ?? QUEUE)
+}
+
+// What a press in test mode did not do, said on the screen it was pressed on.
+async function noteInTestMode($: EngineInterface, sentence: string): Promise<void> {
+  await update($, testMode, (current: PaneTestMode): PaneTestMode => ({ ...EMPTY_TEST_MODE, ...current, note: sentence }))
+}
+
+// /terylon-cockpit test, and test off: everything the pane read and everything drawn starts over, so nothing made-up
+// stays behind in live data, nor the other way round. THE SHARED STORE IS NOT TOUCHED, and what this session held for it
+// stays in memory: leaving, the pane stands where it stood. `isOpened` false enters it without opening the pane.
+async function setTestMode($: EngineInterface, isOn: boolean, isOpened = true): Promise<void> {
+  const now = await $.clock.now()
+
+  if ((await read($, testMode)).isOn !== isOn) {
+    testWorld = isOn ? createTestWorld(now) : null
+    lastFlight = {}
+    lastBriefing = {}
+    lastStories = []
+    policy = null
+    costBasis = null
+    savedPolicy = null
+    lastAttemptAt = 0
+    refs.clear()
+    settled.clear()
+    storyTargets.clear()
+    hostProofStories.clear()
+    postedAt.clear()
+    await update($, testMode, (): PaneTestMode => ({ isOn, note: null }))
+    await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({ ...EMPTY_SNAPSHOT, sessionIdSource: current?.sessionIdSource ?? EMPTY_SNAPSHOT.sessionIdSource, eventsWatchedSince: now }))
+    await update($, band, (): PaneBand => null)
+    await update($, story, (): PaneStory | null => null)
+    await update($, goal, (): PaneGoal | null => null)
+    await update($, answer, (): PaneAnswer | null => null)
+    await update($, goals, (): PaneGoals => EMPTY_GOALS)
+    await update($, bell, (): PaneBell => EMPTY_BELL)
+    await update($, overview, (): PaneOverview => EMPTY_OVERVIEW)
+    await update($, memory, (): PaneMemory => EMPTY_MEMORY)
+    await update($, open, (): string[] => [])
+    await update($, acts, (): Record<string, PaneAct> => ({}))
+    await update($, policyForm, (): PanePolicyForm => EMPTY_POLICY_FORM)
+    await update($, rulesAsked, (): boolean => false)
+    await showHealth($)
+
+    if (isOn) {
+      await refresh($)
+    } else {
+      $.clock.after(0, () => tick($, true))
+    }
+  }
+
+  if (isOpened) {
+    await openPane($, QUEUE)
+  }
 }
 
 async function toggle($: EngineInterface, key: string): Promise<void> {
@@ -1702,7 +1885,7 @@ async function readFlight($: EngineInterface, now: number): Promise<void> {
   lastFlight = { ...flight.value, stories: withoutHostProof(flight.value.stories) }
   rememberRefs('story', list(lastFlight.stories))
 
-  const running = runningItems(lastFlight, zoneOffset, verifiedIds(lastBriefing), costBasis)
+  const running = runningItems(lastFlight, zoneOffset, verifiedIds(lastBriefing), costBasis, now)
   const spent = spend(lastFlight, costBasis)
 
   await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => ({
@@ -1714,6 +1897,7 @@ async function readFlight($: EngineInterface, now: number): Promise<void> {
     runningTokens: spent.tokens,
     slotsUsed: running.length,
     running,
+    stories: roadStories(now),
   }))
 }
 
@@ -1781,9 +1965,10 @@ async function sendAnswerOnce($: EngineInterface): Promise<void> {
 
 async function loadGoals($: EngineInterface): Promise<void> {
   // A VALUE KEPT FROM AN EARLIER VERSION OF THE MOD is replaced whole, as the memory's is; only the new goal's
-  // draft and what became of it stay.
+  // draft and what became of it stay, and goals already read stay drawn while they are read again.
   await update($, goals, (current: PaneGoals): PaneGoals => ({
     ...EMPTY_GOALS,
+    ...(current?.phase === 'ok' && Array.isArray(current.open) && Array.isArray(current.plans) ? { phase: 'ok' as const, open: current.open, plans: current.plans, targets: Array.isArray(current.targets) ? current.targets : [] } : {}),
     draft: typeof current?.draft === 'string' ? current.draft : '',
     ask: typeof current?.ask === 'string' ? current.ask : '',
     priority: typeof current?.priority === 'string' ? current.priority : DEFAULT_PRIORITY,
@@ -1799,18 +1984,26 @@ async function loadGoals($: EngineInterface): Promise<void> {
     closedSentence: typeof current?.closedSentence === 'string' ? current.closedSentence : null,
   }))
   await bounded($, 'goals', () => readGoalsFromTerylon($), sentence => update($, goals, (current: PaneGoals): PaneGoals => ({ ...EMPTY_GOALS, ...current, phase: 'error', sentence })))
-  // THE NEW GOAL'S FOLDER, listed again with the tab: the one the owner listed last, the session's own at first.
+}
+
+// THE NEW GOAL'S FORM: its pickers from the goals, and its folder listed again: the one the owner listed last, the
+// session's own at first.
+async function openNewGoal($: EngineInterface): Promise<void> {
+  await loadGoals($)
   await listFolder($, 'new', (await readPicker($)).listedFolder)
 }
 
-async function readGoalsFromTerylon($: EngineInterface): Promise<void> {
-  const goalsAnswer = await callTerylon($, 'goals_list')
-  const plansAnswer = await callTerylon($, 'plans_list')
+// `isQuiet`: a read of the poll's. One that fails keeps what was read; the next load, or the band, says why.
+async function readGoalsFromTerylon($: EngineInterface, isQuiet = false): Promise<void> {
+  const [goalsAnswer, plansAnswer] = await Promise.all([callTerylon($, 'goals_list'), callTerylon($, 'plans_list')])
   const base = await baseUrl($)
   const questions = (await readSnapshot($)).questions
 
   if (goalsAnswer.kind !== 'ok') {
-    await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, phase: 'error', sentence: why(goalsAnswer) }))
+    if (!isQuiet) {
+      await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, phase: 'error', sentence: why(goalsAnswer) }))
+    }
+
     return
   }
 
@@ -1822,14 +2015,19 @@ async function readGoalsFromTerylon($: EngineInterface): Promise<void> {
   rememberRefs('goal', list(goalsNow.goals))
   rememberRefs('plan', list((plansNow as Json).plans))
   rememberRefs('story', list((plansNow as Json).plans).flatMap(plan => list(plan.stories)))
-  const items = goalItems(goalsNow, questions)
+  // A REPEATING TASK'S GOAL HAS NO ROAD: its card says its newest run, from goals_list's own `repeating`.
+  const items = goalItems(goalsNow, questions, item => {
+    const repeating = repeatingOf(item, base, now, zoneOffset, costBasis)
+
+    return repeating === null ? null : repeatingWords(repeating)
+  })
   const plans = plansAnswer.kind === 'ok' ? planItems(plansNow, base, costBasis) : []
   const targets = targetsOf(goalsAnswer.value)
   // A Terylon with S44 answers the open goals and closedCount, one without it the full list: read per answer.
   const closedCount = number(goalsAnswer.value.closedCount)
 
   await update($, goals, (current: PaneGoals): PaneGoals => {
-    const read_ = { ...current, phase: 'ok' as const, sentence: plansAnswer.kind === 'ok' ? null : why(plansAnswer), open: items.open, plans, targets }
+    const read_ = { ...current, phase: 'ok' as const, sentence: plansAnswer.kind === 'ok' ? null : why(plansAnswer), open: items.open, plans: plansAnswer.kind === 'ok' || current.plans === undefined ? plans : current.plans, targets }
 
     // BEFORE S44: the closed goals counted and filtered here, from the full list, as before.
     if (closedCount === null) {
@@ -1837,21 +2035,46 @@ async function readGoalsFromTerylon($: EngineInterface): Promise<void> {
     }
 
     // AFTER S44: what a press of History read is kept while closedCount says the same; never read again from here.
-    const isKept = current.closedFrom === 'terylon' && current.closedCount === closedCount && current.closedPhase !== 'idle'
+    const isKept = current.closedFrom === 'terylon' && current.closedCount === closedCount && current.closedPhase !== 'idle' && (current.closedPhase !== 'loading' || closedGoalsRead !== null)
+    // NOTHING CLOSED needs no read: History says it is empty, whether it is open or shut.
+    const closedPhase = closedCount === 0 ? 'ok' : current.showing === 'closed' ? 'changed' : 'idle'
 
     return isKept
       ? { ...read_, closedCount, closedFrom: 'terylon' }
-      : { ...read_, closed: [], closedCount, closedFrom: 'terylon', closedPhase: current.showing === 'closed' && closedCount > 0 ? 'changed' : 'idle', closedSentence: null }
+      : { ...read_, closed: [], closedCount, closedFrom: 'terylon', closedPhase, closedSentence: null }
   })
 }
 
-// OPEN OR HISTORY, PRESSED. With S44 a press of History reads the closed goals, and nothing else ever does.
+// THE READ OF THE CLOSED GOALS this load of the module has in flight: a 'loading' the store kept with none is a read
+// that was lost, and is never drawn or waited on.
+let closedGoalsRead: Promise<void> | null = null
+
+// HISTORY'S FOLD, PRESSED. Where goals_list counts them, a press of History reads the closed goals, and nothing else ever does.
 async function showGoals($: EngineInterface, showing: 'open' | 'closed'): Promise<void> {
   await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, showing }))
 
-  const current = await readGoals($)
+  if (showing === 'open') {
+    return
+  }
 
-  if (showing === 'open' || current.closedFrom !== 'terylon' || current.closedPhase === 'loading') {
+  let current = await readGoals($)
+
+  // PRESSED BEFORE THE GOALS WERE READ: they are read first, under their bound, so the fold knows what to say.
+  if (current.closedFrom !== 'terylon' && current.phase !== 'ok') {
+    await loadGoals($)
+    current = await readGoals($)
+  }
+
+  // BEFORE S44 the goals' own read filled History; one that failed says why under the fold too.
+  if (current.closedFrom !== 'terylon') {
+    if (current.closedPhase !== 'ok') {
+      await update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, closedPhase: 'error', closedSentence: state.sentence ?? COPY.loadError(COPY.goalsHistory) }))
+    }
+
+    return
+  }
+
+  if (current.closedPhase === 'loading' && closedGoalsRead !== null) {
     return
   }
 
@@ -1862,7 +2085,13 @@ async function showGoals($: EngineInterface, showing: 'open' | 'closed'): Promis
   }
 
   await update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, closedPhase: 'loading', closedSentence: null }))
-  await bounded($, 'closed goals', () => readClosedGoals($), sentence => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, closedPhase: 'error', closedSentence: sentence })))
+  closedGoalsRead = bounded($, 'closed goals', () => readClosedGoals($), sentence => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, closedPhase: 'error', closedSentence: sentence })))
+
+  try {
+    await closedGoalsRead
+  } finally {
+    closedGoalsRead = null
+  }
 }
 
 async function readClosedGoals($: EngineInterface): Promise<void> {
@@ -2146,7 +2375,16 @@ async function openGoal($: EngineInterface, id: number): Promise<void> {
     title: text(document.title) ?? refOf(document, id),
     ref: text(document.ref),
     meta: COPY.goalMeta(`P${number(document.priority) ?? 2}`, COPY.stateText(state)),
-    stories: list(document.storyList).map(item => ({ id: number(item.id) ?? 0, title: `${refOf(item, number(item.id) ?? 0)} ${text(item.title) ?? ''}`.trim(), state: COPY.stateText(String(item.target) === 'list' && item.state === 'merged' ? 'accepted' : String(item.state ?? '')) })),
+    ask: text(document.ask),
+    state,
+    target: text(document.target),
+    stories: list(document.storyList).map(item => ({
+      id: number(item.id) ?? 0,
+      title: `${refOf(item, number(item.id) ?? 0)} ${text(item.title) ?? ''}`.trim(),
+      state: COPY.stateText(String(item.target) === 'list' && item.state === 'merged' ? 'accepted' : String(item.state ?? '')),
+      stateKey: String(item.state ?? ''),
+      isList: text(item.target) === 'list' || (text(item.target) === null && text(document.target) === 'list'),
+    })),
     isOpen: ['open', 'active'].includes(state),
     // EVERY STORY OF IT THAT HAS NOT ENDED, which a drop abandons (Terylon S35, #388), by title; a run is stopped first.
     openStories: list(document.storyList)
@@ -2171,22 +2409,24 @@ async function loadBell($: EngineInterface): Promise<void> {
 }
 
 async function readBellFromTerylon($: EngineInterface): Promise<void> {
-  const notices = await callTerylon($, 'notices_list')
+  const [notices, metrics] = await Promise.all([callTerylon($, 'notices_list'), callTerylon($, 'metrics')])
 
   if (notices.kind !== 'ok') {
     await update($, bell, (current: PaneBell): PaneBell => ({ ...current, phase: 'error', sentence: why(notices) }))
     return
   }
 
-  const leader = await callTerylon($, 'leader_status')
-  const metrics = await callTerylon($, 'metrics')
   const now = await $.clock.now()
 
   await update($, bell, (): PaneBell =>
-    bellView(notices.value, leader.kind === 'ok' ? leader.value : null, metrics.kind === 'ok' ? metrics.value : null, now, zoneOffset, costBasis ?? (metrics.kind === 'ok' ? costBasisOf(metrics.value) : null)))
+    bellView(notices.value, metrics.kind === 'ok' ? metrics.value : null, now, zoneOffset, costBasis ?? (metrics.kind === 'ok' ? costBasisOf(metrics.value) : null)))
+
+  if (metrics.kind === 'ok') {
+    await update($, overview, (current: PaneOverview): PaneOverview => ({ ...EMPTY_OVERVIEW, ...current, month: monthOf(metrics.value, costBasis ?? costBasisOf(metrics.value)) }))
+  }
 }
 
-// A notice marked handled from the Bell tab (#360): notice_handle is a write the owner decided is not a gate, so
+// A notice marked handled on More: notice_handle is a write the owner decided is not a gate, so
 // the pane sends it; the bell and the band drop it at once, and the next poll reads what Terylon published.
 async function handleNotice($: EngineInterface, id: number): Promise<void> {
   await update($, bell, (current: PaneBell): PaneBell => ({ ...current, handling: id, handleSentence: null }))
@@ -2240,6 +2480,7 @@ async function leaveActs($: EngineInterface): Promise<void> {
     return Object.fromEntries(Object.entries(all).filter(([, value]) => value?.busy != null).map(([key, value]) => [key, { ...NO_ACT, busy: value.busy }]))
   })
   await update($, policyForm, (): PanePolicyForm => EMPTY_POLICY_FORM)
+  await update($, testMode, (current: PaneTestMode): PaneTestMode => ({ ...EMPTY_TEST_MODE, ...current, note: null }))
 }
 
 // An act's field: opened under its card by its button, closed by the same button or Cancel. Not while it is busy.
@@ -2354,10 +2595,10 @@ async function refreshAct($: EngineInterface, key: string): Promise<void> {
   await load($, stack[stack.length - 1] ?? QUEUE)
 }
 
-// How to fix: the Status tab, with every rule the pane needs.
+// How to fix: Health, with every rule the pane needs.
 async function howToFix($: EngineInterface): Promise<void> {
   await update($, rulesAsked, (): boolean => true)
-  await show($, { screen: 'status' }, true)
+  await openMore($)
 }
 
 // THE POLICY: Edit fills the form with what policy_get answered; Save sends only what changed.
@@ -2397,7 +2638,8 @@ async function savePolicy($: EngineInterface): Promise<void> {
   }
 }
 
-async function openAdd($: EngineInterface, title: string): Promise<void> {
+// `goal`: the goal it was opened from, picked first.
+async function openAdd($: EngineInterface, title: string, goal?: number): Promise<void> {
   const goalsAnswer = await callTerylon($, 'goals_list')
   const openGoals = goalsAnswer.kind === 'ok'
     ? list(goalsAnswer.value.goals).filter(item => !['done', 'closed', 'abandoned', 'dropped'].includes(String(item.state)))
@@ -2411,7 +2653,7 @@ async function openAdd($: EngineInterface, title: string): Promise<void> {
     .filter(item => !['merged', 'abandoned'].includes(String(item.state)))
     .map(item => ({ value: String(number(item.id) ?? 0), label: `${refOf(item, number(item.id) ?? 0)} ${text(item.title) ?? ''}` }))
 
-  await update($, add, (): PaneAdd => ({ ...EMPTY_ADD, title, goal: choices[0]?.value ?? '', goals: choices, repositoryGoals, stories: [{ value: '', label: COPY.nothingBefore }, ...stories] }))
+  await update($, add, (): PaneAdd => ({ ...EMPTY_ADD, title, goal: choices.find(choice => choice.value === String(goal))?.value ?? choices[0]?.value ?? '', goals: choices, repositoryGoals, stories: [{ value: '', label: COPY.nothingBefore }, ...stories] }))
   await update($, view, (current: PaneView): PaneView => ({ stack: [...stackOf(current), { screen: 'add' }] }))
 }
 
@@ -2505,6 +2747,8 @@ async function openMemory($: EngineInterface): Promise<void> {
   const now = await $.clock.now()
 
   await update($, memory, (current: PaneMemory): PaneMemory => ({ ...current, phase: 'ok', files, rules, pending: list(answered.value.proposals).length, proposals: proposalItems(answered.value, zoneOffset), edit: null, sentence: null }))
+  // THE OVERVIEW'S PILL follows what was just read.
+  await update($, overview, (current: PaneOverview): PaneOverview => ({ ...EMPTY_OVERVIEW, ...current, memoryPending: list(answered.value.proposals).length }))
 }
 
 // A MEMORY EDIT IS A PROPOSAL: memory_propose, then the owner confirms it in the console's memory gate.
@@ -2563,24 +2807,18 @@ function backLabel(stack: readonly PaneScreen[]): string {
   const previous = stack[stack.length - 2] ?? QUEUE
 
   switch (previous.screen) {
-    case 'goals':
-      return `‹ ${COPY.tabGoals}`
-    case 'bell':
-      return `‹ ${COPY.tabNotices(0)}`
-    case 'memory':
-      return `‹ ${COPY.tabMemory}`
-    case 'status':
-      return `‹ ${COPY.tabHealth(false)}`
+    case 'more':
+      return `‹ ${COPY.more}`
     case 'story':
       return `‹ ${labelOf('story', previous.story)}`
     case 'goal':
-      return `‹ ${COPY.goalOf(labelOf('goal', previous.goal))}`
+      return `‹ ${refs.get(`goal-${previous.goal}`) ?? COPY.goalOf(String(previous.goal))}`
     case 'plan':
       return `‹ ${COPY.plan(labelOf('plan', previous.plan))}`
     case 'question':
       return COPY.back
     default:
-      return `‹ ${COPY.tabQueue}`
+      return `‹ ${COPY.overview}`
   }
 }
 
@@ -2601,17 +2839,18 @@ function weightOf(tone: Tone | undefined): 'semibold' | undefined {
 // HOW A SURFACE DRAWS (S32): a graphic one (Desktop, the phone, VS Code) takes Svg, type sizes and spacing steps;
 // the terminal draws whole cells, no Svg, and the text fallbacks the canvas's terminal board draws. Below
 // NARROW_COLUMNS the pane is the narrow dock.
-// isCompact: too few columns for the stepper of eight at its size (STEPPER_COLUMNS), so it is drawn compact.
-type Look = { isGraphic: boolean; isNarrow: boolean; isCompact: boolean; proofs: Proofs }
+// isCompact: too few columns to name a story's eight phases (ROAD_NAMES_COLUMNS), so only the one now is named.
+// isWide: room for two cards side by side. isTilesLine: no room for three tiles, so they are one line of counts.
+type Look = { isGraphic: boolean; isNarrow: boolean; isCompact: boolean; isWide: boolean; isTilesLine: boolean; columns: number; proofs: Proofs }
 
-// The tint of a card: plain, waiting for the owner (warning), or a problem (error).
-type CardTone = 'plain' | 'wait' | 'bad'
+// A card's stroke: plain, Waiting for you in the gate's purple, waiting for the owner (warning), or a problem (error).
+type CardTone = keyof typeof CARD_STROKES
 
 // A card: a round border, a heading left and a quiet hint right, then its rows. On a graphic surface the spacing is
 // the surface's own steps; on the terminal, where every gap is a whole line, the rows stay together and only the
-// heading stands apart. A CARD THAT WAITS FOR THE OWNER, OR A PROBLEM, IS STROKED IN ITS COLOUR AND NEVER FILLED (the
-// owner's walk of 1.2.0): on a tinted fill the hints, links and chips could not be read.
-function card(elements: Elements, look: Look, key: string, title: unknown, hint: unknown, children: unknown[], tone: CardTone = 'plain'): unknown {
+// heading stands apart. EVERY CARD LIES ON THE ONE NEUTRAL FILL, WHATEVER ITS STROKE: on a tinted fill the hints, links
+// and chips could not be read, so what a card waits for or warns of is its stroke. The terminal paints no fill.
+function card(elements: Elements, look: Look, key: string, title: unknown, hint: unknown, children: unknown[], tone: CardTone = 'plain', isFilling = false): unknown {
   const { Box, Text } = elements
   const toneKey = CARD_STROKES[tone]
 
@@ -2621,14 +2860,20 @@ function card(elements: Elements, look: Look, key: string, title: unknown, hint:
       flexDirection="column"
       borderStyle="round"
       borderColor={toneKey}
+      backgroundColor={look.isGraphic ? CARD_FILL : undefined}
+      flexGrow={isFilling ? 1 : undefined}
       paddingX={look.isGraphic ? 'md' : 1}
       paddingY={look.isGraphic ? 'sm' : 0}
       gap={look.isGraphic ? 'sm' : 1}
     >
-      <Box flexDirection="row" justifyContent="space-between" gap={1}>
-        {typeof title === 'string' ? heading(elements, title) : title}
-        {typeof hint === 'string' ? <Text color="subtle" size="footnote">{hint}</Text> : hint ?? null}
-      </Box>
+      {title === null && hint === null
+        ? null
+        : (
+            <Box flexDirection="row" justifyContent="space-between" gap={1}>
+              {typeof title === 'string' ? heading(elements, title) : title}
+              {typeof hint === 'string' ? <Text color="subtle" size="footnote">{hint}</Text> : hint ?? null}
+            </Box>
+          )}
       <Box flexDirection="column" gap={look.isGraphic ? 'xs' : 0}>
         {children}
       </Box>
@@ -2647,6 +2892,9 @@ function heading(elements: Elements, title: string, count?: string, countTone?: 
     </Text>
   )
 }
+
+// A card's border and padding on the terminal, in cells.
+const CARD_CHROME_COLUMNS = 6
 
 // The width of a row's kind column on the terminal, in cells: every title starts under the one above it. A card
 // whose kinds are wider ("orchestrator") takes its widest, up to KIND_WIDEST, past which a kind is cut.
@@ -2667,6 +2915,8 @@ type Row = {
   kind: string | null
   kindTone?: Tone
   kindColumn?: number
+  // Its subject's ref, monospaced before its title.
+  ref?: string | null
   title: string
   titleTone?: Tone
   // A title drawn dim, as the engine dims a Text: a closed goal's, which a colour alone left as bright as an open one's.
@@ -2677,6 +2927,8 @@ type Row = {
   reveal?: { href: string; label: string } | null
   // A console link that ends the row, always drawn beside the press: History's Delete….
   trail?: { href: string; label: string } | null
+  // The row's own act, drawn beside the press: Waiting for you's Answer, Approve, Accept or Merge ↗.
+  act?: unknown
   onPress: () => unknown
   body?: unknown
 }
@@ -2700,6 +2952,10 @@ function row(elements: Elements, look: Look, input: Row): unknown {
     )
   }
 
+  if (input.ref !== undefined && input.ref !== null) {
+    children.push(<Text mono size="footnote" color="subtle">{input.ref}</Text>, ' ')
+  }
+
   children.push(<Text color={colorOf(input.titleTone)} weight={weightOf(input.titleTone)} dimColor={input.isTitleDim === true ? true : undefined} wrap="truncate-end">{input.title}</Text>)
 
   if (hasDetail) {
@@ -2713,7 +2969,7 @@ function row(elements: Elements, look: Look, input: Row): unknown {
 
   return (
     <Box key={`row-${input.key}`} flexDirection="column" hover={isRevealed ? { backgroundColor: 'userMessageBackgroundHover' } : undefined}>
-      <Box flexDirection="row" minWidth={0} overflow="hidden" gap={isRevealed || (input.trail !== undefined && input.trail !== null) ? (look.isGraphic ? 'sm' : 1) : undefined}>
+      <Box flexDirection="row" minWidth={0} overflow="hidden" justifyContent={input.act === undefined || input.act === null ? undefined : 'space-between'} gap={isRevealed || (input.trail !== undefined && input.trail !== null) || (input.act !== undefined && input.act !== null) ? (look.isGraphic ? 'sm' : 1) : undefined}>
         <Button key={input.key} plain onPress={input.onPress}>
           {children}
         </Button>
@@ -2729,6 +2985,7 @@ function row(elements: Elements, look: Look, input: Row): unknown {
             <Link href={input.trail.href} label={input.trail.label} />
           </Box>
         )}
+        {input.act !== undefined && input.act !== null && <Box flexShrink={0}>{input.act}</Box>}
       </Box>
       {input.body ?? null}
     </Box>
@@ -2753,17 +3010,40 @@ function picture(elements: Elements, value: Picture | null, options: { isInterac
   return <Svg source={value.source} alt={value.alt} height={value.height} isInteractive={options.isInteractive === true ? true : undefined} />
 }
 
-// THE TERMINAL'S STEPPER: ✓ ✓ ✓ ✓ ● ○ ○ ◇, done in success, now in suggestion (warning when stuck), the rest subtle.
-function phaseLine(elements: Elements, phases: readonly PanePhase[], isStuck: boolean, after: string | null): unknown {
+// A ROAD: an Svg where the surface draws one, on the terminal runs of coloured cells, as wide as the pane gives.
+function roadDrawing(elements: Elements, look: Look, key: string, steps: readonly PaneRoadStep[], options: { isStuck?: boolean; tooltips?: readonly string[] | null; height?: number } = {}): unknown {
   const { Text } = elements
 
+  if (look.isGraphic) {
+    return picture(elements, road(steps, options), { isInteractive: options.tooltips !== null && options.tooltips !== undefined })
+  }
+
   return (
-    <Text wrap="truncate-end">
-      {phases.map((phase, index) => (
-        <Text color={phase.status === 'done' ? 'success' : phase.status === 'now' ? (isStuck ? 'warning' : 'suggestion') : 'subtle'}>{`${phaseGlyph(phase, index === phases.length - 1)} `}</Text>
-      ))}
-      {after === null ? null : <Text color="subtle">{` ${after}`}</Text>}
+    <Text key={key} wrap="truncate-end">
+      {roadCells(steps, look.columns - CARD_CHROME_COLUMNS, options.isStuck).flatMap((cell, index) => (index === 0 ? [<Text color={cell.tone}>{cell.text}</Text>] : [' ', <Text color={cell.tone}>{cell.text}</Text>]))}
     </Text>
+  )
+}
+
+// THE NAMES UNDER A ROAD, each in its segment's column; `onlyNow` where there is no room for them all.
+function roadNames(elements: Elements, look: Look, key: string, steps: readonly PaneRoadStep[], options: { isStuck?: boolean; onlyNow?: boolean } = {}): unknown {
+  const { Box, Text } = elements
+  const toneOf = (step: PaneRoadStep): Tone => (step.status === 'now' ? (step.isGate ? 'merged' : options.isStuck === true ? 'error' : 'suggestion') : step.status === 'done' ? 'inactive' : step.isGate ? 'merged' : 'subtle')
+
+  if (options.onlyNow === true) {
+    const now = steps.find(step => step.status === 'now')
+
+    return now === undefined ? null : <Text key={`${key}-now`} size="caption" weight="semibold" color={toneOf(now)}>{now.name}</Text>
+  }
+
+  return (
+    <Box key={`${key}-labels`} flexDirection="row" flexWrap={look.isGraphic ? undefined : 'wrap'} gap={look.isGraphic ? undefined : 1}>
+      {steps.map((step, index) => (
+        <Box key={`${key}-label-${index}`} flexGrow={look.isGraphic ? 1 : undefined} flexShrink={look.isGraphic ? 1 : undefined} minWidth={look.isGraphic ? 0 : undefined} width={look.isGraphic ? 0 : undefined}>
+          <Text size="caption" wrap="truncate-end" weight={step.status === 'now' ? 'semibold' : undefined} color={toneOf(step)}>{step.name}</Text>
+        </Box>
+      ))}
+    </Box>
   )
 }
 
@@ -2780,13 +3060,20 @@ function withHash(elements: Elements, line: string, tone?: Tone): unknown {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     // TERYLON COCKPIT'S ONE COMMAND (Terylon S68): /terylon-pane, /terylon and /terylon-memory are gone, not aliased.
-    await $.command.register({ name: 'terylon-cockpit', description: 'Opens Terylon Cockpit: Waiting, Goals, Notices, Memory and Health' })
+    await $.command.register({ name: 'terylon-cockpit', description: 'Opens Terylon Cockpit: what waits for you, your goals, and Notices, Memory and Health; test and test off for its test mode' })
     storyTargets.clear()
     // UNATTENDED ONLY WHEN THE ENGINE SAYS SO TWICE: no person at the prompt and nowhere to draw, a -p run or the SDK.
     // An engine that names neither starts a session someone is at.
     isUnattended = e.isInteractive === false && (e.surface === null || e.surface === undefined)
     debug($, `this session starts with isInteractive ${String(e.isInteractive)}, surface ${String(e.surface)}: ${isUnattended ? 'nobody is at it' : 'someone is at it'}`)
     sessionFolder = typeof e.cwd === 'string' && e.cwd.trim() !== '' ? e.cwd : sessionFolder
+
+    // TEST MODE FROM THE ENVIRONMENT: TERYLON_PANE_TEST_MODE=on starts the session in it, once, without opening the pane;
+    // /terylon-cockpit test off still ends it. Any other value, or none, changes nothing.
+    if (!isStarted && (await $.env.get('TERYLON_PANE_TEST_MODE')) === 'on') {
+      await setTestMode($, true, false)
+    }
+
     await start($, e.cwd)
     ensurePoll($, 'session.start')
 
@@ -2828,7 +3115,15 @@ export const register: Register = on => {
     return result
   })
 
-  on('command.run', { command: 'terylon-cockpit' }, async $ => {
+  on('command.run', { command: 'terylon-cockpit' }, async ($, e) => {
+    const asked = (e.args ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+
+    if (asked === 'test' || asked === 'test off') {
+      await setTestMode($, asked === 'test')
+
+      return { text: asked === 'test' ? COPY.testOn : COPY.testOff }
+    }
+
     await openPane($, QUEUE)
 
     return { text: 'Terylon Cockpit is open.' }
@@ -2887,7 +3182,7 @@ export const register: Register = on => {
       ...(stuck > 0 ? [<Text color="error" tabular>{COPY.bandStuck(stuck)}</Text>] : []),
     ]
     let segments: unknown[]
-    let title: string = COPY.title
+    let title: string = (await read($, testMode)).isOn ? `${COPY.title} · ${COPY.testBand}` : COPY.title
     switch (current.connection) {
       case 'connecting':
         segments = [<Text color="subtle">{` · ${COPY.connecting}`}</Text>]
@@ -2945,8 +3240,10 @@ export const register: Register = on => {
     )
   })
 
-  // THE PANE: tabs, then the screen on top of the stack.
+  // THE PANE: the screen on top of the stack, the overview at its root.
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    // EVERY SCREEN'S DRAWING, each returning where it ends; test mode's line goes over whichever it was, at the end.
+    const drawn = await (async (): Promise<unknown> => {
     isSeen = true
     ensurePoll($, 'the pane')
     const elements = $.ui.resolve(e)
@@ -2955,25 +3252,32 @@ export const register: Register = on => {
     const look: Look = {
       isGraphic: e.surface !== 'terminal',
       isNarrow: e.props.bodyColumns < NARROW_COLUMNS,
-      isCompact: e.props.bodyColumns < STEPPER_COLUMNS,
+      isCompact: e.props.bodyColumns < ROAD_NAMES_COLUMNS,
+      isWide: e.surface !== 'terminal' && e.props.bodyColumns >= WIDE_COLUMNS,
+      isTilesLine: e.props.bodyColumns < NARROW_COLUMNS || (e.surface === 'terminal' && e.props.bodyColumns < NARROW_TERMINAL_COLUMNS),
+      columns: e.props.bodyColumns,
       proofs: proofsOf(await $.env.get('TERYLON_PANE_PROOFS')),
     }
     const current = await readSnapshot($)
     const stack = stackOf(await read($, view))
     const screen = stack[stack.length - 1] ?? QUEUE
-    const tab = stack[0]?.screen ?? 'queue'
+    const isTestOn = (await read($, testMode)).isOn
     const shown = await read($, open)
     const now = await $.clock.now()
+
+    if (screen.screen === 'queue') {
+      overviewDrawnAt = now
+    }
+
     const base = await baseUrl($)
     const offset = zoneOffset
     const at = (moment: number | null) => (typeof moment !== 'number' || !Number.isFinite(moment) ? '?' : clock(new Date(moment).toISOString(), offset) ?? '?')
     // WHAT THE OWNER LEFT OUT to find the part Desktop does not draw (TERYLON_PANE_STATUS); unset, nothing is.
     const drawingAsked = statusDrawingOf(await $.env.get('TERYLON_PANE_STATUS'))
-    const age = current.fetchedAt === null ? null : COPY.ago(Math.max(0, Math.round((now - current.fetchedAt) / 1000)))
     const isStale = current.connection === 'unreachable'
     const stale = isStale ? COPY.stale : ''
     const go = (target: PaneScreen) => show($, target, false)
-    const cardOf = (key: string, title: unknown, hint: unknown, children: unknown[], tone: CardTone = 'plain') => card(elements, look, key, title, hint, children, tone)
+    const cardOf = (key: string, title: unknown, hint: unknown, children: unknown[], tone: CardTone = 'plain', isFilling = false) => card(elements, look, key, title, hint, children, tone, isFilling)
     const rowOf = (input: Row) => row(elements, look, input)
     const headingOf = (title: string, count?: number, countTone?: Tone, suffix = '') => heading(elements, title, count === undefined ? undefined : `${COPY.count(count)}${suffix}`, countTone)
     // THE OWNER'S ACTS (S27, #27), drawn on their subject's card. A button takes its act in one press, or opens the
@@ -3078,49 +3382,101 @@ export const register: Register = on => {
       ], 'wait')
     }
 
-    // A TAB is a Button with children: its name and a count chip in tabular digits; the selected one primary, its
-    // digit a hotkey while the pane holds the keyboard. The terminal marks the selected one ●, as 1.1.2 did.
-    const tabButton = (key: string, hotkey: string, name: string, target: PaneScreen, isSelected: boolean, chip: { text: string; tone: Tone } | null) => (
-      <Button
-        key={key}
-        label={chip === null ? name : `${name}${chip.text === '⚠' ? ' ⚠' : ` · ${chip.text}`}`}
-        hotkey={hotkey}
-        variant={isSelected ? 'primary' : undefined}
-        dimColor={!isSelected}
-        onPress={() => show($, target, true)}
-      >
-        {!look.isGraphic && isSelected ? '● ' : ''}
-        {name}
-        {chip === null ? '' : ' '}
-        {chip === null ? null : <Text tabular color={colorOf(chip.tone)} weight={weightOf(chip.tone)}>{chip.text}</Text>}
-      </Button>
-    )
-    const tabs = (
-      <Box key="tabs" flexDirection="row" gap={look.isGraphic ? 'xs' : 1} flexWrap="wrap">
-        {tabButton('tab-queue', '1', COPY.tabQueue, QUEUE, tab === 'queue', null)}
-        {tabButton('tab-goals', '2', COPY.tabGoals, { screen: 'goals' }, tab === 'goals', null)}
-        {tabButton('tab-bell', '3', COPY.tabNotices(0), { screen: 'bell' }, tab === 'bell', current.notices > 0 ? { text: String(current.notices), tone: 'attention' } : null)}
-        {tabButton('tab-memory', '4', COPY.tabMemory, { screen: 'memory' }, tab === 'memory', null)}
-        {tabButton('tab-status', '5', COPY.tabHealth(false), { screen: 'status' }, tab === 'status', hasProblem(current, drawingAsked.off) ? { text: '⚠', tone: 'warning' } : null)}
+    // MERGE IS ONLY EVER A LINK INTO THE CONSOLE; in test mode, for a made-up story, the sentence instead.
+    const mergeLink = (key: string, href: string, label: string) => (isTestOn
+      ? <Button key={key} label={label} onPress={() => noteInTestMode($, COPY.testMerge)} />
+      : <Link href={href} label={label} />)
+    const refreshButton = <Button key="refresh" label={COPY.refresh} dimColor onPress={async () => { await tick($, true); await load($, screen) }} />
+    const backButton = <Button key="back" label={backLabel(stack)} dimColor onPress={() => back($)} />
+    // A FOLD: a real Button of its word and its count, drawn dim while shut and at full strength while open. The terminal
+    // draws a Button with no state of its own, so there it stays plain, ▸ shut and ▾ open, in the quiet tone.
+    const foldButton = (key: string, label: string, isOpen: boolean, onPress: () => unknown = () => toggle($, key)) => (look.isGraphic
+      ? <Button key={key} label={label} dimColor={isOpen ? undefined : true} onPress={onPress} />
+      : (
+          <Button key={key} plain onPress={onPress}>
+            <Text color="subtle">{`${isOpen ? '▾' : '▸'} ${label}`}</Text>
+          </Button>
+        ))
+    const folds = (key: string, buttons: unknown[]) => <Box key={key} flexDirection="row" gap={look.isGraphic ? 'md' : 1} flexWrap="wrap">{buttons}</Box>
+    // AN OPEN FOLD'S CARD: the fold's word and count its heading, its rows inside, one card per fold.
+    const foldCard = (key: string, label: string, count: number, rows: unknown[]) => cardOf(key, headingOf(label, count), null, rows)
+    // TWO CARDS SIDE BY SIDE where the pane is wide, each column a column, so its card takes the column's whole width and
+    // none sits at the width of its words; one under the other elsewhere.
+    const twoColumns = (key: string, left: unknown, right: unknown) => (look.isWide && left !== null && right !== null
+      ? (
+          <Box key={key} flexDirection="row" gap="sm" alignItems="stretch">
+            <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0} width={0}>{left}</Box>
+            <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0} width={0}>{right}</Box>
+          </Box>
+        )
+      : [left, right])
+    // THE WORDS OF WHAT COMES NEXT, under a road: "What next  Merge in the console".
+    const nextLine = (key: string, label: string, words_: string) => (
+      <Box key={key} flexDirection="row" gap={1} flexWrap="wrap">
+        <Text color="subtle">{label}</Text>
+        <Text weight="semibold">{words_}</Text>
       </Box>
     )
-    const context = (
-      <Box key="context" flexDirection="row" justifyContent="space-between" gap={1}>
-        <Link href={base === '' ? 'https://' : base} label={`${hostName(base)} ↗`} />
-        <Box flexDirection="row" gap={1}>
-          <Text color={isStale ? 'error' : 'subtle'} size="footnote" tabular>
-            {screen.screen === 'memory'
-              ? COPY.memoryContext
-              : current.connection === 'connecting' ? COPY.connecting : isStale ? COPY.disconnected(at(current.failingSince)) : COPY.connected(age ?? '')}
-          </Text>
-          <Button key="refresh" label={COPY.refresh} dimColor onPress={async () => { await tick($, false); await load($, screen) }} />
-          {screen.screen === 'queue' && current.connection === 'ok' && current.paused === null && actButton('leader', 'leader_pause', null, { opens: true })}
+    // THE MACHINE IN A LINE, at the overview's head: its health, the connection, the slots, and today's cost, or on the
+    // setup token today's tokens and never a $.
+    const overviewLine = () => {
+      const running_ = Number(current.runningUsd)
+      const health = healthOf(current, offset)
+      const cost = current.costKnown !== false
+        ? COPY.todayCost(words.money(running_), current.dayBudget === null ? null : words.budget(Number(current.dayBudget)))
+        : (current.runningTokens ?? null) === null ? null : `${words.tokens(current.runningTokens ?? 0)} today`
+
+      return [
+        current.connection === 'connecting' ? COPY.connecting : isStale ? COPY.disconnected(at(current.failingSince)) : stateWord(health).word,
+        current.connection === 'ok' ? COPY.connectedShort : null,
+        current.slots > 0 ? COPY.slotsShort(current.slotsUsed, current.slots) : null,
+        current.fetchedAt === null ? null : cost,
+      ].filter(part => part !== null).join(' · ')
+    }
+    // THE WAY TO NOTICES AND TO SYSTEM, in the overview's head, each Button its plain word. Desktop draws a Button natively,
+    // drops its children and lets nothing recolour it, so on a graphic surface a head button with something behind it is
+    // the surface's primary Button and a plain one otherwise; Refresh is never primary. On the terminal a `warning` dot
+    // before the word. Its label is the word it draws, since Desktop draws the label.
+    const overviewState = { ...EMPTY_OVERVIEW, ...(await read($, overview)) }
+    const navButton = (key: string, name: string, isWaiting: boolean, onPress: () => unknown) => {
+      if (!look.isGraphic) {
+        return (
+          <Button key={key} label={name} onPress={onPress}>
+            {isWaiting && <Text color="warning">{'● '}</Text>}
+            {name}
+          </Button>
+        )
+      }
+
+      return isWaiting ? <Button key={key} label={name} variant="primary" onPress={onPress} /> : <Button key={key} label={name} onPress={onPress} />
+    }
+    const isMemoryWaiting = (overviewState.memoryPending ?? 0) > 0
+    const nav = (
+      <Box key="overview-nav" flexDirection="row" gap={1} flexShrink={0} flexWrap="wrap" alignItems="center">
+        {navButton('tab-bell', COPY.navNotices, current.notices > 0, () => openNotices($))}
+        {navButton('tab-status', COPY.navSystem, isMemoryWaiting || hasProblem(current, drawingAsked.off), () => openMore($))}
+        {refreshButton}
+      </Box>
+    )
+    const overviewHead = (
+      <Box key="overview-head" flexDirection={look.isNarrow ? 'column' : 'row'} justifyContent="space-between" alignItems={look.isNarrow ? undefined : 'center'} gap={1}>
+        <Box flexDirection="row" alignItems="center" gap={1} flexShrink={1} minWidth={0} overflow="hidden">
+          <Box flexShrink={0}>
+            <Text size="title" weight="semibold">{isTestOn ? COPY.testHead : COPY.machineName}</Text>
+          </Box>
+          <Box flexShrink={1} minWidth={0} overflow="hidden">
+            <Text color={isStale ? 'error' : 'subtle'} size="footnote" tabular wrap="truncate-end">{overviewLine()}</Text>
+          </Box>
         </Box>
+        {nav}
       </Box>
     )
-    const footer = <Text key="footer" color="subtle" size="footnote" mono>{COPY.footer}</Text>
-    // A FAULT OF THE MACHINE, for a bell row's chip: an alert source, or a notice the Status tab counts as an alert.
-    const isMachineFault = (notice: { id: number; source: string }) => ALERT_SOURCES.includes(notice.source) || current.alertNotices.some(alert => alert.id === notice.id)
+    // THE 30 DAYS, ALONE at the overview's foot.
+    const overviewFoot = (
+      <Box key="overview-foot" flexShrink={1} minWidth={0}>
+        {overviewState.month === null ? null : <Text color="subtle" size="footnote" tabular>{COPY.monthLine(overviewState.month)}</Text>}
+      </Box>
+    )
     // A REASON IS ONE CLEAN LINE, whatever it was handed: no control character, no page of text, never an object.
     // Wrapped, not cut: a store's refusal ends in the file that is the fix.
     const reason = (problem: unknown) => (problem === null || problem === undefined ? null : <Text color="subtle" size="footnote">{COPY.reason(plainLine(problem, REASON_WHOLE))}</Text>)
@@ -3189,37 +3545,253 @@ export const register: Register = on => {
     if (current.connection === 'connecting') {
       return (
         <Box flexDirection="column" gap={1}>
-          {tabs}
-          {context}
-          {footer}
+          {overviewHead}
+          {overviewFoot}
         </Box>
       )
     }
 
-    // The slots and today's spend, as gauges where the surface draws Svg, as ▰▱ cells on the terminal.
+    // Today's spend against its limit.
     const runningUsd = Number(current.runningUsd)
     const budgetUsd = current.dayBudget === null ? null : Number(current.dayBudget)
     // TODAY'S COST, OR ITS TOKENS ON THE SETUP TOKEN: no $ figure and no bar against a dollar limit where it is not known.
     const isCostKnown = current.costKnown !== false
-    const costNow = isCostKnown ? words.money(runningUsd) : costTight({ usd: runningUsd, tokens: current.runningTokens ?? null, isKnown: false })
-    const dayNow = current.dayBudget === null || !isCostKnown ? null : words.budget(budgetUsd)
 
-    // THE STATUS TAB: the machine, its slots and cost, every problem with how to fix it, and where to look.
-    if (screen.screen === 'status') {
+    // A PART THAT THROWS IS ONE PROBLEM, NEVER A BLANK PAGE: Desktop draws its own placeholder when a render fails.
+    const part = async (name: string, build: () => unknown): Promise<unknown> => {
+      try {
+        return await build()
+      } catch (error) {
+        const message = messageOf(error)
+        note($, `terylon-pane: Health's ${name} did not draw: ${message}`)
+
+        return cardOf(`problem-part-${name}`, warned(COPY.statusPartFailed(name)), null, [reason(message), steps(COPY.fixStatusPart)], 'bad')
+      }
+    }
+
+    // NOTICES: Needs you, each notice on a card of its own, then What the machine did, its latest in the open and the rest a
+    // press away. Its way back is the screen's ‹ Overview.
+    const noticesSection = async (): Promise<unknown> => {
+      const bellState = await readBell($)
+      const isMachineOpen = shown.includes('fold-machine')
+      const machineShown = isMachineOpen ? bellState.handled : bellState.handled.slice(0, MACHINE_SHOWN)
+      const machineMore = bellState.handled.length - MACHINE_SHOWN
+
+      return (
+        <Box key="notices" flexDirection="column" gap={1}>
+          <Box key="notices-head" flexDirection="row" justifyContent="space-between" alignItems="center" gap={1} flexWrap="wrap">
+            <Text size="heading" weight="semibold">{COPY.moreNotices}</Text>
+            <Link href={consoleLink(base, 'bell')} label={COPY.noticesInConsoleShort} />
+          </Box>
+          {bellState.phase === 'ok' && <Text weight="semibold" color="inactive">{COPY.needsYou(bellState.unhandledCount)}</Text>}
+          {bellState.phase === 'loading' && quiet(elements, COPY.loading)}
+          {bellState.phase === 'error' && cardOf('bell-error', warned(COPY.loadError(COPY.moreNotices)), null, [reason(bellState.sentence)], 'bad')}
+          {bellState.phase === 'ok' && bellState.unhandled.length === 0 && quiet(elements, COPY.nothingYet)}
+          {bellState.phase === 'ok' && bellState.unhandled.map(notice => cardOf(`notice-card-${notice.id}`, <Text weight="semibold">{notice.title}</Text>, null, [
+            <Text color="subtle" size="footnote" tabular>{COPY.alertHint(notice.source, notice.when)}</Text>,
+            <Text color="inactive">{notice.body === '' ? COPY.noBody : notice.body}</Text>,
+            <Box key={`notice-acts-${notice.id}`} flexDirection="row" alignItems="center" gap={1} flexWrap="wrap">
+              <Button
+                key={`handle-${notice.id}`}
+                label={bellState.handling === notice.id ? COPY.handling : COPY.markHandled}
+                onPress={() => handleNotice($, notice.id)}
+              />
+              {notice.link !== null && <Link href={`${base}${notice.link}`} label={COPY.noticesInConsole} />}
+            </Box>,
+          ], 'wait'))}
+          {bellState.handleSentence === null ? null : reason(bellState.handleSentence)}
+          {bellState.phase === 'ok' && bellState.handled.length > 0 && <Text weight="semibold" color="inactive">{COPY.machineDid}</Text>}
+          {bellState.phase === 'ok' && bellState.handled.length > 0 && cardOf('bell-machine', null, null, [
+            ...machineShown.map(notice => (
+              <Text key={`handled-${notice.id}`} wrap="truncate-end">
+                <Text color="success">{'✓ '}</Text>
+                {withHash(elements, notice.title)}
+                <Text color="subtle" size="footnote" tabular>{` ${notice.when}`}</Text>
+              </Text>
+            )),
+            machineMore > 0 ? foldButton('fold-machine', COPY.machineMore(machineMore), isMachineOpen) : null,
+          ])}
+        </Box>
+      )
+    }
+
+    // MEMORY: the proposals waiting, then what the leader remembers and the rules the machine enforces, a press away.
+    const memorySection = async (): Promise<unknown> => {
+      const state = await readMemory($)
+      const memoryLink = consoleLink(base, 'memory')
+
+      if (state.phase === 'loading') {
+        return (
+          <Box key="more-memory" flexDirection="column" gap={1}>
+            <Text size="heading" weight="semibold">{COPY.moreMemory}</Text>
+            {quiet(elements, COPY.memoryLoading)}
+          </Box>
+        )
+      }
+
+      if (state.phase === 'error') {
+        return (
+          <Box key="more-memory" flexDirection="column" gap={1}>
+            <Text size="heading" weight="semibold">{COPY.moreMemory}</Text>
+            {cardOf('mem-error', warned(COPY.memoryError), null, [
+              reason(state.sentence ?? '?'),
+              <Button key="mem-retry" label={COPY.retry} variant="primary" onPress={() => openMemory($)} />,
+            ], 'bad')}
+          </Box>
+        )
+      }
+
+      const edit = state.edit
+      const startEdit = (action: 'add' | 'replace' | 'remove', file: string, oldText: string | null) =>
+        update($, memory, (value: PaneMemory): PaneMemory => ({ ...value, phase: 'editing', sentence: null, edit: { action, file, oldText, text: action === 'replace' ? oldText ?? '' : '', why: '' } }))
+      const isEditing = (file: string, oldText: string | null, action: string) =>
+        edit !== null && edit.file === file && edit.oldText === oldText && edit.action === action
+      const choice = (key: string, label: string, isChosen: boolean, onPress: () => unknown) => (
+        <Button key={key} label={isChosen ? COPY.selected(label) : label} variant={isChosen ? 'primary' : undefined} dimColor={!isChosen} onPress={onPress} />
+      )
+
+      // The form under the entry it changes: text, why, then Propose; after it, the answer and the console's link.
+      const form = (file: string) => {
+        if (edit === null || edit.file !== file) {
+          return null
+        }
+
+        return (
+          <Box key={`mem-form-${file}`} flexDirection="column" gap={1}>
+            {state.phase === 'editing' && hasInput && 'Input' in elements && edit.action !== 'remove' && (
+              <elements.Input key="mem-text" label={COPY.memoryText} value={edit.text} onInput={value => update($, memory, (value_: PaneMemory): PaneMemory => ({ ...value_, edit: value_.edit === null ? null : { ...value_.edit, text: value } }))} onSubmit={() => undefined} />
+            )}
+            {state.phase === 'editing' && hasInput && 'Input' in elements && (
+              <elements.Input key="mem-why" label={COPY.memoryWhy} value={edit.why} onInput={value => update($, memory, (value_: PaneMemory): PaneMemory => ({ ...value_, edit: value_.edit === null ? null : { ...value_.edit, why: value } }))} onSubmit={() => proposeMemory($)} />
+            )}
+            {state.phase === 'editing' && (
+              <Box flexDirection="row" gap={1}>
+                <Button key="mem-propose" label={COPY.memoryPropose} variant="primary" onPress={() => proposeMemory($)} />
+                <Button key="mem-cancel" label={COPY.cancel} dimColor onPress={() => update($, memory, (value: PaneMemory): PaneMemory => ({ ...value, phase: 'ok', edit: null }))} />
+              </Box>
+            )}
+            {state.phase === 'sending' && quiet(elements, COPY.memorySending)}
+            {(state.phase === 'proposed' || state.phase === 'refused') && (
+              <Box flexDirection="column">
+                <Text color={state.phase === 'refused' ? 'error' : 'success'}>{state.sentence ?? ''}</Text>
+                <Button key="mem-back" label={COPY.memoryBack} dimColor onPress={() => openMemory($)} />
+              </Box>
+            )}
+            {state.phase === 'editing' && <Text color="inactive" size="footnote">{COPY.memoryNote}</Text>}
+          </Box>
+        )
+      }
+
+      // ONE MEMORY FILE'S CARD: its entries, each with Edit and Remove, or a topic's note, a press away.
+      const fileCard = (file: PaneMemory['files'][number]) => {
+        const fileIndex = state.files.indexOf(file)
+
+        return cardOf(
+          `mem-file-${fileIndex}`,
+          file.heading,
+          file.text !== null ? COPY.memoryTopic : COPY.memoryEntries(file.file, file.entries.length),
+          [
+            ...file.entries.map((entry, entryIndex) => (
+              <Box key={`mem-entry-${fileIndex}-${entryIndex}`} flexDirection="row" justifyContent="space-between" gap={1}>
+                <Box flexShrink={1}>
+                  <Text>{entry}</Text>
+                </Box>
+                <Box flexDirection="row" gap={1} flexShrink={0}>
+                  {choice(`mem-edit-${fileIndex}-${entryIndex}`, COPY.memoryEdit, isEditing(file.file, entry, 'replace'), () => startEdit('replace', file.file, entry))}
+                  {choice(`mem-remove-${fileIndex}-${entryIndex}`, COPY.memoryRemove, isEditing(file.file, entry, 'remove'), () => startEdit('remove', file.file, entry))}
+                </Box>
+              </Box>
+            )),
+            ...(file.text === null
+              ? [choice(`mem-add-${fileIndex}`, COPY.memoryAdd, isEditing(file.file, null, 'add'), () => startEdit('add', file.file, null))]
+              : [
+                  rowOf({
+                    key: `mem-topic-${fileIndex}`,
+                    kind: shown.includes(`mem-topic-${fileIndex}`) ? '▾' : '▸',
+                    title: firstLine(file.text),
+                    onPress: () => toggle($, `mem-topic-${fileIndex}`),
+                    body: shown.includes(`mem-topic-${fileIndex}`) ? <Text color="inactive">{file.text}</Text> : null,
+                  }),
+                ]),
+            form(file.file),
+          ],
+        )
+      }
+      const ownerFiles = state.files.filter(file => file.text === null)
+      const topicFiles = state.files.filter(file => file.text !== null)
+      const ownerCount = ownerFiles.reduce((sum, file) => sum + file.entries.length, 0)
+      const isOwnerOpen = shown.includes('fold-memory-owner')
+      const isTopicsOpen = shown.includes('fold-memory-topics')
+      const isRulesOpen = shown.includes('fold-memory-rules')
+
+      return (
+        <Box key="more-memory" flexDirection="column" gap={1}>
+          <Text size="heading" weight="semibold">{COPY.moreMemory}</Text>
+          {/* THE PROPOSALS WAITING (S27): what each changes, old text struck and new, with Confirm and Drop. */}
+          {state.proposals.length === 0
+            ? cardOf('mem-pending', COPY.memoryPendingHeading, null, [quiet(elements, COPY.nothingYet)])
+            : cardOf('mem-proposals', headingOf(COPY.proposalsHeading, state.proposals.length, 'text'), COPY.proposalsHint, state.proposals.map(proposal => {
+                const proposalKey = `proposal-${proposal.id}`
+
+                return (
+                  <Box key={`mem-proposal-${proposal.id}`} flexDirection="column" gap={look.isGraphic ? 'xs' : 0}>
+                    <Text size="footnote" color="subtle" wrap="truncate-end">
+                      <Text color="inactive">{proposal.file === 'owner' ? COPY.memoryOwnerFile : proposal.file.replace(/^(topic|project):/, '')}</Text>
+                      {' · '}
+                      <Text>{COPY.proposedBy(proposal.by, proposal.storyRef ?? (proposal.story === null ? null : labelOf('story', proposal.story)), null)}</Text>
+                      {proposal.at === null ? null : ' · '}
+                      {proposal.at === null ? null : <Text tabular>{proposal.at}</Text>}
+                    </Text>
+                    {/* NO DIFF FIELD (Terylon main aaf07e8): a replace is its old text struck, then its new; an add +text; a remove −oldText. */}
+                    {proposal.operations.flatMap((operation, index) => [
+                      operation.oldText !== null && operation.action !== 'add'
+                        ? <Text key={`mem-proposal-${proposal.id}-old-${index}`} strikethrough color="error">{operation.action === 'remove' ? `− ${operation.oldText}` : operation.oldText}</Text>
+                        : null,
+                      operation.text !== null && operation.action !== 'remove'
+                        ? <Text key={`mem-proposal-${proposal.id}-new-${index}`} color="success">{operation.action === 'add' ? `+ ${operation.text}` : operation.text}</Text>
+                        : null,
+                    ])}
+                    {proposal.why !== null && <Text color="subtle" size="footnote">{COPY.proposalWhy(proposal.why)}</Text>}
+                    <Box flexDirection="row" gap={1}>
+                      {actButton(proposalKey, 'memory_confirm', proposal.id, { isPrimary: true })}
+                      {actButton(proposalKey, 'memory_drop', proposal.id)}
+                    </Box>
+                    {actBusyNote(proposalKey)}
+                    {actOutcome(proposalKey, memoryLink, COPY.memoryBrowser)}
+                  </Box>
+                )
+              }), 'gate')}
+          {/* WHAT BECAME OF A PROPOSAL NO LONGER LISTED: confirmed or dropped, it left memory_get's list. */}
+          {Object.keys(allActs)
+            .filter(key => key.startsWith('proposal-') && !state.proposals.some(proposal => `proposal-${proposal.id}` === key))
+            .map(key => actOutcome(key, memoryLink, COPY.memoryBrowser))}
+          {state.proposals.length > 0 && <Link key="mem-browser" href={memoryLink} label={COPY.memoryBrowser} />}
+          {folds('memory-folds', [
+            ownerFiles.length === 0 ? null : foldButton('fold-memory-owner', `${COPY.memoryOwner} ${ownerCount}`, isOwnerOpen),
+            topicFiles.length === 0 ? null : foldButton('fold-memory-topics', `${COPY.memoryTopics} ${topicFiles.length}`, isTopicsOpen),
+            state.rules.length === 0 ? null : foldButton('fold-memory-rules', `${COPY.memoryRules} ${state.rules.length}`, isRulesOpen),
+          ])}
+          {state.files.length === 0 && cardOf('mem-empty', COPY.memoryFiles, null, [quiet(elements, COPY.memoryEmpty)])}
+          {isOwnerOpen && ownerFiles.map(fileCard)}
+          {isTopicsOpen && topicFiles.map(fileCard)}
+          {isRulesOpen && cardOf('mem-rules', COPY.memoryRules, COPY.memoryRulesHint(state.rules.length), state.rules.map((rule, index) =>
+            rowOf({
+              key: `mem-rule-${index}`,
+              kind: null,
+              title: rule.rule,
+              detail: rule.enforcedBy,
+              onPress: () => toggle($, `mem-rule-${index}`),
+              body: shown.includes(`mem-rule-${index}`) ? <Text color="inactive">{`${rule.rule} · ${rule.artefact}`}</Text> : null,
+            })))}
+          {state.proposed.length === 0 ? null : cardOf('mem-proposed', COPY.memoryProposedHeading, null, state.proposed.slice().reverse().map((line, position) => <Text key={`mem-proposed-${position}`} color="inactive" wrap="truncate-end">{line}</Text>))}
+        </Box>
+      )
+    }
+
+    // HEALTH: the machine, its slots and cost, every problem with how to fix it, the 30 days, the policy, where to look.
+    const healthSection = async (): Promise<unknown> => {
       // EVERY DRAW SAYS THAT IT BEGAN: a line here with no "draws" after it is a draw that never returned.
       note($, `terylon-pane: Health begins on ${e.surface} at ${e.props.bodyColumns} columns`)
-
-      // A PART THAT THROWS IS ONE PROBLEM, NEVER A BLANK TAB: Desktop draws its own placeholder when a render fails.
-      const part = async (name: string, build: () => unknown): Promise<unknown> => {
-        try {
-          return await build()
-        } catch (error) {
-          const message = messageOf(error)
-          note($, `terylon-pane: Health's ${name} did not draw: ${message}`)
-
-          return cardOf(`problem-part-${name}`, warned(COPY.statusPartFailed(name)), null, [reason(message), steps(COPY.fixStatusPart)], 'bad')
-        }
-      }
 
       try {
         const pausedCard = await part('paused', () => current.paused === null ? null : cardOf('problem-paused', warned(COPY.pausedTitle, 'wait'), current.pausedSince === null ? null : COPY.statusSince(current.pausedSince), [
@@ -3234,12 +3806,19 @@ export const register: Register = on => {
           // NO Try again ON THIS CARD (#35): its last step names the act's own button instead.
           ...rulesFix(COPY.fixNotAllowedAct),
         ], 'wait'))
-        const alertCards = await part('alerts', () => current.alertNotices.map(notice =>
-          cardOf(`problem-alert-${notice.id}`, warned(notice.title), COPY.alertHint(notice.source, notice.when), [
-            notice.body === '' ? null : <Text color="inactive">{notice.body}</Text>,
-            <Text color="subtle">{COPY.fixAlert}</Text>,
-            <Link href={notice.link === null ? consoleLink(base, 'bell') : `${base}${notice.link}`} label={COPY.noticesInConsole} />,
-          ], 'bad')))
+        // A NOTICE IS NEVER REPEATED HERE: Health says that one needs the owner, and Notices holds it.
+        const alertLine = await part('alerts', () => {
+          const first = current.alertNotices[0]
+
+          return first === undefined ? null : (
+            <Box key="health-notices" flexDirection="row" justifyContent="space-between" alignItems="center" gap={1} flexWrap="wrap" borderStyle="round" borderColor={CARD_STROKES.wait} backgroundColor={look.isGraphic ? CARD_FILL : undefined} paddingX={look.isGraphic ? 'md' : 1} paddingY={look.isGraphic ? 'xs' : 0}>
+              <Box flexShrink={1} minWidth={0}>
+                <Text>{COPY.noticesNeedYou(current.alertNotices.length, first.title)}</Text>
+              </Box>
+              <Button key="health-open-notices" label={COPY.openInNotices} onPress={() => openNotices($)} />
+            </Box>
+          )
+        })
         // ITS OWN Try again AND RULES, KEYED APART from the connection's: two elements of one key are one too many.
         // THE DONE-SIGNAL'S OWN PROBLEM: the queue may read well while events_since, or the store, fails on its own. DRAWN
         // ONLY IN WHAT DESKTOP HAS DRAWN ON THIS TAB: a plain card and title, a plain Button, no red stroke or primary.
@@ -3299,21 +3878,7 @@ export const register: Register = on => {
           COPY.diagnosticsEvents('signaller', current.signaller === 'this' ? COPY.signallerThis(current.signallerHolder ?? shortId(sessionId), current.sessionIdSource) : current.signaller === 'another' ? COPY.signallerAnother(current.signallerHolder ?? '?', at(current.signallerSince)) : COPY.signallerNone),
         ]
         note($, `terylon-pane: Health's done-signal: ${eventsDiagnostics.join('; ')}`)
-        const problems = [problemCard, rulesCard, isShown('events') ? eventsCard : null, isShown('events') ? signallerCard : null, pausedCard, ...(isShown('alerts') ? (Array.isArray(alertCards) ? alertCards : [alertCards]) : [])].filter(item => item !== null)
-        const slotsCard = await part('slots', () => cardOf('status-slots', COPY.statusSlots, COPY.statusSlotsHint, [
-          look.isGraphic ? picture(elements, slotsGauge(current.slotsUsed, current.slots, true)) : null,
-          <Text tabular>{COPY.statusSlotsLine(current.slotsUsed, current.slots)}</Text>,
-          current.running.length === 0 ? quiet(elements, COPY.nothingRunning) : null,
-          ...current.running.map(item =>
-            rowOf({
-              key: `status-story-${item.story}`,
-              kind: item.isStuck ? COPY.kindStuck : item.isVerifying ? COPY.verifying : COPY.kindRunning,
-              kindTone: markOf(kindTone(item.isStuck ? 'stuck' : 'running')),
-              title: item.title,
-              detail: item.detail,
-              onPress: () => go({ screen: 'story', story: item.story }),
-            })),
-        ]))
+        const problems = [problemCard, rulesCard, isShown('events') ? eventsCard : null, isShown('events') ? signallerCard : null, pausedCard].filter(item => item !== null)
         // THE POLICY (S27): read as policy_get answered it, edited in place within its limits, saved with policy_save.
         const policyCard = await part('policy', async () => {
           const form = { ...EMPTY_POLICY_FORM, ...(await read($, policyForm)) }
@@ -3358,78 +3923,79 @@ export const register: Register = on => {
                 )),
               ])
         })
-        const costCard = await part('cost', async () => {
-          const bellState = await readBell($)
-
-          // ON THE SETUP TOKEN: the tokens and the phrase, and no bar against a dollar limit.
-          const today = isCostKnown ? COPY.statusToday(words.money(runningUsd), current.dayBudget === null ? null : words.budget(budgetUsd)) : todayCost(healthOf(current, offset))
-
-          return cardOf('status-cost', COPY.statusCost, null, [
-            look.isGraphic && budgetUsd !== null && isCostKnown ? picture(elements, spendBar(runningUsd, budgetUsd, 'wide', today)) : null,
-            <Text tabular>{today}</Text>,
-            bellState.metrics.length === 0 ? null : (
-              <Text tabular>
-                <Text color="subtle">{`${COPY.statusMonth} `}</Text>
-                <Text color="inactive">{bellState.metrics.map(metric => `${metric.value} ${metric.label}`).join(' · ')}</Text>
-              </Text>
-            ),
-          ])
-        })
+        const bellState = await readBell($)
+        // THE MACHINE, ITS SLOTS, ITS COST AND THE LEADER'S PAUSE: on the setup token its tokens and the phrase, never a $.
         const machineCard = await part('machine', () => {
           const health = healthOf(current, offset)
           const state = stateWord(health)
+          const today = isCostKnown ? COPY.statusToday(words.money(runningUsd), current.dayBudget === null ? null : words.budget(budgetUsd)) : todayCost(health)
+          const statusRow = (label: string, value: string) => (
+            <Box key={`status-row-${label}`} flexDirection="row" justifyContent="space-between" gap={1}>
+              <Box flexShrink={0}><Text>{label}</Text></Box>
+              <Box flexShrink={1} minWidth={0}><Text color="inactive" tabular>{value}</Text></Box>
+            </Box>
+          )
 
-          return cardOf('status-machine', <Text size="caption" color="subtle">{COPY.statusMachine.toUpperCase()}</Text>, null, [
-                <Box flexDirection="row" justifyContent="space-between" gap={1}>
-                  <Box flexDirection="row" gap={1}>
-                    <Text size="title" weight="semibold" color={colorOf(state.tone)}>{state.word}</Text>
-                    {health.failingSince !== null && current.connection !== 'ok' && <Text color="subtle" tabular>{` · ${COPY.statusSince(health.failingSince)}`}</Text>}
-                    {current.connection === 'ok' && current.pausedSince !== null && <Text color="subtle" tabular>{` · ${COPY.statusSince(current.pausedSince)}`}</Text>}
-                  </Box>
-                  <Button key="status-refresh" label={COPY.refresh} dimColor onPress={async () => { await tick($, true); await loadBell($) }} />
-                </Box>,
-                <Text color="subtle" size="footnote" tabular>{COPY.statusLastAnswer(current.fetchedAt === null ? null : at(current.fetchedAt))}</Text>,
-              ])
+          return cardOf('status-machine', COPY.statusMachine, <Text weight="semibold" color={colorOf(state.tone)}>{state.word}</Text>, [
+            <Box key="status-since" flexDirection="row" gap={1} flexWrap="wrap">
+              <Text color="subtle" size="footnote" tabular>{COPY.statusLastAnswer(current.fetchedAt === null ? null : at(current.fetchedAt))}</Text>
+              {health.failingSince !== null && current.connection !== 'ok' && <Text color="subtle" size="footnote" tabular>{COPY.statusSince(health.failingSince)}</Text>}
+              {current.connection === 'ok' && current.pausedSince !== null && <Text color="subtle" size="footnote" tabular>{COPY.statusSince(current.pausedSince)}</Text>}
+              <Link href={base === '' ? 'https://' : base} label={`${hostName(base)} ↗`} />
+            </Box>,
+            statusRow(COPY.statusRowSlots, COPY.statusSlotsLine(current.slotsUsed, current.slots)),
+            statusRow(COPY.statusRowCost, today),
+            // THE LEADER'S PAUSE, with an optional reason; its Resume is on the paused card, here and on the overview.
+            current.connection === 'ok' && current.paused === null ? <Box key="status-pause" flexDirection="row">{actButton('leader', 'leader_pause', null, { opens: true })}</Box> : null,
+            current.connection === 'ok' && current.paused === null && actState('leader').open === 'leader_pause' ? actField('leader', 'leader_pause', null, { label: COPY.whyOptional }) : null,
+            current.connection === 'ok' && current.paused === null && actState('leader').open === 'leader_pause' ? <Text color="subtle" size="footnote">{COPY.pauseNote}</Text> : null,
+            actBusyNote('leader'),
+          ], 'plain', true)
         })
+        // THE LAST 30 DAYS, in rows, and the Policy and Diagnostics a press away.
+        const monthCard = cardOf('status-month', COPY.statusMonth, null, [
+          ...(bellState.phase === 'loading' ? [quiet(elements, COPY.loading)] : bellState.metrics.map(metric => (
+            <Box key={`metric-${metric.label}`} flexDirection="row" justifyContent="space-between" gap={1}>
+              <Text>{`${metric.label.slice(0, 1).toUpperCase()}${metric.label.slice(1)}`}</Text>
+              <Text color="inactive" tabular>{metric.value}</Text>
+            </Box>
+          ))),
+          folds('status-folds', [
+            isShown('policy') ? foldButton('fold-policy', COPY.policy, shown.includes('fold-policy')) : null,
+            isShown('diagnostics') ? foldButton('fold-diagnostics', COPY.statusDiagnostics, shown.includes('fold-diagnostics')) : null,
+          ]),
+        ], 'plain', true)
 
-        // PLAIN LINES ALONE: no card, no picture, no button but the tabs, to tell the tab's drawing from its data.
+        // PLAIN LINES ALONE: no card and no picture, to tell Health's drawing from its data.
         const tree = drawingAsked.isMinimal
           ? (
-              <Box flexDirection="column" gap={1}>
-                {tabs}
+              <Box key="more-health" flexDirection="column" gap={1}>
                 <Text>{COPY.statusMinimalMachine(stateWord(healthOf(current, offset)).word)}</Text>
                 <Text>{COPY.statusMinimalProblems(problems.length, events === null ? null : events.kind)}</Text>
                 <Text>{COPY.diagnosticsVersion(MOD_VERSION)}</Text>
               </Box>
             )
           : (
-              <Box flexDirection="column" gap={1}>
-                {tabs}
-                {isShown('machine') && machineCard}
-                {isShown('gauges') && (look.isGraphic && !look.isNarrow
-                  ? (
-                      <Box key="status-gauges" flexDirection="row" gap="sm">
-                        <Box flexGrow={1} flexShrink={1} minWidth={0}>{slotsCard}</Box>
-                        <Box flexGrow={1} flexShrink={1} minWidth={0}>{costCard}</Box>
-                      </Box>
-                    )
-                  : [slotsCard, costCard])}
-                {/* THE PROBLEMS UNDER THEIR HEADING, never an empty card above them: the card says only that nothing is wrong. */}
-                {isShown('problems') && (problems.length === 0
-                  ? cardOf('status-problems', headingOf(COPY.statusProblems, 0, 'inactive'), null, [quiet(elements, COPY.nothingWrong)])
-                  : headingOf(COPY.statusProblems, problems.length, 'error'))}
+              <Box key="more-health" flexDirection="column" gap={1}>
+                <Text size="heading" weight="semibold">{COPY.moreHealth}</Text>
+                {isShown('alerts') && alertLine}
+                {/* WHAT IS WRONG FIRST, under its heading; with nothing wrong the machine's card says so. */}
+                {isShown('problems') && problems.length > 0 && headingOf(COPY.statusProblems, problems.length, 'error')}
                 {isShown('problems') && problems}
+                {isShown('machine') && isShown('gauges') ? twoColumns('status-cards', machineCard, monthCard) : [isShown('machine') ? machineCard : null, isShown('gauges') ? monthCard : null]}
                 {isShown('outcomes') && actOutcome('leader', consoleLink(base, 'work'), COPY.workInConsole)}
-                {isShown('policy') && policyCard}
+                {isShown('policy') && shown.includes('fold-policy') && policyCard}
                 {isShown('outcomes') && actOutcome('policy', consoleLink(base, 'policy'), COPY.policyInConsole)}
-                {isShown('diagnostics') && cardOf('status-diagnostics', <Text size="heading" weight="semibold" color="subtle">{COPY.statusDiagnostics}</Text>, null, [
+                {isShown('diagnostics') && shown.includes('fold-diagnostics') && cardOf('status-diagnostics', <Text size="heading" weight="semibold" color="subtle">{COPY.statusDiagnostics}</Text>, null, [
                   <Text color="subtle" mono>{COPY.diagnosticsVersion(MOD_VERSION)}</Text>,
                   <Text color="subtle" mono>{COPY.diagnosticsUrl(base)}</Text>,
                   <Text color="subtle" mono>{COPY.diagnosticsServer(current.server)}</Text>,
                   ...eventsDiagnostics.map(line => <Text color="subtle" mono>{line}</Text>),
                   <Text color="subtle" size="footnote">{COPY.diagnosticsDebug}</Text>,
                 ])}
-                {footer}
+                <Box key="health-links" flexDirection="row" gap={1} flexWrap="wrap">
+                  <Link href={consoleLink(base, 'health')} label={COPY.health} />
+                </Box>
               </Box>
             )
 
@@ -3439,32 +4005,65 @@ export const register: Register = on => {
 
         return tree
       } catch (error) {
-        // WHAT NO PART CAUGHT still draws the tabs and says why, so the owner can move on and read the debug log.
+        // WHAT NO PART CAUGHT still says why, so the owner can move on and read the debug log.
         const message = messageOf(error)
         note($, `terylon-pane: Health did not draw: ${message}`)
 
         return (
-          <Box flexDirection="column" gap={1}>
-            {tabs}
+          <Box key="more-health" flexDirection="column" gap={1}>
             {cardOf('problem-part-status', warned(COPY.statusPartFailed('tab')), null, [reason(message), steps(COPY.fixStatusPart)], 'bad')}
-            {footer}
           </Box>
         )
       }
     }
 
-    if (problemCard !== null && !isStale) {
+    // NOTICES, AN ORDINARY SCREEN on every surface, as More is: ‹ Overview and Refresh at its head.
+    if (screen.screen === 'notices') {
       return (
         <Box flexDirection="column" gap={1}>
-          {tabs}
-          {context}
-          {problemCard}
-          {footer}
+          <Box key="notices-top" flexDirection="row" justifyContent="space-between" gap={1}>
+            {backButton}
+            {refreshButton}
+          </Box>
+          {await part('notices', noticesSection)}
         </Box>
       )
     }
 
-    const backButton = <Button key="back" label={backLabel(stack)} dimColor onPress={() => back($)} />
+    // MORE: Health and Memory on one page; ‹ Overview from the head's buttons, ‹ back from a card's How to fix.
+    if (screen.screen === 'more') {
+      const [healthPart, memoryPart] = [await healthSection(), await part('memory', memorySection)]
+
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Box key="more-top" flexDirection="row" justifyContent="space-between" gap={1}>
+            {stack.length > 2 ? backButton : <Button key="tab-queue" label={backLabel(stack)} dimColor onPress={() => show($, QUEUE, true)} />}
+            {refreshButton}
+          </Box>
+          {healthPart}
+          {memoryPart}
+        </Box>
+      )
+    }
+
+    if (problemCard !== null && !isStale && screen.screen === 'queue') {
+      return (
+        <Box flexDirection="column" gap={1}>
+          {overviewHead}
+          {problemCard}
+          {overviewFoot}
+        </Box>
+      )
+    }
+
+    if (problemCard !== null && !isStale) {
+      return (
+        <Box flexDirection="column" gap={1}>
+          {backButton}
+          {problemCard}
+        </Box>
+      )
+    }
 
     // ONE STORY: its phases, Now working, the run's question, environment, verdict, criteria, what happened.
     if (screen.screen === 'story') {
@@ -3485,7 +4084,6 @@ export const register: Register = on => {
           <Box flexDirection="column" gap={1}>
             {backButton}
             {quiet(elements, shownStory.sentence ?? '')}
-            {footer}
           </Box>
         )
       }
@@ -3495,7 +4093,6 @@ export const register: Register = on => {
           <Box flexDirection="column" gap={1}>
             {backButton}
             {cardOf('story-error', warned(COPY.storyError), labelOf('story', screen.story), [reason(shownStory.sentence)], 'bad')}
-            {footer}
           </Box>
         )
       }
@@ -3504,9 +4101,11 @@ export const register: Register = on => {
       const timelineOpen = shown.includes(`timeline-${shownStory.story}`)
       const done = shownStory.phases.filter(item => item.status === 'done').length
       const nowAt = shownStory.phases.findIndex(item => item.status === 'now')
-      // STUCK OR BLOCKED, its node now is drawn amber.
+      // STUCK OR BLOCKED, its segment now is drawn amber.
       const isStuck = shownStory.stateTone === 'warning'
       const labels = shortLabels(shownStory.phases)
+      const steps_ = phaseSteps(shownStory.phases, labels)
+      const working = shownStory.working
       const tooltips = look.proofs.svgTooltips
         ? shownStory.phases.map(item => COPY.phaseTooltip(item.label, item.role, item.status, item.status === 'now' ? shownStory.working?.step ?? null : null))
         : null
@@ -3516,7 +4115,6 @@ export const register: Register = on => {
           <Text size="caption" color={CHIP_WORD}>{look.isGraphic ? '\u00a0' : ''}<Text color={shownStory.stateTone}>{CHIP_DOT}</Text>{` ${shownStory.stateText}${look.isGraphic ? '\u00a0' : ''}`}</Text>
         </Box>
       )
-      const working = shownStory.working
       const storyKey = `story-${shownStory.story}`
       const storyAct = actState(storyKey)
       // THE STORY AND ITS GOAL BY THEIR REFS, in the console's addresses, its Goal button and the prompt alike.
@@ -3526,9 +4124,12 @@ export const register: Register = on => {
 
       return (
         <Box flexDirection="column" gap={1}>
-          <Box key="story-top" flexDirection="row" justifyContent="space-between">
+          <Box key="story-top" flexDirection="row" justifyContent="space-between" alignItems="center" gap={1}>
             {backButton}
-            {age !== null && <Text color="subtle" size="footnote" tabular>{age}</Text>}
+            <Box flexDirection="row" alignItems="center" gap={1} flexWrap="wrap">
+              <Link href={storyLink(base, 'story', storyRef, shownStory.story)} label={COPY.storyInConsole} />
+              {refreshButton}
+            </Box>
           </Box>
           <Box key="story-head" flexDirection="column">
             <Text size="caption" color="subtle">{COPY.storyCaption(goalLabel)}</Text>
@@ -3547,62 +4148,56 @@ export const register: Register = on => {
               </Text>
             </Box>
           </Box>
-          {cardOf('story-phases', COPY.phases, <Text color="subtle" size="footnote" tabular>{ENDED_STORY_STATES.includes(shownStory.state) ? COPY.phasesEnded(done, shownStory.phases.length, shownStory.stateText) : nowAt >= 0 || shownStory.hasStage ? COPY.phasesHint(nowAt >= 0 ? nowAt + 1 : done, shownStory.phases.length) : COPY.phasesNoStage(done, shownStory.phases.length)}</Text>, look.isGraphic
-            ? [
-                // THE STEPPER (S32): the Svg says no word, the labels sit under it in Text; no stage, no node is now.
-                picture(elements, stepper(shownStory.phases, labels, { isStuck, tooltips, isCompact: look.isCompact }), { isInteractive: tooltips !== null }),
-                // COMPACT, below STEPPER_COLUMNS (the owner's walk, a dock of about 435 px): eight labels ran together, so
-                // only the phase now is named; the tooltips name the rest.
-                look.isCompact
-                  ? (nowAt < 0 ? null : <Text key="phase-now" size="caption" weight="semibold" color={isStuck ? 'error' : 'suggestion'}>{shownStory.phases[nowAt]?.label ?? ''}</Text>)
-                  : <Box key="phase-labels" flexDirection="row">
-                  {shownStory.phases.map((item, index) => (
-                    <Box key={`phase-label-${index}`} flexGrow={1} flexShrink={1} minWidth={0} width={0} justifyContent="center">
-                      <Text
-                        size="caption"
-                        wrap="truncate-end"
-                        weight={item.status === 'now' ? 'semibold' : undefined}
-                        color={item.status === 'now' ? (isStuck ? 'error' : 'suggestion') : item.status === 'done' ? 'inactive' : index === shownStory.phases.length - 1 ? 'merged' : 'subtle'}
-                      >
-                        {labels[index] ?? item.label}
-                      </Text>
-                    </Box>
-                  ))}
-                </Box>,
-              ]
-            : shownStory.phases.map((item, index) => (
-                <Box key={`phase-${index}`} flexDirection="row" justifyContent="space-between" gap={1}>
-                  <Text>
-                    <Text color={item.status === 'done' ? 'success' : item.status === 'now' ? 'suggestion' : 'subtle'}>{`${phaseGlyph(item, index === shownStory.phases.length - 1)} `}</Text>
-                    <Text bold={item.status === 'now'} color={item.status === 'next' ? 'subtle' : 'text'}>{item.label}</Text>
-                    {item.role !== null && <Text color="subtle">{` · ${item.role}`}</Text>}
-                  </Text>
-                  <Text color="subtle" wrap="truncate-end">{item.detail}</Text>
+          {cardOf('story-phases', COPY.phases, <Text color="subtle" size="footnote" tabular>{ENDED_STORY_STATES.includes(shownStory.state) ? COPY.phasesEnded(done, shownStory.phases.length, shownStory.stateText) : nowAt >= 0 || shownStory.hasStage ? COPY.phasesHint(nowAt >= 0 ? nowAt + 1 : done, shownStory.phases.length) : COPY.phasesNoStage(done, shownStory.phases.length)}</Text>, [
+            // THE ROAD: the Svg says no word, the names sit under it in Text; no stage, no segment is now.
+            roadDrawing(elements, look, 'story-road', steps_, { isStuck, tooltips }),
+            look.isGraphic
+              // COMPACT, below ROAD_NAMES_COLUMNS (the owner's walk, a dock of about 435 px): eight names ran together, so
+              // only the phase now is named; the tooltips name the rest.
+              ? roadNames(elements, look, 'phase', steps_, { isStuck, onlyNow: look.isCompact })
+              : shownStory.phases.map((item, index) => (
+                  <Box key={`phase-${index}`} flexDirection="row" justifyContent="space-between" gap={1}>
+                    <Text>
+                      <Text color={item.status === 'done' ? 'success' : item.status === 'now' ? 'suggestion' : 'subtle'}>{`${phaseGlyph(item.status, index === shownStory.phases.length - 1)} `}</Text>
+                      <Text bold={item.status === 'now'} color={item.status === 'next' ? 'subtle' : 'text'}>{item.label}</Text>
+                      {item.role !== null && <Text color="subtle">{` · ${item.role}`}</Text>}
+                    </Text>
+                    <Text color="subtle" wrap="truncate-end">{item.detail}</Text>
+                  </Box>
+                )),
+            // WHAT NEXT, for a story no run is working on: what it waits for.
+            working === null && storyNext(shownStory) !== null ? nextLine('story-next', COPY.whatNext, storyNext(shownStory) ?? '') : null,
+            // NOW WORKING, under the road: the agent at work, its step and what the run spent, with the run's own acts.
+            working === null ? null : (
+              <Box key="story-working" flexDirection="column" gap={look.isGraphic ? 'xs' : 0}>
+                <Box flexDirection="row" justifyContent="space-between" gap={1}>
+                  <Text weight="semibold" color="subtle">{COPY.nowWorking}</Text>
+                  <Text color="subtle" size="footnote">{COPY.nowWorkingHint(working.agent, working.stage)}</Text>
                 </Box>
-              )))}
-          {working !== null && (
-            <Box key="story-working" flexDirection="column">
-              {cardOf('story-working-card', COPY.nowWorking, COPY.nowWorkingHint(working.agent, working.stage), look.isGraphic
-                ? [
-                    <Text>{working.step}</Text>,
-                    <Box key="working-numbers" flexDirection="row" gap="lg" flexWrap="wrap">
-                      {working.numbers.map((item, index) => (
-                        <Box key={`working-number-${index}`} flexDirection="column">
-                          <Text size="title" weight="semibold" tabular>{item.value}</Text>
-                          <Text size="footnote" color="subtle">{item.label}</Text>
-                        </Box>
-                      ))}
-                    </Box>,
-                    // A BAR AGAINST THE STORY'S DOLLAR BUDGET only where the cost is known: none on the setup token.
-                    working.spentUsd === null ? null : picture(elements, spendBar(working.spentUsd, working.budgetUsd, 'full', COPY.spendAlt(words.money(working.spentUsd), words.budget(working.budgetUsd ?? 0)))),
-                  ]
-                : [
-                    <Text>{working.step}</Text>,
-                    working.fraction === null ? null : <Text color="suggestion">{bar(working.fraction)}</Text>,
-                    <Text color="inactive">{working.spend}</Text>,
-                  ])}
-            </Box>
-          )}
+                <Text weight="semibold">{working.step}</Text>
+                {look.isGraphic
+                  ? (
+                      <Box key="working-numbers" flexDirection="row" gap="lg" flexWrap="wrap">
+                        {working.numbers.map((item, index) => (
+                          <Box key={`working-number-${index}`} flexDirection="column">
+                            <Text size="title" weight="semibold" tabular>{item.value}</Text>
+                            <Text size="footnote" color="subtle">{item.label}</Text>
+                          </Box>
+                        ))}
+                      </Box>
+                    )
+                  : null}
+                {/* A BAR AGAINST THE STORY'S DOLLAR BUDGET only where the cost is known: none on the setup token. */}
+                {look.isGraphic && working.spentUsd !== null ? picture(elements, spendBar(working.spentUsd, working.budgetUsd, COPY.spendAlt(words.money(working.spentUsd), words.budget(working.budgetUsd ?? 0)))) : null}
+                {!look.isGraphic && working.fraction !== null ? <Text color="suggestion">{bar(working.fraction)}</Text> : null}
+                {!look.isGraphic ? <Text color="inactive">{working.spend}</Text> : null}
+                <Box key="story-working-acts" flexDirection="row" gap={1} flexWrap="wrap">
+                  {shownStory.canStop && actButton(storyKey, 'story_stop', screen.story)}
+                  <Button key="summarise" label={COPY.summariseInSession} onPress={() => postPrompt($, COPY.summarisePrompt(storyLabel))} />
+                </Box>
+              </Box>
+            ),
+          ])}
           {/* HELD (#35): an approved story story_get says is held, with its reason, as the queue's row says it. */}
           {shownStory.heldReason !== null && shownStory.heldReason !== undefined && cardOf('story-held', COPY.heldTitle, null, [<Text color="inactive">{shownStory.heldReason}</Text>])}
           {working === null && shownStory.step !== null && cardOf('story-progress', COPY.progress, null, [
@@ -3637,15 +4232,14 @@ export const register: Register = on => {
               </Text>
             ),
           ])}
-          {shownStory.criteria.length > 0 && cardOf('story-criteria', COPY.criteria, COPY.criteriaHint(shownStory.criteria.length), [
+          {twoColumns('story-columns', shownStory.criteria.length === 0 ? null : cardOf('story-criteria', COPY.criteria, COPY.criteriaHint(shownStory.criteria.length), [
             ...(criteriaOpen ? shownStory.criteria : shownStory.criteria.slice(0, CRITERIA_SHOWN)).map((criterion, index) => (
               <Text key={`criterion-${index}`} color="inactive" wrap={criteriaOpen ? 'wrap' : 'truncate-end'}>{`· ${criterion}`}</Text>
             )),
             shownStory.criteria.length > CRITERIA_SHOWN ? (
-              <Button key="criteria-more" plain dimColor label={criteriaOpen ? COPY.less : COPY.more(shownStory.criteria.length - CRITERIA_SHOWN)} onPress={() => toggle($, `criteria-${shownStory.story}`)} />
+              <Button key="criteria-more" plain dimColor label={criteriaOpen ? COPY.less : COPY.moreCount(shownStory.criteria.length - CRITERIA_SHOWN)} onPress={() => toggle($, `criteria-${shownStory.story}`)} />
             ) : null,
-          ])}
-          {shownStory.timeline.length > 0 && cardOf('story-timeline', COPY.timeline, COPY.timelineHint, [
+          ]), shownStory.timeline.length === 0 ? null : cardOf('story-timeline', COPY.timeline, COPY.timelineHint, [
             ...(timelineOpen ? shownStory.timeline : shownStory.timeline.slice(0, TIMELINE_SHOWN)).map((event, index) => (
               <Text key={`event-${index}`} wrap="truncate-end">
                 <Text color="subtle" tabular>{`${event.time} `}</Text>
@@ -3654,9 +4248,9 @@ export const register: Register = on => {
               </Text>
             )),
             shownStory.timeline.length > TIMELINE_SHOWN ? (
-              <Button key="timeline-more" plain dimColor label={timelineOpen ? COPY.less : COPY.more(shownStory.timeline.length - TIMELINE_SHOWN)} onPress={() => toggle($, `timeline-${shownStory.story}`)} />
+              <Button key="timeline-more" plain dimColor label={timelineOpen ? COPY.less : COPY.moreCount(shownStory.timeline.length - TIMELINE_SHOWN)} onPress={() => toggle($, `timeline-${shownStory.story}`)} />
             ) : null,
-          ])}
+          ]))}
           {/* THE STORY'S ACTS (S27), by its state, where S32 left the dashed slot for them. Merge is only ever a link. */}
           {shownStory.isBlocked && cardOf(`act-${storyKey}-blocked`, warned(COPY.blockedTitle, 'wait'), null, [
             storyAct.open === 'story_abandon'
@@ -3694,17 +4288,15 @@ export const register: Register = on => {
           ], 'wait')}
           {actOutcome(storyKey, storyLink(base, 'story', storyRef, shownStory.story), COPY.storyInConsole)}
           <Box key="story-actions" flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
-            {shownStory.isVerified && !shownStory.isList && <Link href={storyLink(base, 'merge', storyRef, shownStory.story)} label={COPY.mergeInConsole} />}
+            {shownStory.isVerified && !shownStory.isList && mergeLink('merge-story', storyLink(base, 'merge', storyRef, shownStory.story), COPY.mergeInConsole)}
             {shownStory.isVerified && shownStory.isList && actButton(storyKey, 'story_accept', screen.story, { isPrimary: true })}
             {shownStory.isVerified && actButton(storyKey, 'story_return', screen.story, { opens: true })}
-            {shownStory.canStop && actButton(storyKey, 'story_stop', screen.story)}
             {shownStory.canAbandon && actButton(storyKey, 'story_abandon', screen.story, { isDanger: true, opens: true })}
-            <Button key="summarise" label={COPY.summariseInSession} onPress={() => postPrompt($, COPY.summarisePrompt(storyLabel))} />
+            {working === null && <Button key="summarise" label={COPY.summariseInSession} onPress={() => postPrompt($, COPY.summarisePrompt(storyLabel))} />}
             {shownStory.goal !== null && <Button key="story-goal" label={COPY.goalOf(goalLabel ?? String(shownStory.goal))} dimColor onPress={() => go({ screen: 'goal', goal: shownStory.goal ?? 0 })} />}
             {shownStory.pullRequest !== null && <Link href={shownStory.pullRequest.url} label={shownStory.pullRequest.label} />}
             {/* A WORK ITEM IS ONLY EVER THIS LINK, "ADO #n ↗", never the story's name. */}
             {shownStory.workItem !== null && shownStory.workItem !== undefined && <Link href={shownStory.workItem.url} label={shownStory.workItem.label} />}
-            <Link href={storyLink(base, 'story', storyRef, shownStory.story)} label={COPY.storyInConsole} />
           </Box>
           {shownStory.isVerified && storyAct.open === 'story_return' && actField(storyKey, 'story_return', screen.story, { label: COPY.returnLabel, placeholder: COPY.returnPlaceholder })}
           {shownStory.canAbandon && storyAct.open === 'story_abandon' && actField(storyKey, 'story_abandon', screen.story, { label: COPY.whyOptional, isDanger: true })}
@@ -3717,7 +4309,6 @@ export const register: Register = on => {
           {shownStory.isVerified && shownStory.isList && <Text key="story-accept-note" color="subtle" size="footnote">{COPY.acceptNote}</Text>}
           {shownStory.canStop && <Text key="story-stop-note" color="subtle" size="footnote">{COPY.stopNote}</Text>}
           <Text key="story-note" color="subtle" size="footnote">{COPY.summariseNote}</Text>
-          {footer}
         </Box>
       )
     }
@@ -3743,7 +4334,6 @@ export const register: Register = on => {
           <Box flexDirection="column" gap={1}>
             {backButton}
             {quiet(elements, COPY.questionGone)}
-            {footer}
           </Box>
         )
       }
@@ -3815,7 +4405,6 @@ export const register: Register = on => {
           ])}
           <Link key="answer-console" href={consoleLink(base, `question&question=${screen.question}`)} label={COPY.answerInConsole} />
           <Text key="answer-note" color="subtle" size="footnote">{COPY.answerNote}</Text>
-          {footer}
         </Box>
       )
     }
@@ -3931,171 +4520,10 @@ export const register: Register = on => {
       )
     }
 
-    // THE MEMORY TAB: the rules the machine enforces, the leader's memory as stored, the proposals waiting.
-    if (screen.screen === 'memory') {
-      const state = await readMemory($)
-      const memoryLink = consoleLink(base, 'memory')
-
-      if (state.phase === 'loading') {
-        return (
-          <Box flexDirection="column" gap={1}>
-            {tabs}
-            {quiet(elements, COPY.memoryLoading)}
-          </Box>
-        )
-      }
-
-      if (state.phase === 'error') {
-        return (
-          <Box flexDirection="column" gap={1}>
-            {tabs}
-            {context}
-            {cardOf('mem-error', warned(COPY.memoryError), null, [
-              reason(state.sentence ?? '?'),
-              <Button key="mem-retry" label={COPY.retry} variant="primary" onPress={() => openMemory($)} />,
-            ], 'bad')}
-            {footer}
-          </Box>
-        )
-      }
-
-      const edit = state.edit
-      const startEdit = (action: 'add' | 'replace' | 'remove', file: string, oldText: string | null) =>
-        update($, memory, (value: PaneMemory): PaneMemory => ({ ...value, phase: 'editing', sentence: null, edit: { action, file, oldText, text: action === 'replace' ? oldText ?? '' : '', why: '' } }))
-      const isEditing = (file: string, oldText: string | null, action: string) =>
-        edit !== null && edit.file === file && edit.oldText === oldText && edit.action === action
-      const choice = (key: string, label: string, isChosen: boolean, onPress: () => unknown) => (
-        <Button key={key} label={isChosen ? COPY.selected(label) : label} variant={isChosen ? 'primary' : undefined} dimColor={!isChosen} onPress={onPress} />
-      )
-
-      // The form under the entry it changes: text, why, then Propose; after it, the answer and the console's link.
-      const form = (file: string) => {
-        if (edit === null || edit.file !== file) {
-          return null
-        }
-
-        return (
-          <Box key={`mem-form-${file}`} flexDirection="column" gap={1}>
-            {state.phase === 'editing' && hasInput && 'Input' in elements && edit.action !== 'remove' && (
-              <elements.Input key="mem-text" label={COPY.memoryText} value={edit.text} onInput={value => update($, memory, (value_: PaneMemory): PaneMemory => ({ ...value_, edit: value_.edit === null ? null : { ...value_.edit, text: value } }))} onSubmit={() => undefined} />
-            )}
-            {state.phase === 'editing' && hasInput && 'Input' in elements && (
-              <elements.Input key="mem-why" label={COPY.memoryWhy} value={edit.why} onInput={value => update($, memory, (value_: PaneMemory): PaneMemory => ({ ...value_, edit: value_.edit === null ? null : { ...value_.edit, why: value } }))} onSubmit={() => proposeMemory($)} />
-            )}
-            {state.phase === 'editing' && (
-              <Box flexDirection="row" gap={1}>
-                <Button key="mem-propose" label={COPY.memoryPropose} variant="primary" onPress={() => proposeMemory($)} />
-                <Button key="mem-cancel" label={COPY.cancel} dimColor onPress={() => update($, memory, (value: PaneMemory): PaneMemory => ({ ...value, phase: 'ok', edit: null }))} />
-              </Box>
-            )}
-            {state.phase === 'sending' && quiet(elements, COPY.memorySending)}
-            {(state.phase === 'proposed' || state.phase === 'refused') && (
-              <Box flexDirection="column">
-                <Text color={state.phase === 'refused' ? 'error' : 'success'}>{state.sentence ?? ''}</Text>
-                <Button key="mem-back" label={COPY.memoryBack} dimColor onPress={() => openMemory($)} />
-              </Box>
-            )}
-            {state.phase === 'editing' && <Text color="inactive" size="footnote">{COPY.memoryNote}</Text>}
-          </Box>
-        )
-      }
-
-      return (
-        <Box flexDirection="column" gap={1}>
-          {tabs}
-          {context}
-          {state.rules.length > 0 && cardOf('mem-rules', COPY.memoryRules, COPY.memoryRulesHint(state.rules.length), state.rules.map((rule, index) =>
-            rowOf({
-              key: `mem-rule-${index}`,
-              kind: null,
-              title: rule.rule,
-              detail: rule.enforcedBy,
-              onPress: () => toggle($, `mem-rule-${index}`),
-              body: shown.includes(`mem-rule-${index}`) ? <Text color="inactive">{`${rule.rule} · ${rule.artefact}`}</Text> : null,
-            })))}
-          {state.files.length === 0 && cardOf('mem-empty', COPY.memoryFiles, null, [quiet(elements, COPY.memoryEmpty)])}
-          {state.files.map((file, fileIndex) =>
-            cardOf(
-              `mem-file-${fileIndex}`,
-              file.heading,
-              file.text !== null ? COPY.memoryTopic : COPY.memoryEntries(file.file, file.entries.length),
-              [
-                ...file.entries.map((entry, entryIndex) => (
-                  <Box key={`mem-entry-${fileIndex}-${entryIndex}`} flexDirection="row" justifyContent="space-between" gap={1}>
-                    <Box flexShrink={1}>
-                      <Text>{entry}</Text>
-                    </Box>
-                    <Box flexDirection="row" gap={1} flexShrink={0}>
-                      {choice(`mem-edit-${fileIndex}-${entryIndex}`, COPY.memoryEdit, isEditing(file.file, entry, 'replace'), () => startEdit('replace', file.file, entry))}
-                      {choice(`mem-remove-${fileIndex}-${entryIndex}`, COPY.memoryRemove, isEditing(file.file, entry, 'remove'), () => startEdit('remove', file.file, entry))}
-                    </Box>
-                  </Box>
-                )),
-                ...(file.text === null
-                  ? [choice(`mem-add-${fileIndex}`, COPY.memoryAdd, isEditing(file.file, null, 'add'), () => startEdit('add', file.file, null))]
-                  : [
-                      rowOf({
-                        key: `mem-topic-${fileIndex}`,
-                        kind: shown.includes(`mem-topic-${fileIndex}`) ? '▾' : '▸',
-                        title: firstLine(file.text),
-                        onPress: () => toggle($, `mem-topic-${fileIndex}`),
-                        body: shown.includes(`mem-topic-${fileIndex}`) ? <Text color="inactive">{file.text}</Text> : null,
-                      }),
-                    ]),
-                form(file.file),
-              ],
-            ))}
-          {/* THE PROPOSALS WAITING (S27): what each changes, old text struck and new, with Confirm and Drop. */}
-          {state.proposals.length === 0
-            ? cardOf('mem-pending', COPY.memoryPendingHeading, null, [quiet(elements, COPY.nothingYet)])
-            : cardOf('mem-proposals', headingOf(COPY.proposalsHeading, state.proposals.length, 'text'), COPY.proposalsHint, state.proposals.map(proposal => {
-                const proposalKey = `proposal-${proposal.id}`
-
-                return (
-                  <Box key={`mem-proposal-${proposal.id}`} flexDirection="column" gap={look.isGraphic ? 'xs' : 0}>
-                    <Text size="footnote" color="subtle" wrap="truncate-end">
-                      <Text color="inactive">{proposal.file === 'owner' ? COPY.memoryOwnerFile : proposal.file.replace(/^(topic|project):/, '')}</Text>
-                      {' · '}
-                      <Text>{COPY.proposedBy(proposal.by, proposal.storyRef ?? (proposal.story === null ? null : labelOf('story', proposal.story)), null)}</Text>
-                      {proposal.at === null ? null : ' · '}
-                      {proposal.at === null ? null : <Text tabular>{proposal.at}</Text>}
-                    </Text>
-                    {/* NO DIFF FIELD (Terylon main aaf07e8): a replace is its old text struck, then its new; an add +text; a remove −oldText. */}
-                    {proposal.operations.flatMap((operation, index) => [
-                      operation.oldText !== null && operation.action !== 'add'
-                        ? <Text key={`mem-proposal-${proposal.id}-old-${index}`} strikethrough color="error">{operation.action === 'remove' ? `− ${operation.oldText}` : operation.oldText}</Text>
-                        : null,
-                      operation.text !== null && operation.action !== 'remove'
-                        ? <Text key={`mem-proposal-${proposal.id}-new-${index}`} color="success">{operation.action === 'add' ? `+ ${operation.text}` : operation.text}</Text>
-                        : null,
-                    ])}
-                    {proposal.why !== null && <Text color="subtle" size="footnote">{COPY.proposalWhy(proposal.why)}</Text>}
-                    <Box flexDirection="row" gap={1}>
-                      {actButton(proposalKey, 'memory_confirm', proposal.id, { isPrimary: true })}
-                      {actButton(proposalKey, 'memory_drop', proposal.id)}
-                    </Box>
-                    {actBusyNote(proposalKey)}
-                    {actOutcome(proposalKey, memoryLink, COPY.memoryBrowser)}
-                  </Box>
-                )
-              }), 'wait')}
-          {/* WHAT BECAME OF A PROPOSAL NO LONGER LISTED: confirmed or dropped, it left memory_get's list. */}
-          {Object.keys(allActs)
-            .filter(key => key.startsWith('proposal-') && !state.proposals.some(proposal => `proposal-${proposal.id}` === key))
-            .map(key => actOutcome(key, memoryLink, COPY.memoryBrowser))}
-          {state.proposals.length > 0 && <Link key="mem-browser" href={memoryLink} label={COPY.memoryBrowser} />}
-          {cardOf('mem-proposed', COPY.memoryProposedHeading, null, state.proposed.length === 0
-            ? [quiet(elements, COPY.nothingYet)]
-            : state.proposed.slice().reverse().map((line, position) => <Text key={`mem-proposed-${position}`} color="inactive" wrap="truncate-end">{line}</Text>))}
-          {footer}
-        </Box>
-      )
-    }
-
     const goalsState = await readGoals($)
 
     // ONE PLAN: its chain, its stories in order, each opening the story; approval and rethinking are the console's.
-    const planCard = (plan: (typeof goalsState.plans)[number]) => {
+    const planCard = (plan: (typeof goalsState.plans)[number], isOnGoal = false) => {
       // ITS ORDER IS ITS STORIES' after (#35): an arrow only where a story waits for another, said by their titles.
       const chain = plan.stories.map(item => ({ index: item.index, after: item.after }))
       const orderAlt = COPY.planOrderAlt(plan.stories.map(item => ({ title: item.title, after: item.after.map(place => plan.stories[place - 1]?.title ?? `#${place}`) })))
@@ -4131,7 +4559,7 @@ export const register: Register = on => {
         <Box flexDirection="row" gap={1} flexWrap="wrap">
           {plan.isProposed && actButton(planKey, 'plan_approve', plan.id, { isPrimary: true })}
           {plan.isProposed && actButton(planKey, 'plan_rethink', plan.id, { opens: true })}
-          <Button key={`plan-${plan.id}-goal`} label={COPY.goalOf(plan.goalRef ?? labelOf('goal', plan.goal))} dimColor onPress={() => go({ screen: 'goal', goal: plan.goal })} />
+          {isOnGoal ? null : <Button key={`plan-${plan.id}-goal`} label={COPY.goalOf(plan.goalRef ?? labelOf('goal', plan.goal))} dimColor onPress={() => go({ screen: 'goal', goal: plan.goal })} />}
         </Box>,
         plan.isProposed && actState(planKey).open === 'plan_rethink' ? actField(planKey, 'plan_rethink', plan.id, { label: COPY.rethinkLabel }) : null,
         plan.isProposed && actState(planKey).open === 'plan_rethink' ? <Text color="subtle" size="footnote">{COPY.rethinkNote}</Text> : null,
@@ -4143,7 +4571,7 @@ export const register: Register = on => {
       ], plan.isProposed ? 'wait' : 'plain')
 
       return [card_, actOutcome(planKey, plan.console, COPY.planInConsole, [
-        actState(planKey).outcome?.tool === 'plan_approve' ? <Button key={`act-${planKey}-queue`} label={COPY.openQueue} variant="primary" onPress={() => show($, QUEUE, true)} /> : null,
+        actState(planKey).outcome?.tool === 'plan_approve' && screen.screen !== 'queue' ? <Button key={`act-${planKey}-queue`} label={COPY.openQueue} variant="primary" onPress={() => show($, QUEUE, true)} /> : null,
       ])]
     }
 
@@ -4256,7 +4684,6 @@ export const register: Register = on => {
             <Markdown key={`spec-markdown-${file.name}`} text={file.text} />,
           ]))}
           <Link key="spec-view-console" href={goalLink(base, refItem('goal', screen.goal), screen.goal)} label={COPY.specInConsole} />
-          {footer}
         </Box>
       )
     }
@@ -4268,7 +4695,6 @@ export const register: Register = on => {
         <Box flexDirection="column" gap={1}>
           {backButton}
           {plan === null ? quiet(elements, goalsState.phase === 'loading' ? COPY.loading : COPY.noPlans) : planCard(plan)}
-          {footer}
         </Box>
       )
     }
@@ -4304,6 +4730,20 @@ export const register: Register = on => {
       const replan = specification === null ? null : specification.replan
       const reviseForm = await read($, revise)
       const isRevising = reviseForm !== null && reviseForm.goal === screen.goal && reviseForm.phase !== 'saved'
+      // ITS ROAD (hooks/road.ts), from its own stories as goal_get names them, each as the last read knows it. A repeating
+      // task's goal has none. Its proposed plan's card stands right under it, with its acts.
+      const goalRoadStories = (shownGoal.stories ?? []).map(item => current.stories.find(story => story.id === item.id) ?? { id: item.id, ref: '', title: item.title, goal: screen.goal, goalRef: null, state: item.stateKey ?? '', isList: item.isList === true, isStuck: false, usd: 0, tokens: null, isCostKnown: true })
+      const goalRoad = shownGoal.phase !== 'ok' || repeating !== null
+        ? null
+        : roadOf({
+            isClosed: isClosedGoal(shownGoal.state ?? 'open'),
+            target: shownGoal.target,
+            stories: goalRoadStories,
+            plans: roadPlansOf(plans, current.waiting).filter(plan => plan.goal === screen.goal),
+            hasQuestion: questions.length > 0 || current.questions.some(item => goalRoadStories.some(story => item.subject === `story/${story.id}`)),
+          })
+      const waitingPlan = plans.find(plan => plan.isProposed)
+      const goalNext = goalRoad?.stage === 'approve' && waitingPlan !== undefined ? COPY.nextApprovePlan(waitingPlan.ref ?? String(waitingPlan.id)) : goalRoad?.next ?? ''
       const specCard = specification === null ? null : cardOf('goal-spec', COPY.specTitle(specification.version), COPY.specRevised(specification.revised), [
         <Box key="spec-files" flexDirection="column" gap={look.isGraphic ? 'xs' : 0}>
           {specification.files.map(file => <Button key={`spec-file-${file.name}`} label={COPY.specFile(file.name, file.size)} plain onPress={() => go({ screen: 'spec', goal: screen.goal, version: null, file: file.name })} />)}
@@ -4319,13 +4759,6 @@ export const register: Register = on => {
           {isRevising ? null : <Button key="spec-revise" label={COPY.specRevise} onPress={() => openRevise($, screen.goal, specification.version)} />}
           {specification.older.map(version => <Button key={`spec-version-${version}`} label={COPY.specVersion(version)} dimColor onPress={() => go({ screen: 'spec', goal: screen.goal, version, file: null })} />)}
         </Box>,
-        <Link key="spec-console" href={goalLink(base, refItem('goal', screen.goal), screen.goal)} label={COPY.specInConsole} />,
-        specification.decisions.length === 0 ? null : (
-          <Box key="spec-decisions" flexDirection="column">
-            <Text size="caption" color="subtle">{COPY.specDecisions}</Text>
-            {specification.decisions.map((line, index) => <Text key={`spec-decision-${index}`} color="inactive">{line}</Text>)}
-          </Box>
-        ),
       ])
       // REVISE…: the files kept whole, replaced or added from a folder, removed; saved as the next version on its press.
       const reviseCard = specification === null || reviseForm === null || !isRevising ? null : cardOf('spec-revise-form', COPY.specReviseTitle(reviseForm.basedOn), COPY.specReviseHint, [
@@ -4347,14 +4780,28 @@ export const register: Register = on => {
           <Box flexDirection="column" gap={1}>
             {backButton}
             {quiet(elements, shownGoal.sentence ?? COPY.goalDeleted(screen.goal))}
-            {footer}
           </Box>
         )
       }
 
+      const decisions = specification === null ? [] : specification.decisions
+      const isDecisionsOpen = shown.includes('fold-decisions')
+      const isAddOpen = shown.includes('fold-add-task')
+      const storiesCard = shownGoal.phase === 'ok' && repeating === null ? cardOf('goal-stories', COPY.goalStories, <Text color="subtle" size="footnote" tabular>{String(shownGoal.stories.length)}</Text>, [
+        shownGoal.stories.length === 0 ? quiet(elements, COPY.noGoalStories) : null,
+        ...shownGoal.stories.map(item =>
+          rowOf({ key: `goal-story-${item.id}`, kind: COPY.kindStory, kindTone: markOf(kindTone(item.state)), title: item.title, detail: item.state, onPress: () => go({ screen: 'story', story: item.id }) })),
+      ]) : null
+
       return (
         <Box flexDirection="column" gap={1}>
-          {backButton}
+          <Box key="goal-top" flexDirection="row" justifyContent="space-between" alignItems="center" gap={1}>
+            {backButton}
+            <Box flexDirection="row" alignItems="center" gap={1} flexWrap="wrap">
+              <Link key="goal-console" href={goalLink(base, refItem('goal', screen.goal), screen.goal)} label={COPY.goalInConsole} />
+              {refreshButton}
+            </Box>
+          </Box>
           {shownGoal.phase === 'error'
             ? cardOf('goal-error', warned(COPY.loadError(COPY.goalOf(labelOf('goal', screen.goal)))), null, [reason(shownGoal.sentence)], 'bad')
             : (
@@ -4362,21 +4809,48 @@ export const register: Register = on => {
                   <Text size="caption" color="subtle">{COPY.goalOf(shownGoal.ref ?? labelOf('goal', screen.goal)).toUpperCase()}</Text>
                   <Text size="title" weight="semibold">{shownGoal.title}</Text>
                   <Text color="subtle" size="footnote">{shownGoal.meta}</Text>
+                  {shownGoal.ask === null || shownGoal.ask === undefined ? null : <Text color="inactive">{shownGoal.ask}</Text>}
                 </Box>
               )}
-          {specCard}
-          {reviseCard}
+          {goalRoad === null ? null : (
+            <Box key="goal-road" flexDirection="column" borderStyle="round" borderColor="subtle" backgroundColor={look.isGraphic ? CARD_FILL : undefined} paddingX={look.isGraphic ? 'md' : 1} paddingY={look.isGraphic ? 'sm' : 0} gap={look.isGraphic ? 'sm' : 1}>
+              {roadDrawing(elements, look, 'goal-road-cells', goalRoad.steps)}
+              {roadNames(elements, look, 'goal-road', goalRoad.steps, { onlyNow: look.isNarrow })}
+              {nextLine('goal-next', COPY.whatNext, goalNext)}
+            </Box>
+          )}
+          {plans.filter(plan => plan.isProposed).map(plan => planCard(plan, true))}
+          {twoColumns('goal-columns', storiesCard, specCard === null && reviseCard === null ? null : [specCard, reviseCard])}
           {specCard === null ? null : actOutcome(specKey, goalLink(base, refItem('goal', screen.goal), screen.goal), COPY.specInConsole)}
           {shownGoal.phase === 'ok' && repeating !== null && repeatingCard(repeating, settledVersions)}
-          {shownGoal.phase === 'ok' && repeating === null && cardOf('goal-stories', COPY.goalStories, <Text color="subtle" size="footnote" tabular>{String(shownGoal.stories.length)}</Text>, [
-            shownGoal.stories.length === 0 ? quiet(elements, COPY.noGoalStories) : null,
-            ...shownGoal.stories.map(item =>
-              rowOf({ key: `goal-story-${item.id}`, kind: COPY.kindStory, kindTone: markOf(kindTone(item.state)), title: item.title, detail: item.state, onPress: () => go({ screen: 'story', story: item.id }) })),
-          ])}
           {questions.length > 0 && cardOf('goal-questions', headingOf(COPY.goalQuestionsHeading, questions.length, 'text'), null, questions.map(item =>
             rowOf({ key: `goal-question-${item.id}`, kind: COPY.kindQuestion, kindTone: markOf(kindTone('question')), title: firstLine(item.text), onPress: () => go({ screen: 'question', question: item.id }) })), 'wait')}
-          {plans.filter(plan => !settledVersions.includes(plan)).map(plan =>
-            rowOf({ key: `goal-plan-${plan.id}`, kind: COPY.kindPlan, kindTone: plan.isProposed ? markOf(kindTone('plan')) : undefined, title: COPY.plan(plan.ref ?? String(plan.id)), detail: plan.stateText, detailTone: plan.isProposed ? 'attention' : 'subtle', onPress: () => go({ screen: 'plan', plan: plan.id }) }))}
+          {/* WHAT BECAME OF AN ACT ON A PLAN THAT NO LONGER WAITS: its card has gone, its ✓ stays. */}
+          {plans.filter(plan => !plan.isProposed).map(plan => actOutcome(`plan-${plan.id}`, plan.console, COPY.planInConsole))}
+          {plans.filter(plan => !plan.isProposed && !settledVersions.includes(plan)).map(plan =>
+            rowOf({ key: `goal-plan-${plan.id}`, kind: COPY.kindPlan, title: COPY.plan(plan.ref ?? String(plan.id)), detail: plan.stateText, detailTone: 'subtle', onPress: () => go({ screen: 'plan', plan: plan.id }) }))}
+          {folds('goal-folds', [
+            decisions.length === 0 ? null : foldButton('fold-decisions', `${COPY.yourDecisions} ${decisions.length}`, isDecisionsOpen),
+            shownGoal.phase === 'ok' && shownGoal.isOpen ? foldButton('fold-add-task', COPY.addTask, isAddOpen) : null,
+          ])}
+          {isDecisionsOpen && decisions.length > 0 && (
+            <Box key="spec-decisions" flexDirection="column">
+              {decisions.map((line, index) => <Text key={`spec-decision-${index}`} color="inactive">{line}</Text>)}
+            </Box>
+          )}
+          {/* A TASK UNDER THIS GOAL: a line here, the whole form on the next screen, this goal picked. */}
+          {shownGoal.phase === 'ok' && shownGoal.isOpen && isAddOpen && isStale && quiet(elements, COPY.addAfterReconnect)}
+          {shownGoal.phase === 'ok' && shownGoal.isOpen && isAddOpen && !isStale && hasInput && 'Input' in elements && (
+            <Box key="quick" flexDirection="column">
+              <Box flexDirection="row" gap={1}>
+                <Box flexGrow={1}>
+                  <elements.Input key="quick-add" label={COPY.quickLabel} placeholder={COPY.quickPlaceholder} value={await read($, quick)} onInput={value => update($, quick, (): string => value)} onSubmit={async value => { await update($, quick, (): string => ''); await openAdd($, value, screen.goal) }} />
+                </Box>
+                <Button key="quick-open" label={COPY.quickAdd} variant="primary" onPress={async () => { const value = await read($, quick); await update($, quick, (): string => ''); await openAdd($, value, screen.goal) }} />
+              </Box>
+              <Text color="subtle" size="footnote">{COPY.quickNote}</Text>
+            </Box>
+          )}
           {/* THE GOAL'S ACT (S27): Drop goal… asks once more, saying what it withdraws and what keeps running. */}
           {shownGoal.phase === 'ok' && shownGoal.isOpen && goalAct.open !== 'goal_drop' && (
             <Box key="goal-actions" flexDirection="row" gap={1}>{actButton(goalKey, 'goal_drop', screen.goal, { isDanger: true, opens: true })}</Box>
@@ -4386,52 +4860,13 @@ export const register: Register = on => {
           ], 'wait')}
           {actBusyNote(goalKey)}
           {actOutcome(goalKey, goalLink(base, refItem('goal', screen.goal), screen.goal), COPY.goalInConsole)}
-          <Link key="goal-console" href={goalLink(base, refItem('goal', screen.goal), screen.goal)} label={COPY.goalInConsole} />
-          {footer}
         </Box>
       )
     }
 
-    // THE GOALS TAB: open goals by priority, the plans, and a new goal with its priority and target.
-    if (screen.screen === 'goals') {
-      const isClosedShown = goalsState.showing === 'closed'
+    // A NEW GOAL: its title, its ask, its specification, its priority and target, by goal_add.
+    if (screen.screen === 'new-goal') {
       const newPicker = await readPicker($)
-      // A WITHDRAWN PLAN (plans_list's `state: 'withdrawn'`) LEAVES THE TAB, and so does a repeating task's version plan
-      // once settled: each waits on nothing, and stays on its goal's screen. A version that waits stays, as an act.
-      const tabPlans = goalsState.plans.filter(plan => plan.state !== 'withdrawn' && (plan.taskVersion == null || plan.isProposed))
-      // A CLOSED GOAL'S PLANS LEAVE THE OPEN LIST: they stay on the goal's own screen. After
-      // S44 the tab knows the open goals alone, so a plan stays only under one of them.
-      const openPlans = tabPlans.filter(plan => (goalsState.closedFrom === 'terylon'
-        ? goalsState.open.some(item => item.id === plan.goal)
-        : !goalsState.closed.some(item => item.id === plan.goal)))
-      // UNDER HISTORY, ONLY A CLOSED GOAL'S PLAN THAT STILL WAITS FOR THE OWNER: a settled one waits on nothing, and stays
-      // on its goal's own screen.
-      const shownPlans = isClosedShown ? tabPlans.filter(plan => plan.isProposed && goalsState.closed.some(item => item.id === plan.goal)) : openPlans
-      // OPEN · N AND HISTORY · M: the one selected filled, the other dim, as the tabs are. History is the closed goals.
-      const switchButton = (key: string, name: string, count: number, isSelected: boolean, showing: 'open' | 'closed') => (
-        <Button key={key} label={`${name}${COPY.count(count)}`} variant={isSelected ? 'primary' : undefined} dimColor={isSelected ? undefined : true} onPress={() => showGoals($, showing)}>
-          {!look.isGraphic && isSelected ? '● ' : ''}
-          {name}
-          {' · '}
-          <Text tabular>{String(count)}</Text>
-        </Button>
-      )
-      const goalSwitch = (
-        <Box flexDirection="row" gap={look.isGraphic ? 'xs' : 1} flexWrap="wrap">
-          {switchButton('goals-show-open', COPY.goalsOpen, goalsState.open.length, !isClosedShown, 'open')}
-          {switchButton('goals-show-closed', COPY.goalsHistory, goalsState.closedCount, isClosedShown, 'closed')}
-        </Box>
-      )
-      const closedRetry = (label: string) => <Button key="goals-closed-retry" label={label} onPress={() => showGoals($, 'closed')} />
-      // THE CLOSED LIST'S OWN STATES: loading and empty said quietly, a failed read with Terylon's sentence and Try again.
-      const closedLines = goalsState.closedPhase === 'loading' || goalsState.closedPhase === 'idle'
-        ? [quiet(elements, COPY.closedLoading)]
-        : goalsState.closedPhase === 'error'
-          ? [reason(goalsState.closedSentence), closedRetry(COPY.retry)]
-          : goalsState.closedPhase === 'changed'
-            ? [quiet(elements, COPY.closedChanged), closedRetry(COPY.closedReadAgain)]
-            : goalsState.closed.length === 0 ? [quiet(elements, COPY.historyEmpty)] : null
-      const goalRows = isClosedShown ? goalsState.closed : goalsState.open
       const goalPickers = [
         'Select' in elements ? (
           <elements.Select key="goal-priority" label={COPY.priority} value={goalsState.priority} options={COPY.priorities} onSelect={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, priority: value }))} />
@@ -4443,34 +4878,7 @@ export const register: Register = on => {
 
       return (
         <Box flexDirection="column" gap={1}>
-          {tabs}
-          {context}
-          {problemCard}
-          {goalsState.phase === 'loading' && quiet(elements, COPY.loading)}
-          {goalsState.phase === 'error' && cardOf('goals-error', warned(COPY.loadError(COPY.tabGoals)), null, [reason(goalsState.sentence)], 'bad')}
-          {goalsState.phase === 'ok' && cardOf('goals-open', goalSwitch, COPY.goalsHint, [
-            ...(isClosedShown && closedLines !== null ? closedLines : []),
-            !isClosedShown && goalRows.length === 0 ? quiet(elements, COPY.noOpenGoals) : null,
-            ...(isClosedShown && closedLines !== null ? [] : goalRows).map(item =>
-              rowOf({
-                key: `goal-${item.id}`,
-                // THE PRIORITY AS A CHIP (S32): P1 in warning, the others inactive.
-                kind: item.priority,
-                kindTone: item.priority === 'P1' ? 'warning' : 'inactive',
-                kindColumn: 3,
-                title: item.title,
-                titleTone: isClosedShown ? 'subtle' : undefined,
-                isTitleDim: isClosedShown,
-                // DELETE… ENDS EACH HISTORY ROW: the console's Goals, where the owner deletes it; no tool of the pane deletes.
-                trail: isClosedShown ? { href: deleteLink(base, item.id, item.ref ?? null), label: COPY.deleteInConsole } : null,
-                detail: item.questions > 0 ? COPY.goalQuestions(item.questions) : item.stories,
-                detailTone: item.questions > 0 ? 'attention' : 'subtle',
-                onPress: () => go({ screen: 'goal', goal: item.id }),
-              })),
-          ])}
-          {goalsState.phase === 'ok' && !isClosedShown && openPlans.length === 0 && cardOf('plans-empty', COPY.plans, null, [quiet(elements, COPY.noPlans)])}
-          {shownPlans.map(plan => planCard(plan))}
-          {goalsState.sentence !== null && goalsState.phase === 'ok' && reason(goalsState.sentence)}
+          {backButton}
           {hasInput && 'Input' in elements && cardOf('goal-new', COPY.newGoal, null, [
             // A SHORT TITLE, AND THE ASK IN THE OWNER'S OWN WORDS, as long as it needs: in rows where Desktop has proven a
             // multi-line field (input-rows). Each with its helper line under it.
@@ -4504,173 +4912,196 @@ export const register: Register = on => {
             goalsState.adding === 'refused' ? <Text color="error">{goalsState.addSentence ?? ''}</Text> : null,
             <Text color="subtle" size="footnote">{COPY.addGoalNote}</Text>,
           ])}
-          {footer}
         </Box>
       )
     }
 
-    // THE BELL TAB: what needs the owner, what the machine did, the leader's state, the last 30 days.
-    if (screen.screen === 'bell') {
-      const bellState = await readBell($)
-      const sourceColumn = kindWidth(bellState.unhandled.map(item => item.source))
-
-      return (
-        <Box flexDirection="column" gap={1}>
-          {tabs}
-          {context}
-          {problemCard}
-          {bellState.phase === 'loading' && quiet(elements, COPY.loading)}
-          {bellState.phase === 'error' && cardOf('bell-error', warned(COPY.loadError(COPY.tabNotices(0))), null, [reason(bellState.sentence)], 'bad')}
-          {bellState.phase === 'ok' && cardOf('bell-needs', headingOf(COPY.needsYou, bellState.unhandledCount, bellState.unhandledCount > 0 ? 'text' : 'inactive'), COPY.bellHint, [
-            bellState.unhandled.length === 0 ? quiet(elements, COPY.nothingYet) : null,
-            ...bellState.unhandled.map(notice =>
-              rowOf({
-                key: `notice-${notice.id}`,
-                // THE SOURCE AS A CHIP (S32): a fault of the machine in error, everything else inactive.
-                kind: notice.source,
-                kindTone: isMachineFault(notice) ? 'error' : 'inactive',
-                kindColumn: sourceColumn,
-                title: notice.title,
-                detail: `${notice.when} ${shown.includes(`notice-${notice.id}`) ? '▾' : '▸'}`,
-                onPress: () => toggle($, `notice-${notice.id}`),
-                body: shown.includes(`notice-${notice.id}`) ? (
-                  <Box flexDirection="column" paddingLeft={look.isGraphic ? 0 : sourceColumn + 1}>
-                    <Text color="inactive">{notice.body === '' ? COPY.noBody : notice.body}</Text>
-                    <Box flexDirection="row" gap={1} flexWrap="wrap">
-                      <Button
-                        key={`handle-${notice.id}`}
-                        label={bellState.handling === notice.id ? COPY.handling : COPY.markHandled}
-                        onPress={() => handleNotice($, notice.id)}
-                      />
-                      {notice.link !== null && <Link href={`${base}${notice.link}`} label={COPY.noticesInConsole} />}
-                    </Box>
-                  </Box>
-                ) : null,
-              })),
-            bellState.handleSentence === null ? null : reason(bellState.handleSentence),
-            <Text color="subtle" size="footnote">{COPY.bellNote}</Text>,
-          ], bellState.unhandledCount > 0 ? 'wait' : 'plain')}
-          {bellState.phase === 'ok' && cardOf('bell-machine', COPY.machine, COPY.machineHint, [
-            <Text>
-              <Text color={bellState.leader.isPaused ? 'warning' : 'success'}>{bellState.leader.isPaused ? '⚠ ' : '✓ '}</Text>
-              <Text color="text" weight={bellState.leader.isPaused ? 'semibold' : undefined}>{bellState.leader.text}</Text>
-            </Text>,
-            ...bellState.handled.map(notice => (
-              <Text key={`handled-${notice.id}`} wrap="truncate-end">
-                <Text color="success">{'✓ '}</Text>
-                {withHash(elements, notice.title)}
-                <Text color="subtle" size="footnote" tabular>{` ${notice.when}`}</Text>
-              </Text>
-            )),
-          ])}
-          {bellState.phase === 'ok' && bellState.metrics.length > 0 && cardOf('bell-metrics', COPY.metrics, COPY.metricsHint, [
-            look.isGraphic
-              ? (
-                  // FOUR NUMBERS, LARGE (S32): metrics reports no per-day series, so there is no 30-day chart.
-                  <Box key="metric-numbers" flexDirection="row" gap="lg" flexWrap="wrap">
-                    {bellState.metrics.map((metric, index) => (
-                      <Box key={`metric-${index}`} flexDirection="column">
-                        <Text size="title" weight="semibold" tabular>{metric.value}</Text>
-                        <Text size="footnote" color="subtle">{metric.label}</Text>
-                      </Box>
-                    ))}
-                  </Box>
-                )
-              : (
-                  <Box flexDirection="row" gap={2} flexWrap="wrap">
-                    {bellState.metrics.map((metric, index) => (
-                      <Text key={`metric-${index}`}>
-                        <Text bold>{metric.value}</Text>
-                        <Text color="subtle">{` ${metric.label}`}</Text>
-                      </Text>
-                    ))}
-                  </Box>
-                ),
-          ])}
-          {/* WHERE S32 LEFT THE DASHED SLOT: the leader's Pause and Resume are on Waiting and Health (S27). */}
-          <Box key="leader-actions" flexDirection="row" gap={1} flexWrap="wrap">
-            <Link href={consoleLink(base, 'bell')} label={COPY.noticesInConsole} />
-            <Link href={consoleLink(base, 'health')} label={COPY.health} />
+    // THE OVERVIEW: the machine in a line, three tiles, what waits for the owner, one card per goal, the folds, the footer.
+    const isHistoryOpen = goalsState.showing === 'closed'
+    const stuckCount = current.running.filter(item => item.isStuck).length
+    const { cards: goalCards, elsewhere } = goalCardsOf({
+      goals: goalsState.phase === 'ok' ? goalsState.open : [],
+      plans: roadPlansOf(goalsState.phase === 'ok' ? goalsState.plans : [], current.waiting),
+      stories: current.stories,
+      running: current.running,
+      questions: current.questions,
+    })
+    // A TILE: a stroke, a coloured number and the fill of a card; the waiting tile the gate's translucent purple, its word
+    // `inactive` since `subtle` falls short on it. Amber is a stroke alone: a stuck count's number is ink.
+    const tile = (name: string, count: number, label: string, stroke: 'merged' | 'subtle' | 'warning', numberTone: Tone, fill: string = CARD_FILL, labelTone: Tone = 'subtle') => (
+      <Box key={`tile-${name}`} backgroundColor={look.isGraphic ? fill : undefined} flexGrow={1} flexShrink={1} minWidth={0} width={look.isGraphic ? 0 : '33%'} flexDirection="row" alignItems="center" borderStyle="round" borderColor={count > 0 ? stroke : 'subtle'} paddingX={look.isGraphic ? 'md' : 1} paddingY={look.isGraphic ? 'sm' : 0} gap={look.isGraphic ? 'sm' : 1}>
+        <Text size="title" tabular color={colorOf(count > 0 ? numberTone : 'inactive')} weight="semibold">{String(count)}</Text>
+        <Text color={labelTone} wrap="truncate-end">{label}</Text>
+      </Box>
+    )
+    const tiles = look.isTilesLine
+      ? (
+          <Box key="tiles-line">
+            <Text wrap="truncate-end">
+              <Text color={current.waiting.length > 0 ? 'merged' : 'inactive'} weight="semibold" tabular>{COPY.tilesWaiting(current.waiting.length)}</Text>
+              <Text color="subtle">{' · '}</Text>
+              <Text color={current.running.length > 0 ? 'suggestion' : 'inactive'} tabular>{COPY.tilesRunning(current.running.length)}</Text>
+              <Text color="subtle">{' · '}</Text>
+              <Text color={stuckCount > 0 ? 'text' : 'inactive'} weight={stuckCount > 0 ? 'semibold' : undefined} tabular>{COPY.tilesStuck(stuckCount)}</Text>
+            </Text>
           </Box>
-          {footer}
-        </Box>
-      )
-    }
-
-    // THE QUEUE: waiting for you, running, queued or held, done today. Each card stays, quiet when empty.
+        )
+      : (
+          <Box key="tiles" flexDirection="row" gap={look.isGraphic ? 'sm' : 1}>
+            {tile('waiting', current.waiting.length, COPY.tileWaiting, 'merged', 'merged', WAITING_TILE_FILL, 'inactive')}
+            {tile('running', current.running.length, COPY.tileRunning, 'subtle', 'suggestion')}
+            {tile('stuck', stuckCount, COPY.tileStuck, 'warning', 'attention')}
+          </Box>
+        )
     const waitingKind = (kind: string) =>
       kind === 'question' ? COPY.kindQuestion : kind === 'merge' ? COPY.kindMerge : kind === 'accept' ? COPY.kindAccept : kind === 'plan' ? COPY.kindPlan : COPY.kindBlocked
     // THE KIND'S DOT (hooks/tones.ts): what waits on the owner's merge, acceptance or approval purple, a question amber.
     const waitingTone = (kind: string): Tone => markOf(kindTone(kind))
-    // THE CARD'S HINT says where each waiting decision is taken: a merge in the console, an acceptance on its card (#39).
-    const hasAccept = current.waiting.some(item => item.kind === 'accept')
-    const waitingHint = !hasAccept ? COPY.waitingHint : current.waiting.some(item => item.kind === 'merge') ? COPY.waitingHintBoth : COPY.waitingHintAccept
-    const waitingReveal = (kind: string) => (kind === 'question' ? COPY.answerInConsole : COPY.mergeInConsole)
-    const slots = slotsGauge(current.slotsUsed, current.slots, false)
-    const spend = budgetUsd === null || !isCostKnown ? null : spendBar(runningUsd, budgetUsd, 'small', COPY.gaugeSpendAlt(costNow, dayNow ?? ''))
+    // A WAITING ROW'S ACT, beside its press: each opens its subject's card, where the act is taken, so a plan is never
+    // approved unread; the row keeps the act's word. MERGE IS ONLY EVER A LINK INTO THE CONSOLE.
+    const waitingAct = (item: PaneSnapshot['waiting'][number]) => {
+      switch (item.kind) {
+        case 'question':
+          return <Button key={`answer-${item.target}`} label={COPY.answer} onPress={() => go({ screen: 'question', question: item.target })} />
+        case 'plan':
+          return <Button key={`open-plan-${item.target}`} label={COPY.actButton.plan_approve} onPress={() => go({ screen: 'plan', plan: item.target })} />
+        case 'accept':
+          return <Button key={`open-story-${item.target}`} label={COPY.actButton.story_accept} onPress={() => go({ screen: 'story', story: item.target })} />
+        case 'merge':
+          return mergeLink(`merge-act-${item.target}`, item.console, COPY.mergeShort)
+        default:
+          return <Button key={`open-story-${item.target}`} label={COPY.rowOpen} onPress={() => go({ screen: 'story', story: item.target })} />
+      }
+    }
+    // WHAT BECAME OF AN ACT STILL GOING WHEN ITS CARD WAS LEFT: it may have left the list, so its outcome stands under the card.
+    const rowOutcomes = Object.keys(allActs)
+      .filter(key => /^(plan|story)-\d+$/.test(key))
+      .map(key => {
+        const id = Number(key.slice(key.indexOf('-') + 1))
 
-    // THE RUNNING HEADING'S GAUGES (S32): the slots and today's spend as two small Svg with their numbers; the
-    // narrow dock says the numbers alone, the terminal draws ▰▱ cells.
-    const gauges = !look.isGraphic
-      ? (
-          <Text color="subtle" tabular>
-            {`${meter(current.slotsUsed, Math.min(current.slots, 12))} ${COPY.gaugeSlots(current.slotsUsed, current.slots)} · ${budgetUsd === null || budgetUsd <= 0 || !isCostKnown ? '' : `${meter((runningUsd / budgetUsd) * 4, 4)} `}${isCostKnown ? COPY.gaugeSpend(costNow, dayNow) : costNow}`}
-          </Text>
-        )
-      : look.isNarrow
-        ? <Text color="subtle" size="footnote" tabular>{COPY.gaugesNarrow(current.slotsUsed, current.slots, costNow)}</Text>
-        : (
-            <Box flexDirection="row" gap="sm" alignItems="center">
-              {picture(elements, slots)}
-              <Text color="subtle" size="footnote" tabular>{COPY.gaugeSlots(current.slotsUsed, current.slots)}</Text>
-              {picture(elements, spend)}
-              <Text color="subtle" size="footnote" tabular>{isCostKnown ? COPY.gaugeSpend(costNow, dayNow) : costNow}</Text>
+        return key.startsWith('plan-')
+          ? actOutcome(key, planLink(base, refItem('plan', id), id), COPY.planInConsole)
+          : actOutcome(key, storyLink(base, 'story', refItem('story', id), id), COPY.storyInConsole)
+      })
+    // ONE GOAL'S CARD: its ref, its title, its stage; its road; how far it is with a press for each running story; what next.
+    const goalCard = (item: PaneGoalCard) => {
+      const stageTone = item.road?.tone ?? 'subtle'
+      const stageWord = item.road?.word ?? COPY.repeating
+      const stageChip = look.isGraphic
+        ? <Text size="caption" color={CHIP_WORD} backgroundColor={CHIP_BACKGROUND}>{'\u00a0'}<Text color={stageTone}>{CHIP_DOT}</Text>{`\u00a0${stageWord}\u00a0`}</Text>
+        : <Text color={stageTone} weight="semibold">{stageWord}</Text>
+
+      return (
+        <Box key={`goal-card-${item.goal.id}`} flexDirection="column" borderStyle="round" borderColor={item.stuck > 0 ? 'warning' : 'subtle'} backgroundColor={look.isGraphic ? CARD_FILL : undefined} paddingX={look.isGraphic ? 'md' : 1} paddingY={look.isGraphic ? 'sm' : 0} gap={look.isGraphic ? 'sm' : 1}>
+          <Box key={`goal-card-title-${item.goal.id}`} flexDirection="row" alignItems="center" justifyContent="space-between" gap={1}>
+            <Box flexDirection="row" alignItems="center" gap={1} flexShrink={1} minWidth={0} overflow="hidden">
+              {item.goal.ref === undefined || item.goal.ref === null ? null : <Box flexShrink={0}><Text mono size="footnote" color="subtle">{item.goal.ref}</Text></Box>}
+              <Button key={`goal-${item.goal.id}`} plain onPress={() => go({ screen: 'goal', goal: item.goal.id })}>
+                <Text weight="semibold" wrap="truncate-end">{item.goal.title}</Text>
+              </Button>
             </Box>
-          )
+            <Box flexShrink={0}>{stageChip}</Box>
+          </Box>
+          {item.road === null ? null : roadDrawing(elements, look, `goal-card-road-${item.goal.id}`, item.road.steps, { height: ROAD_CARD_HEIGHT })}
+          <Box key={`goal-card-detail-${item.goal.id}`} flexDirection={look.isNarrow ? 'column' : 'row'} justifyContent="space-between" gap={1}>
+            <Box flexDirection="row" flexWrap="wrap" flexShrink={1} minWidth={0} gap={1} alignItems="center">
+              <Text color="subtle" size="footnote" tabular>{item.summary}</Text>
+              {item.running.map(run => (
+                // A RUNNING STORY IS ONE PRESS AWAY, by its ref and its state.
+                <Button key={`story-${run.story}`} plain onPress={() => go({ screen: 'story', story: run.story })}>
+                  <Text mono size="footnote" color="suggestion">{run.ref}</Text>
+                  {' '}
+                  <Text size="footnote" tabular color="inactive">{run.now}</Text>
+                </Button>
+              ))}
+              {item.stuck > 0 && (
+                <Text size="footnote">
+                  <Text color="warning">⚠</Text>
+                  {' '}
+                  <Text weight="semibold">{COPY.stuckFlag(item.stuck)}</Text>
+                </Text>
+              )}
+              {item.spend === null ? null : <Text color="subtle" size="footnote" tabular>{item.spend}</Text>}
+            </Box>
+            <Box flexShrink={0}>
+              <Text>{item.next}</Text>
+            </Box>
+          </Box>
+        </Box>
+      )
+    }
+    // HISTORY NEVER SITS ON LOADING: the line stands only while a read runs, under its bound; a count of 0 is empty with
+    // nothing called, and a read nothing runs, one a reload of the module lost, is a press away.
+    const closedLines = goalsState.closedPhase === 'error'
+      ? [reason(goalsState.closedSentence), <Button key="goals-closed-retry" label={COPY.retry} onPress={() => showGoals($, 'closed')} />]
+      : goalsState.closedPhase === 'changed'
+        ? [quiet(elements, COPY.closedChanged), <Button key="goals-closed-retry" label={COPY.closedReadAgain} onPress={() => showGoals($, 'closed')} />]
+        : goalsState.closedCount === 0 && goalsState.closed.length === 0
+          ? [quiet(elements, COPY.historyEmpty)]
+          : goalsState.closedPhase === 'loading' && closedGoalsRead !== null
+            ? [quiet(elements, COPY.closedLoading)]
+            : goalsState.closedPhase !== 'ok'
+              ? [<Button key="goals-closed-retry" label={COPY.closedRead} onPress={() => showGoals($, 'closed')} />]
+              : goalsState.closed.length === 0 ? [quiet(elements, COPY.historyEmpty)] : null
+    const isDoneOpen = shown.includes('fold-done')
+    const isQueuedOpen = shown.includes('fold-queued')
+    // OPEN UNTIL IT IS SHUT: nothing running is ever hidden, so a story no goal could be found for stands in the open.
+    const isElsewhereOpen = !shown.includes('fold-running')
 
-    return (
+    const overviewDrawing = (
       <Box flexDirection="column" gap={1}>
-        {tabs}
-        {context}
+        {overviewHead}
+        {tiles}
         {problemCard}
-        {/* THE LEADER'S ACTS (S27): Pause… with an optional reason under the header, Resume on the paused card. */}
-        {current.connection === 'ok' && current.paused === null && actState('leader').open === 'leader_pause' && cardOf('act-leader-pause-card', COPY.actButton.leader_pause?.replace('…', '') ?? '', null, [
-          actField('leader', 'leader_pause', null, { label: COPY.whyOptional }),
-          <Text color="subtle" size="footnote">{COPY.pauseNote}</Text>,
-        ])}
         {current.paused !== null && cardOf('paused', <Text size="heading" weight="semibold" color="text">{current.paused}</Text>, null, [
           <Box flexDirection="row" gap={1}>{actButton('leader', 'leader_resume', null, { isPrimary: true })}</Box>,
         ], 'wait')}
         {actBusyNote('leader')}
         {actOutcome('leader', consoleLink(base, 'work'), COPY.workInConsole)}
-        {cardOf('waiting', headingOf(COPY.waiting, current.waiting.length, current.waiting.length > 0 ? 'text' : 'inactive', stale), look.isNarrow ? null : waitingHint, [
+        {cardOf('waiting', heading(elements, `${COPY.waiting}${stale}`), null, [
           current.waiting.length === 0 ? quiet(elements, COPY.nothingWaiting) : null,
           ...current.waiting.map(item =>
             rowOf({
               key: item.key,
               kind: waitingKind(item.kind),
               kindTone: waitingTone(item.kind),
+              ref: item.ref,
               title: item.kind === 'merge' || item.kind === 'accept' ? `${item.title} · ${item.detail}` : item.title,
-              // ONLY MERGE LINKS OUT (S27): every other waiting row's act is on its subject's card.
-              reveal: item.kind === 'merge' || item.kind === 'question' ? { href: item.console, label: waitingReveal(item.kind) } : null,
-              onPress: () => toggle($, item.key),
-              body: shown.includes(item.key) ? (
+              // A QUESTION CAN BE ANSWERED IN THE CONSOLE TOO; every other act is the row's own.
+              reveal: item.kind === 'question' ? { href: item.console, label: COPY.answerInConsole } : null,
+              act: waitingAct(item),
+              // A QUESTION IS ONE LINE AND ITS Answer: its text is read where it is answered.
+              onPress: () => (item.kind === 'question' ? go({ screen: 'question', question: item.target }) : toggle($, item.key)),
+              body: item.kind !== 'question' && shown.includes(item.key) ? (
                 <Box flexDirection="column" paddingLeft={look.isGraphic ? 0 : KIND_WIDTH + 1}>
                   <Text color="inactive">{item.detail}</Text>
                   <Box flexDirection="row" gap={1} flexWrap="wrap">
-                    {item.kind === 'question' && <Button key={`answer-${item.target}`} label={COPY.answer} variant="primary" onPress={() => go({ screen: 'question', question: item.target })} />}
-                    {item.kind === 'question' && <Link href={item.console} label={COPY.answerInConsole} />}
-                    {(item.kind === 'merge' || item.kind === 'accept' || item.kind === 'blocked') && <Button key={`open-story-${item.target}`} label={COPY.openStory} onPress={() => go({ screen: 'story', story: item.target })} />}
-                    {item.kind === 'merge' && <Link href={item.console} label={COPY.mergeInConsole} />}
-                    {item.kind === 'plan' && <Button key={`open-plan-${item.target}`} label={COPY.openPlan} onPress={() => go({ screen: 'plan', plan: item.target })} />}
+                    {item.kind === 'merge' && <Button key={`open-story-${item.target}`} label={COPY.openStory} onPress={() => go({ screen: 'story', story: item.target })} />}
+                    {item.kind === 'merge' && mergeLink(`merge-long-${item.target}`, item.console, COPY.mergeInConsole)}
                   </Box>
                 </Box>
               ) : null,
             })),
-        ], current.waiting.length > 0 ? 'wait' : 'plain')}
-        {cardOf('running', headingOf(COPY.running, current.running.length, current.running.length > 0 ? 'suggestion' : 'inactive', stale), gauges, [
-          current.running.length === 0 ? quiet(elements, COPY.nothingRunning) : null,
-          ...current.running.map(item =>
+        ], 'gate')}
+        {rowOutcomes}
+        <Box key="goals" flexDirection="column" gap={look.isGraphic ? 'sm' : 1}>
+          <Box key="goals-head" flexDirection="row" justifyContent="space-between" alignItems="center" gap={1}>
+            <Text size="heading" weight="semibold">{COPY.goalsHeading}</Text>
+            {hasInput && <Button key="goal-new-open" label={COPY.newGoal} onPress={() => go({ screen: 'new-goal' })} />}
+          </Box>
+          {goalsState.phase === 'loading' && quiet(elements, COPY.loading)}
+          {goalsState.phase === 'error' && cardOf('goals-error', warned(COPY.loadError(COPY.goalsHeading)), null, [reason(goalsState.sentence)], 'bad')}
+          {goalsState.phase === 'ok' && goalCards.length === 0 && quiet(elements, COPY.noOpenGoals)}
+          {goalCards.map(goalCard)}
+          {goalsState.sentence !== null && goalsState.phase === 'ok' && reason(goalsState.sentence)}
+          {folds('overview-folds', [
+            elsewhere.length === 0 ? null : foldButton('fold-running', `${COPY.foldRunning} ${elsewhere.length}`, isElsewhereOpen),
+            foldButton('fold-done', `${COPY.doneToday} ${current.doneToday.length}`, isDoneOpen),
+            foldButton('fold-queued', `${COPY.queued} ${current.queued.length}`, isQueuedOpen),
+            foldButton('goals-show-closed', `${COPY.goalsHistory} ${goalsState.closedCount}`, isHistoryOpen, () => showGoals($, isHistoryOpen ? 'open' : 'closed')),
+          ])}
+          {/* EACH OPEN FOLD ITS OWN CARD, stacked in the folds' order. */}
+          {isElsewhereOpen && elsewhere.length > 0 && foldCard('fold-running-card', COPY.foldRunning, elsewhere.length, elsewhere.map(item =>
             rowOf({
               key: `story-${item.story}`,
               kind: null,
@@ -4678,33 +5109,15 @@ export const register: Register = on => {
               detail: look.isNarrow ? null : item.detail,
               detailTone: item.isStuck ? 'error' : 'inactive',
               onPress: () => go({ screen: 'story', story: item.story }),
-              // THE RUN'S PHASES (S32): eight segments from progress.stage, dots in the narrow dock, ✓●○◇ on the terminal.
+              // ITS PHASES FROM progress.stage: a road on the desktop, coloured cells on the terminal.
               body: (
                 <Box flexDirection="column" paddingLeft={look.isGraphic ? 0 : 1}>
-                  {look.isGraphic
-                    ? picture(elements, (look.isNarrow ? dots : segments)(item.phases, shortLabels(item.phases), item.isStuck))
-                    : phaseLine(elements, item.phases, item.isStuck, item.stageLine)}
-                  {look.isGraphic && (item.stageLine ?? item.step) !== null && <Text color="inactive" size="footnote" wrap="truncate-end">{item.stageLine ?? item.step}</Text>}
-                  {!look.isGraphic && item.stageLine === null && item.step !== null && <Text color="inactive" wrap="truncate-end">{item.step}</Text>}
+                  {roadDrawing(elements, look, `story-${item.story}-road`, phaseSteps(item.phases, shortLabels(item.phases)), { isStuck: item.isStuck })}
+                  {(item.stageLine ?? item.step) !== null && <Text color="inactive" size="footnote" wrap="truncate-end">{item.stageLine ?? item.step}</Text>}
                 </Box>
               ),
-            })),
-        ])}
-        {cardOf('queued', headingOf(COPY.queued, current.queued.length, 'inactive', stale), null, [
-          current.queued.length === 0 ? quiet(elements, COPY.nothingQueued) : null,
-          ...current.queued.map(item =>
-            rowOf({
-              key: `queued-${item.story}`,
-              kind: item.isHeld ? COPY.kindHeld : COPY.kindQueued,
-              title: item.title,
-              detail: item.detail,
-              detailTone: item.isHeld ? 'attention' : 'subtle',
-              onPress: () => go({ screen: 'story', story: item.story }),
-            })),
-        ])}
-        {cardOf('done', headingOf(COPY.doneToday, current.doneToday.length, current.doneToday.length > 0 ? wordOf('ok').color : 'inactive'), null, [
-          current.doneToday.length === 0 ? quiet(elements, COPY.nothingDone) : null,
-          ...current.doneToday.map(item =>
+            })))}
+          {isDoneOpen && foldCard('fold-done-card', COPY.doneToday, current.doneToday.length, current.doneToday.length === 0 ? [quiet(elements, COPY.nothingDone)] : current.doneToday.map(item =>
             rowOf({
               key: `done-${item.story}`,
               kind: item.isAccepted === true ? COPY.kindAccepted : COPY.kindMerged,
@@ -4713,20 +5126,33 @@ export const register: Register = on => {
               title: item.title,
               detail: item.detail,
               onPress: () => go({ screen: 'story', story: item.story }),
-            })),
-        ])}
-        {isStale && quiet(elements, COPY.addAfterReconnect)}
-        {!isStale && hasInput && 'Input' in elements && (
-          <Box key="quick" flexDirection="column">
-            <Box flexDirection="row" gap={1}>
-              <Box flexGrow={1}>
-                <elements.Input key="quick-add" label={COPY.quickLabel} placeholder={COPY.quickPlaceholder} value={await read($, quick)} onInput={value => update($, quick, (): string => value)} onSubmit={async value => { await update($, quick, (): string => ''); await openAdd($, value) }} />
-              </Box>
-              <Button key="quick-open" label={COPY.quickAdd} variant="primary" onPress={async () => { const value = await read($, quick); await update($, quick, (): string => ''); await openAdd($, value) }} />
-            </Box>
-            <Text color="subtle" size="footnote">{COPY.quickNote}</Text>
-          </Box>
-        )}
+            })))}
+          {isQueuedOpen && foldCard('fold-queued-card', COPY.queued, current.queued.length, current.queued.length === 0 ? [quiet(elements, COPY.nothingQueued)] : current.queued.map(item =>
+            rowOf({
+              key: `queued-${item.story}`,
+              kind: item.isHeld ? COPY.kindHeld : COPY.kindQueued,
+              title: item.title,
+              detail: item.detail,
+              detailTone: item.isHeld ? 'attention' : 'subtle',
+              onPress: () => go({ screen: 'story', story: item.story }),
+            })))}
+          {isHistoryOpen && foldCard('goals-closed-card', COPY.goalsHistory, goalsState.closedCount, closedLines ?? goalsState.closed.map(item =>
+            rowOf({
+              key: `goal-${item.id}`,
+              // THE PRIORITY AS A CHIP: P1 in warning, the others inactive.
+              kind: item.priority,
+              kindTone: item.priority === 'P1' ? 'warning' : 'inactive',
+              kindColumn: 3,
+              title: item.title,
+              titleTone: 'subtle',
+              isTitleDim: true,
+              // DELETE… ENDS EACH HISTORY ROW: the console's Goals, where the owner deletes it; no tool of the pane deletes.
+              trail: { href: deleteLink(base, item.id, item.ref ?? null), label: COPY.deleteInConsole },
+              detail: item.questions > 0 ? COPY.goalQuestions(item.questions) : item.stories,
+              detailTone: item.questions > 0 ? 'attention' : 'subtle',
+              onPress: () => go({ screen: 'goal', goal: item.id }),
+            })))}
+        </Box>
         {!isStale && !hasInput && (
           <Box key="phone-add-box" flexDirection="column">
             <Button key="phone-add" label={COPY.addOnPhone} onPress={() => postPrompt($, COPY.addOnPhonePrompt)} />
@@ -4737,7 +5163,29 @@ export const register: Register = on => {
           notes.length === 0 ? quiet(elements, COPY.paneLogEmpty) : null,
           ...notes.map(line => <Text color="subtle" size="footnote" mono>{line}</Text>),
         ])}
-        {footer}
+        {overviewFoot}
+      </Box>
+    )
+
+    return overviewDrawing
+    })()
+
+    // TEST MODE IS SAID ON EVERY SCREEN: its head names it on the overview, this line elsewhere, and the sentence of what
+    // a press did not do on any.
+    const testing = await read($, testMode)
+    const screenNow = stackOf(await read($, view)).at(-1) ?? QUEUE
+    const testLine = !testing.isOn ? null : testing.note ?? (screenNow.screen === 'queue' ? null : COPY.testBand)
+
+    if (testLine === null) {
+      return drawn as never
+    }
+
+    const { Box, Text } = $.ui.resolve(e)
+
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text key="test-line" color="merged" weight="semibold">{testLine}</Text>
+        {drawn}
       </Box>
     )
   })

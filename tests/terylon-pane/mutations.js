@@ -62,8 +62,8 @@ const MUTATIONS = [
     {
         name: "the pane opens by itself at session start",
         file: "hooks/register.tsx",
-        find: "  $.clock.after(0, () => tick($, true))\n",
-        replace: "  void $.ui.open({ id: PANE, title: COPY.title })\n  $.clock.after(0, () => tick($, true))\n",
+        find: "  tickedAt = startedAt\n  $.clock.after(0, () => tick($, true))\n",
+        replace: "  tickedAt = startedAt\n  void $.ui.open({ id: PANE, title: COPY.title })\n  $.clock.after(0, () => tick($, true))\n",
     },
     {
         name: "the band draws a waiting count calm",
@@ -105,7 +105,7 @@ const MUTATIONS = [
             },
             {
                 file: "hooks/register.tsx",
-                find: "              onPress: () => toggle($, item.key),\n",
+                find: "              onPress: () => (item.kind === 'question' ? go({ screen: 'question', question: item.target }) : toggle($, item.key)),\n",
                 replace: "              onPress: () => callTerylon($, 'story_merge', {}),\n",
             },
         ],
@@ -119,8 +119,8 @@ const MUTATIONS = [
     {
         name: "an empty card says nothing",
         file: "hooks/register.tsx",
-        find: "          current.running.length === 0 ? quiet(elements, COPY.nothingRunning) : null,\n          ...current.running.map(item =>\n            rowOf({\n              key: `story-${item.story}`,",
-        replace: "          null,\n          ...current.running.map(item =>\n            rowOf({\n              key: `story-${item.story}`,",
+        find: "          current.waiting.length === 0 ? quiet(elements, COPY.nothingWaiting) : null,\n",
+        replace: "          null,\n",
     },
     {
         name: "the machine card shows a repeated notice each time",
@@ -162,8 +162,8 @@ const MUTATIONS = [
     {
         name: "Mark handled sends nothing",
         file: "hooks/register.tsx",
-        find: "                        onPress={() => handleNotice($, notice.id)}\n",
-        replace: "                        onPress={() => toggle($, `notice-${notice.id}`)}\n",
+        find: "onPress={() => handleNotice($, notice.id)}\n",
+        replace: "onPress={() => toggle($, `notice-${notice.id}`)}\n",
     },
     {
         name: "the band drops the bell's count",
@@ -211,7 +211,7 @@ const MUTATIONS = [
     {
         name: "a verified story's merge becomes a button",
         file: "hooks/register.tsx",
-        find: "            {shownStory.isVerified && !shownStory.isList && <Link href={storyLink(base, 'merge', storyRef, shownStory.story)} label={COPY.mergeInConsole} />}\n",
+        find: "            {shownStory.isVerified && !shownStory.isList && mergeLink('merge-story', storyLink(base, 'merge', storyRef, shownStory.story), COPY.mergeInConsole)}\n",
         replace: "            {shownStory.isVerified && !shownStory.isList && <Button key=\"act-story-merge\" label=\"Merge\" onPress={() => undefined} />}\n",
     },
     {
@@ -293,9 +293,9 @@ const MUTATIONS = [
     // S32 (#25): the drawing on the 2.1.304 mod API.
     {
         name: "a running row with no progress.stage draws its first phase to come as now",
-        file: "hooks/drawing.ts",
-        find: "  const parts = phases.map((phase, index) => {\n    const x = round(index * (size + gap))\n",
-        replace: "  const parts = phases.map((given, index) => {\n    const phase = nowOf(phases) < 0 && index === phases.findIndex(item => item.status === 'next') ? { ...given, status: 'now' as const } : given\n    const x = round(index * (size + gap))\n",
+        file: "hooks/road.ts",
+        find: "  return phases.map((phase, index) => ({ name: names[index] ?? phase.label, status: phase.status, isGate: index === phases.length - 1 }))\n",
+        replace: "  return phases.map((phase, index) => ({ name: names[index] ?? phase.label, status: !phases.some(item => item.status === 'now') && index === phases.findIndex(item => item.status === 'next') ? 'now' as const : phase.status, isGate: index === phases.length - 1 }))\n",
     },
     {
         name: "a gate creeps into the allow rules the Status tab draws",
@@ -361,8 +361,8 @@ const MUTATIONS = [
     {
         name: "a card that waits for the owner is filled again",
         file: "hooks/register.tsx",
-        find: "      borderColor={toneKey}\n",
-        replace: "      borderColor={toneKey}\n      backgroundColor={look.isGraphic && tone !== 'plain' ? toneKey : undefined}\n",
+        find: "      backgroundColor={look.isGraphic ? CARD_FILL : undefined}\n      flexGrow={isFilling ? 1 : undefined}\n",
+        replace: "      backgroundColor={look.isGraphic && tone !== 'plain' ? toneKey : look.isGraphic ? CARD_FILL : undefined}\n      flexGrow={isFilling ? 1 : undefined}\n",
     },
     {
         name: "a card that waits for the owner loses its coloured stroke",
@@ -373,14 +373,14 @@ const MUTATIONS = [
     {
         name: "a row's kind chip loses its grey",
         file: "hooks/register.tsx",
-        find: " color={CHIP_WORD} backgroundColor={CHIP_BACKGROUND}>",
-        replace: " color={CHIP_WORD}>",
+        find: " color={CHIP_WORD} backgroundColor={CHIP_BACKGROUND}>{'\\u00a0'}<Text color={input.kindTone ?? 'subtle'}>",
+        replace: " color={CHIP_WORD}>{'\\u00a0'}<Text color={input.kindTone ?? 'subtle'}>",
     },
     {
         name: "a chip's word is drawn in the kind's colour again, unreadable on the chip",
         file: "hooks/register.tsx",
-        find: "<Text size=\"caption\" color={CHIP_WORD} backgroundColor={CHIP_BACKGROUND}>",
-        replace: "<Text size=\"caption\" color={input.kindTone ?? 'subtle'} backgroundColor={CHIP_BACKGROUND}>",
+        find: "<Text size=\"caption\" color={CHIP_WORD} backgroundColor={CHIP_BACKGROUND}>{'\\u00a0'}<Text color={input.kindTone ?? 'subtle'}>",
+        replace: "<Text size=\"caption\" color={input.kindTone ?? 'subtle'} backgroundColor={CHIP_BACKGROUND}>{'\\u00a0'}<Text color={input.kindTone ?? 'subtle'}>",
     },
     {
         name: "a problem card's title is amber again",
@@ -389,15 +389,15 @@ const MUTATIONS = [
         replace: "color=\"warning\"",
     },
     {
-        name: "the waiting card's count is amber again",
+        name: "the stuck tile's number is amber, a word under 4.5:1 in the light theme",
         file: "hooks/register.tsx",
-        find: "current.waiting.length > 0 ? 'text' : 'inactive', stale)",
-        replace: "current.waiting.length > 0 ? 'warning' : 'inactive', stale)",
+        find: "{tile('stuck', stuckCount, COPY.tileStuck, 'warning', 'attention')}",
+        replace: "{tile('stuck', stuckCount, COPY.tileStuck, 'warning', 'warning')}",
     },
     {
-        name: "the stepper shrinks as a whole in a dock of about 435 px again",
+        name: "a story's road names all its phases in a dock of about 435 px again",
         file: "hooks/register.tsx",
-        find: "      isCompact: e.props.bodyColumns < STEPPER_COLUMNS,\n",
+        find: "      isCompact: e.props.bodyColumns < ROAD_NAMES_COLUMNS,\n",
         replace: "      isCompact: false,\n",
     },
     {
@@ -407,10 +407,10 @@ const MUTATIONS = [
         replace: "backgroundColor={look.isGraphic ? shownStory.stateTone : undefined} paddingX",
     },
     {
-        name: "the hover reveal is laid over an open row",
+        name: "a question's row no longer leads to its question",
         file: "hooks/register.tsx",
-        find: " && !isOpen && ",
-        replace: " && ",
+        find: "              onPress: () => (item.kind === 'question' ? go({ screen: 'question', question: item.target }) : toggle($, item.key)),\n",
+        replace: "              onPress: () => toggle($, item.key),\n",
     },
     {
         name: "an Svg is left to size its own box",
@@ -425,10 +425,10 @@ const MUTATIONS = [
         replace: "submitLabel=\"answer\"",
     },
     {
-        name: "the wide stepper's nodes are a strip of fixed width again, apart from the labels",
+        name: "a road is a strip of fixed width again, apart from the names under it",
         file: "hooks/drawing.ts",
-        find: "    : `<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100%\" height=\"${height}\">${parts.join('')}</svg>`",
-        replace: "    : svg(456, height, parts.join(''))",
+        find: "`<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100%\" height=\"${height}\">${parts.join('')}</svg>`",
+        replace: "svg(456, height, parts.join(''))",
     },
     {
         name: "a blocked story's header says it is running again",
@@ -492,10 +492,10 @@ const MUTATIONS = [
         replace: "    canAbandon: false,\n",
     },
     {
-        name: "a closed goal's plans stay on the Goals tab",
+        name: "a settled plan is drawn as a card on its goal's screen again",
         file: "hooks/register.tsx",
-        find: "      const openPlans = tabPlans.filter(plan => (goalsState.closedFrom === 'terylon'\n        ? goalsState.open.some(item => item.id === plan.goal)\n        : !goalsState.closed.some(item => item.id === plan.goal)))\n",
-        replace: "      const openPlans = tabPlans\n",
+        find: "{plans.filter(plan => plan.isProposed).map(plan => planCard(plan, true))}",
+        replace: "{plans.map(plan => planCard(plan, true))}",
     },
     {
         name: "a plan is drawn as one chain again",
@@ -691,16 +691,16 @@ const MUTATIONS = [
         replace: "(false ? [] : [{",
     },
     {
-        name: "a withdrawn plan stays on the Goals tab",
-        file: "hooks/register.tsx",
-        find: "const tabPlans = goalsState.plans.filter(plan => plan.state !== 'withdrawn' && (",
-        replace: "const tabPlans = goalsState.plans.filter(plan => (",
+        name: "a plan that no longer waits holds its goal on Approve",
+        file: "hooks/road.ts",
+        find: "goal: plan.goal, isProposed: plan.isProposed, stories:",
+        replace: "goal: plan.goal, isProposed: true, stories:",
     },
     {
-        name: "the closed goals are read on every poll of the goals",
+        name: "the closed goals are read on every read of the goals",
         file: "hooks/register.tsx",
-        find: "  const goalsAnswer = await callTerylon($, 'goals_list')\n  const plansAnswer = await callTerylon($, 'plans_list')\n",
-        replace: "  const goalsAnswer = await callTerylon($, 'goals_list')\n  await callTerylon($, 'goals_list', { closed: true })\n  const plansAnswer = await callTerylon($, 'plans_list')\n",
+        find: "  const [goalsAnswer, plansAnswer] = await Promise.all([callTerylon($, 'goals_list'), callTerylon($, 'plans_list')])\n",
+        replace: "  const [goalsAnswer, plansAnswer] = await Promise.all([callTerylon($, 'goals_list'), callTerylon($, 'plans_list')])\n  await callTerylon($, 'goals_list', { closed: true })\n",
     },
     {
         name: "closedCount is ignored",
@@ -715,21 +715,21 @@ const MUTATIONS = [
         replace: "      return { ...read_, closed: [], closedCount: 0, closedFrom: 'list', closedPhase: 'ok', closedSentence: null }\n",
     },
     {
-        name: "after S44 a plan stays on the Goals tab under a goal that is not open",
-        file: "hooks/register.tsx",
-        find: "        ? goalsState.open.some(item => item.id === plan.goal)\n",
-        replace: "        ? true\n",
+        name: "a running story no open goal could be found for is hidden",
+        file: "hooks/road.ts",
+        find: "elsewhere: input.running.filter(item => goalOfRunning(item) === null) }",
+        replace: "elsewhere: [] }",
     },
     {
-        name: "under Closed the open goals' plans are listed again",
+        name: "History's fold shut still draws the closed goals",
         file: "hooks/register.tsx",
-        find: "      const shownPlans = isClosedShown ? tabPlans.filter(plan => plan.isProposed && goalsState.closed.some(item => item.id === plan.goal)) : openPlans\n",
-        replace: "      const shownPlans = openPlans\n",
+        find: "{isHistoryOpen && foldCard('goals-closed-card'",
+        replace: "{foldCard('goals-closed-card'",
     },
     {
         name: "a closed goal's title is drawn as bright as an open one's again",
         file: "hooks/register.tsx",
-        find: "                isTitleDim: isClosedShown,\n",
+        find: "              isTitleDim: true,\n",
         replace: "",
     },
     {
@@ -739,10 +739,10 @@ const MUTATIONS = [
         replace: "  return { ...EMPTY_SNAPSHOT, ...(await read($, snapshot)) }\n",
     },
     {
-        name: "a part of the Status tab that throws takes the whole tab down again",
+        name: "a part of Health that throws takes the whole page down again",
         file: "hooks/register.tsx",
-        find: "          return cardOf(`problem-part-${name}`",
-        replace: "          throw error\n          return cardOf(`problem-part-${name}`",
+        find: "return cardOf(`problem-part-${name}`",
+        replace: "throw error\n        return cardOf(`problem-part-${name}`",
     },
     {
         name: "the done-signal's Try again shares the connection's key again",
@@ -865,10 +865,10 @@ const MUTATIONS = [
         replace: "      ? answered.value\n      : null\n",
     },
     {
-        name: "the Status tab draws an empty Problems card above its problems again",
+        name: "Health draws an empty Problems card above its problems again",
         file: "hooks/register.tsx",
-        find: "                  : headingOf(COPY.statusProblems, problems.length, 'error'))}",
-        replace: "                  : cardOf('status-problems', headingOf(COPY.statusProblems, problems.length, 'error'), null, []))}",
+        find: "{isShown('problems') && problems.length > 0 && headingOf(COPY.statusProblems, problems.length, 'error')}",
+        replace: "{isShown('problems') && problems.length > 0 && cardOf('status-problems', headingOf(COPY.statusProblems, problems.length, 'error'), null, [])}",
     },
     {
         name: "Diagnostics says undefined or null again where a value is missing",
@@ -879,8 +879,8 @@ const MUTATIONS = [
     {
         name: "the repeating card no longer replaces the stories card",
         file: "hooks/register.tsx",
-        find: "repeating === null && cardOf('goal-stories'",
-        replace: "cardOf('goal-stories'",
+        find: "shownGoal.phase === 'ok' && repeating === null ? cardOf('goal-stories'",
+        replace: "shownGoal.phase === 'ok' ? cardOf('goal-stories'",
     },
     {
         name: "the summary says green runs accept themselves whatever autoAccept says",
@@ -919,10 +919,10 @@ const MUTATIONS = [
         replace: "  const date = new Date(moment - offsetAt(zone, Date.parse('2026-10-28T21:00:00Z')) * 60000)\n",
     },
     {
-        name: "a version plan waits on the Queue as 0 stories again",
+        name: "a version plan waits on the overview as 0 stories again",
         file: "hooks/queue.ts",
-        find: "    const taskVersion = taskVersionOf(plan)\n    const label = text(plan.ref) ?? String(id)\n",
-        replace: "    const taskVersion = null as { version: string | null; title: string | null; terms: string | null } | null\n    const label = text(plan.ref) ?? String(id)\n",
+        find: "    const taskVersion = taskVersionOf(plan)\n",
+        replace: "    const taskVersion = null as { version: string | null; title: string | null; terms: string | null } | null\n",
     },
     {
         name: "a version plan's card says it starts all 0 stories again",
@@ -948,8 +948,8 @@ const MUTATIONS = [
     {
         name: "a repeating task's settled version plans are listed below its card again",
         file: "hooks/register.tsx",
-        find: "          {plans.filter(plan => !settledVersions.includes(plan)).map(plan =>\n",
-        replace: "          {plans.map(plan =>\n",
+        find: "{plans.filter(plan => !plan.isProposed && !settledVersions.includes(plan)).map(plan =>\n",
+        replace: "{plans.filter(plan => !plan.isProposed).map(plan =>\n",
     },
     {
         name: "a head below the since no longer starts the events over",
@@ -1092,8 +1092,8 @@ const MUTATIONS = [
     {
         name: "a History row no longer ends with Delete…",
         file: "hooks/register.tsx",
-        find: "                trail: isClosedShown ? { href: deleteLink(base, item.id, item.ref ?? null), label: COPY.deleteInConsole } : null,\n",
-        replace: "                trail: null,\n",
+        find: "              trail: { href: deleteLink(base, item.id, item.ref ?? null), label: COPY.deleteInConsole },\n",
+        replace: "              trail: null,\n",
     },
     {
         name: "Delete… no longer opens the goal's Delete… sheet in History",
@@ -1162,10 +1162,10 @@ const MUTATIONS = [
         replace: "",
     },
     {
-        name: "under History a closed goal's settled plan is drawn again",
-        file: "hooks/register.tsx",
-        find: "tabPlans.filter(plan => plan.isProposed && goalsState.closed.some(",
-        replace: "tabPlans.filter(plan => goalsState.closed.some(",
+        name: "a goal's road reads the plans of every goal",
+        file: "hooks/road.ts",
+        find: "    const plans = input.plans.filter(plan => plan.goal === goal.id)\n",
+        replace: "    const plans = input.plans\n",
     },
     {
         name: "the held signals are not kept in the store",
@@ -1216,10 +1216,10 @@ const MUTATIONS = [
         replace: "",
     },
     {
-        name: "a settled version plan of a repeating task is listed on the Goals tab again",
-        file: "hooks/register.tsx",
-        find: "plan.state !== 'withdrawn' && (plan.taskVersion == null || plan.isProposed))",
-        replace: "plan.state !== 'withdrawn')",
+        name: "a repeating task's card on the overview draws a road again",
+        file: "hooks/road.ts",
+        find: "    if (goal.repeating !== undefined && goal.repeating !== null) {\n",
+        replace: "    if (false) {\n",
     },
     {
         name: "a word is drawn amber again, under 4.5:1 in the light theme",
@@ -1271,10 +1271,10 @@ const MUTATIONS = [
     },
     // TERYLON COCKPIT (Terylon S68): its words, the setup token's cost, its refs, and a host proof told nowhere.
     {
-        name: "an old tab name comes back: Queue in place of Waiting",
+        name: "an old tab name comes back: Queue in place of Overview",
         file: "hooks/copy.ts",
-        find: "  tabQueue: 'Waiting',\n",
-        replace: "  tabQueue: 'Queue',\n",
+        find: "  overview: 'Overview',\n",
+        replace: "  overview: 'Queue',\n",
     },
     {
         name: "a $0.00 comes back on the setup token: a cost not known is said as known",
@@ -1302,6 +1302,264 @@ const MUTATIONS = [
         file: "hooks/queue.ts",
         find: "  return item !== null && typeof item === 'object' && (item as Json).source === HOST_PROOF\n",
         replace: "  return item === undefined\n",
+    },
+    {
+        name: "a closed goal is no longer Done on its road",
+        file: "hooks/road.ts",
+        find: "  if (input.isClosed) {\n    return 'done'\n  }\n",
+        replace: "",
+    },
+    {
+        name: "a story waiting for its merge or acceptance no longer says so on its goal's road",
+        file: "hooks/road.ts",
+        find: "  if (input.stories.some(story => story.state === 'verified')) {\n    return 'merge'\n  }\n",
+        replace: "",
+    },
+    {
+        name: "a proposed plan no longer stops its goal at Approve",
+        file: "hooks/road.ts",
+        find: "  if (input.plans.some(plan => plan.isProposed)) {\n    return 'approve'\n  }\n",
+        replace: "",
+    },
+    {
+        name: "a plan that waits outranks a story waiting for its merge",
+        file: "hooks/road.ts",
+        find: "  if (input.stories.some(story => story.state === 'verified')) {\n    return 'merge'\n  }\n\n  if (input.plans.some(plan => plan.isProposed)) {\n    return 'approve'\n  }\n",
+        replace: "  if (input.plans.some(plan => plan.isProposed)) {\n    return 'approve'\n  }\n\n  if (input.stories.some(story => story.state === 'verified')) {\n    return 'merge'\n  }\n",
+    },
+    {
+        name: "a story being verified no longer says Verify on its goal's road",
+        file: "hooks/road.ts",
+        find: "  if (input.stories.some(story => story.state === 'verifying')) {\n    return 'verify'\n  }\n",
+        replace: "",
+    },
+    {
+        name: "a story that runs or waits for a slot leaves its goal on Plan",
+        file: "hooks/road.ts",
+        find: "  return input.stories.some(story => BUILDING_STATES.has(story.state)) ? 'build' : 'plan'\n",
+        replace: "  return 'plan'\n",
+    },
+    {
+        name: "a blocked story sends its goal back to Plan",
+        file: "hooks/road.ts",
+        find: "new Set(['approved', 'dispatched', 'running', 'pr-open', 'blocked'])",
+        replace: "new Set(['approved', 'dispatched', 'running', 'pr-open'])",
+    },
+    {
+        name: "a list story's goal says Your merge",
+        file: "hooks/road.ts",
+        find: "verified.length > 0 ? verified.every(story => story.isList) : target === 'list'",
+        replace: "false",
+    },
+    {
+        name: "the owner's gates are no longer marked on the road",
+        file: "hooks/road.ts",
+        find: "    isGate: GATES.has(name),\n",
+        replace: "    isGate: false,\n",
+    },
+    {
+        name: "a $ is drawn on a goal's card while its cost is not known",
+        file: "hooks/road.ts",
+        find: "  if (stories.some(story => !story.isCostKnown)) {\n",
+        replace: "  if (false) {\n",
+    },
+    {
+        name: "a question no longer says so on its goal's card",
+        file: "hooks/road.ts",
+        find: "  if (hasQuestion) {\n    return COPY.nextAsks\n  }\n",
+        replace: "",
+    },
+    {
+        name: "a story's goal is no longer found by the plan it stands in",
+        file: "hooks/road.ts",
+        find: " ?? goals.find(item => plans.some(plan => plan.goal === item.id && plan.storyIds.includes(id)))",
+        replace: "",
+    },
+    {
+        name: "a story's goal is no longer found by its goal's ref",
+        file: "hooks/road.ts",
+        find: " ?? goals.find(item => goalRef !== null && item.ref === goalRef)",
+        replace: "",
+    },
+    {
+        name: "a stuck story's card is no longer stroked",
+        file: "hooks/register.tsx",
+        find: "borderColor={item.stuck > 0 ? 'warning' : 'subtle'}",
+        replace: "borderColor=\"subtle\"",
+    },
+    {
+        name: "a stuck story is no longer flagged on its goal's card",
+        file: "hooks/register.tsx",
+        find: "              {item.stuck > 0 && (\n",
+        replace: "              {false && (\n",
+    },
+    {
+        name: "a stuck story is no longer counted in the third tile",
+        file: "hooks/register.tsx",
+        find: "    const stuckCount = current.running.filter(item => item.isStuck).length\n",
+        replace: "    const stuckCount = 0\n",
+    },
+    {
+        name: "a tile is filled",
+        file: "hooks/register.tsx",
+        find: "flexDirection=\"row\" alignItems=\"center\" borderStyle=\"round\" borderColor={count > 0 ? stroke : 'subtle'}",
+        replace: "flexDirection=\"row\" alignItems=\"center\" backgroundColor={count > 0 ? stroke : undefined} borderStyle=\"round\" borderColor={count > 0 ? stroke : 'subtle'}",
+    },
+    {
+        name: "the tiles stay boxes in a narrow terminal",
+        file: "hooks/register.tsx",
+        find: "      isTilesLine: e.props.bodyColumns < NARROW_COLUMNS || (e.surface === 'terminal' && e.props.bodyColumns < NARROW_TERMINAL_COLUMNS),\n",
+        replace: "      isTilesLine: e.props.bodyColumns < NARROW_COLUMNS,\n",
+    },
+    {
+        name: "a running story on a goal's card no longer opens",
+        file: "hooks/register.tsx",
+        find: "<Button key={`story-${run.story}`} plain onPress={() => go({ screen: 'story', story: run.story })}>",
+        replace: "<Button key={`story-${run.story}`} plain onPress={() => undefined}>",
+    },
+    {
+        name: "a running story no goal could be found for is folded away",
+        file: "hooks/register.tsx",
+        find: "    const isElsewhereOpen = !shown.includes('fold-running')\n",
+        replace: "    const isElsewhereOpen = shown.includes('fold-running')\n",
+    },
+    {
+        name: "a paused leader no longer shows on the overview",
+        file: "hooks/register.tsx",
+        find: "        {current.paused !== null && cardOf('paused',",
+        replace: "        {false && cardOf('paused',",
+    },
+    {
+        name: "Pause is drawn on the overview again",
+        file: "hooks/register.tsx",
+        find: "        {refreshButton}\n      </Box>\n    )\n    const overviewHead = (\n",
+        replace: "        {refreshButton}{current.paused === null && actButton('leader', 'leader_pause', null, { opens: true })}\n      </Box>\n    )\n    const overviewHead = (\n",
+    },
+    {
+        name: "Pause leaves Health",
+        file: "hooks/register.tsx",
+        find: "current.connection === 'ok' && current.paused === null ? <Box key=\"status-pause\" flexDirection=\"row\">{actButton('leader', 'leader_pause', null, { opens: true })}</Box> : null,",
+        replace: "null,",
+    },
+    {
+        name: "the 30-day line says what a story cost with no story",
+        file: "hooks/queue.ts",
+        find: "...(stories === 0 ? [] : [COPY.monthCost(metricCost(metrics, basis))])",
+        replace: "COPY.monthCost(metricCost(metrics, basis))",
+    },
+    {
+        name: "Health says what a story cost with no story",
+        file: "hooks/queue.ts",
+        find: "...((number(metrics.stories) ?? 0) === 0 ? [] : [{ value: metricCost(metrics, basis), label: COPY.metricCost }])",
+        replace: "{ value: metricCost(metrics, basis), label: COPY.metricCost }",
+    },
+    {
+        name: "More reads its sources one after another, the memory first",
+        file: "hooks/register.tsx",
+        find: "  await Promise.all([\n    loadBell($),\n    bounded($, 'the memory', () => openMemory($), sentence => update($, memory, (current: PaneMemory): PaneMemory => ({ ...EMPTY_MEMORY, ...current, phase: 'error', sentence }))),\n  ])\n",
+        replace: "  await bounded($, 'the memory', () => openMemory($), sentence => update($, memory, (current: PaneMemory): PaneMemory => ({ ...EMPTY_MEMORY, ...current, phase: 'error', sentence })))\n  await loadBell($)\n",
+    },
+    {
+        name: "More's memory is no longer bounded",
+        file: "hooks/register.tsx",
+        find: "    bounded($, 'the memory', () => openMemory($), sentence => update($, memory, (current: PaneMemory): PaneMemory => ({ ...EMPTY_MEMORY, ...current, phase: 'error', sentence }))),\n",
+        replace: "    openMemory($),\n",
+    },
+    {
+        name: "the overview's goals no longer follow the poll",
+        file: "hooks/register.tsx",
+        find: "    pollGoals($, now)\n",
+        replace: "",
+    },
+    {
+        name: "the poll reads the goals for a pane nobody has open",
+        file: "hooks/register.tsx",
+        find: "  if (isGoalsPolling || now - overviewDrawnAt > POLL_STALLED_MILLISECONDS) {\n",
+        replace: "  if (isGoalsPolling) {\n",
+    },
+    {
+        name: "a failed read of the poll says the goals did not load",
+        file: "hooks/register.tsx",
+        find: "    if (!isQuiet) {\n      await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, phase: 'error', sentence: why(goalsAnswer) }))\n    }\n",
+        replace: "    await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, phase: 'error', sentence: why(goalsAnswer) }))\n",
+    },
+    {
+        name: "the overview no longer reads its goals on its load",
+        file: "hooks/register.tsx",
+        find: "  await Promise.all([loadGoals($), readOverviewFooter($)])\n",
+        replace: "  await readOverviewFooter($)\n",
+    },
+    {
+        name: "a button of the overview's head no longer opens More",
+        file: "hooks/register.tsx",
+        find: "        {navButton('tab-status', COPY.navSystem, isMemoryWaiting || hasProblem(current, drawingAsked.off), () => openMore($))}\n",
+        replace: "        {navButton('tab-status', COPY.navSystem, isMemoryWaiting || hasProblem(current, drawingAsked.off), () => undefined)}\n",
+    },
+    {
+        name: "a goal's screen no longer says What next",
+        file: "hooks/register.tsx",
+        find: "              {nextLine('goal-next', COPY.whatNext, goalNext)}\n",
+        replace: "",
+    },
+    {
+        name: "a story's screen no longer says What next",
+        file: "hooks/register.tsx",
+        find: "            working === null && storyNext(shownStory) !== null ? nextLine('story-next', COPY.whatNext, storyNext(shownStory) ?? '') : null,\n",
+        replace: "",
+    },
+    {
+        name: "a repeating task's goal screen draws a road again",
+        file: "hooks/register.tsx",
+        find: "      const goalRoad = shownGoal.phase !== 'ok' || repeating !== null\n",
+        replace: "      const goalRoad = shownGoal.phase !== 'ok'\n",
+    },
+    {
+        name: "a new task from a goal no longer picks that goal",
+        file: "hooks/register.tsx",
+        find: "choices.find(choice => choice.value === String(goal))?.value ?? ",
+        replace: "",
+    },
+    {
+        name: "an act still going when its card was left says nothing once its row has gone",
+        file: "hooks/register.tsx",
+        find: "        {rowOutcomes}\n",
+        replace: "",
+    },
+    {
+        name: "test mode's gate is bypassed: a call reaches the real Terylon",
+        file: "hooks/register.tsx",
+        find: "  if ((await read($, testMode)).isOn) {\n    const now = await $.clock.now()\n    testWorld = testWorld ?? createTestWorld(now)\n",
+        replace: "  if (false) {\n    const now = await $.clock.now()\n    testWorld = testWorld ?? createTestWorld(now)\n",
+    },
+    {
+        name: "test mode writes the shared store: its ticks take the lease and read the events",
+        file: "hooks/register.tsx",
+        find: "    if ((await read($, testMode)).isOn) {\n      return\n    }\n\n    if (!(await isSignaller($, now))) {",
+        replace: "    if (!(await isSignaller($, now))) {",
+    },
+    {
+        name: "test mode posts a signal: what was held goes out at a turn's end",
+        file: "hooks/register.tsx",
+        find: "  // WHAT WAS HELD WAITS: it is real, so it is posted once test mode ends.\n  if ((await read($, testMode)).isOn) {\n    return\n  }\n",
+        replace: "",
+    },
+    {
+        name: "a merge in test mode opens the console for a made-up story",
+        file: "hooks/register.tsx",
+        find: "    const mergeLink = (key: string, href: string, label: string) => (isTestOn\n",
+        replace: "    const mergeLink = (key: string, href: string, label: string) => (false\n",
+    },
+    {
+        name: "Approve on a waiting row acts on its press, the plan unread",
+        file: "hooks/register.tsx",
+        find: "          return <Button key={`open-plan-${item.target}`} label={COPY.actButton.plan_approve} onPress={() => go({ screen: 'plan', plan: item.target })} />\n",
+        replace: "          return actButton(`plan-${item.target}`, 'plan_approve', item.target)\n",
+    },
+    {
+        name: "a head button is primary with nothing waiting",
+        file: "hooks/register.tsx",
+        find: "      return isWaiting ? <Button key={key} label={name} variant=\"primary\" onPress={onPress} /> : <Button key={key} label={name} onPress={onPress} />\n",
+        replace: "      return <Button key={key} label={name} variant=\"primary\" onPress={onPress} />\n",
     },
 ];
 
