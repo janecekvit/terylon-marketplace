@@ -5,7 +5,7 @@ description: >-
   Triggers on phrasings like "write a Feature", "draft a Feature spec", "update Feature N",
   "is this Feature ready", "review this Feature". Applies the Terylon Feature Specification
   Standard in this skill's references/.
-allowed-tools: Read Edit Write Bash(git *) Bash(gh *) mcp__ado__*
+allowed-tools: Read Edit Write Bash(git *) Bash(gh *) Bash(base64 *) Bash(node *) mcp__ado__*
 ---
 
 # Create Feature
@@ -13,6 +13,8 @@ allowed-tools: Read Edit Write Bash(git *) Bash(gh *) mcp__ado__*
 ## Overview
 
 Drafts, updates, and reviews Features against the Terylon Feature Specification Standard, on whichever forge the repository is hosted on — a work item on Azure DevOps, an issue on GitHub. It is written against the port's **work-item keys** and never names a platform field; where each key lives is the adapter's answer. The standard itself - naming rules, the field template, the Definition of Ready, the quality bar - lives in [`references/feature-standard.md`](references/feature-standard.md) and is the **single source of truth**. This skill does not restate it; it reads the rule at runtime and applies it. Always read that file at the start.
+
+**Every Feature carries its design board**: an HTML page in light and dark, for the repository's canvas, and the same board in Markdown, attached to the Feature. [`references/feature-board.md`](references/feature-board.md) is its single source of truth.
 
 **Core discipline:** never fabricate the inputs a drafter can't know. Customer names, external references, business context, and real-world numbers are not yours to invent - gather them from the user (or mark `N/A` / `TBD` with a note). A confident-looking spec full of invented references is worse than one that flags its gaps.
 
@@ -51,9 +53,13 @@ For fields the user could not fully specify, write `[needs input]` (optionally w
 
 Run the Section 3 Definition of Ready checklist (see [Definition of Ready](#definition-of-ready) below). Report each item pass / partial / not-met. Be explicit about what still needs human input (real references, unresolved scope decisions) and cannot be settled inside a draft.
 
-### 5. Output
+### 5. Draw the board
 
-Give the paste-ready artifact, then the readiness verdict and the specific list of what must happen before it's ready to break down into User Stories. If pushing it to the forge, follow [Writing to the forge](#writing-to-the-forge).
+Read `${CLAUDE_SKILL_DIR}/references/feature-board.md` and draw `board.html` from the template `${CLAUDE_SKILL_DIR}/references/feature-board.html` and `board.md` into the draft folder. **Every cell comes from the draft**, or says `[needs input]` / `N/A`; nothing is measured yet. Name the repository's canvas, or say there is none.
+
+### 6. Output
+
+Give the paste-ready artifact, then the readiness verdict and the specific list of what must happen before it's ready to break down into User Stories, then the board's two paths and its canvas. If pushing it to the forge, follow [Writing to the forge](#writing-to-the-forge).
 
 ## Mode: update or review an existing Feature
 
@@ -102,6 +108,8 @@ Run the Section 3 checklist (see below) against the current state. Mark each ite
 
 A checklist verdict plus a concrete, ordered list of fixes. Suggest a compliant name rewrite if the title fails (sanctioned by Section 1), but don't rewrite field bodies unless asked - point to what to change. If pushing changes to the forge, follow [Writing to the forge](#writing-to-the-forge).
 
+**A push that changes the `description`, or a Feature with no board, redraws the board** as in the write mode's step 5 and attaches it again; its status strip now carries the Feature's `children`.
+
 ## Writing to the forge
 
 ```
@@ -111,7 +119,8 @@ create-feature
     ├── fetch-work-item ........ review mode: the Feature as it stands
     ├── create-work-item ....... a new Feature, from the keys
     ├── update-work-item ....... an existing Feature, only the keys that changed
-    └── link-work-item-parent .. a new Feature under its Epic, read back
+    ├── link-work-item-parent .. a new Feature under its Epic, read back
+    └── attach-work-item-file .. the board's Markdown on the Feature, read back
 ```
 
 **The whole specification is the `description` key, on both forges.** The standard's seven fields — Acceptance criteria among them — are sections of one body, so a Feature passes no `acceptanceCriteria` key and every section reaches the forge in the order the standard lays out. That is what keeps the standard intact on a forge whose criteria have no field of their own.
@@ -128,7 +137,7 @@ Any other key this run would carry — `tags`, `planning` under an Epic — is c
 Before writing to the item:
 
 0. **Resolve the forge, in either mode.** Invoke `resolve-forge` — with the Feature's URL in update mode, against the repository in create mode — and report its answer in one line. If nothing resolves or its adapter is not enabled, stop as it says; a new Feature has no fallback forge.
-1. **Show the draft and confirm.** Print the draft in plain Markdown. Ask: push as-is (placeholders included), revise first, or just leave the draft here? Do not write to the work item until the user confirms.
+1. **Show the draft and confirm.** Print the draft in plain Markdown. Ask: push as-is (placeholders included), revise first, or just leave the draft here? Do not write to the work item, attach the board or touch the canvas until the user confirms.
 2. **Confirm title edits separately.** Title edits are higher blast radius than description edits - get a separate yes for the name.
 3. **Always Markdown — never HTML.** In HTML a `- [ ]` line is a dead bullet, headings and tables need hand-written tags, and the Definition of Ready checklist stops being a checklist. Hand the keys over as markdown; storing them so they render is the adapter's job, including converting an inherited HTML field the moment it is written.
 
@@ -144,6 +153,16 @@ Before writing to the item:
 The platform calls themselves - fetching the Feature (`fetch-work-item`), creating one (`create-work-item`) and pushing an update (`update-work-item`) - are owned by the **`forge-ops`** engine skill of the adapter `resolve-forge` named. **Load `forge-ops` by name and take the call shapes from it**; this skill issues its own platform calls following those recipes, names operations and keys, and names no tool or field of its own. Both surfaces sit in `allowed-tools` for that reason — an absent one is inert.
 
 **Parenting.** `create-work-item` sets the keys only - it cannot set the parent relation. To place the Feature under an Epic, follow with `link-work-item-parent`, with `child` = the **new Feature** and `parent` = the Epic, and confirm by reading the Epic back. Getting the direction backwards makes the Epic a child of the Feature. A refused link is reported as created-and-not-linked, and the Epic is recorded nowhere else.
+
+**The board comes last**, needing the id:
+
+```
+create-work-item ──▶ link-work-item-parent ──▶ attach-work-item-file ──▶ the canvas
+                                               feature-<id>-board.md     HTML board, working tree,
+                                               read back from the item   NOT committed
+```
+
+`attach-work-item-file` takes `id`, `fileName` = `feature-<id>-board.md`, the draft's `board.md` and a `comment` with the date and `create-feature@<plugin-version>`; only a board read back from the item counts. The canvas copy follows `references/feature-board.md`, section 4. **A failed step is reported, never skipped silently**: the Feature is **created, its board not attached**, with the forge's answer and the path of `board.md` (section 5).
 
 ## Footer
 
@@ -192,10 +211,11 @@ In Claude Code from the repo root:
 5. **Markdown rendering** — open a Feature this skill wrote: headings, tables and code spans render natively, and any `- [ ]` line is an interactive checkbox rather than a dead bullet. Equivalently, re-fetch it and confirm the `description` key comes back as the markdown that was sent.
 6. **Conversion of an inherited HTML Feature** — run the update mode against a Feature whose description is HTML, on Azure DevOps where a field can be. Expect the body to render as Markdown afterwards. Verified on Feature #112, which was created as HTML before this rule existed.
 7. **Every section of the standard survives the forge** — push a Feature on each forge and re-fetch it: all seven fields of Section 2 are present in the `description`, in the standard's order, and nothing of the specification was moved into a field or section of the forge's own choosing.
+8. **The board** — a pushed Feature has one attached, six sections in order; `board.html` draws offline in light and dark.
 
 ## Common mistakes
 
-- **Writing HTML at all.** Every key this skill hands over is Markdown. HTML costs the interactive checkboxes and forces hand-written `<p>` / `<ul><li>` tags for content either forge renders on its own.
+- **Writing HTML at all.** Every key this skill hands over is Markdown. HTML costs the interactive checkboxes and forces hand-written `<p>` / `<ul><li>` tags for content either forge renders on its own.- **Filling the board from imagination.** What the specification does not hold is invented; nothing is measured before a story runs.
 - **Updating from memory instead of the recipe.** On a forge with per-field formats, a Markdown body written into a field still encoded as HTML renders as literal `#` and `-`. The `update-work-item` recipe sets the format with the content; follow it rather than reconstructing the call.
 - **Splitting the specification across keys.** The standard's Acceptance criteria are a section of the description, not the `acceptanceCriteria` key. Moving them out reorders the standard on one forge and not the other.
 - **Naming a platform field or tool here.** This skill names keys and operations; a field reference copied into it is a second place to fix, and it makes the skill one forge's.

@@ -1,0 +1,143 @@
+<!doctype html>
+<!--
+  The Feature design board's template, for create-feature (references/feature-board.md is its standard).
+  Plain HTML and inline CSS: no script, no sc-if, nothing fetched. It draws whole from disk, in the
+  system's light or dark. Replace every %%PLACEHOLDER%% and every example row; keep the six sections,
+  their order and the token block's markers. In a repository with a canvas, the canvas's own token
+  block replaces the one below whole, and the head is taken from a sibling board.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>Feature · %%TITLE%%</title>
+<style>
+:root{color-scheme:light dark}
+body{margin:0;background:Canvas}
+/* tokens: the template's default; a canvas's own token block replaces it whole, never edited by hand */
+.t{color-scheme:light dark;--surface:#ffffff;--surface-sunken:#f4f4f5;--surface-raised:#ececee;--border:#d8d8dc;--text:#18181b;--text-dim:#63636b;--accent:#2f5fd0;--ok:#1e7f4f;--waiting:#9a5b00;--danger:#b3261e;--gate:#6b47d6;--sans:"DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;--mono:"JetBrains Mono", ui-monospace, "Cascadia Mono", "Consolas", Menlo, monospace;--type-caption:11.5px;--type-footnote:13px;--type-body:14px;--type-heading:17px;--type-title:22px;--type-display:30px;--type-label:10.5px;--tracking-label:0.08em;--stroke-hairline:1px;--stroke-emphasis:2px;--edge:40%;--tint:15%;--space-2:2px;--space-4:4px;--space-6:6px;--space-8:8px;--space-10:10px;--space-12:12px;--space-16:16px;--space-24:24px;--space-32:32px;--space-48:48px;--radius-inset:4px;--radius-control:8px;--radius-card:14px;--radius-round:999px}
+@media (prefers-color-scheme:dark){.t:not(.light):not([data-theme="light"]){color-scheme:dark;--surface:#0f0f10;--surface-sunken:#17171a;--surface-raised:#1f1f23;--border:#33333c;--text:#ece9e2;--text-dim:#9a9aa4;--accent:#8098f9;--ok:#6fd39a;--waiting:#f0b35a;--danger:#f2a29b;--gate:#b49cf5}
+}
+.t.light,.t[data-theme="light"]{color-scheme:light}
+.t.dark,.t[data-theme="dark"]{color-scheme:dark;--surface:#0f0f10;--surface-sunken:#17171a;--surface-raised:#1f1f23;--border:#33333c;--text:#ece9e2;--text-dim:#9a9aa4;--accent:#8098f9;--ok:#6fd39a;--waiting:#f0b35a;--danger:#f2a29b;--gate:#b49cf5}
+/* /tokens */
+.t{width:1440px;background:var(--surface);color:var(--text);font-family:var(--sans);font-size:var(--type-body);line-height:1.5}
+.t *{box-sizing:border-box}
+.doc{padding:var(--space-32) var(--space-48) var(--space-48)}
+.doc h1{font-size:var(--type-display);line-height:1.2;margin:0 0 var(--space-8);font-weight:700}
+.doc h2{font-size:var(--type-title);margin:var(--space-32) 0 var(--space-8);font-weight:700}
+.doc p{margin:0 0 var(--space-10);max-width:96ch}
+.doc code{font-family:var(--mono);font-size:.86em;background:var(--surface-raised);padding:1px 5px;border-radius:var(--radius-inset)}
+.doc a{color:var(--accent)}
+.doc table{border-collapse:collapse;width:100%;font-size:var(--type-footnote);margin:var(--space-8) 0 var(--space-16)}
+.doc th,.doc td{text-align:left;vertical-align:top;padding:var(--space-8) var(--space-10);border-bottom:var(--stroke-hairline) solid var(--border)}
+.doc th{font-family:var(--mono);font-size:var(--type-label);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--text-dim);font-weight:500}
+.fb-facts{font-family:var(--mono);font-size:var(--type-caption);color:var(--text-dim)}
+.fb-strip{display:grid;grid-template-columns:repeat(6,1fr);gap:var(--space-8);margin:var(--space-16) 0 var(--space-8)}
+.fb-story{border:var(--stroke-hairline) solid var(--border);border-radius:var(--radius-control);padding:var(--space-10) var(--space-12);background:var(--surface-sunken);font-size:var(--type-caption);display:grid;gap:var(--space-4);align-content:start}
+.fb-story b{font-size:var(--type-footnote)}
+.fb-story.is-wait{border-style:dashed;border-color:color-mix(in srgb,var(--waiting) var(--edge),var(--border))}
+.fb-chip{display:inline-flex;align-items:center;gap:var(--space-6);font-size:var(--type-caption);font-weight:500}
+.fb-chip::before{content:"";width:7px;height:7px;border-radius:var(--radius-round);background:var(--text-dim)}
+.fb-chip.is-ok::before{background:var(--ok)}
+.fb-chip.is-wait::before{background:var(--waiting)}
+.fb-chip.is-run::before{background:var(--accent)}
+.fb-pair{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-16);margin:var(--space-8) 0 var(--space-16)}
+.fb-state{display:block;font-family:var(--mono);font-size:var(--type-label);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--text-dim);margin-bottom:var(--space-8)}
+.fb-frame{border:var(--stroke-emphasis) solid var(--border);border-radius:var(--radius-card);padding:var(--space-12) var(--space-16);background:var(--surface-sunken);display:grid;gap:var(--space-12);align-content:start}
+.fb-group{border:var(--stroke-hairline) dashed var(--border);border-radius:var(--radius-control);padding:var(--space-10) var(--space-12);background:var(--surface)}
+.fb-group-title{font-family:var(--mono);font-size:var(--type-label);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--text-dim);margin-bottom:var(--space-8)}
+.fb-parts{display:flex;flex-wrap:wrap;gap:var(--space-6)}
+.fb-part{display:inline-grid;gap:var(--space-2);padding:var(--space-6) var(--space-10);border-radius:var(--radius-control);border:var(--stroke-hairline) solid var(--border);background:var(--surface-sunken);font-size:var(--type-footnote);font-weight:500}
+.fb-part small{font-family:var(--mono);font-size:var(--type-label);color:var(--text-dim);font-weight:400}
+.fb-part.is-new{border-color:color-mix(in srgb,var(--ok) var(--edge),var(--border))}
+.fb-part.is-gone{border-style:dashed;color:var(--text-dim)}
+.fb-note{font-size:var(--type-caption);color:var(--text-dim)}
+.fb-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-12);margin:var(--space-12) 0}
+.fb-card{border:var(--stroke-hairline) solid var(--border);border-radius:var(--radius-card);padding:var(--space-16);background:var(--surface-sunken);display:grid;gap:var(--space-6);align-content:start;font-size:var(--type-footnote)}
+.fb-card.is-gate{border-color:color-mix(in srgb,var(--gate) var(--edge),var(--border))}
+.fb-card.is-wait{border-style:dashed;border-color:color-mix(in srgb,var(--waiting) var(--edge),var(--border))}
+.fb-card b{font-size:var(--type-heading)}
+.fb-tag{justify-self:start;padding:var(--space-2) var(--space-6);border-radius:var(--radius-inset);font-family:var(--mono);font-size:var(--type-label);letter-spacing:0.04em;text-transform:uppercase;background:color-mix(in srgb,var(--gate) var(--tint),transparent);color:var(--gate)}
+.fb-tag.is-wait{background:color-mix(in srgb,var(--waiting) var(--tint),transparent);color:var(--waiting)}
+.fb-empty{border:var(--stroke-hairline) dashed var(--border);border-radius:var(--radius-card);padding:var(--space-24);text-align:center;color:var(--text-dim)}
+</style>
+</head>
+<body>
+<div class="t">
+<div class="doc">
+
+<!-- Header: the title, the id and its link once created, the date, create-feature@<version>. -->
+<h1>%%TITLE%%</h1>
+<p class="fb-facts">Feature %%ID%% · %%DATE%% · create-feature@%%VERSION%%</p>
+<p>%%ONE_PARAGRAPH_SUMMARY_FROM_PROBLEM_AND_DESIGN%%</p>
+
+<!-- 0. Status strip: one chip per User Story or landing, with its state. Before the breakdown, the one chip below. -->
+<section id="status">
+<div class="fb-strip">
+<div class="fb-story is-wait"><span class="fb-chip is-wait">not broken down yet</span><b>No stories yet</b><span>the Feature waits for its User Stories</span></div>
+</div>
+</section>
+
+<!-- 1. Today beside after: the parts as boxes, today from the Problem, after from the Design & proposal. The load-bearing fact goes inside the box. -->
+<section id="today-beside-after">
+<h2>1 · Today beside after</h2>
+<div class="fb-pair">
+<div>
+<span class="fb-state">Today</span>
+<div class="fb-frame">
+<div class="fb-group"><div class="fb-group-title">%%GROUP_TODAY%%</div>
+<div class="fb-parts"><span class="fb-part">%%PART%%<small>%%FACT%%</small></span><span class="fb-part is-gone">%%PART_THAT_GOES%%<small>%%FACT%%</small></span></div>
+</div>
+<span class="fb-note">%%WHAT_IS_WRONG_TODAY%%</span>
+</div>
+</div>
+<div>
+<span class="fb-state">After</span>
+<div class="fb-frame">
+<div class="fb-group"><div class="fb-group-title">%%GROUP_AFTER%%</div>
+<div class="fb-parts"><span class="fb-part">%%PART%%<small>%%FACT%%</small></span><span class="fb-part is-new">%%NEW_PART%%<small>%%FACT%%</small></span></div>
+</div>
+<span class="fb-note">%%WHAT_CHANGES%%</span>
+</div>
+</div>
+</div>
+</section>
+
+<!-- 2. What each part gets instead: one row per part. -->
+<section id="instead">
+<h2>2 · What each part gets instead</h2>
+<table>
+<thead><tr><th>Part</th><th>Today</th><th>After</th><th>Why</th></tr></thead>
+<tbody><tr><td>%%PART%%</td><td>%%TODAY%%</td><td>%%AFTER%%</td><td>%%WHY%%</td></tr></tbody>
+</table>
+</section>
+
+<!-- 3. Who reaches what: every role from the User needs. -->
+<section id="reach">
+<h2>3 · Who reaches what</h2>
+<table>
+<thead><tr><th>Role</th><th>Reaches</th><th>Through</th></tr></thead>
+<tbody><tr><td>%%ROLE%%</td><td>%%REACHES%%</td><td>%%THROUGH%%</td></tr></tbody>
+</table>
+</section>
+
+<!-- 4. The owner's decisions: chosen and rejected variants, the out-of-scope boundaries; an open one is TBD. -->
+<section id="decisions">
+<h2>4 · The owner's decisions</h2>
+<div class="fb-cards">
+<div class="fb-card is-gate"><span class="fb-tag">decided</span><b>%%DECISION%%</b><span>%%REASON%%</span></div>
+<div class="fb-card is-wait"><span class="fb-tag is-wait">TBD</span><b>%%OPEN_DECISION%%</b><span>%%WHAT_DECIDES_IT%%</span></div>
+</div>
+</section>
+
+<!-- 5. What each step measured: empty until a story records its evidence. Never a number before then. -->
+<section id="measured">
+<h2>5 · What each step measured</h2>
+<div class="fb-empty">Nothing measured yet. Each story's evidence is drawn here when the board is redrawn after it.</div>
+</section>
+
+</div>
+</div>
+</body>
+</html>

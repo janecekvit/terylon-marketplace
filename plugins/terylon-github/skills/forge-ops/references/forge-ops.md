@@ -388,6 +388,53 @@ gh issue edit "$ISSUE" --repo "$OWNER/$REPO" --title "$TITLE"      # only when `
 
 Whole-body overwrite, so read the item with `fetch-work-item`, replace the keys that were given, and recompose the body in the order the key table fixes. **No angle-bracket sanitising** — unlike Azure DevOps, which silently drops tag-shaped text on update, GitHub stores `feat/<slug>` verbatim. A transport that defensively rewrites placeholders for the other side produces uglier text here but never wrong text, so the defensive form is safe on both.
 
+### `attach-work-item-file`
+
+- **In:** `id` (the issue), `fileName`, the file's local path in `FILE`, and a one-line `comment`. **Out:** the attachment's `url`, read back from the issue.
+
+**GitHub's API cannot attach a file to an issue**: the web editor's upload has no REST or `gh` counterpart. So the file **is a comment**: its first line a marker naming the file, then the caller's `comment`, then the file's text. That makes this the port's one operation whose two bodies store different things, and the difference is declared rather than papered over: on GitHub the file must be **Markdown or plain text**, which a comment renders, and anything else is refused here before a call is made.
+
+```bash
+# A comment renders Markdown and text; any other file has no place on GitHub, and is refused before a call.
+case "$FILE_NAME" in
+    *.md|*.txt)
+        ;;
+    *)
+        echo "attach-work-item-file: GitHub carries a Markdown or text file only, not $FILE_NAME" >&2
+        exit 1
+        ;;
+esac
+
+# The marker names the file, so a re-run finds its own comment and replaces it instead of adding another.
+MARKER="<!-- attached-file: $FILE_NAME -->"
+{
+    printf '%s\n\n' "$MARKER"
+    printf '%s\n\n' "$COMMENT"
+    cat "$FILE"
+} > attachment.md
+
+# tail, never head: head closes the pipe early, and under pipefail gh's SIGPIPE fails the assignment.
+COMMENT_ID=$(gh api --paginate "repos/$OWNER/$REPO/issues/$ISSUE/comments" --jq ".[] | select(.body | startswith(\"$MARKER\")) | .id" | tail -n 1)
+
+if [ -n "$COMMENT_ID" ]
+then
+    gh api -X PATCH "repos/$OWNER/$REPO/issues/comments/$COMMENT_ID" -F body=@attachment.md --jq .html_url
+else
+    gh api "repos/$OWNER/$REPO/issues/$ISSUE/comments" -F body=@attachment.md --jq .html_url
+fi
+```
+
+**Verify by reading the issue back**, never from the write's answer:
+
+```bash
+gh api --paginate "repos/$OWNER/$REPO/issues/$ISSUE/comments" --jq ".[] | select(.body | startswith(\"$MARKER\")) | .html_url"
+```
+
+- **`-F body=@attachment.md`, not `-f`:** `-F` reads the value from the file, `-f` would send the literal text `@attachment.md`.
+- **A re-run replaces, unlike Azure DevOps**, which keeps both attachments: the marker finds the earlier comment and the `PATCH` rewrites it. A comment the marker does not open is never touched.
+- **The limit is a comment's**, about 65 536 characters. A longer file is refused by the API (HTTP 422); the caller reports it **not attached** with the error, and splits nothing.
+- **The marker is an HTML comment**, so the rendered comment shows the caller's line and the file, not the marker.
+
 ### `create-pull-request`
 
 ```bash
@@ -612,7 +659,7 @@ Never substitute a concrete version here: a caller could copy the example verbat
 Every caller that delegates its GitHub recipes to this file loads it **by name**, plugin-qualified as `terylon-github:forge-ops` once `resolve-forge` has returned `github`:
 
 - `create-pr`, `review-pr`, `write-pr-description`, `address-pr-comments`, `update-pr-checklist`, `update-work-item-checklist` and the `pr-reviewer` agent, all in `terylon-forge`.
-- `create-user-story` and `create-feature` in `terylon-product`.
+- `create-user-story` and `create-feature` in `terylon-product`; `create-feature` is the one consumer of `attach-work-item-file`.
 - `develop` in `terylon-dev`.
 
 Each issues its own `gh` invocations following these recipes; delegation centralises the **knowledge**, not the calls.
