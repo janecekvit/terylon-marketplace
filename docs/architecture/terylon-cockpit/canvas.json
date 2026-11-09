@@ -12,9 +12,10 @@
     "More.dc.html": { "x": 1040, "y": 1100, "w": 960, "h": 860, "title": "System: health", "is_interactive": true },
     "Terminal.dc.html": { "x": 2080, "y": 1100, "w": 960, "h": 860, "title": "The CLI: its lesser form (1, approved)" },
     "TestMode.dc.html": { "x": 0, "y": 2080, "w": 960, "h": 860, "title": "Test mode: /terylon-cockpit test" },
-    "Memory.dc.html": { "x": 2440, "y": 2080, "w": 960, "h": 760, "title": "Memory: a screen of its own", "is_interactive": true }
+    "Memory.dc.html": { "x": 2440, "y": 2080, "w": 960, "h": 760, "title": "Memory: a screen of its own", "is_interactive": true },
+    "NewGoal.dc.html": { "x": 3480, "y": 2080, "w": 960, "h": 900, "title": "New goal", "is_interactive": true }
   },
-  "order": ["Main.dc.html", "Notices.dc.html", "Goal.dc.html", "Story.dc.html", "More.dc.html", "Memory.dc.html", "Terminal.dc.html", "TestMode.dc.html"],
+  "order": ["Main.dc.html", "Notices.dc.html", "Goal.dc.html", "Story.dc.html", "More.dc.html", "Memory.dc.html", "NewGoal.dc.html", "Terminal.dc.html", "TestMode.dc.html"],
   "notes": {},
   "designSystems": []
 }

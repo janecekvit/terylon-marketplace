@@ -147,7 +147,7 @@ type Reset = { from: number; head: number | null; refused: string | null }
 export const PANE = 'terylon'
 
 // The mod's version, said on Health: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.21.0'
+export const MOD_VERSION = '1.21.1'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -4648,17 +4648,24 @@ export const register: Register = on => {
       ])
     }
 
-    // A SPECIFICATION'S FILES (Terylon S53): those kept and attached, each a row with Remove, then the folder's .md files
-    // to attach and another folder to list. A file of a name takes the place of the other, so each name keys one row.
+    // A SPECIFICATION'S FILES (Terylon S53): those kept and attached, each a row with a quiet Remove, then the folder's
+    // .md files to attach and another folder to list. A file of a name takes the place of the other, so each name keys
+    // one row. New goal's card names the session's folder above its files and, on a graphic surface, frames each
+    // attached file and sets Another folder's label above its field.
     const specPickerOf = (prefix: 'spec-new' | 'revise', picker: PaneSpecPicker, kept: readonly { name: string; text: string }[]) => {
       const which = prefix === 'spec-new' ? 'new' : 'revise'
+      const isNewGoal = prefix === 'spec-new'
+      const isLabelAbove = isNewGoal && look.isGraphic
       const offered = picker.listed.filter(file => !picker.attached.some(item => item.path === file.path))
       const fileRow = (name: string, line: string, removeKey: string, onRemove: () => unknown) => (
-        <Box key={`${prefix}-row-${name}`} flexDirection="row" justifyContent="space-between" gap={1}>
-          <Text wrap="truncate-end">{line}</Text>
-          <Button key={removeKey} label={COPY.specRemove} dimColor onPress={onRemove} />
+        <Box key={`${prefix}-row-${name}`} flexDirection="row" justifyContent="space-between" alignItems="center" gap={1} {...(isLabelAbove ? ({ borderStyle: 'round', borderColor: 'subtle', paddingX: 'sm' } as const) : {})}>
+          <Box flexShrink={1} minWidth={0}>
+            <Text wrap="truncate-end">{line}</Text>
+          </Box>
+          <Button key={removeKey} label={COPY.specRemove} plain dimColor onPress={onRemove} />
         </Box>
       )
+      const listedIn = picker.listedFolder === SESSION_FOLDER ? (isNewGoal ? COPY.specInSessionFolder : null) : COPY.specListedIn(picker.listedFolder)
 
       return [
         ...kept.map(file => fileRow(file.name, COPY.specAttached(file.name, charactersText(file.text.length)), `${prefix}-drop-${file.name}`, () => dropKept($, file.name))),
@@ -4666,14 +4673,17 @@ export const register: Register = on => {
         picker.phase === 'loading' ? quiet(elements, COPY.specListing) : null,
         picker.phase === 'error' ? <Text key={`${prefix}-list-error`} color="error">{picker.sentence ?? ''}</Text> : null,
         picker.phase === 'ok' && picker.listed.length === 0 ? quiet(elements, COPY.specNoFiles(picker.listedFolder)) : null,
-        picker.phase === 'ok' && offered.length > 0 && picker.listedFolder !== SESSION_FOLDER ? <Text key={`${prefix}-listed-in`} color="subtle" size="footnote">{COPY.specListedIn(picker.listedFolder)}</Text> : null,
+        picker.phase === 'ok' && offered.length > 0 && listedIn !== null ? <Text key={`${prefix}-listed-in`} color="subtle" size="footnote">{listedIn}</Text> : null,
         picker.phase === 'ok' && offered.length > 0 ? (
           <Box key={`${prefix}-listed`} flexDirection={look.isNarrow ? 'column' : 'row'} flexWrap="wrap" gap={look.isGraphic ? 'xs' : 1}>
             {offered.map(file => <Button key={`${prefix}-add-${file.name}`} label={COPY.specAttach(file.name, bytesText(file.bytes))} onPress={() => attachFile($, which, file)} />)}
           </Box>
         ) : null,
         hasInput && 'Input' in elements ? (
-          <elements.Input key={`${prefix}-folder`} label={COPY.specFolderLabel} placeholder={COPY.specFolderPlaceholder} value={picker.folder} onInput={value => changePicker($, which, current => ({ ...current, folder: value }))} onSubmit={value => listFolder($, which, value)} />
+          <Box key={`${prefix}-folder-field`} flexDirection="column">
+            {isLabelAbove ? <Text color="subtle" size="footnote">{COPY.specFolderLabel}</Text> : null}
+            <elements.Input key={`${prefix}-folder`} {...(isLabelAbove ? {} : { label: COPY.specFolderLabel })} placeholder={COPY.specFolderPlaceholder} value={picker.folder} onInput={value => changePicker($, which, current => ({ ...current, folder: value }))} onSubmit={value => listFolder($, which, value)} />
+          </Box>
         ) : null,
       ]
     }
@@ -4892,54 +4902,80 @@ export const register: Register = on => {
       )
     }
 
-    // A NEW GOAL: its title, its ask, its specification, its priority and target, by goal_add.
+    // A NEW GOAL: its head, a card of its title, its ask, its priority and target, a card of its specification, and
+    // Cancel and Add goal at its foot, by goal_add. A FIELD'S LABEL STANDS ABOVE IT on a graphic surface, the field as
+    // wide as its card; the terminal, a lesser form in the same order, draws the label before the field.
     if (screen.screen === 'new-goal') {
       const newPicker = await readPicker($)
+      const labelAbove = (label: string) => (look.isGraphic ? <Text weight="semibold">{label}</Text> : null)
+      const labelBefore = (label: string) => (look.isGraphic ? {} : { label })
+      const isSideBySide = look.isGraphic && !look.isNarrow
       const goalPickers = [
         'Select' in elements ? (
-          <elements.Select key="goal-priority" label={COPY.priority} value={goalsState.priority} options={COPY.priorities} onSelect={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, priority: value }))} />
+          <Box key="goal-picker-0" flexDirection="column" flexGrow={isSideBySide ? 1 : undefined} flexShrink={1} minWidth={0}>
+            {labelAbove(COPY.priority)}
+            <elements.Select key="goal-priority" {...labelBefore(COPY.priority)} value={goalsState.priority} options={COPY.priorities} onSelect={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, priority: value }))} />
+          </Box>
         ) : null,
         'Select' in elements ? (
-          <elements.Select key="goal-target" label={COPY.target} value={goalsState.target} options={goalsState.targets.length === 0 ? [{ value: OWN_LIST, label: COPY.ownList }] : goalsState.targets} onSelect={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, target: value }))} />
+          <Box key="goal-picker-1" flexDirection="column" flexGrow={isSideBySide ? 1 : undefined} flexShrink={1} minWidth={0}>
+            {labelAbove(COPY.target)}
+            <elements.Select key="goal-target" {...labelBefore(COPY.target)} value={goalsState.target} options={goalsState.targets.length === 0 ? [{ value: OWN_LIST, label: COPY.ownList }] : goalsState.targets} onSelect={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, target: value }))} />
+          </Box>
         ) : null,
       ].filter(item => item !== null)
 
       return (
         <Box flexDirection="column" gap={1}>
           {backButton}
-          {hasInput && 'Input' in elements && cardOf('goal-new', COPY.newGoal, null, [
+          {hasInput && (
+            // THE HEAD: the screen's name, and the one line on what a goal is and what a task is.
+            <Box key="goal-new-head" flexDirection="column">
+              <Text size="title" weight="semibold">{COPY.newGoal}</Text>
+              <Text color="subtle">{COPY.addGoalNote}</Text>
+            </Box>
+          )}
+          {hasInput && cardOf('goal-new', null, null, [
             // A SHORT TITLE, AND THE ASK IN THE OWNER'S OWN WORDS, as long as it needs: in rows where Desktop has proven a
             // multi-line field (input-rows). Each with its helper line under it.
-            <elements.Input key="goal-draft" label={COPY.goalTitleLabel} value={goalsState.draft} onInput={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, draft: value }))} onSubmit={() => addGoal($)} />,
-            <Text color="subtle" size="footnote">{COPY.goalTitleHelp}</Text>,
-            <elements.Input key="goal-ask" label={COPY.goalAskLabel} value={goalsState.ask} rows={look.proofs.inputRows ? 4 : undefined} onInput={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, ask: value }))} onSubmit={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, ask: value }))} />,
-            <Text color="subtle" size="footnote">{COPY.goalAskHelp}</Text>,
-            // ITS SPECIFICATION (Terylon S53), optional: A, the .md files of a folder attached here and read on Add goal;
-            // B, a request in this chat for Claude to add the goal with the files the owner names or Claude wrote.
-            <Box key="spec-new-section" flexDirection="column" gap={look.isGraphic ? 'xs' : 0}>
-              <Text weight="semibold">{COPY.specSection}</Text>
-              {specPickerOf('spec-new', newPicker, [])}
-              <Text color="subtle" size="footnote">{COPY.specHelp}</Text>
-              <Box flexDirection="row" gap={1} flexWrap="wrap">
-                <Button key="spec-in-session" label={COPY.specInSession} dimColor onPress={() => specInSession($)} />
+            <Box key="goal-new-fields" flexDirection="column" gap={look.isGraphic ? 'sm' : 0}>
+              <Box key="goal-title-field" flexDirection="column">
+                {labelAbove(COPY.goalTitleLabel)}
+                <elements.Input key="goal-draft" {...labelBefore(COPY.goalTitleLabel)} value={goalsState.draft} onInput={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, draft: value }))} onSubmit={() => addGoal($)} />
+                <Text color="subtle" size="footnote">{COPY.goalTitleHelp}</Text>
               </Box>
-              <Text color="subtle" size="footnote">{COPY.specInSessionHelp}</Text>
+              <Box key="goal-ask-field" flexDirection="column">
+                {labelAbove(COPY.goalAskLabel)}
+                <elements.Input key="goal-ask" {...labelBefore(COPY.goalAskLabel)} value={goalsState.ask} rows={look.proofs.inputRows ? 4 : undefined} onInput={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, ask: value }))} onSubmit={value => update($, goals, (state: PaneGoals): PaneGoals => ({ ...state, ask: value }))} />
+                <Text color="subtle" size="footnote">{COPY.goalAskHelp}</Text>
+              </Box>
+              {/* PRIORITY AND WHERE: two equal columns on the desktop, one under the other in the narrow dock and the terminal. */}
+              <Box key="goal-pickers" flexDirection={isSideBySide ? 'row' : 'column'} gap={look.isGraphic ? 'sm' : 0}>
+                {goalPickers}
+              </Box>
             </Box>,
-            look.isGraphic && !look.isNarrow
-              ? (
-                  <Box key="goal-pickers" flexDirection="row" gap="sm">
-                    {goalPickers.map((picker, position) => <Box key={`goal-picker-${position}`} flexGrow={1} flexShrink={1} minWidth={0}>{picker}</Box>)}
-                  </Box>
-                )
-              : goalPickers,
-            <Box flexDirection="row" gap={1}>
-              <Button key="goal-add" label={COPY.addGoal} variant="primary" onPress={() => addGoal($)} />
-            </Box>,
-            goalsState.adding === 'sending' ? quiet(elements, COPY.goalSending) : null,
-            goalsState.adding === 'added' ? <Text color="success">{`✓ ${goalsState.addSentence ?? ''}`}</Text> : null,
-            goalsState.adding === 'refused' ? <Text color="error">{goalsState.addSentence ?? ''}</Text> : null,
-            <Text color="subtle" size="footnote">{COPY.addGoalNote}</Text>,
           ])}
+          {/* ITS SPECIFICATION (Terylon S53), optional: A, the .md files of a folder attached here and read on Add goal;
+              B, a request in this chat for Claude to add the goal with the files the owner names or Claude wrote. */}
+          {hasInput && cardOf('spec-new-section', COPY.specSection, COPY.specLimits, [
+            ...specPickerOf('spec-new', newPicker, []),
+            <Box key="spec-new-foot" flexDirection={isSideBySide ? 'row' : 'column'} justifyContent="space-between" alignItems={isSideBySide ? 'center' : undefined} gap={1}>
+              <Box flexShrink={1} minWidth={0}>
+                <Text color="subtle" size="footnote">{COPY.specDataHelp}</Text>
+              </Box>
+              <Button key="spec-in-session" label={COPY.specInSession} plain onPress={() => specInSession($)} />
+            </Box>,
+          ])}
+          {hasInput && (
+            // THE FOOT: Cancel, back to the overview, and Add goal, the one to press, at the right.
+            <Box key="goal-new-foot" flexDirection="row" justifyContent="flex-end" gap={1}>
+              <Button key="goal-cancel" label={COPY.cancel} onPress={() => show($, QUEUE, true)} />
+              <Button key="goal-add" label={COPY.addGoal} variant="primary" onPress={() => addGoal($)} />
+            </Box>
+          )}
+          {hasInput && goalsState.adding === 'sending' ? quiet(elements, COPY.goalSending) : null}
+          {hasInput && goalsState.adding === 'added' ? <Text color="success">{`✓ ${goalsState.addSentence ?? ''}`}</Text> : null}
+          {hasInput && goalsState.adding === 'refused' ? <Text color="error">{goalsState.addSentence ?? ''}</Text> : null}
         </Box>
       )
     }

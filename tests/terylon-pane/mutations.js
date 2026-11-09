@@ -1236,8 +1236,33 @@ const MUTATIONS = [
     {
         name: "the new goal's ask loses its helper line",
         file: "hooks/register.tsx",
-        find: "            <Text color=\"subtle\" size=\"footnote\">{COPY.goalAskHelp}</Text>,\n",
+        find: "                <Text color=\"subtle\" size=\"footnote\">{COPY.goalAskHelp}</Text>\n",
         replace: "",
+    },
+    // NEW GOAL AS ITS BOARD: labels above the fields, the pickers side by side, Add goal primary, Cancel to the overview.
+    {
+        name: "the new goal's labels are drawn before their fields again",
+        file: "hooks/register.tsx",
+        find: "      const labelBefore = (label: string) => (look.isGraphic ? {} : { label })\n",
+        replace: "      const labelBefore = (label: string) => ({ label })\n",
+    },
+    {
+        name: "Priority and Where stack on the desktop too",
+        file: "hooks/register.tsx",
+        find: "      const isSideBySide = look.isGraphic && !look.isNarrow\n      const goalPickers = [\n",
+        replace: "      const isSideBySide = false\n      const goalPickers = [\n",
+    },
+    {
+        name: "Add goal is no longer the primary button",
+        file: "hooks/register.tsx",
+        find: "<Button key=\"goal-add\" label={COPY.addGoal} variant=\"primary\" onPress={() => addGoal($)} />",
+        replace: "<Button key=\"goal-add\" label={COPY.addGoal} onPress={() => addGoal($)} />",
+    },
+    {
+        name: "the new goal's Cancel no longer goes back to the overview",
+        file: "hooks/register.tsx",
+        find: "<Button key=\"goal-cancel\" label={COPY.cancel} onPress={() => show($, QUEUE, true)} />",
+        replace: "<Button key=\"goal-cancel\" label={COPY.cancel} onPress={() => undefined} />",
     },
     {
         name: "an epoch events_since refused no longer starts the pane over",

@@ -30,9 +30,18 @@ for (const { name, surface, props } of SURFACES) {
     const ui = await $.ui.mount({ plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props, surface })
     await toNewGoal(ui)
 
-    expect((await ui.find({ key: 'goal-draft' }))?.props).toMatchObject({ label: 'Title' })
+    // EACH LABEL ABOVE ITS FIELD on a graphic surface, and before it on the terminal.
+    if (surface === 'terminal') {
+      expect((await ui.find({ key: 'goal-draft' }))?.props).toMatchObject({ label: 'Title' })
+      expect((await ui.find({ key: 'goal-ask' }))?.props).toMatchObject({ label: 'What should it do?' })
+    } else {
+      expect((await ui.find({ key: 'goal-draft' }))?.props.label).toBeUndefined()
+      expect((await ui.find({ key: 'goal-ask' }))?.props.label).toBeUndefined()
+      expect((await ui.find({ type: 'Text', text: exact('Title') }))?.props.weight).toBe('semibold')
+      expect((await ui.find({ type: 'Text', text: exact('What should it do?') }))?.props.weight).toBe('semibold')
+    }
     expect((await ui.find({ key: 'goal-draft' }))?.props.rows).toBeUndefined()
-    expect((await ui.find({ key: 'goal-ask' }))?.props).toMatchObject({ label: 'What should it do?', rows: 4, value: '' })
+    expect((await ui.find({ key: 'goal-ask' }))?.props).toMatchObject({ rows: 4, value: '' })
     expect((await ui.find({ type: 'Text', text: exact(TITLE_HELP) }))?.props.color).toBe('subtle')
     expect((await ui.find({ type: 'Text', text: exact(ASK_HELP) }))?.props.color).toBe('subtle')
     expect(await ui.find({ key: 'goal-priority' })).toBeDefined()
