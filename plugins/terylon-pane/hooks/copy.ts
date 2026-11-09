@@ -17,8 +17,10 @@ export const COPY = {
   disconnected: (since: string) => `not answering since ${since}`,
   // The overview: the machine in a line, the three tiles, the goals, the folds and the 30-day line.
   overview: 'Overview',
-  // The header's way to Notices and to System, in plain words: what waits makes the button primary, never a word in it.
+  // The header's way to Notices, to Memory and to System, in plain words: what waits makes the button primary, never a
+  // word in it.
   navNotices: 'Notices',
+  navMemory: 'Memory',
   navSystem: 'System',
   needsYou: (count: number) => `Needs you · ${count}`,
   noticesNeedYou: (count: number, title: string) => `${count} ${count === 1 ? 'notice needs' : 'notices need'} you: ${title}`,
@@ -64,7 +66,7 @@ export const COPY = {
   stuckFlag: (count: number) => `${count} stuck`,
   addTask: 'Add a task',
   yourDecisions: 'Your decisions on earlier plans',
-  // More: Notices, Memory and Health on one page.
+  // The screens behind the head's buttons: Notices, Memory, and System, which is Health.
   more: 'More',
   moreNotices: 'Notices',
   moreMemory: 'Memory',

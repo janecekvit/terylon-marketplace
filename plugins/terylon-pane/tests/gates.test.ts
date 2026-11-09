@@ -23,7 +23,7 @@ const PATHS: string[][] = [
   ['goals-show-closed'],
   ['tab-bell'],
   ['tab-bell'],
-  ['tab-status', 'fold-memory-owner', 'mem-edit-0-0'],
+  ['tab-memory', 'fold-memory-owner', 'mem-edit-0-0'],
   ['tab-status', 'fold-policy'],
 ]
 

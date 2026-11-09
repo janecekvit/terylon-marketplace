@@ -147,7 +147,7 @@ type Reset = { from: number; head: number | null; refused: string | null }
 export const PANE = 'terylon'
 
 // The mod's version, said on Health: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.20.5'
+export const MOD_VERSION = '1.21.0'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -1666,8 +1666,9 @@ async function postPrompt($: EngineInterface, text: string): Promise<void> {
   await $.prompt.submit({ text })
 }
 
-// THE SCREENS 1.18 HAD AS TABS, in a stack an earlier version kept across a reload: the overview and More hold them now.
-const RETIRED_SCREENS: readonly string[] = ['goals', 'bell', 'memory', 'status']
+// THE SCREENS 1.18 HAD AS TABS, in a stack an earlier version kept across a reload: the overview and System hold them
+// now. Memory is a screen again, under the name its tab had.
+const RETIRED_SCREENS: readonly string[] = ['goals', 'bell', 'status']
 
 function stackOf(value: PaneView): PaneScreen[] {
   const stack = Array.isArray(value.stack) ? value.stack.filter(screen => !RETIRED_SCREENS.includes(screen.screen)) : []
@@ -1708,6 +1709,8 @@ async function load($: EngineInterface, screen: PaneScreen): Promise<void> {
       return openSpec($, screen.goal, screen.version, screen.file)
     case 'more':
       return loadMore($)
+    case 'memory':
+      return loadMemory($)
     case 'notices':
       return loadNotices($)
     default:
@@ -1748,17 +1751,25 @@ async function openNotices($: EngineInterface): Promise<void> {
   await load($, screen)
 }
 
-// MORE: Health and Memory on one page, what they read fetched at once under Desktop's 10 s bound on a press.
+// SYSTEM: Health alone, its alert line read from the bell under Desktop's 10 s bound on a press. The memory is not read.
 async function loadMore($: EngineInterface): Promise<void> {
-  await Promise.all([
-    loadBell($),
-    bounded($, 'the memory', () => openMemory($), sentence => update($, memory, (current: PaneMemory): PaneMemory => ({ ...EMPTY_MEMORY, ...current, phase: 'error', sentence }))),
-  ])
+  await loadBell($)
 }
 
-// A button of the overview's head, and How to fix: More, at its top, where Health stands above Memory.
+// MEMORY: memory_get alone, under the same bound.
+async function loadMemory($: EngineInterface): Promise<void> {
+  await bounded($, 'the memory', () => openMemory($), sentence => update($, memory, (current: PaneMemory): PaneMemory => ({ ...EMPTY_MEMORY, ...current, phase: 'error', sentence })))
+}
+
+// A button of the overview's head, and How to fix: System, at its top, where Health stands.
 async function openMore($: EngineInterface): Promise<void> {
   await show($, { screen: 'more' }, false)
+  await $.ui.scroll({ to: 'start', in: PANE }).catch(() => undefined)
+}
+
+// A button of the overview's head: Memory, at its top.
+async function openMemoryScreen($: EngineInterface): Promise<void> {
+  await show($, { screen: 'memory' }, false)
   await $.ui.scroll({ to: 'start', in: PANE }).catch(() => undefined)
 }
 
@@ -2809,6 +2820,8 @@ function backLabel(stack: readonly PaneScreen[]): string {
   switch (previous.screen) {
     case 'more':
       return `‹ ${COPY.more}`
+    case 'memory':
+      return `‹ ${COPY.navMemory}`
     case 'story':
       return `‹ ${labelOf('story', previous.story)}`
     case 'goal':
@@ -3433,7 +3446,7 @@ export const register: Register = on => {
         current.fetchedAt === null ? null : cost,
       ].filter(part => part !== null).join(' · ')
     }
-    // THE WAY TO NOTICES AND TO SYSTEM, in the overview's head, each Button its plain word. Desktop draws a Button natively,
+    // THE WAY TO NOTICES, TO MEMORY AND TO SYSTEM, in the overview's head, each Button its plain word. Desktop draws a Button natively,
     // drops its children and lets nothing recolour it, so on a graphic surface a head button with something behind it is
     // the surface's primary Button and a plain one otherwise; Refresh is never primary. On the terminal a `warning` dot
     // before the word. Its label is the word it draws, since Desktop draws the label.
@@ -3454,7 +3467,8 @@ export const register: Register = on => {
     const nav = (
       <Box key="overview-nav" flexDirection="row" gap={1} flexShrink={0} flexWrap="wrap" alignItems="center">
         {navButton('tab-bell', COPY.navNotices, current.notices > 0, () => openNotices($))}
-        {navButton('tab-status', COPY.navSystem, isMemoryWaiting || hasProblem(current, drawingAsked.off), () => openMore($))}
+        {navButton('tab-memory', COPY.navMemory, isMemoryWaiting, () => openMemoryScreen($))}
+        {navButton('tab-status', COPY.navSystem, hasProblem(current, drawingAsked.off), () => openMore($))}
         {refreshButton}
       </Box>
     )
@@ -4030,9 +4044,9 @@ export const register: Register = on => {
       )
     }
 
-    // MORE: Health and Memory on one page; ‹ Overview from the head's buttons, ‹ back from a card's How to fix.
+    // SYSTEM: Health alone; ‹ Overview from the head's buttons, ‹ back from a card's How to fix.
     if (screen.screen === 'more') {
-      const [healthPart, memoryPart] = [await healthSection(), await part('memory', memorySection)]
+      const healthPart = await healthSection()
 
       return (
         <Box flexDirection="column" gap={1}>
@@ -4041,6 +4055,20 @@ export const register: Register = on => {
             {refreshButton}
           </Box>
           {healthPart}
+        </Box>
+      )
+    }
+
+    // MEMORY, a screen of its own: ‹ Overview and Refresh at its head, then the memory as it stood on More.
+    if (screen.screen === 'memory') {
+      const memoryPart = await part('memory', memorySection)
+
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Box key="memory-top" flexDirection="row" justifyContent="space-between" gap={1}>
+            {stack.length > 2 ? backButton : <Button key="tab-queue" label={backLabel(stack)} dimColor onPress={() => show($, QUEUE, true)} />}
+            {refreshButton}
+          </Box>
           {memoryPart}
         </Box>
       )

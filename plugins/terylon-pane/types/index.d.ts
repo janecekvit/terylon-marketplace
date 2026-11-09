@@ -156,8 +156,10 @@ export type PaneSnapshot = {
 
 export type PaneScreen =
   | { screen: 'queue' }
-  // HEALTH AND MEMORY ON ONE PAGE, opened at its top.
+  // SYSTEM: Health alone, opened at its top.
   | { screen: 'more' }
+  // MEMORY, a screen of its own beside Notices and System: the proposals waiting, what the leader remembers, the rules.
+  | { screen: 'memory' }
   // NOTICES: a slide-over on the overview where the surface has room, else a screen of its own.
   | { screen: 'notices' }
   | { screen: 'new-goal' }

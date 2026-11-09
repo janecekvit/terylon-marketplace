@@ -77,12 +77,15 @@ test('the overview: the machine in a line, three tiles, Waiting for you, a card 
 
     expect((await foldOf(ui, 'goals-show-closed'))).toBe('▸ History 1')
 
-    // THE FOOT: the 30 days alone; Notices and System are in the head, each marked for what waits behind it.
+    // THE FOOT: the 30 days alone; Notices, Memory and System are in the head, each marked for what waits behind it:
+    // a notice, a proposal, and Health well.
     expect(await ui.find({ type: 'Text', text: exact('Last 30 days 43 stories · $1.10 per story') })).toBeDefined()
     expect((await ui.find({ key: 'tab-bell' }))?.props.label).toBe('Notices')
+    expect((await ui.find({ key: 'tab-memory' }))?.props.label).toBe('Memory')
     expect((await ui.find({ key: 'tab-status' }))?.props.label).toBe('System')
     expect(await marked(ui, 'tab-bell')).toBe(true)
-    expect(await marked(ui, 'tab-status')).toBe(true)
+    expect(await marked(ui, 'tab-memory')).toBe(true)
+    expect(await marked(ui, 'tab-status')).toBe(false)
     await ui.unmount()
   }
 })
