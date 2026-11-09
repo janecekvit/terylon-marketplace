@@ -511,9 +511,35 @@ test("teeth: passing the issue number where the database id belongs links nothin
 // it drawing from disk, and that is a property of the text.
 // ---------------------------------------------------------------------------------------------
 
+// The text with every <!-- … --> comment taken out, scanned once from left to right so that no comment
+// can survive by being assembled from the pieces around another; an unclosed comment runs to the end.
 function withoutHtmlComments(html)
 {
-    return html.replace(/<!--[\s\S]*?-->/g, "");
+    let kept = "";
+    let position = 0;
+
+    while (position < html.length)
+    {
+        const start = html.indexOf("<!--", position);
+
+        if (start === -1)
+        {
+            return kept + html.slice(position);
+        }
+
+        kept += html.slice(position, start);
+
+        const end = html.indexOf("-->", start + "<!--".length);
+
+        if (end === -1)
+        {
+            return kept;
+        }
+
+        position = end + "-->".length;
+    }
+
+    return kept;
 }
 
 // The token block, between the markers the canvas's own generator writes and the template keeps.
