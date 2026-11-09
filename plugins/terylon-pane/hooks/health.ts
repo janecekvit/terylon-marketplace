@@ -57,8 +57,8 @@ export function clip(line: string, longest = HEALTH_LONGEST): string {
   return line.length <= longest ? line : `${line.slice(0, longest - 1).trimEnd()}…`
 }
 
-// THE STATUS TAB'S PARTS, as TERYLON_PANE_STATUS names them to bisect a tab Desktop does not draw: `no-<part>` leaves
-// that part out, `minimal` draws the tab as plain lines alone. Unset, the whole tab is drawn.
+// HEALTH'S PARTS, as TERYLON_PANE_STATUS names them to bisect a part Desktop does not draw: `no-<part>` leaves
+// that part out, `minimal` draws Health as plain lines alone. Unset, the whole of it is drawn.
 export const STATUS_PARTS = ['machine', 'gauges', 'problems', 'events', 'alerts', 'policy', 'outcomes', 'diagnostics'] as const
 
 export type StatusPart = (typeof STATUS_PARTS)[number]
@@ -70,7 +70,7 @@ export function statusDrawingOf(value: string | null | undefined): StatusDrawing
 
   return {
     isMinimal: named.has('minimal'),
-    // `log` draws the pane's own diagnostics on the Queue tab, for a host that writes no log the owner can read.
+    // `log` draws the pane's own diagnostics on the overview, for a host that writes no log the owner can read.
     isLogShown: named.has('log'),
     off: new Set(STATUS_PARTS.filter(part => named.has(`no-${part}`))),
   }
@@ -202,7 +202,7 @@ export function todayCost(health: Health): string {
   return COPY.todayCost(words.money(Number(health.runningUsd)), health.dayBudget === null ? null : words.budget(Number(health.dayBudget)))
 }
 
-// The machine's state in one word, for the Status tab: the same order as the status line.
+// The machine's state in one word, for Health: the same order as the status line.
 export function stateWord(health: Health): { word: string; tone: 'success' | 'attention' | 'error' | 'subtle' } {
   switch (health.connection) {
     case 'connecting':

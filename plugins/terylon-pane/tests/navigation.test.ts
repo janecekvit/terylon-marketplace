@@ -4,7 +4,7 @@
 import { test, expect } from 'claude-code/testing'
 
 import { when } from '../hooks/queue'
-import { BRIEFING, GOALS, GOAL_QUESTION, NOTICES, PANE_PROPS, SESSION, WORLD_NOW, chipOf, exact, hostZoneOffset, pictures, world } from './fixtures'
+import { BRIEFING, GOALS, GOAL_QUESTION, NOTICES, PANE_PROPS, SESSION, WORLD_NOW, chipOf, exact, hostZoneOffset, marked, pictures, world, pill, toOverview } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -104,9 +104,9 @@ for (const surface of ['desktop', 'terminal'] as const) {
     expect(await ui.find({ key: 'goal-story-333' })).toBeDefined()
     await ui.press({ key: 'back' })
     expect(await ui.find({ type: 'Text', text: exact('#333 Direct dispatch') })).toBeDefined()
-    expect((await ui.find({ key: 'back' }))?.props.label).toBe('‹ Waiting')
+    expect((await ui.find({ key: 'back' }))?.props.label).toBe('‹ Overview')
     await ui.press({ key: 'back' })
-    expect(await ui.find({ type: 'Text', text: exact('Waiting for you · 3') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('Waiting for you') })).toBeDefined()
   })
 }
 
@@ -147,7 +147,6 @@ test('a question is answered from the pane: a choice pressed, question_answer se
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'question-606' })
   await ui.press({ key: 'answer-606' })
 
   expect((await ui.find({ type: 'Text', text: exact('question 2 of 2') }))?.props).toMatchObject({ color: 'text', weight: 'semibold' })
@@ -180,7 +179,6 @@ test('a typed answer is sent as typed; a refusal is said with its reason and the
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  await ui.press({ key: 'question-9' })
   await ui.press({ key: 'answer-9' })
   await ui.input({ key: 'answer-text', text: 'Ano, od posledního commitu.', kind: 'change' })
   await ui.press({ key: 'answer-send' })
@@ -224,7 +222,7 @@ test('a waiting plan opens with its stories, each opening the story; approve and
   expect(await ui.find({ type: 'Text', text: exact('P1 · Agentic OS') })).toBeDefined()
 })
 
-test('the goals tab: open goals by priority with their questions, the closed ones a press away, a new goal by goal_add', async ($, on) => {
+test('the goals on the overview: a card each, the closed ones a press away, a new goal by goal_add', async ($, on) => {
   const terylon = world(on)
   terylon.answers.goals_list = { goals: GOALS.goals.map(item => (item.id === 3 ? { ...item, target: 'github:contoso/agentic-os' } : item)) }
   terylon.answers.briefing = { ...BRIEFING, questionsOpen: [...BRIEFING.questionsOpen, GOAL_QUESTION] }
@@ -232,22 +230,20 @@ test('the goals tab: open goals by priority with their questions, the closed one
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
 
-  expect((await ui.find({ key: 'tab-goals' }))?.props.variant).toBe('primary')
-  expect((await ui.find({ key: 'goals-show-open' }))?.props.label).toBe('Open · 2')
-  expect((await ui.find({ key: 'goal-3' }))?.text).toMatch(/^\s*(?:●\s+)?P1\s+P1 · Agentic OS\s+2 running, 2 approved$/)
-  // THE PRIORITY AS A CHIP (S32): P1 in warning, the others inactive.
-  expect((await chipOf(ui, 'goal-3'))?.dot).toBe('warning')
-  expect((await chipOf(ui, 'goal-11'))?.dot).toBe('inactive')
-  expect((await ui.find({ type: 'Text', text: exact('1 question') }))?.props).toMatchObject({ color: 'text', weight: 'semibold' })
+  expect((await ui.find({ key: 'goal-3' }))?.text).toBe('P1 · Agentic OS')
   expect(await ui.find({ key: 'goal-1' })).toBeUndefined()
+  // WHAT ASKS IS SAID ON ITS CARD.
+  expect(await ui.find({ type: 'Text', text: exact('Asks you a question') })).toBeDefined()
 
   await ui.press({ key: 'goals-show-closed' })
   expect((await ui.find({ key: 'goal-1' }))?.text).toContain('Old')
-  await ui.press({ key: 'goals-show-open' })
+  // THE PRIORITY AS A CHIP (S32): P1 in warning, the others inactive.
+  expect((await chipOf(ui, 'goal-1'))?.dot).toBe('inactive')
+  await ui.press({ key: 'goals-show-closed' })
 
-  expect(await ui.find({ type: 'Text', text: exact('Plan 41 · Agentic OS') })).toBeDefined()
+  await ui.press({ key: 'goal-new-open' })
   // GOALS ARE GENERAL (Terylon #369, S31): the New goal note steers a concrete ask to a task, and adding one is never refused.
   expect(await ui.find({ type: 'Text', text: exact('A goal is a general direction. A concrete ask — a file, a document, one change — becomes a task under a goal. The leader asks its questions first, then makes a plan you approve.') })).toBeDefined()
 
@@ -261,21 +257,23 @@ test('the goals tab: open goals by priority with their questions, the closed one
   expect(terylon.calls.filter(call => call.tool === 'goal_add').map(call => call.args)).toEqual([{ title: 'Household budget in Excel', priority: 1, target: 'list' }])
   expect((await ui.find({ type: 'Text', text: /^✓ Goal 12 is set: Household budget in Excel\. The leader reads it first: / }))?.props.color).toBe('success')
 
+  await ui.press({ key: 'back' })
   await ui.press({ key: 'goal-11' })
   expect(await ui.find({ key: 'goal-question-606' })).toBeDefined()
   await ui.press({ key: 'goal-question-606' })
   expect(await ui.find({ key: 'answer-send' })).toBeDefined()
 })
 
-test('the bell tab reads the notices, the leader and the metrics; a notice is handled here, the leader paused on the queue', async ($, on) => {
+test('Notices reads the notices and a notice is handled there; More reads the metrics and the leader is paused there', async ($, on) => {
   const terylon = world(on)
   terylon.answers.briefing = { ...BRIEFING, unhandledNotices: 2 }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ key: 'tab-bell' }))?.props.label).toBe('Notices · 2')
-  await ui.press({ key: 'tab-bell' })
+  expect((await ui.find({ key: 'tab-bell' }))?.props.label).toBe('Notices')
+  expect(await marked(ui, 'tab-bell')).toBe(true)
+  await pill(ui, 'tab-bell')
 
   expect(await ui.find({ type: 'Text', text: exact('Needs you · 2') })).toBeDefined()
   // WHEN IT WAS RAISED, in the host's own zone (#39): 07:26 on a UTC runner, "11. 10." in Prague, where 22:00 UTC is the
@@ -283,56 +281,63 @@ test('the bell tab reads the notices, the leader and the metrics; a notice is ha
   const raised = when(NOTICES.notices.find(notice => notice.id === 117)?.raisedAt, WORLD_NOW, hostZoneOffset(WORLD_NOW))
   expect(raised).toBe(hostZoneOffset(WORLD_NOW) === 0 ? '07:26' : raised)
   expect(raised).toMatch(/^(\d\d:\d\d|yesterday \d\d:\d\d|\d{1,2} [A-Z][a-z]{2} \d\d:\d\d)$/)
-  expect((await ui.find({ key: 'notice-117' }))?.text).toMatch(new RegExp(`^\\s*(?:●\\s+)?diun\\s+A newer docker\\.io/amir20/dozzle:latest is published\\s+${escapeRegExp(raised)} ▸$`))
-  // THE SOURCE AS A CHIP (S32): a fault of the machine in error, everything else inactive.
-  expect((await chipOf(ui, 'notice-117'))?.dot).toBe('inactive')
-  expect(await ui.find({ type: 'Text', text: exact('Nothing was pulled: update the pin when you choose.') })).toBeUndefined()
-  await ui.press({ key: 'notice-117' })
+  expect(await ui.find({ type: 'Text', text: exact(`A newer docker.io/amir20/dozzle:latest is published`) })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact(`diun · ${raised}`) })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('Nothing was pulled: update the pin when you choose.') })).toBeDefined()
 
-  expect(await ui.find({ type: 'Text', text: exact('✓ The leader runs') })).toBeDefined()
+  // WHAT THE MACHINE DID, IN THE OPEN.
+  expect(await ui.find({ type: 'Text', text: exact('What the machine did') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^✓ The backup ran/ })).toBeDefined()
-  // FOUR NUMBERS, LARGE (S32), and no 30-day chart: metrics reports no per-day series.
-  for (const [value, label] of [['43', 'stories'], ['$1.10', 'per story'], ['0', 'merged'], ['1', 'PR opened']]) {
-    const number = await ui.find({ type: 'Text', text: exact(value ?? '') })
-    expect(number?.props.size).toBe('title')
-    expect(number?.props.tabular).toBe(true)
-    expect((await ui.find({ type: 'Text', text: exact(label ?? '') }))?.props.size).toBe('footnote')
+  expect(await ui.find({ type: 'Text', text: exact('✓ The leader runs') })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /notice_handle/ })).toBeUndefined()
+  expect((await ui.find({ type: 'Link', text: 'In the console ↗' }))?.props.href).toContain('notices=open')
+
+  await pill(ui, 'tab-status')
+  // THE 30 DAYS IN ROWS, and no 30-day chart: metrics reports no per-day series.
+  for (const [label, value] of [['Stories', '43'], ['Per story', '$1.10'], ['Merged', '0'], ['PR opened', '1']]) {
+    expect(await ui.find({ type: 'Text', text: exact(label ?? '') })).toBeDefined()
+    expect((await ui.find({ key: `metric-${(label ?? '').toLowerCase().replace('pr ', 'PR ')}` }))?.text).toContain(value ?? '')
   }
 
   expect(await ui.find({ type: 'Svg' })).toBeUndefined()
-  // WHERE S32 LEFT THE DASHED SLOT (S27): no border, and no pause here; Pause and Resume are on the queue and Status.
-  expect((await ui.find({ key: 'leader-actions' }))?.props.borderStyle).toBeUndefined()
+  // PAUSE IS ON HEALTH; RESUME STANDS ON THE PAUSED CARD.
   expect(await ui.find({ type: 'Link', text: 'Pause the leader ↗' })).toBeUndefined()
-  expect(await ui.find({ key: 'act-leader-pause' })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: exact('Mark handled is notice_handle, which decides nothing about work. Pause and Resume are on Waiting and Health.') })).toBeDefined()
-  expect(await ui.find({ type: 'Link', text: 'Notices in the console ↗' })).toBeDefined()
+  expect((await ui.find({ key: 'act-leader-pause' }))?.props.label).toBe('Pause the leader…')
 
-  for (const tool of ['notices_list', 'leader_status', 'metrics']) {
+  for (const tool of ['notices_list', 'metrics']) {
     expect(terylon.calls.map(call => call.tool)).toContain(tool)
   }
 })
 
-test('Memory is a tab of the one pane: no second pane opens, and the tabs lead back to the queue and the goals', async ($, on) => {
+test('More is a page of the one pane: no second pane opens, every pill opens it, and ‹ leads back to the overview', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-memory' })
-  expect(terylon.opens).toEqual([])
-  expect((await ui.find({ key: 'tab-memory' }))?.props.variant).toBe('primary')
-  expect(await ui.find({ type: 'Text', text: exact('About you') })).toBeDefined()
 
-  await ui.press({ key: 'tab-goals' })
-  expect((await ui.find({ key: 'tab-goals' }))?.props.variant).toBe('primary')
+  // NOTICES ARE A SCREEN OF THE ONE PANE, and ‹ Overview leads back.
+  await ui.press({ key: 'tab-bell' })
+  expect(terylon.opens).toEqual([])
+  expect(await ui.find({ key: 'notices' })).toBeDefined()
+  await ui.press({ key: 'back' })
+  expect(await ui.find({ key: 'notices' })).toBeUndefined()
+
+  await ui.press({ key: 'tab-status' })
+  expect(terylon.opens).toEqual([])
+
+  for (const section of ['more-memory', 'more-health']) {
+    expect(await ui.find({ key: section })).toBeDefined()
+  }
+
+  expect((await ui.find({ key: 'tab-queue' }))?.props.label).toBe('‹ Overview')
   await ui.press({ key: 'tab-queue' })
-  expect(await ui.find({ type: 'Text', text: exact('Waiting for you · 3') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('Waiting for you') })).toBeDefined()
 })
 
-// TERYLON COCKPIT'S ONE COMMAND (Terylon S68): /terylon-cockpit opens the pane on Waiting, the Memory a tab of it; the
-// three commands it had before are gone, not aliased.
-test('/terylon-cockpit is the one command: it opens the pane on Waiting; /terylon-pane, /terylon and /terylon-memory are gone', async ($, on) => {
+// TERYLON COCKPIT'S ONE COMMAND (Terylon S68): /terylon-cockpit opens the pane on the overview; the three commands it had
+// before are gone, not aliased.
+test('/terylon-cockpit is the one command: it opens the pane on the overview; /terylon-pane, /terylon and /terylon-memory are gone', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -347,9 +352,7 @@ test('/terylon-cockpit is the one command: it opens the pane on Waiting; /terylo
   expect(terylon.opens).toEqual(['terylon'])
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ key: 'tab-queue' }))?.props.variant).toBe('primary')
-  expect((await ui.find({ key: 'tab-queue' }))?.props.label).toBe('Waiting')
-  expect(await ui.find({ type: 'Text', text: exact('/terylon-cockpit') })).toBeDefined()
-  await ui.press({ key: 'tab-memory' })
-  expect((await ui.find({ key: 'tab-memory' }))?.props.variant).toBe('primary')
+  expect(await ui.find({ key: 'tiles' })).toBeDefined()
+  await pill(ui, 'tab-status')
+  expect(await ui.find({ type: 'Text', text: exact('/terylon-cockpit') })).toBeUndefined()
 })

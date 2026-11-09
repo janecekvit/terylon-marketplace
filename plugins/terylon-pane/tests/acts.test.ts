@@ -7,7 +7,7 @@ import { test, expect } from 'claude-code/testing'
 
 import { OWNER_ACTS } from '../hooks/terylon'
 
-import { ACTS, BRIEFING, FLIGHT, GATES, MEMORY, PANE_PROPS, POLICY, SESSION, STORY_327, exact, leaderRefusal, refusal, world } from './fixtures'
+import { ACTS, BRIEFING, FLIGHT, GATES, MEMORY, PANE_PROPS, POLICY, SESSION, STORY_327, exact, leaderRefusal, refusal, world, moreWith, pill, toOverview } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -65,6 +65,7 @@ test('NOTHING IS CALLED ON RENDER: every screen with acts drawn, and no act reac
 
   for (const surface of ['desktop', 'terminal'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
+    await toQueue($)
     await openPlan(ui)
     expect(await ui.find({ key: 'act-plan-41-approve' })).toBeDefined()
     await openStory($, ui, 333)
@@ -72,15 +73,14 @@ test('NOTHING IS CALLED ON RENDER: every screen with acts drawn, and no act reac
     await openStory($, ui, 327)
     expect(await ui.find({ key: 'act-story-327-return' })).toBeDefined()
     await toQueue($)
-    await ui.press({ key: 'tab-goals' })
+    await toOverview(ui)
     await ui.press({ key: 'goal-3' })
     expect(await ui.find({ key: 'act-goal-3-drop' })).toBeDefined()
     await toQueue($)
-    await ui.press({ key: 'tab-memory' })
+    await pill(ui, 'tab-status')
     expect(await ui.find({ key: 'act-proposal-5-confirm' })).toBeDefined()
-    await ui.press({ key: 'tab-status' })
+    await moreWith(ui, 'fold-policy')
     expect(await ui.find({ key: 'act-policy-edit' })).toBeDefined()
-    await toQueue($)
     expect(await ui.find({ key: 'act-leader-pause' })).toBeDefined()
     await ui.unmount()
   }
@@ -198,7 +198,7 @@ test('NOT ALLOWED: Claude Code refused the act, nothing happened, and How to fix
   expect((await ui.find({ key: 'act-plan-41-outcome' }))?.props.borderColor).toBe('warning')
 
   await ui.press({ key: 'act-plan-41-fix' })
-  expect((await ui.find({ key: 'tab-status' }))?.props.variant).toBe('primary')
+  expect(await ui.find({ key: 'more-health' })).toBeDefined()
   const rules = String((await ui.find({ type: 'Code' }))?.props.source ?? '')
   expect(rules).toContain('"mcp__plugin_terylon-os_terylon__plan_approve"')
   expect(rules).not.toContain('story_merge')
@@ -316,7 +316,7 @@ test('THE S27 SLOTS ARE GONE: the story\'s and the leader\'s acts sit on plain r
   await openStory($, ui, 333)
   expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.borderStyle === 'dashed')).toEqual([])
   await toQueue($)
-  await ui.press({ key: 'tab-bell' })
+  await pill(ui, 'tab-bell')
   expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.borderStyle === 'dashed')).toEqual([])
 })
 
@@ -328,6 +328,10 @@ test('LEADER: Pause… in the queue\'s header with an optional reason; Resume on
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  // PAUSE MOVED TO HEALTH: the overview has none.
+  expect(await ui.find({ key: 'act-leader-pause' })).toBeUndefined()
+  await pill(ui, 'tab-status')
+  expect((await ui.find({ key: 'act-leader-pause' }))?.props.label).toBe('Pause the leader…')
   await ui.press({ key: 'act-leader-pause' })
   expect((await ui.find({ key: 'act-leader-text' }))?.props.label).toBe('Why (optional)')
   expect(await ui.find({ type: 'Text', text: exact('Nothing new is admitted, issued, judged or written until you resume. Runs already going keep going.') })).toBeDefined()
@@ -339,13 +343,13 @@ test('LEADER: Pause… in the queue\'s header with an optional reason; Resume on
 
   terylon.answers.briefing = { ...BRIEFING, leader: { paused: true, pausedAt: '2026-10-11T12:05:00Z', reason: 'Host maintenance tonight.' } }
   terylon.answers.work_in_flight = { ...FLIGHT, paused: true }
-  await ui.press({ key: 'refresh' })
+  await toOverview(ui)
   expect(await ui.find({ key: 'act-leader-pause' })).toBeUndefined()
   expect(await ui.find({ type: 'Link', text: 'Resume in the console ↗' })).toBeUndefined()
   await ui.press({ key: 'act-leader-resume' })
   expect(actCalls(terylon.calls).slice(1)).toEqual([{ tool: 'leader_resume', args: {} }])
 
-  await ui.press({ key: 'tab-status' })
+  await pill(ui, 'tab-status')
   expect(await ui.find({ key: 'act-leader-resume' })).toBeDefined()
 })
 
@@ -357,7 +361,7 @@ test('GOAL: Drop goal… asks once more, says what it withdraws, then goal_drop'
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   await ui.press({ key: 'goal-3' })
   await ui.press({ key: 'act-goal-3-drop' })
   expect(actCalls(terylon.calls)).toEqual([])
@@ -386,9 +390,9 @@ test('MEMORY: a proposal waits on the Memory tab, old text struck and new, with 
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-memory' })
+  await pill(ui, 'tab-status')
   expect(await ui.find({ type: 'Text', text: exact('Proposals waiting · 3') })).toBeDefined()
-  expect((await ui.find({ key: 'mem-proposals' }))?.props.borderColor).toBe('warning')
+  expect((await ui.find({ key: 'mem-proposals' }))?.props.borderColor).toBe('merged')
   // The owner's memory holds the same entry, unstruck: the proposal's old text is the struck one.
   expect((await ui.findAll({ type: 'Text', text: exact('Merge potvrzuje passkey.') })).map(node => [node.props.strikethrough, node.props.color])).toContainEqual([true, 'error'])
   expect((await ui.find({ type: 'Text', text: exact('Merge potvrzuje passkey; produkci nasazuje follower.') }))?.props.color).toBe('success')
@@ -441,7 +445,7 @@ test('POLICY: read on Status with its version, edited within policy_get\'s limit
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-status' })
+  await moreWith(ui, 'fold-policy')
   expect(await ui.find({ type: 'Text', text: exact('version 1 · never changed') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('4 stories') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('$25') })).toBeDefined()
@@ -526,7 +530,7 @@ test('AN ACT WITHOUT ITS SUBJECT\'S ID SENDS NOTHING: a proposal memory_get list
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-memory' })
+  await pill(ui, 'tab-status')
   expect(await ui.find({ type: 'Text', text: exact('+ No id.') })).toBeDefined()
   await ui.press({ key: 'act-proposal-0-confirm' })
   await ui.press({ key: 'act-proposal-0-drop' })

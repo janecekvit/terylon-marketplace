@@ -1,10 +1,10 @@
-// A goal carries its ask (Terylon S52): the Goals tab's New goal takes a short title and, in the owner's own words,
+// A goal carries its ask (Terylon S52): New goal takes a short title and, in the owner's own words,
 // what the goal should do. goal_add is sent the ask only where one was typed, and Terylon's refusal of a length is
 // said word for word. On the desktop, in the narrow dock and on the terminal alike.
 
 import { test, expect } from 'claude-code/testing'
 
-import { NARROW_PANE_PROPS, PANE_PROPS, SESSION, exact, refusal, world } from './fixtures'
+import { NARROW_PANE_PROPS, PANE_PROPS, SESSION, exact, refusal, world, toNewGoal } from './fixtures'
 
 const TITLE_HELP = 'A short name: up to 200 characters.'
 const ASK_HELP = 'In your own words, as long as you need. The leader plans from it and asks if anything is unclear.'
@@ -28,7 +28,7 @@ for (const { name, surface, props } of SURFACES) {
     await terylon.clock.settle()
 
     const ui = await $.ui.mount({ plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props, surface })
-    await ui.press({ key: 'tab-goals' })
+    await toNewGoal(ui)
 
     expect((await ui.find({ key: 'goal-draft' }))?.props).toMatchObject({ label: 'Title' })
     expect((await ui.find({ key: 'goal-draft' }))?.props.rows).toBeUndefined()
@@ -46,7 +46,7 @@ for (const { name, surface, props } of SURFACES) {
     await terylon.clock.settle()
 
     const ui = await $.ui.mount({ plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props, surface })
-    await ui.press({ key: 'tab-goals' })
+    await toNewGoal(ui)
     await ui.input({ key: 'goal-draft', text: 'Household budget', kind: 'change' })
     await ui.input({ key: 'goal-ask', text: ASK, kind: 'change' })
     await ui.press({ key: 'goal-add' })
@@ -64,7 +64,7 @@ test('a blank ask is left out of goal_add, never sent empty', async ($, on) => {
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toNewGoal(ui)
   await ui.input({ key: 'goal-draft', text: 'Household budget', kind: 'change' })
   await ui.press({ key: 'goal-add' })
   await ui.input({ key: 'goal-draft', text: 'Garden', kind: 'change' })
@@ -84,7 +84,7 @@ test("Terylon's refusal of a long ask is said word for word, and what was typed 
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await toNewGoal(ui)
   await ui.input({ key: 'goal-draft', text: 'Household budget', kind: 'change' })
   await ui.input({ key: 'goal-ask', text: ASK, kind: 'change' })
   await ui.press({ key: 'goal-add' })

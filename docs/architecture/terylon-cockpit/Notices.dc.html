@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cockpit: notices</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#8ab4f8;text-decoration:none}a:hover{color:#b3cdfa}
+</style>
+</helmet>
+<div style="width: 960px; height: 620px; box-sizing: border-box; padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; background: #1b1b1a; color: #ecebe6; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; line-height: 1.4">
+
+  <div style="display: flex; align-items: center; gap: 12px">
+    <a href="Main.dc.html" style="color: #a3a29b">‹ Overview</a>
+    <div style="flex-grow: 1"></div>
+    <button style="background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 5px 12px; font: inherit">Refresh</button>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <div style="font-size: 16px; font-weight: 600; flex-grow: 1">Notices</div>
+      <a href="https://claude.ai">In the console ↗</a>
+    </div>
+
+    <div style="color: #a3a29b; font-weight: 600">Needs you · 1</div>
+    <div style="border: 1px solid #e0a84e; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
+      <div style="font-weight: 600">40-sudo changed on main: yours to apply</div>
+      <div style="color: #a3a29b">host · 6 Nov 06:48</div>
+      <div style="color: #d8d7d0">It decides who gets in or who is root, so nothing applies it by itself.</div>
+      <button style="align-self: flex-start; background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 4px 12px; font: inherit">Mark handled</button>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <div style="color: #a3a29b; font-weight: 600">What the machine did</div>
+    <div style="background: #232322; border: 1px solid #383836; border-radius: 10px; padding: 10px 14px; display: flex; flex-direction: column; gap: 6px">
+      <div style="display: flex; gap: 8px"><span style="color: #7fd4a4">✓</span><span style="flex-grow: 1">Production is at b7d95c70</span><span style="color: #a3a29b">08:02</span></div>
+      <div style="display: flex; gap: 8px"><span style="color: #7fd4a4">✓</span><span style="flex-grow: 1">Production is at d5b79c65</span><span style="color: #a3a29b">06:49</span></div>
+      <div style="display: flex; gap: 8px"><span style="color: #7fd4a4">✓</span><span style="flex-grow: 1">The host: all well again</span><span style="color: #a3a29b">06:34</span></div>
+      <button aria-expanded="false" style="align-self: flex-start; background: #2c2c2a; color: #a3a29b; border: 0; border-radius: 6px; padding: 5px 12px; font: inherit">1 more</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":620}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

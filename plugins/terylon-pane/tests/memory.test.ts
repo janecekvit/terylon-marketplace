@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
-import { GATES, PANE_PROPS, SESSION, exact, openMemoryTab, world } from './fixtures'
+import { GATES, PANE_PROPS, SESSION, exact, world, pill, openMemoryTab, foldOf } from './fixtures'
 
 const MEMORY_MOUNT = { plugin: 'terylon-pane', surface: 'desktop', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -10,14 +10,19 @@ test("the Memory tab shows the leader's memory as stored, a card per file, and t
   await terylon.clock.settle()
 
   const memory = await $.ui.mount(MEMORY_MOUNT)
-  await memory.press({ key: 'tab-memory' })
+  await pill(memory, 'tab-status')
+  // ABOUT YOU AND THE TOPICS A PRESS AWAY, each with its count.
+  expect((await foldOf(memory, 'fold-memory-owner'))).toBe('▸ About you 2')
+  expect((await foldOf(memory, 'fold-memory-topics'))).toBe('▸ Topics 1')
+  expect(await memory.find({ type: 'Text', text: exact('Píše česky; kód anglicky.') })).toBeUndefined()
+  await memory.press({ key: 'fold-memory-owner' })
+  await memory.press({ key: 'fold-memory-topics' })
 
   expect(await memory.find({ type: 'Text', text: exact('About you') })).toBeDefined()
   expect((await memory.find({ type: 'Text', text: exact('owner · 2 entries') }))?.props.color).toBe('subtle')
   expect(await memory.find({ type: 'Text', text: exact('Píše česky; kód anglicky.') })).toBeDefined()
   expect(await memory.find({ type: 'Text', text: exact('terylon/deploy') })).toBeDefined()
   expect(await memory.find({ type: 'Text', text: exact('topic · note') })).toBeDefined()
-  expect((await memory.find({ type: 'Text', text: exact('what the leader remembers across runs') }))?.props.color).toBe('subtle')
 
   // THE PROPOSALS WAIT HERE (S27): confirmed or dropped on the Memory tab, the console's memory browser a link away.
   expect(await memory.find({ type: 'Text', text: exact('Proposals waiting · 1') })).toBeDefined()
@@ -25,9 +30,8 @@ test("the Memory tab shows the leader's memory as stored, a card per file, and t
   expect((await memory.find({ key: 'act-proposal-5-confirm' }))?.props.label).toBe('Confirm')
   expect(await memory.find({ type: 'Link', text: 'Confirm in the console ↗' })).toBeUndefined()
   expect((await memory.find({ type: 'Link', text: "Versions, roll-back and dropped proposals stay in the console's memory browser ↗" }))?.props.href).toBe('https://terylon.example.ts.net/?view=memory')
-  expect(await memory.find({ type: 'Text', text: exact('Proposed in this session') })).toBeDefined()
-  expect(await memory.find({ type: 'Text', text: exact('Nothing yet.') })).toBeDefined()
-  expect(await memory.find({ type: 'Text', text: exact('/terylon-cockpit') })).toBeDefined()
+  expect(await memory.find({ type: 'Text', text: exact('Proposed in this session') })).toBeUndefined()
+  expect(await memory.find({ type: 'Text', text: exact('/terylon-cockpit') })).toBeUndefined()
 
   const cards = (await memory.findAll({ type: 'Box' })).filter(box => box.props.borderStyle === 'round')
   expect(cards.length).toBeGreaterThanOrEqual(3)
@@ -130,7 +134,7 @@ test('the rules the machine enforces: each one line with who enforces it, presse
     expect(await memory.find({ type: 'Text', text: /\.claude\/hooks\/git-guard\.js/ })).toBeDefined()
     await memory.press({ key: 'mem-rule-0' })
 
-    // An empty memory is said quietly, never left blank.
+    // AN EMPTY MEMORY is said quietly, never left blank.
     expect((await memory.find({ type: 'Text', text: exact('Nothing remembered yet.') }))?.props.color).toBe('subtle')
     await memory.unmount()
   }

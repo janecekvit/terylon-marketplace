@@ -6,7 +6,7 @@ import { test, expect } from 'claude-code/testing'
 
 import { repeatingOf, runDay, taskVersionOf } from '../hooks/queue'
 
-import { BASE, BRIEFING, NARROW_PANE_PROPS, PANE_PROPS, SESSION, exact, hostZoneOffset, lateOnTheLocalDayOf, world } from './fixtures'
+import { BASE, BRIEFING, NARROW_PANE_PROPS, PANE_PROPS, SESSION, exact, hostZoneOffset, lateOnTheLocalDayOf, world, toOverview } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS } as const
 
@@ -74,7 +74,7 @@ function undrawable(node: unknown, found: string[] = []): string[] {
 }
 
 async function openGoal12(ui: { press: (query: { key: string }) => Promise<unknown> }) {
-  await ui.press({ key: 'tab-goals' })
+  await toOverview(ui)
   await ui.press({ key: 'goal-12' })
 }
 
@@ -234,7 +234,8 @@ test('a plan with no stories, under a repeating task, draws', async ($, on) => {
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await openGoal12(ui)
-  await ui.press({ key: 'goal-plan-60' })
+  // IT WAITS: its card on its goal's screen, with its acts.
+  expect(await ui.find({ key: 'act-plan-60-approve' })).toBeDefined()
   expect(await ui.find({ key: 'back' })).toBeDefined()
   expect(undrawable(await ui.drawn())).toEqual([])
 })
@@ -282,14 +283,15 @@ const LIVE_VERSION_PLAN = {
 const VERSION_PLAN = { ...LIVE_VERSION_PLAN, goal: 12, state: 'proposed', repeating: { ...LIVE_VERSION_PLAN.repeating, state: 'proposed' } }
 
 for (const [surface, props] of [['desktop', PANE_PROPS], ['terminal', PANE_PROPS], ['narrow dock', NARROW_PANE_PROPS]] as const) {
-  test(`${surface}: a version plan waits on the Queue as the version it approves, with no story count`, async ($, on) => {
+  test(`${surface}: a version plan waits on the overview as the version it approves, with no story count`, async ($, on) => {
     const terylon = repeatingWorld(on, REPEATING)
     terylon.answers.briefing = { ...BRIEFING, plansWaiting: [{ id: 2573, goal: 12, goalTitle: VERSION_PLAN.goalTitle, stories: 0, estimateUsd: 0, repeating: VERSION_PLAN.repeating }] }
     await $.session.start(SESSION)
     await terylon.clock.settle()
 
     const ui = await $.ui.mount({ ...PANE, props, surface: surface === 'terminal' ? 'terminal' : 'desktop' })
-    expect(await ui.find({ type: 'Text', text: /Plan 2573 · version 2 of TEST PR54: sum the amounts/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('Plan 2573') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('version 2 of TEST PR54: sum the amounts') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /0 stories|~\$0/ })).toBeUndefined()
     await ui.press({ key: 'plan-2573' })
     expect(await ui.find({ type: 'Text', text: exact('to approve · up to $1 a run · green runs accepted by themselves') })).toBeDefined()
@@ -303,7 +305,7 @@ test('a version plan Terylon names no version of waits as a new version, never a
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: /Plan 2573 · a new version of Daily forex statistics/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('a new version of Daily forex statistics') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /0 stories/ })).toBeUndefined()
 })
 
@@ -315,9 +317,8 @@ test('a version plan\'s card says what Approve does to later runs, never "all 0 
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await openGoal12(ui)
-  await ui.press({ key: 'goal-plan-2573' })
 
-  expect(await ui.find({ type: 'Text', text: exact('Approve: each later task_run uses version 2.') })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('Approve: each later run uses version 2.') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /0 stories|its story|both stories/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: exact(' · version 2 of TEST PR54: sum the amounts') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('up to $1 a run · green runs accepted by themselves') })).toBeDefined()
@@ -341,12 +342,12 @@ for (const [surface, props] of [['desktop', PANE_PROPS], ['terminal', PANE_PROPS
     for (const id of [2536, 2573, 2590]) {
       expect(await ui.find({ key: `goal-plan-${id}` })).toBeUndefined()
     }
-    expect(await ui.find({ key: 'goal-plan-2600' })).toBeDefined()
+    expect(await ui.find({ key: 'act-plan-2600-approve' })).toBeDefined()
     expect(undrawable(await ui.drawn())).toEqual([])
   })
 }
 
-test('A SETTLED VERSION PLAN leaves the Goals tab, an approved one as a withdrawn one does; a version that waits stays there as an act', async ($, on) => {
+test('A SETTLED VERSION PLAN is on no card of the goal, an approved one as a withdrawn one; a version that waits stands there as an act', async ($, on) => {
   const terylon = repeatingWorld(on, REPEATING)
   const version = (id: number, number: number, state: string) => ({ ...LIVE_VERSION_PLAN, id, goal: 12, state, repeating: { ...LIVE_VERSION_PLAN.repeating, version: number, plan: id, state } })
   terylon.answers.plans_list = { plans: [version(3661, 1, 'approved'), version(3700, 2, 'proposed')] }
@@ -354,11 +355,10 @@ test('A SETTLED VERSION PLAN leaves the Goals tab, an approved one as a withdraw
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'tab-goals' })
+  await openGoal12(ui)
   await terylon.clock.settle()
 
   expect(await ui.find({ key: 'plan-3661' })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /Plan 3661/ })).toBeUndefined()
   expect(await ui.find({ key: 'plan-3700' })).toBeDefined()
 })
 

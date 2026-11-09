@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cockpit: test mode</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#8ab4f8;text-decoration:none}a:hover{color:#b3cdfa}
+</style>
+</helmet>
+<div style="width: 960px; height: 860px; box-sizing: border-box; padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; background: #1b1b1a; color: #ecebe6; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; line-height: 1.4">
+
+  <div style="display: flex; align-items: center; gap: 12px">
+    <div style="font-size: 20px; font-weight: 600">Terylon · Test mode</div>
+    <div style="flex-grow: 1; color: #a3a29b">made-up data · nothing reaches Terylon</div>
+    <button style="background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 5px 12px; font: inherit">Refresh</button>
+  </div>
+
+  <div style="border: 1px solid #5a4890; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
+    <div style="font-weight: 600">Waiting for you</div>
+    <div style="display: flex; align-items: center; gap: 10px">
+      <div style="width: 58px"><span style="background: #2a2340; color: #c9b1f7; border-radius: 99px; padding: 1px 8px; font-size: 11px">plan</span></div>
+      <div style="flex-grow: 1">Household budget · 3 stories</div>
+      <button style="background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 3px 10px; font: inherit">Approve</button>
+    </div>
+  </div>
+
+  <div style="background: #232322; border: 1px solid #383836; border-radius: 10px; padding: 12px 14px; color: #d8d7d0">Test mode: nothing was merged. A real merge is confirmed with your passkey in the console.</div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: stretch">
+    <div style="background: #232322; border: 1px solid #383836; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
+      <div style="font-weight: 600">What it does</div>
+      <div>Opened by <span style="font-family: Consolas, ui-monospace, monospace; font-size: 12px">/terylon-cockpit test</span>, closed by <span style="font-family: Consolas, ui-monospace, monospace; font-size: 12px">/terylon-cockpit test off</span>.</div>
+      <div>Answers every call of the pane from made-up data: one goal per road stage, a stuck story, a question, a plan, notices and memory.</div>
+      <div>The acts move that data in memory: Approve, Accept, Answer, Mark handled, Confirm, Drop, New goal.</div>
+      <div>Says Test mode in the head, the band, the status line and the pane's title.</div>
+    </div>
+    <div style="background: #232322; border: 1px solid #383836; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
+      <div style="font-weight: 600">What it does not</div>
+      <div>It sends nothing to Terylon, and posts nothing into the chat.</div>
+      <div>It writes nothing to the store the sessions share, and takes no lease, so every other session goes on as it was.</div>
+      <div>It covers the pane alone: Claude's own Terylon tools in that chat still reach the real Terylon.</div>
+      <div>It leaves when the session does: <span style="font-family: Consolas, ui-monospace, monospace; font-size: 12px">test off</span> returns to live data, as it was.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":860}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

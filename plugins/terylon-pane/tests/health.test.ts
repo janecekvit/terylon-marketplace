@@ -6,7 +6,7 @@ import { test, expect } from 'claude-code/testing'
 import { ALERT_SOURCES, HEALTH_LONGEST, clip, healthLine, isAlert } from '../hooks/health'
 import type { Health } from '../hooks/health'
 
-import { BRIEFING, PANE_PROPS, SESSION, bandProps, exact, world } from './fixtures'
+import { BRIEFING, MEMORY, PANE_PROPS, SESSION, bandProps, exact, marked, world } from './fixtures'
 
 const WELL: Health = { connection: 'ok', failingSince: null, isPaused: false, alerts: 0, runningUsd: '5.50', dayBudget: '20', slotsUsed: 2, slots: 4 }
 
@@ -52,6 +52,8 @@ test('an alert is a fault of the machine; the briefing, the questions, a newer i
 
 test('in a session: the status line counts the alerts, the band says them and its Open opens the pane as always', async ($, on) => {
   const terylon = world(on)
+  // NO MEMORY PROPOSAL WAITS, so System is marked for Health alone.
+  terylon.answers.memory_get = { ...MEMORY, proposals: [] }
   terylon.answers.notices_list = {
     unhandled: 3,
     notices: [
@@ -75,9 +77,8 @@ test('in a session: the status line counts the alerts, the band says them and it
   }
 
   const pane = await $.ui.mount({ plugin: 'terylon-pane', surface: 'desktop', component: 'Pane', requestId: 'terylon', props: PANE_PROPS })
-  expect((await pane.find({ key: 'tab-queue' }))?.props.variant).toBe('primary')
-  expect((await pane.find({ key: 'tab-status' }))?.props.label).toBe('Health ⚠')
-  expect((await pane.find({ key: 'tab-bell' }))?.props.label).toBe('Notices · 3')
+  expect(await marked(pane, 'tab-status')).toBe(true)
+  expect(await marked(pane, 'tab-bell')).toBe(true)
 })
 
 test('in a session: each problem reaches the status line, and the line comes back to well', async ($, on) => {

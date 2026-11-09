@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cockpit: one page of cards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#8ab4f8;text-decoration:none}a:hover{color:#b3cdfa}
+</style>
+</helmet>
+<div style="width: 960px; height: 980px; box-sizing: border-box; padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; background: #1b1b1a; color: #ecebe6; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; line-height: 1.4">
+
+  <div style="display: flex; align-items: center; gap: 12px">
+    <div style="font-size: 20px; font-weight: 600">Terylon</div>
+    <div style="flex-grow: 1; color: #a3a29b">all well · connected · 1/2 slots · 144 k tokens today</div>
+    <a href="Notices.dc.html" aria-label="Notices, 1 needs you" style="background: #ecebe6; color: #1b1b1a; border-radius: 6px; padding: 5px 12px; font-weight: 600">Notices</a>
+    <a href="More.dc.html" aria-label="System, 1 proposal waits" style="background: #ecebe6; color: #1b1b1a; border-radius: 6px; padding: 5px 12px; font-weight: 600">System</a>
+    <button style="background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 5px 12px; font: inherit">Refresh</button>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+    <div style="background: #2a2340; border: 1px solid #5a4890; border-radius: 10px; padding: 10px 14px; display: flex; align-items: baseline; gap: 10px">
+      <div style="font-size: 26px; font-weight: 600; color: #c9b1f7">4</div><div style="color: #d6cdec">waiting for you</div>
+    </div>
+    <div style="background: #232322; border: 1px solid #383836; border-radius: 10px; padding: 10px 14px; display: flex; align-items: baseline; gap: 10px">
+      <div style="font-size: 26px; font-weight: 600; color: #8ab4f8">1</div><div style="color: #a3a29b">running</div>
+    </div>
+    <div style="background: #232322; border: 1px solid #383836; border-radius: 10px; padding: 10px 14px; display: flex; align-items: baseline; gap: 10px">
+      <div style="font-size: 26px; font-weight: 600; color: #e0a84e">1</div><div style="color: #a3a29b">stuck</div>
+    </div>
+  </div>
+
+  <div style="border: 1px solid #5a4890; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px">
+    <div style="font-weight: 600; padding-bottom: 2px">Waiting for you</div>
+    <sc-for list="{{ waiting }}" as="item" hint-placeholder-count="4">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 3px 0">
+        <div style="width: 58px; flex-shrink: 0"><span style="background: {{ item.chipGround }}; color: {{ item.chipInk }}; border-radius: 99px; padding: 1px 8px; font-size: 11px">{{ item.kind }}</span></div>
+        <div style="width: 62px; flex-shrink: 0; color: #a3a29b; font-family: Consolas, ui-monospace, monospace; font-size: 12px">{{ item.ref }}</div>
+        <div style="flex-grow: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ item.title }}</div>
+        <button style="background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 3px 10px; font: inherit; flex-shrink: 0">{{ item.act }}</button>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <div style="display: flex; align-items: baseline; gap: 10px">
+      <div style="font-weight: 600; flex-grow: 1">Goals</div>
+      <button style="background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 3px 10px; font: inherit">New goal</button>
+    </div>
+    <sc-for list="{{ goals }}" as="goal" hint-placeholder-count="3">
+      <div style="background: #232322; border: 1px solid #383836; border-radius: 10px; padding: 10px 14px; display: flex; flex-direction: column; gap: 7px">
+        <div style="display: flex; align-items: center; gap: 10px">
+          <div style="color: #a3a29b; font-family: Consolas, ui-monospace, monospace; font-size: 12px">{{ goal.ref }}</div>
+          <a href="Goal.dc.html" style="flex-grow: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; color: #ecebe6">{{ goal.title }}</a>
+          <div style="background: {{ goal.stageGround }}; color: {{ goal.stageInk }}; border-radius: 99px; padding: 1px 9px; font-size: 11px">{{ goal.stage }}</div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px">
+          <sc-for list="{{ goal.segments }}" as="segment" hint-placeholder-count="6">
+            <div style="height: 4px; border-radius: 2px; background: {{ segment.color }}"></div>
+          </sc-for>
+        </div>
+        <div style="display: flex; gap: 12px; color: #a3a29b">
+          <div style="flex-grow: 1">{{ goal.detail }}</div>
+          <div style="color: #d8d7d0">{{ goal.next }}</div>
+        </div>
+      </div>
+    </sc-for>
+    <div style="display: flex; flex-wrap: wrap; gap: 8px">
+      <button aria-expanded="true" style="background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 5px 12px; font: inherit">Done today 1</button>
+      <button aria-expanded="false" style="background: #2c2c2a; color: #a3a29b; border: 0; border-radius: 6px; padding: 5px 12px; font: inherit">Queued 0</button>
+      <button aria-expanded="false" style="background: #2c2c2a; color: #a3a29b; border: 0; border-radius: 6px; padding: 5px 12px; font: inherit">History 12</button>
+    </div>
+    <div style="background: #232322; border: 1px solid #383836; border-radius: 10px; padding: 10px 14px; display: flex; flex-direction: column; gap: 7px">
+      <div style="font-weight: 600">Done today <span style="color: #a3a29b; font-weight: 400">· 1</span></div>
+      <a href="Story.dc.html" style="display: flex; align-items: center; gap: 10px; color: #ecebe6">
+        <span style="background: #1c3326; color: #8fd9ad; border-radius: 99px; padding: 1px 8px; font-size: 11px; flex-shrink: 0">merged</span>
+        <span style="color: #a3a29b; font-family: Consolas, ui-monospace, monospace; font-size: 12px; flex-shrink: 0">S-8KD2P</span>
+        <span style="flex-grow: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">The day's statistics sent by mail</span>
+        <span style="color: #a3a29b; flex-shrink: 0">merged 14:20</span>
+      </a>
+    </div>
+  </div>
+
+  <div style="margin-top: auto; border-top: 1px solid #383836; padding-top: 10px; display: flex; gap: 8px; align-items: center; color: #a3a29b">
+    <div style="flex-grow: 1">Last 30 days 12 stories · 22 k tokens per story</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const DONE = '#58c48a', NOW = '#8ab4f8', TODO = '#3a3a38', GATE = '#4a3b78', GATE_NOW = '#a88bf0';
+    const GATES = [1, 4];
+    const segmentsAt = stage => [0, 1, 2, 3, 4, 5].map(index => ({
+      color: index < stage ? DONE : index === stage ? (GATES.includes(index) ? GATE_NOW : NOW) : GATES.includes(index) ? GATE : TODO,
+    }));
+    const gateChip = { chipGround: '#2a2340', chipInk: '#c9b1f7' };
+    const stageOf = (stage, ground, ink) => ({ stage, stageGround: ground, stageInk: ink });
+    return {
+      waiting: [
+        { kind: 'question', ref: 'S-JMAVS', title: 'Which of the two price columns is the one to add up?', act: 'Answer', chipGround: '#3a2f1c', chipInk: '#e8c07a' },
+        { kind: 'plan', ref: 'P-58HFX', title: 'Household budget: 3 stories, about 90 k tokens', act: 'Approve', ...gateChip },
+        { kind: 'accept', ref: 'S-3BTND', title: 'Take your time: verified', act: 'Accept', ...gateChip },
+        { kind: 'merge', ref: 'S-346D1', title: 'Slots fit the machine: verified, green build', act: 'Merge ↗', ...gateChip },
+      ],
+      goals: [
+        { ref: 'G-7QK2M', title: 'Household budget', ...stageOf('Approve', '#2a2340', '#c9b1f7'), segments: segmentsAt(1), detail: 'plan P-58HFX · 3 stories', next: 'Waits for your approval' },
+        { ref: 'G-4TR9C', title: 'Take your time', ...stageOf('Build', '#1d2c44', '#8ab4f8'), segments: segmentsAt(2), detail: '1 of 2 stories · S-JMAVS running 36 s · 144 k tokens', next: 'Asks you a question' },
+        { ref: 'G-2HN6W', title: 'Slots fit the machine', ...stageOf('Your merge', '#2a2340', '#c9b1f7'), segments: segmentsAt(4), detail: '2 of 2 stories · cost not known on the setup token', next: 'Merge in the console' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

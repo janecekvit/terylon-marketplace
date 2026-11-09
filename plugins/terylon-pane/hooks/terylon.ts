@@ -122,7 +122,7 @@ export function readResult(result: { content: readonly { type: string; text?: st
   }
 }
 
-// The permissions block that lets the pane call its own tools and nothing else: never the gate. The Status tab draws
+// The permissions block that lets the pane call its own tools and nothing else: never the gate. Health draws
 // it as `Code` in json (S32), to be selected and copied by hand: `$.ui.copy` does not work in Desktop.
 export function allowRules(): string {
   const lines = [...PANE_TOOLS].map(tool => `    "${PANE_TOOL_PREFIX}${tool}"`)

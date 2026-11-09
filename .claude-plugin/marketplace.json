@@ -26,7 +26,7 @@
       "source": "./plugins/terylon-pane",
       "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-pane",
       "repository": "https://github.com/janecekvit/terylon-marketplace",
-      "description": "Terylon Cockpit: the Terylon band, status line and pane in Claude Desktop, a mod opened by /terylon-cockpit: what waits for you above the prompt, the health of Terylon and today's cost in the status line, and one pane with Waiting, Goals, Notices, Memory and Health tabs. It answers the leader's questions, adds tasks and goals, follows a run live, marks notices handled, and takes the owner's acts on their cards; it never merges. Requires terylon-os.",
+      "description": "Terylon Cockpit: the Terylon band, status line and pane in Claude Desktop, a mod opened by /terylon-cockpit: what waits for you above the prompt, the health of Terylon and today's cost in the status line, and one pane: an overview of what waits and every goal's road, with Notices, Memory and Health a press away. It answers the leader's questions, adds tasks and goals, follows a run live, marks notices handled, and takes the owner's acts on their cards; it never merges. Requires terylon-os.",
       "category": "general",
       "keywords": [
         "terylon",

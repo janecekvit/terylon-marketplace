@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cockpit: a story</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#8ab4f8;text-decoration:none}a:hover{color:#b3cdfa}
+</style>
+</helmet>
+<div style="width: 960px; height: 860px; box-sizing: border-box; padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; background: #1b1b1a; color: #ecebe6; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; line-height: 1.4">
+
+  <div style="display: flex; align-items: center; gap: 12px">
+    <a href="Goal.dc.html" style="color: #a3a29b">‹ G-4TR9C</a>
+    <div style="flex-grow: 1"></div>
+    <a href="https://claude.ai">Story in the console ↗</a>
+    <button style="background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 5px 12px; font: inherit">Refresh</button>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 4px">
+    <div style="color: #a3a29b">S-JMAVS · running 2 min · attempt 2</div>
+    <div style="font-size: 20px; font-weight: 600; line-height: 1.25">Take your time again</div>
+  </div>
+
+  <div style="background: #232322; border: 1px solid #383836; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px">
+    <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px">
+      <sc-for list="{{ road }}" as="step" hint-placeholder-count="7">
+        <div style="display: flex; flex-direction: column; gap: 5px">
+          <div style="height: 5px; border-radius: 3px; background: {{ step.bar }}"></div>
+          <div style="font-size: 12px; color: {{ step.text }}; font-weight: {{ step.weight }}">{{ step.name }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display: flex; gap: 8px; align-items: baseline">
+      <div style="color: #a3a29b">Now working</div>
+      <div style="font-weight: 500">tester · step 4 of 6: read the price column and add it up</div>
+    </div>
+    <div style="display: flex; gap: 8px">
+      <div style="color: #a3a29b; flex-grow: 1">144 k tokens · cost not known on the setup token</div>
+      <button style="background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 4px 12px; font: inherit">Summarise in the session</button>
+      <button style="background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 4px 12px; font: inherit">Stop</button>
+    </div>
+  </div>
+
+  <div style="border: 1px solid #e0a84e; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+    <div style="font-weight: 600">It asks you</div>
+    <div>Which of the two price columns is the one to add up?</div>
+    <label style="display: flex; flex-direction: column; gap: 4px; color: #a3a29b">Your answer
+      <textarea rows="2" style="font: inherit; background: #1b1b1a; color: #ecebe6; border: 1px solid #4a4a47; border-radius: 6px; padding: 7px 9px; resize: none"></textarea>
+    </label>
+    <button style="align-self: flex-start; background: #ecebe6; color: #1b1b1a; border: 0; border-radius: 6px; padding: 5px 14px; font: inherit; font-weight: 600">Answer</button>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start">
+    <div style="background: #232322; border: 1px solid #383836; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
+      <div style="display: flex; justify-content: space-between"><div style="font-weight: 600">Criteria</div><div style="color: #a3a29b">1 of 2</div></div>
+      <div style="display: flex; gap: 8px"><span style="color: #7fd4a4">✓</span><span>The sum matches the export</span></div>
+      <div style="display: flex; gap: 8px"><span style="color: #a3a29b">○</span><span>The sheet opens in Excel</span></div>
+    </div>
+    <div style="background: #232322; border: 1px solid #383836; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
+      <div style="display: flex; justify-content: space-between"><div style="font-weight: 600">What happened</div><div style="color: #a3a29b">newest first</div></div>
+      <div style="display: flex; gap: 10px"><span style="color: #a3a29b">16:33</span><span>run dispatched, now running</span></div>
+      <div style="display: flex; gap: 10px"><span style="color: #a3a29b">16:31</span><span>attempt 2 after your return</span></div>
+      <button style="align-self: flex-start; background: none; border: 0; padding: 2px 0; color: #a3a29b; font: inherit">▸ 6 more</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":860}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const stepOf = (name, kind) => ({
+      name,
+      bar: kind === 'done' ? '#58c48a' : kind === 'now' ? '#8ab4f8' : kind === 'gate' ? '#4a3b78' : '#3a3a38',
+      text: kind === 'now' ? '#8ab4f8' : kind === 'gate' ? '#c9b1f7' : '#a3a29b',
+      weight: kind === 'now' ? 600 : 400,
+    });
+    return {
+      road: [stepOf('Admitted', 'done'), stepOf('Plan', 'done'), stepOf('Develop', 'done'), stepOf('Review', 'done'), stepOf('Tests', 'now'), stepOf('Verified', 'todo'), stepOf('Accept', 'gate')],
+    };
+  }
+}
+</script>
+</body>
+</html>

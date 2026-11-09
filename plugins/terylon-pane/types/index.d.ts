@@ -9,20 +9,32 @@ export type PaneWaitingItem = {
   key: string
   // The subject the row opens in the pane: a story, a plan or a question.
   target: number
+  // Its ref, drawn monospaced before its title; null where the question names no subject by a ref.
+  ref: string | null
   title: string
   detail: string
   console: string
+  // The goal a waiting plan or story is under, for its road: null where Terylon names none.
+  goal: number | null
+  // A waiting plan's stories, for its goal's card.
+  stories?: number
 }
 
 export type PaneRunningItem = {
   story: number
+  // Its ref, and the goal it is under where its answer names one: a goal card draws the ref as its press.
+  ref: string
+  goal: number | null
+  goalRef: string | null
+  // "running 12 h", "verifying", "stuck since 14:20": what the goal card says beside the ref.
+  now: string
   title: string
   detail: string
   step: string | null
   fraction: number | null
   isStuck: boolean
   isVerifying: boolean
-  // The eight phases from progress.stage, as the story's own screen draws them (S32): none is now without a stage.
+  // The phases from progress.stage, as the story's own screen draws them (S32): none is now without a stage.
   phases: PanePhase[]
   // "Tests · tester · step 5 of 9": the stage, who works in it and the step, or null with no stage reported.
   stageLine: string | null
@@ -34,7 +46,7 @@ export type PaneQueuedItem = { story: number; title: string; detail: string; isH
 export type PaneDoneItem = { story: number; title: string; detail: string; isAccepted: boolean }
 
 // WHY THE DONE-SIGNAL CANNOT RUN: events_since did not answer as the owner's, or the store that keeps the pane's place
-// refused. The kind names the fix the Status tab draws; the reason is the engine's or Terylon's own words.
+// refused. The kind names the fix Health draws; the reason is the engine's or Terylon's own words.
 export type PaneEventsProblem = {
   kind: 'not-allowed' | 'no-server' | 'unreachable' | 'refused' | 'store' | 'failed'
   reason: string
@@ -47,11 +59,56 @@ export type PaneQuestionItem = {
   subject: string
   // "cíl 11", "story 38": what the question waits on, as the pane names it.
   subjectLabel: string
+  // Its subject's ref, where Terylon names one.
+  subjectRef?: string | null
   text: string
   askedAt: string | null
 }
 
 export type PaneChoice = { value: string; label: string }
+
+// One story as a goal's road reads it: its state, where it is kept, whether it is stuck and what it spent.
+export type PaneRoadStory = {
+  id: number
+  ref: string
+  title: string
+  goal: number | null
+  goalRef: string | null
+  state: string
+  isList: boolean
+  isStuck: boolean
+  usd: number
+  tokens: number | null
+  isCostKnown: boolean
+}
+
+// A plan as a goal's road reads it.
+export type PaneRoadPlan = { id: number; ref: string; goal: number; isProposed: boolean; stories: number; storyIds: readonly number[] }
+
+export type PaneRoadStage = 'plan' | 'approve' | 'build' | 'verify' | 'merge' | 'done'
+
+// A step of a road, a goal's or a story's: its name, how far it is, and whether it is one of the owner's gates.
+export type PaneRoadStep = { name: string; status: 'done' | 'now' | 'next'; isGate: boolean }
+
+export type PaneRoad = {
+  stage: PaneRoadStage
+  // "Approve", "Your merge", "Your accept": the stage in words, its chip's and the road's.
+  word: string
+  tone: 'merged' | 'success' | 'suggestion'
+  steps: PaneRoadStep[]
+  next: string
+}
+
+// One goal's card on the overview, derived from what the pane read (hooks/road.ts). A repeating task's goal has no road.
+export type PaneGoalCard = {
+  goal: PaneGoalItem
+  road: PaneRoad | null
+  summary: string
+  spend: string | null
+  next: string
+  running: PaneRunningItem[]
+  stuck: number
+}
 
 export type PaneSnapshot = {
   connection: PaneConnection
@@ -73,6 +130,8 @@ export type PaneSnapshot = {
   running: PaneRunningItem[]
   queued: PaneQueuedItem[]
   doneToday: PaneDoneItem[]
+  // Every story of the last read, as a goal's road reads it.
+  stories: PaneRoadStory[]
   questions: PaneQuestionItem[]
   events: PaneEventsProblem | null
   // THE WATCHDOG'S CLOCK: when events_since last answered, and when this session began to wait for it.
@@ -97,10 +156,11 @@ export type PaneSnapshot = {
 
 export type PaneScreen =
   | { screen: 'queue' }
-  | { screen: 'goals' }
-  | { screen: 'bell' }
-  | { screen: 'memory' }
-  | { screen: 'status' }
+  // HEALTH AND MEMORY ON ONE PAGE, opened at its top.
+  | { screen: 'more' }
+  // NOTICES: a slide-over on the overview where the surface has room, else a screen of its own.
+  | { screen: 'notices' }
+  | { screen: 'new-goal' }
   | { screen: 'add' }
   | { screen: 'story'; story: number }
   | { screen: 'question'; question: number }
@@ -110,7 +170,7 @@ export type PaneScreen =
   // when `file` names one.
   | { screen: 'spec'; goal: number; version: number | null; file: string | null }
 
-// Where the pane is, and the way back: the last entry is drawn, ‹ pops it, a tab starts the stack over.
+// Where the pane is, and the way back: the last entry is drawn, ‹ pops it; the overview is always at its root.
 export type PaneView = { stack: PaneScreen[] }
 
 export type PanePhase = { label: string; role: string | null; detail: string; status: 'done' | 'now' | 'next' }
@@ -213,7 +273,11 @@ export type PaneAnswer = {
   sentence: string | null
 }
 
-export type PaneGoalItem = { id: number; ref?: string | null; title: string; priority: string; state: string; questions: number; stories: string }
+// `counts`: its stories by state, as goals_list says them. `target`: where it is kept. `repeating`: a repeating task's
+// goal, its newest run in words; absent in a value an older version stored.
+export type PaneGoalItem = { id: number; ref?: string | null; title: string; priority: string; state: string; questions: number; stories: string; counts?: Record<string, number>; target?: string | null; repeating?: PaneGoalRepeating | null }
+
+export type PaneGoalRepeating = { run: string; terms: string }
 
 // `after`: the places in the plan, 1-based, of the stories this one waits for (#35).
 export type PanePlanStory = { id: number; ref?: string | null; index: number; title: string; detail: string; criteria: string[]; after: number[]; size: string; estimate: string | null }
@@ -271,7 +335,11 @@ export type PaneGoal = {
   // Its ref (Terylon S66), null from a Terylon older than refs.
   ref?: string | null
   meta: string
-  stories: { id: number; title: string; state: string }[]
+  // The goal's ask in the owner's words, and its state as Terylon says it; absent in a value an older version stored.
+  ask?: string | null
+  state?: string
+  target?: string | null
+  stories: { id: number; title: string; state: string; stateKey?: string; isList?: boolean }[]
   // An open or active goal can be dropped (S27); a done or dropped one cannot. A drop abandons every story of it that
   // has not ended, stopping a run first (Terylon S35, #388), and the drop says which, by title (#35).
   isOpen: boolean
@@ -346,11 +414,16 @@ export type PaneBell = {
   unhandledCount: number
   unhandled: PaneNotice[]
   handled: PaneNotice[]
-  leader: { isPaused: boolean; text: string }
   metrics: { value: string; label: string }[]
   handling: number | null
   handleSentence: string | null
 }
+
+// What the overview's footer says: the last 30 days in a line, and how many memory proposals wait. Null before an answer.
+export type PaneOverview = { month: string | null; memoryPending: number | null }
+
+// TEST MODE, this session's alone: whether it is on, and what the last made-up merge said.
+export type PaneTestMode = { isOn: boolean; note: string | null }
 
 export type PaneBand = { text: string; link: string; isAlert: boolean } | null
 
@@ -390,7 +463,7 @@ export type PaneActOutcome = { kind: 'done' | 'pending' | 'refused' | 'not-allow
 // answering, and the last outcome. Keyed by subject: "plan-41", "story-327", "leader", "goal-3", "proposal-5", "policy".
 export type PaneAct = { open: string | null; text: string; busy: string | null; outcome: PaneActOutcome | null }
 
-// The policy's form on the Status tab: whether it is open, and each field as typed.
+// The policy's form on Health: whether it is open, and each field as typed.
 export type PanePolicyForm = { isEditing: boolean; values: Record<string, string> }
 
 declare module 'claude-code' {
@@ -407,6 +480,8 @@ declare module 'claude-code' {
       goals: PaneGoals
       goal: PaneGoal | null
       bell: PaneBell
+      overview: PaneOverview
+      testMode: PaneTestMode
       open: string[]
       acts: Record<string, PaneAct>
       policyForm: PanePolicyForm

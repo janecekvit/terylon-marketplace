@@ -1,0 +1,19 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-11-06T09:00:00Z" },
+  "title": "Terylon Cockpit redesign",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 960, "h": 980, "title": "Overview: navigation on top, the notices bell", "is_interactive": true },
+    "Notices.dc.html": { "x": 1040, "y": 0, "w": 960, "h": 620, "title": "Notices: a screen of its own, back to the overview", "is_interactive": true },
+    "Goal.dc.html": { "x": 2080, "y": 0, "w": 960, "h": 980, "title": "A goal: road, plan at the gate, stories", "is_interactive": true },
+    "Story.dc.html": { "x": 0, "y": 1100, "w": 960, "h": 860, "title": "A story: phases as a road, the acts", "is_interactive": true },
+    "More.dc.html": { "x": 1040, "y": 1100, "w": 960, "h": 860, "title": "Health and Memory: no notice twice", "is_interactive": true },
+    "Terminal.dc.html": { "x": 2080, "y": 1100, "w": 960, "h": 860, "title": "The CLI: its lesser form (1, approved)" },
+    "TestMode.dc.html": { "x": 0, "y": 2080, "w": 960, "h": 860, "title": "Test mode: /terylon-cockpit test" }
+  },
+  "order": ["Main.dc.html", "Notices.dc.html", "Goal.dc.html", "Story.dc.html", "More.dc.html", "Terminal.dc.html", "TestMode.dc.html"],
+  "notes": {},
+  "designSystems": []
+}
