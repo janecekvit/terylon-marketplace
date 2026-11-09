@@ -33,7 +33,8 @@ async function typeNewTask(ui: { input: (input: never) => Promise<unknown>; pres
   await ui.press({ key: 'quick-open' } as never)
 }
 
-test('DEFECT, THE TITLE: a new task typed key by key is handed over whole, and the card says what was handed over', async ($, on) => {
+// TYPED KEY BY KEY, a run of renders: about 4 s on a hosted runner and past the default 5 s on a slow one, so 20 s.
+test('DEFECT, THE TITLE: a new task typed key by key is handed over whole, and the card says what was handed over', { timeoutMs: 20_000 }, async ($, on) => {
   const terylon = world(on)
   terylon.answers.goals_list = WALK_GOALS
   await $.session.start(SESSION)
@@ -52,7 +53,7 @@ test('DEFECT, THE TITLE: a new task typed key by key is handed over whole, and t
   expect(await ui.find({ type: 'Text', text: exact(`Title: ${WALK_TITLE}`) })).toBeDefined()
 })
 
-test('DEFECT, THE CRITERIA: an empty Criteria sends no criterion, never the goal picker\'s label, and the card says none was sent', async ($, on) => {
+test('DEFECT, THE CRITERIA: an empty Criteria sends no criterion, never the goal picker\'s label, and the card says none was sent', { timeoutMs: 20_000 }, async ($, on) => {
   const terylon = world(on)
   terylon.answers.goals_list = WALK_GOALS
   await $.session.start(SESSION)
