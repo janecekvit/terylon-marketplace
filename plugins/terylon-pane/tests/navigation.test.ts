@@ -309,7 +309,7 @@ test('Notices reads the notices and a notice is handled there; More reads the me
   }
 })
 
-test('More is a page of the one pane: no second pane opens, every pill opens it, and ‹ leads back to the overview', async ($, on) => {
+test('Notices, Memory and System are pages of the one pane: no second pane opens, and ‹ leads back to the overview', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -323,16 +323,17 @@ test('More is a page of the one pane: no second pane opens, every pill opens it,
   await ui.press({ key: 'back' })
   expect(await ui.find({ key: 'notices' })).toBeUndefined()
 
-  await ui.press({ key: 'tab-status' })
-  expect(terylon.opens).toEqual([])
-
-  for (const section of ['more-memory', 'more-health']) {
+  // EACH ITS OWN SECTION ALONE: Memory the memory, System Health.
+  for (const [key, section, other] of [['tab-memory', 'more-memory', 'more-health'], ['tab-status', 'more-health', 'more-memory']] as const) {
+    await ui.press({ key })
+    expect(terylon.opens).toEqual([])
     expect(await ui.find({ key: section })).toBeDefined()
-  }
+    expect(await ui.find({ key: other })).toBeUndefined()
 
-  expect((await ui.find({ key: 'tab-queue' }))?.props.label).toBe('‹ Overview')
-  await ui.press({ key: 'tab-queue' })
-  expect(await ui.find({ type: 'Text', text: exact('Waiting for you') })).toBeDefined()
+    expect((await ui.find({ key: 'tab-queue' }))?.props.label).toBe('‹ Overview')
+    await ui.press({ key: 'tab-queue' })
+    expect(await ui.find({ type: 'Text', text: exact('Waiting for you') })).toBeDefined()
+  }
 })
 
 // TERYLON COCKPIT'S ONE COMMAND (Terylon S68): /terylon-cockpit opens the pane on the overview; the three commands it had

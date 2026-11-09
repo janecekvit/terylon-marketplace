@@ -388,29 +388,43 @@ test('THE OVERVIEW READS ITS GOALS ON ITS LOAD AND WITH THE POLL WHILE IT IS DRA
   expect(await ui.find({ type: 'Text', text: /Reason: .*ETIMEDOUT/ })).toBeDefined()
 })
 
-test('MORE: Health and Memory on one page, whichever button opened it, its sources read at once under the bound of a press', async ($, on) => {
+test('SYSTEM AND MEMORY each read their own sources alone, under the bound of a press: System never memory_get', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, props: PANE_PROPS, surface: 'desktop' })
-  const before = terylon.calls.length
   terylon.hang.add('memory_get')
-  const pressed = ui.press({ key: 'tab-status' })
+
+  // SYSTEM: Health's sources, and no memory_get, however long the memory would take.
+  const beforeSystem = terylon.calls.length
+  await ui.press({ key: 'tab-status' })
   await terylon.clock.settle()
-
-  // ALL ASKED AT ONCE: Health drawn while Memory is still not answered.
-  expect(terylon.calls.slice(before).map(call => call.tool)).toEqual(expect.arrayContaining(['notices_list', 'metrics', 'memory_get']))
-  expect(await ui.find({ type: 'Text', text: exact('Loading the memory…') })).toBeDefined()
+  expect(terylon.calls.slice(beforeSystem).map(call => call.tool)).toEqual(expect.arrayContaining(['notices_list', 'metrics']))
+  expect(terylon.calls.slice(beforeSystem).map(call => call.tool)).not.toContain('memory_get')
   expect(await ui.find({ key: 'status-machine' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact('Loading the memory…') })).toBeUndefined()
 
-  // UNDER DESKTOP'S 10 s BOUND ON A PRESS, the one that does not answer ends as its own error; the others stand.
+  // The overview reads the memory's proposals for its head, so it answers while the pane goes back there.
+  terylon.hang.delete('memory_get')
+  await ui.press({ key: 'tab-queue' })
+  terylon.hang.add('memory_get')
+
+  // MEMORY: memory_get alone, and nothing of the bell.
+  const beforeMemory = terylon.calls.length
+  const pressed = ui.press({ key: 'tab-memory' })
+  await terylon.clock.settle()
+  expect(terylon.calls.slice(beforeMemory).map(call => call.tool)).toContain('memory_get')
+  expect(terylon.calls.slice(beforeMemory).map(call => call.tool)).not.toContain('notices_list')
+  expect(await ui.find({ type: 'Text', text: exact('Loading the memory…') })).toBeDefined()
+  expect(await ui.find({ key: 'status-machine' })).toBeUndefined()
+
+  // UNDER DESKTOP'S 10 s BOUND ON A PRESS, a memory that does not answer ends as its own error.
   await terylon.clock.advance(8000)
   await terylon.clock.settle()
   await pressed
   expect(await ui.find({ type: 'Text', text: exact('The memory did not load') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /did not answer within 8 s/ })).toBeDefined()
-  expect(await ui.find({ key: 'status-machine' })).toBeDefined()
 
   // ITS OWN TRY AGAIN.
   terylon.hang.delete('memory_get')

@@ -17,8 +17,10 @@ export const COPY = {
   disconnected: (since: string) => `not answering since ${since}`,
   // The overview: the machine in a line, the three tiles, the goals, the folds and the 30-day line.
   overview: 'Overview',
-  // The header's way to Notices and to System, in plain words: what waits makes the button primary, never a word in it.
+  // The header's way to Notices, to Memory and to System, in plain words: what waits makes the button primary, never a
+  // word in it.
   navNotices: 'Notices',
+  navMemory: 'Memory',
   navSystem: 'System',
   needsYou: (count: number) => `Needs you · ${count}`,
   noticesNeedYou: (count: number, title: string) => `${count} ${count === 1 ? 'notice needs' : 'notices need'} you: ${title}`,
@@ -64,7 +66,7 @@ export const COPY = {
   stuckFlag: (count: number) => `${count} stuck`,
   addTask: 'Add a task',
   yourDecisions: 'Your decisions on earlier plans',
-  // More: Notices, Memory and Health on one page.
+  // The screens behind the head's buttons: Notices, Memory, and System, which is Health.
   more: 'More',
   moreNotices: 'Notices',
   moreMemory: 'Memory',
@@ -430,11 +432,13 @@ export const COPY = {
   goalQuestionsHeading: "The leader's questions",
   goalInConsole: 'Goal in the console ↗',
   // A GOAL'S SPECIFICATION (Terylon S53): the owner's .md files, attached to a new goal or revised on its screen.
-  specSection: 'Specification (optional)',
-  specHelp: 'Up to 10 files, 200,000 characters in all. Read as data, never as instructions; a file holding a secret is refused.',
+  specSection: 'Specification',
+  specLimits: 'optional · up to 10 .md files',
+  specHelp:'Up to 10 files, 200,000 characters in all. Read as data, never as instructions; a file holding a secret is refused.',
   specAttach: (name: string, size: string) => `+ ${name} · ${size}`,
   specAttached: (name: string, size: string) => `${name} · ${size}`,
   specRemove: 'Remove',
+  specInSessionFolder: "In this session's folder",
   specFolderLabel: 'Another folder',
   specFolderPlaceholder: 'a path, relative or absolute',
   specListing: 'Reading the folder…',
@@ -446,8 +450,9 @@ export const COPY = {
   specBadName: (name: string) => `${name} is not a name Terylon takes: a letter or a digit first, then letters, digits, dots, dashes or underscores, ending in .md, at most 80 characters.`,
   specUnread: (name: string, reason: string) => `${name} could not be read: ${reason}`,
   specNoneKept: 'Keep or add at least one file: a specification has 1 to 10.',
-  specInSession: 'Attach .md files in the session ↗',
-  specInSessionHelp: 'Puts a request in this chat: Claude reads the .md files you name or wrote and adds the goal with them.',
+  // New goal's card says its limits beside its heading, so the line at its foot keeps only how a file is read.
+  specDataHelp: 'Read as data, never as instructions; a file holding a secret is refused.',
+  specInSession: 'Attach files through Claude instead ↗',
   specPrompt: (title: string, ask: string, priority: string, target: string) =>
     [
       'Chci lídrovi Terylonu přidat cíl se specifikací.',

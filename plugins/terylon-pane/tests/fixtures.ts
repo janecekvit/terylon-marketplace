@@ -491,8 +491,8 @@ export async function toOverview(ui: Mounted): Promise<void> {
   await ui.press({ key: 'refresh' })
 }
 
-// A button of the overview's head: Notices, or More whose sections are on one page, from the overview.
-export async function pill(ui: Mounted, key: 'tab-bell' | 'tab-status'): Promise<void> {
+// A button of the overview's head, from the overview: Notices, Memory, or System, which is Health.
+export async function pill(ui: Mounted, key: 'tab-bell' | 'tab-memory' | 'tab-status'): Promise<void> {
   if ((await ui.find({ key })) === undefined) {
     await toRoot(ui)
   }
@@ -502,7 +502,7 @@ export async function pill(ui: Mounted, key: 'tab-bell' | 'tab-status'): Promise
 
 // WHAT WAITS ON A BUTTON OF THE HEAD: the primary variant on a graphic surface, its warning dot on the terminal;
 // undefined where the head is not drawn.
-export async function marked(ui: Mounted, key: 'tab-bell' | 'tab-status'): Promise<boolean | undefined> {
+export async function marked(ui: Mounted, key: 'tab-bell' | 'tab-memory' | 'tab-status'): Promise<boolean | undefined> {
   const button = await ui.find({ key }) as { text?: string; props?: Record<string, unknown> } | undefined
 
   return button === undefined ? undefined : button.props?.variant === 'primary' || String(button.text ?? '').startsWith('● ')
@@ -536,7 +536,7 @@ export async function foldOf(ui: { find: (query: { key: string }) => Promise<{ t
   return button.props?.plain === true ? String(button.text ?? '') : `${isFoldOpen(button) ? '▾' : '▸'} ${String(button.text ?? '')}`
 }
 
-// More, with a fold of it open: Health's Policy or Diagnostics, Notices' What the machine did, Memory's About you…
+// System, with a fold of Health open: Policy or Diagnostics.
 export async function moreWith(ui: Parameters<typeof unfold>[0] & Mounted, ...keys: string[]): Promise<void> {
   await pill(ui, 'tab-status')
 
@@ -570,7 +570,7 @@ export async function openCockpit($: Engine): Promise<void> {
 export async function openMemoryTab($: Engine & { ui: { mount: (request: never) => Promise<Mounted & { unmount: () => Promise<unknown>; find: (query: { key: string }) => Promise<{ text?: string } | undefined> }> } }): Promise<void> {
   await $.command.run({ command: 'terylon-cockpit', args: '' } as never)
   const pane = await $.ui.mount({ plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', props: PANE_PROPS, surface: 'desktop' } as never)
-  await pane.press({ key: 'tab-status' })
+  await pane.press({ key: 'tab-memory' })
 
   for (const key of ['fold-memory-owner', 'fold-memory-topics', 'fold-memory-rules']) {
     if ((await pane.find({ key })) !== undefined) {

@@ -77,7 +77,7 @@ test('NOTHING IS CALLED ON RENDER: every screen with acts drawn, and no act reac
     await ui.press({ key: 'goal-3' })
     expect(await ui.find({ key: 'act-goal-3-drop' })).toBeDefined()
     await toQueue($)
-    await pill(ui, 'tab-status')
+    await pill(ui, 'tab-memory')
     expect(await ui.find({ key: 'act-proposal-5-confirm' })).toBeDefined()
     await moreWith(ui, 'fold-policy')
     expect(await ui.find({ key: 'act-policy-edit' })).toBeDefined()
@@ -390,7 +390,7 @@ test('MEMORY: a proposal waits on the Memory tab, old text struck and new, with 
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await pill(ui, 'tab-status')
+  await pill(ui, 'tab-memory')
   expect(await ui.find({ type: 'Text', text: exact('Proposals waiting · 3') })).toBeDefined()
   expect((await ui.find({ key: 'mem-proposals' }))?.props.borderColor).toBe('merged')
   // The owner's memory holds the same entry, unstruck: the proposal's old text is the struck one.
@@ -530,7 +530,7 @@ test('AN ACT WITHOUT ITS SUBJECT\'S ID SENDS NOTHING: a proposal memory_get list
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await pill(ui, 'tab-status')
+  await pill(ui, 'tab-memory')
   expect(await ui.find({ type: 'Text', text: exact('+ No id.') })).toBeDefined()
   await ui.press({ key: 'act-proposal-0-confirm' })
   await ui.press({ key: 'act-proposal-0-drop' })

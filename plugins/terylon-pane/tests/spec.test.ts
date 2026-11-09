@@ -11,8 +11,7 @@ import { GOALS, NARROW_PANE_PROPS, PANE_PROPS, SESSION, exact, leaderRefusal, re
 
 const OVERVIEW = '# Overview\n\nKeep the budget in one file.\n'
 const NOTES = '# Notes\n\nThe bank exports CSV.\n'
-const SPEC_HELP = 'Up to 10 files, 200,000 characters in all. Read as data, never as instructions; a file holding a secret is refused.'
-const SESSION_HELP = 'Puts a request in this chat: Claude reads the .md files you name or wrote and adds the goal with them.'
+const SPEC_HELP = 'Read as data, never as instructions; a file holding a secret is refused.'
 const SECRET = 'notes.md holds what looks like a secret (an API key); remove it and send the specification again.'
 const NEWER = "Goal 92's specification is at version 3 now; read it with spec_get and revise that."
 
@@ -102,7 +101,7 @@ async function amberWords(ui: { drawn: () => Promise<unknown> }): Promise<string
 }
 
 for (const { name, surface, props } of SURFACES) {
-  test(`${name}: New goal draws Specification (optional), the session folder's .md files to attach, its helper line and B`, async ($, on) => {
+  test(`${name}: New goal draws Specification with its limits, the session folder's .md files to attach, its helper line and B`, async ($, on) => {
     const terylon = setUp(on)
     await $.session.start(SESSION)
     await terylon.clock.settle()
@@ -111,14 +110,21 @@ for (const { name, surface, props } of SURFACES) {
     await toNewGoal(ui)
 
     expect(terylon.listed).toContain('.')
-    expect(await ui.find({ type: 'Text', text: exact('Specification (optional)') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('Specification') })).toBeDefined()
+    expect((await ui.find({ type: 'Text', text: exact('optional · up to 10 .md files') }))?.props.color).toBe('subtle')
+    expect((await ui.find({ type: 'Text', text: exact("In this session's folder") }))?.props.color).toBe('subtle')
     expect((await ui.find({ key: 'spec-new-add-notes.md' }))?.props.label).toBe(`+ notes.md · ${NOTES.length} B`)
     expect((await ui.find({ key: 'spec-new-add-overview.md' }))?.props.label).toBe(`+ overview.md · ${OVERVIEW.length} B`)
     expect(await ui.find({ key: 'spec-new-add-README.txt' })).toBeUndefined()
-    expect((await ui.find({ key: 'spec-new-folder' }))?.props.label).toBe('Another folder')
+    // ANOTHER FOLDER'S LABEL stands above its field on a graphic surface, and before it on the terminal.
+    if (surface === 'terminal') {
+      expect((await ui.find({ key: 'spec-new-folder' }))?.props.label).toBe('Another folder')
+    } else {
+      expect((await ui.find({ key: 'spec-new-folder' }))?.props.label).toBeUndefined()
+      expect(await ui.find({ type: 'Text', text: exact('Another folder') })).toBeDefined()
+    }
     expect((await ui.find({ type: 'Text', text: exact(SPEC_HELP) }))?.props.color).toBe('subtle')
-    expect((await ui.find({ key: 'spec-in-session' }))?.props.label).toBe('Attach .md files in the session ↗')
-    expect((await ui.find({ type: 'Text', text: exact(SESSION_HELP) }))?.props.color).toBe('subtle')
+    expect((await ui.find({ key: 'spec-in-session' }))?.props).toMatchObject({ label: 'Attach files through Claude instead ↗', plain: true })
     // NOTHING ELSE IN THE FORM CHANGES: its fields, its pickers and Add goal are all still there.
     for (const key of ['goal-draft', 'goal-ask', 'goal-priority', 'goal-target', 'goal-add']) {
       expect(await ui.find({ key })).toBeDefined()

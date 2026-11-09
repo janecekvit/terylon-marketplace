@@ -1,4 +1,4 @@
-// THE OVERVIEW'S HEAD AND WHAT HANGS OFF IT: the way to Notices and to System, the primary button while something
+// THE OVERVIEW'S HEAD AND WHAT HANGS OFF IT: the way to Notices, to Memory and to System, the primary button while something
 // behind it waits for the owner, Notices as a screen of its own, the thin road and the fills on the graphic surfaces
 // alone.
 
@@ -16,8 +16,11 @@ const THEMES: Theme[] = ['dark', 'light']
 
 const WIDE_PROPS = { ...(PANE_PROPS as Record<string, unknown>), bodyColumns: 100 } as never
 
-// The head's two buttons, each with the word it draws.
-const HEAD_BUTTONS = [['tab-bell', 'Notices'], ['tab-status', 'System']] as const
+// The head's three buttons, each with the word it draws.
+const HEAD_BUTTONS = [['tab-bell', 'Notices'], ['tab-memory', 'Memory'], ['tab-status', 'System']] as const
+
+// THE LEADER PAUSED, a problem on Health: what lights System.
+const PAUSED_LEADER = { paused: true, pausedAt: '2026-10-11T12:05:00Z', reason: 'Host maintenance tonight.' }
 
 // The graphic surfaces, where a waiting button is the primary one: the narrow dock follows the desktop.
 const GRAPHIC = [['the desktop', PANE_PROPS], ['the narrow dock', NARROW_PANE_PROPS]] as const
@@ -31,18 +34,20 @@ function unreadable(found: readonly Ink[]): string[] {
   return THEMES.flatMap(theme => found.filter(ink => contrast(ink.color, ink.on, theme) < TEXT_RATIO).map(ink => `${theme}: "${ink.text}" in ${ink.color} on ${ink.on}`))
 }
 
-// A world with this many notices and memory proposals waiting, and Health well.
+// A world with this many notices and memory proposals waiting, and while any waits, a problem on Health: the leader
+// paused. With none, Health is well.
 function waitingWorld(on: Parameters<typeof world>[0], count: number) {
   const terylon = world(on)
 
-  terylon.answers.briefing = { ...BRIEFING, unhandledNotices: count }
+  terylon.answers.briefing = count === 0 ? { ...BRIEFING, unhandledNotices: count } : { ...BRIEFING, unhandledNotices: count, leader: PAUSED_LEADER }
+  terylon.answers.work_in_flight = { ...FLIGHT, paused: count > 0 }
   terylon.answers.notices_list = { unhandled: count, notices: [] }
   terylon.answers.memory_get = { ...MEMORY, proposals: count === 0 ? [] : (MEMORY.proposals as unknown[]).slice(0, 1) }
 
   return terylon
 }
 
-test('the head holds the status line, then Notices, System and Refresh in that order, each its plain word; the foot the 30 days alone', async ($, on) => {
+test('the head holds the status line, then Notices, Memory, System and Refresh in that order, each its plain word; the foot the 30 days alone', async ($, on) => {
   const terylon = waitingWorld(on, 2)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -54,9 +59,9 @@ test('the head holds the status line, then Notices, System and Refresh in that o
     const buttons = (await ui.findAll({ type: 'Button' })).filter(button => ['tab-bell', 'tab-memory', 'tab-status', 'refresh'].includes(String(button.key)))
 
     expect(navigation).toBeDefined()
-    expect(buttons.map(button => button.key)).toEqual(['tab-bell', 'tab-status', 'refresh'])
+    expect(buttons.map(button => button.key)).toEqual(['tab-bell', 'tab-memory', 'tab-status', 'refresh'])
     // NO GLYPH, COUNT, BADGE, ⚠ OR › in a label: what waits is the Button's variant, never a word in it.
-    expect(buttons.map(button => button.props.label)).toEqual(['Notices', 'System', 'Refresh'])
+    expect(buttons.map(button => button.props.label)).toEqual(['Notices', 'Memory', 'System', 'Refresh'])
     expect(buttons.filter(button => /[0-9⚠›🔔]/u.test(`${String(button.props.label)} ${button.text}`))).toEqual([])
     expect(await ui.find({ key: 'pills' })).toBeUndefined()
     expect((await ui.find({ key: 'overview-foot' }))?.text).toContain('Last 30 days')
@@ -108,9 +113,9 @@ for (const [key, word] of HEAD_BUTTONS) {
   }
 }
 
-test('System is primary while Health has a problem, with no memory proposal waiting; Notices stays plain', async ($, on) => {
+test('System is primary while Health has a problem, with no memory proposal waiting; Memory and Notices stay plain', async ($, on) => {
   const terylon = waitingWorld(on, 0)
-  terylon.answers.briefing = { ...BRIEFING, unhandledNotices: 0, leader: { paused: true, pausedAt: '2026-10-11T12:05:00Z', reason: 'Host maintenance tonight.' } }
+  terylon.answers.briefing = { ...BRIEFING, unhandledNotices: 0, leader: PAUSED_LEADER }
   terylon.answers.work_in_flight = { ...FLIGHT, paused: true }
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -118,25 +123,35 @@ test('System is primary while Health has a problem, with no memory proposal wait
   const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await desktop.press({ key: 'refresh' })
   expect((await desktop.find({ key: 'tab-status' }))?.props.variant).toBe('primary')
+  expect((await desktop.find({ key: 'tab-memory' }))?.props.variant).toBeUndefined()
   expect((await desktop.find({ key: 'tab-bell' }))?.props.variant).toBeUndefined()
   await desktop.unmount()
 
   const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await terminal.press({ key: 'refresh' })
   expect((await terminal.find({ key: 'tab-status' }))?.text).toBe('● System')
+  expect((await terminal.find({ key: 'tab-memory' }))?.text).toBe('Memory')
   expect((await terminal.find({ key: 'tab-bell' }))?.text).toBe('Notices')
 })
 
-test('System is primary while a memory proposal waits, with Health well and no notice; Notices stays plain', async ($, on) => {
+test('Memory is primary while a memory proposal waits, with Health well and no notice; a proposal no longer lights System', async ($, on) => {
   const terylon = waitingWorld(on, 0)
   terylon.answers.memory_get = { ...MEMORY, proposals: (MEMORY.proposals as unknown[]).slice(0, 1) }
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
-  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'refresh' })
-  expect((await ui.find({ key: 'tab-status' }))?.props.variant).toBe('primary')
-  expect((await ui.find({ key: 'tab-bell' }))?.props.variant).toBeUndefined()
+  const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await desktop.press({ key: 'refresh' })
+  expect((await desktop.find({ key: 'tab-memory' }))?.props.variant).toBe('primary')
+  expect((await desktop.find({ key: 'tab-status' }))?.props.variant).toBeUndefined()
+  expect((await desktop.find({ key: 'tab-bell' }))?.props.variant).toBeUndefined()
+  await desktop.unmount()
+
+  const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await terminal.press({ key: 'refresh' })
+  expect((await terminal.find({ key: 'tab-memory' }))?.text).toBe('● Memory')
+  expect((await terminal.find({ key: 'tab-status' }))?.text).toBe('System')
+  expect((await terminal.find({ key: 'tab-bell' }))?.text).toBe('Notices')
 })
 
 for (const count of [0, 2]) {
@@ -158,7 +173,7 @@ for (const count of [0, 2]) {
 
       expect((await ui.find({ key: 'refresh' }))?.props.variant).toBeUndefined()
       // THE HEAD'S BUTTONS SIT IN THE ROW THEMSELVES, no Box round any of them.
-      expect((navigation.children ?? []).map(child => (child as Drawn).type)).toEqual(['Button', 'Button', 'Button'])
+      expect((navigation.children ?? []).map(child => (child as Drawn).type)).toEqual(['Button', 'Button', 'Button', 'Button'])
       expect(boxesOf(head).filter(box => box.props.borderColor !== undefined || box.props.borderStyle !== undefined)).toEqual([])
       expect((await ui.findAll({ type: 'Box' })).filter(box => box.props.borderColor === AMBER || String(box.key).endsWith('-frame'))).toEqual([])
       await ui.unmount()
@@ -166,22 +181,39 @@ for (const count of [0, 2]) {
   })
 }
 
-test('System opens More at its top: Health first, then Memory, and no button opens Memory alone', async ($, on) => {
+test('System opens Health alone and Memory the memory alone, each at its top under ‹ Overview and Refresh', async ($, on) => {
   const terylon = waitingWorld(on, 1)
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'refresh' })
-  expect(await ui.find({ key: 'tab-memory' })).toBeUndefined()
   await ui.press({ key: 'tab-status' })
-  const keys = (await ui.findAll({ type: 'Box' })).map(box => String(box.key))
+  const system = (await ui.findAll({ type: 'Box' })).map(box => String(box.key))
 
-  // THE PAGE'S HEAD FIRST, then Health, then Memory: the top it is opened at is Health's.
-  expect(keys.indexOf('more-top')).toBeGreaterThanOrEqual(0)
-  expect(keys.indexOf('more-top')).toBeLessThan(keys.indexOf('more-health'))
-  expect(keys.indexOf('more-health')).toBeLessThan(keys.indexOf('more-memory'))
+  // SYSTEM: its head, then Health, and nothing of the memory.
+  expect(system.indexOf('more-top')).toBeGreaterThanOrEqual(0)
+  expect(system.indexOf('more-top')).toBeLessThan(system.indexOf('more-health'))
+  expect(system).not.toContain('more-memory')
+  expect(await ui.find({ key: 'act-proposal-5-confirm' })).toBeUndefined()
+  expect((await ui.find({ key: 'tab-queue' }))?.props.label).toBe('‹ Overview')
+  expect(await ui.find({ key: 'refresh' })).toBeDefined()
+
+  // MEMORY: its head, then the memory with its proposal, and nothing of Health.
+  await ui.press({ key: 'tab-queue' })
+  await ui.press({ key: 'tab-memory' })
+  const memory = (await ui.findAll({ type: 'Box' })).map(box => String(box.key))
+
+  expect(memory.indexOf('memory-top')).toBeGreaterThanOrEqual(0)
+  expect(memory.indexOf('memory-top')).toBeLessThan(memory.indexOf('more-memory'))
+  expect(memory).not.toContain('more-health')
+  expect(memory).not.toContain('more-top')
   expect(await ui.find({ key: 'act-proposal-5-confirm' })).toBeDefined()
+  expect(await ui.find({ key: 'act-leader-resume' })).toBeUndefined()
+  expect((await ui.find({ key: 'tab-queue' }))?.props.label).toBe('‹ Overview')
+  expect(await ui.find({ key: 'refresh' })).toBeDefined()
+  await ui.press({ key: 'tab-queue' })
+  expect(await ui.find({ key: 'tiles' })).toBeDefined()
 })
 
 for (const [name, surface, props, env] of [
@@ -325,7 +357,7 @@ test('HEALTH\'S TWO CARDS fill their columns: one width, one height, none at the
   expect((await ui.find({ key: 'status-month' }))?.props.flexGrow).toBe(1)
 })
 
-test('MORE IS HEALTH AND MEMORY: Health first, no notice on it, and an alert a line that leads to Notices', async ($, on) => {
+test('SYSTEM IS HEALTH ALONE: no memory, no notice on it, and an alert a line that leads to Notices', async ($, on) => {
   const terylon = world(on)
   const alert = { id: 117, source: 'gatus', title: 'the page is not well', body: 'its body', key: 'gatus:x', link: null, raisedAt: '2026-10-11T07:26:00Z', handledAt: null }
   terylon.answers.notices_list = { unhandled: 1, notices: [alert] }
@@ -337,7 +369,8 @@ test('MORE IS HEALTH AND MEMORY: Health first, no notice on it, and an alert a l
   await ui.press({ key: 'tab-status' })
   const keys = (await ui.findAll({ type: 'Box' })).map(box => String(box.key))
 
-  expect(keys.indexOf('more-health')).toBeLessThan(keys.indexOf('more-memory'))
+  expect(keys).toContain('more-health')
+  expect(keys).not.toContain('more-memory')
   expect(await ui.find({ key: 'notices' })).toBeUndefined()
   expect(await ui.find({ key: 'handle-117' })).toBeUndefined()
   expect(await ui.find({ key: 'problem-alert-117' })).toBeUndefined()
@@ -361,7 +394,7 @@ test('NO DEVELOPER WORD on a screen a person reads: no tool, no internal, no com
     seen.push(...(await ui.findAll({ type: 'Text' })).map(node => node.text))
   }
 
-  for (const path of [['refresh'], ['tab-bell', 'back'], ['tab-status', 'tab-queue'], ['open-plan-41', 'back'], ['story-333', 'back']]) {
+  for (const path of [['refresh'], ['tab-bell', 'back'], ['tab-status', 'tab-queue'], ['tab-memory', 'tab-queue'], ['open-plan-41', 'back'], ['story-333', 'back']]) {
     await ui.press({ key: path[0] ?? '' })
     await look()
 

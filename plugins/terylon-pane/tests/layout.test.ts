@@ -55,7 +55,7 @@ test('everything sits in a card: no plan, no memory, no proposal is a card with 
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await pill(ui, 'tab-status')
+  await pill(ui, 'tab-memory')
 
   for (const heading of ['Memory', 'Proposals waiting']) {
     expect((await ui.find({ type: 'Text', text: exact(heading) }))?.props.bold).toBe(true)

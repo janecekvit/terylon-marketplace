@@ -78,7 +78,7 @@ async function walk(ui: { press: (query: { key: string }) => Promise<unknown>; f
   await press('tab-bell')
   await press('handle-3')
   await backHome()
-  await press('tab-status')
+  await press('tab-memory')
   await press('fold-memory-owner')
   await press('act-proposal-5-confirm')
   await backHome()
@@ -137,7 +137,7 @@ for (const [name, surface, props] of [['desktop', 'desktop', PANE_PROPS], ['narr
     const ui = await $.ui.mount({ ...PANE, surface, props })
     const pressed = await walk(ui as never)
 
-    expect(pressed).toEqual(expect.arrayContaining(['tab-bell', 'handle-3', 'tab-status', 'act-proposal-5-confirm', 'goal-71', 'open-plan-58', 'act-plan-58-approve', 'open-story-205', 'act-story-205-accept', 'merge-act-204', 'answer-9', 'answer-send']))
+    expect(pressed).toEqual(expect.arrayContaining(['tab-bell', 'handle-3', 'tab-memory', 'fold-memory-owner', 'tab-status', 'act-proposal-5-confirm', 'goal-71', 'open-plan-58', 'act-plan-58-approve', 'open-story-205', 'act-story-205-accept', 'merge-act-204', 'answer-9', 'answer-send']))
     expect(terylon.calls.slice(calls)).toEqual([])
     expect(store.touched).toEqual([])
     expect(terylon.prompts).toHaveLength(prompts)
@@ -219,6 +219,9 @@ test('CLEARLY MARKED: the head, the band, the status line and every other screen
   expect(await ui.find({ type: 'Text', text: exact('Terylon · Test mode') })).toBeDefined()
   await ui.press({ key: 'tab-status' })
   expect(await ui.find({ type: 'Text', text: exact('Test mode') })).toBeDefined()
+  await ui.press({ key: 'tab-queue' })
+  await ui.press({ key: 'tab-memory' })
+  expect(await ui.find({ type: 'Text', text: exact('Test mode') })).toBeDefined()
 
   const band = await $.ui.mount({ plugin: 'terylon-pane', surface: 'desktop', component: 'AbovePrompt', props: { hasSurvey: false } as never })
   expect(await band.find({ type: 'Text', text: /Test mode/ })).toBeDefined()
@@ -275,10 +278,10 @@ test('THE ACTS WORK IN MEMORY: Approve moves its goal to Build, Accept moves the
   expect(await ui.find({ type: 'Text', text: exact('Needs you · 1') })).toBeDefined()
   await ui.press({ key: 'back' })
 
-  await ui.press({ key: 'tab-status' })
+  await ui.press({ key: 'tab-memory' })
   await ui.press({ key: 'act-proposal-5-drop' })
   await ui.press({ key: 'tab-queue' })
-  await ui.press({ key: 'tab-status' })
+  await ui.press({ key: 'tab-memory' })
   expect(await ui.find({ key: 'act-proposal-5-drop' })).toBeUndefined()
   await ui.press({ key: 'tab-queue' })
 

@@ -163,6 +163,8 @@ test('no card is filled, on any screen: the stroke carries the warning, the pane
   await noneFilled()
   await pill(ui, 'tab-status')
   await noneFilled()
+  await pill(ui, 'tab-memory')
+  await noneFilled()
 })
 
 // THE OWNER'S ACTS (S27) on the cards that wait or warn: a blocked story's, a refusal's, Claude Code's refusal, the
@@ -192,7 +194,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
     terylon.mode.server = 'up'
     await look()
     await ui.press({ key: 'back' })
-    await pill(ui, 'tab-status')
+    await pill(ui, 'tab-memory')
     await look()
 
     expect(seen.map(ink => ink.text)).toEqual(expect.arrayContaining(['Blocked', 'Abandon…', '✗ Refused (409)', 'Story 329 is running; only a blocked story is unblocked.', '⚠', "Claude Code refused the pane's call to story_unblock", 'Old text.', 'New text.']))
@@ -245,7 +247,7 @@ const WALKS: Walked[] = [
       terylon.answers.briefing = { ...BRIEFING, questionsOpen: [...BRIEFING.questionsOpen, GOAL_QUESTION], unhandledNotices: 2 }
       terylon.answers.work_in_flight = { ...FLIGHT, stories: FLIGHT.stories.map(story => (story.id === 333 ? { ...story, stuck: { since: '2026-10-11T15:20:00Z', reason: 'no progress' } } : story)) }
     },
-    paths: [['question-9'], ['story-333'], ['merge-327', 'open-story-327'], ['question-606'], ['refresh', 'goal-3'], ['refresh', 'goal-new-open'], ['tab-bell'], ['tab-status', 'fold-memory-owner', 'fold-policy', 'fold-diagnostics']],
+    paths: [['question-9'], ['story-333'], ['merge-327', 'open-story-327'], ['question-606'], ['refresh', 'goal-3'], ['refresh', 'goal-new-open'], ['tab-bell'], ['tab-memory', 'fold-memory-owner'], ['tab-status', 'fold-policy', 'fold-diagnostics']],
     words: [/^\(1 stuck\)$/, /^question 2 of 2$/, /^! files outside the declaration$/],
   },
   {

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cockpit: new goal</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#8ab4f8;text-decoration:none}a:hover{color:#b3cdfa}
+</style>
+</helmet>
+<div style="width: 960px; height: 900px; box-sizing: border-box; padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; background: #1b1b1a; color: #ecebe6; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; line-height: 1.4">
+
+  <div style="display: flex; align-items: center; gap: 12px">
+    <a href="Main.dc.html" style="color: #a3a29b">‹ Overview</a>
+    <div style="flex-grow: 1"></div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 4px">
+    <div style="font-size: 20px; font-weight: 600">New goal</div>
+    <div style="color: #a3a29b">A goal is a direction. The leader asks its questions first, then makes a plan you approve. A single change is a task under a goal.</div>
+  </div>
+
+  <div style="background: #232322; border: 1px solid #383836; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px">
+    <label style="display: flex; flex-direction: column; gap: 5px">
+      <span style="font-weight: 600">Title</span>
+      <input placeholder="Household budget" style="font: inherit; background: #1b1b1a; color: #ecebe6; border: 1px solid #4a4a47; border-radius: 6px; padding: 7px 10px">
+      <span style="color: #a3a29b; font-size: 12px">A short name, up to 200 characters.</span>
+    </label>
+    <label style="display: flex; flex-direction: column; gap: 5px">
+      <span style="font-weight: 600">What should it do?</span>
+      <textarea rows="4" placeholder="A monthly sheet of what we spend, by category, from the bank's export." style="font: inherit; background: #1b1b1a; color: #ecebe6; border: 1px solid #4a4a47; border-radius: 6px; padding: 7px 10px; resize: none"></textarea>
+      <span style="color: #a3a29b; font-size: 12px">In your own words, as long as you need.</span>
+    </label>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+      <label style="display: flex; flex-direction: column; gap: 5px">
+        <span style="font-weight: 600">Priority</span>
+        <select style="font: inherit; background: #1b1b1a; color: #ecebe6; border: 1px solid #4a4a47; border-radius: 6px; padding: 6px 8px"><option>2 · normal</option></select>
+      </label>
+      <label style="display: flex; flex-direction: column; gap: 5px">
+        <span style="font-weight: 600">Where</span>
+        <select style="font: inherit; background: #1b1b1a; color: #ecebe6; border: 1px solid #4a4a47; border-radius: 6px; padding: 6px 8px"><option>Terylon's own list</option></select>
+      </label>
+    </div>
+  </div>
+
+  <div style="background: #232322; border: 1px solid #383836; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; justify-content: space-between; align-items: baseline"><div style="font-weight: 600">Specification</div><div style="color: #a3a29b">optional · up to 10 .md files</div></div>
+    <div style="display: flex; justify-content: space-between; align-items: center; border: 1px solid #4a4a47; border-radius: 8px; padding: 6px 6px 6px 10px">
+      <span>README.md · 17.7 KB</span>
+      <button style="background: none; border: 0; padding: 2px 8px; color: #a3a29b; font: inherit">Remove</button>
+    </div>
+    <div style="color: #a3a29b; font-size: 12px">In this session's folder</div>
+    <div style="display: flex; flex-wrap: wrap; gap: 8px">
+      <button style="background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 5px 12px; font: inherit">+ CLAUDE.md · 30.0 KB</button>
+      <button style="background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 5px 12px; font: inherit">+ CONTRIBUTING.md · 3.3 KB</button>
+      <button style="background: #2c2c2a; color: #ecebe6; border: 0; border-radius: 6px; padding: 5px 12px; font: inherit">+ SECURITY.md · 1.2 KB</button>
+    </div>
+    <label style="display: flex; flex-direction: column; gap: 5px">
+      <span style="color: #a3a29b; font-size: 12px">Another folder</span>
+      <input placeholder="a path, relative or absolute" style="font: inherit; background: #1b1b1a; color: #ecebe6; border: 1px solid #4a4a47; border-radius: 6px; padding: 7px 10px">
+    </label>
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px">
+      <span style="color: #a3a29b; font-size: 12px">Read as data, never as instructions; a file holding a secret is refused.</span>
+      <button style="background: none; border: 0; padding: 0; color: #8ab4f8; font: inherit">Attach files through Claude instead ↗</button>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 8px; justify-content: flex-end">
+    <a href="Main.dc.html" style="background: #2c2c2a; color: #ecebe6; border-radius: 6px; padding: 6px 14px">Cancel</a>
+    <button style="background: #ecebe6; color: #1b1b1a; border: 0; border-radius: 6px; padding: 6px 16px; font: inherit; font-weight: 600">Add goal</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

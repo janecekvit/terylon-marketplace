@@ -6,11 +6,13 @@
 
 | Board | Draws |
 |---|---|
-| `Main.dc.html` | the overview: the head with *Notices* and *System*, each drawn light as the primary button while something waits, and *Refresh*, never primary; three tiles, *Waiting for you*, a card and a road per goal, the folds as buttons of their name and count, an open one at full strength and a shut one dimmer, each open fold a card of its own under them (*Done today 1* drawn open), the 30-day line |
+| `Main.dc.html` | the overview: the head with *Notices*, *Memory* and *System*, each drawn light as the primary button while something waits, and *Refresh*, never primary; three tiles, *Waiting for you*, a card and a road per goal, the folds as buttons of their name and count, an open one at full strength and a shut one dimmer, each open fold a card of its own under them (*Done today 1* drawn open), the 30-day line |
 | `Notices.dc.html` | Notices, a screen of its own with *‹ Overview* and *Refresh* at its head: what needs you, each with *Mark handled*, and what the machine did |
 | `Goal.dc.html` | a goal: its road and what next, a plan at the gate, stories, the specification |
 | `Story.dc.html` | a story: its phases as a road, what is working now, the question, criteria, what happened |
-| `More.dc.html` | Health and Memory, where a notice is one line that leads to Notices |
+| `Memory.dc.html` | Memory, a screen of its own with *‹ Overview* and *Refresh* at its head: the proposals waiting with *Confirm* and *Drop*, *About you* and *Topics* with their cards, *Edit*, *Remove* and *Add entry* |
+| `NewGoal.dc.html` | New goal, a screen of its own with *‹ Overview* at its head: its heading and the one line on what a goal is and what a task is; a card of *Title* and *What should it do?*, each label above its field, then *Priority* and *Where* side by side; a card of the *Specification*: the attached files, *In this session's folder*, *Another folder* and *Attach files through Claude instead ↗*; *Cancel* and *Add goal* at its foot |
+| `More.dc.html` | System: Health alone, where a notice is one line that leads to Notices |
 | `Terminal.dc.html` | the terminal's lesser form, left half; the right half is the option that was turned down |
 | `TestMode.dc.html` | what `/terylon-cockpit test` shows, does and does not do |
 

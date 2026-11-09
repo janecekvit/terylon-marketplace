@@ -1236,8 +1236,33 @@ const MUTATIONS = [
     {
         name: "the new goal's ask loses its helper line",
         file: "hooks/register.tsx",
-        find: "            <Text color=\"subtle\" size=\"footnote\">{COPY.goalAskHelp}</Text>,\n",
+        find: "                <Text color=\"subtle\" size=\"footnote\">{COPY.goalAskHelp}</Text>\n",
         replace: "",
+    },
+    // NEW GOAL AS ITS BOARD: labels above the fields, the pickers side by side, Add goal primary, Cancel to the overview.
+    {
+        name: "the new goal's labels are drawn before their fields again",
+        file: "hooks/register.tsx",
+        find: "      const labelBefore = (label: string) => (look.isGraphic ? {} : { label })\n",
+        replace: "      const labelBefore = (label: string) => ({ label })\n",
+    },
+    {
+        name: "Priority and Where stack on the desktop too",
+        file: "hooks/register.tsx",
+        find: "      const isSideBySide = look.isGraphic && !look.isNarrow\n      const goalPickers = [\n",
+        replace: "      const isSideBySide = false\n      const goalPickers = [\n",
+    },
+    {
+        name: "Add goal is no longer the primary button",
+        file: "hooks/register.tsx",
+        find: "<Button key=\"goal-add\" label={COPY.addGoal} variant=\"primary\" onPress={() => addGoal($)} />",
+        replace: "<Button key=\"goal-add\" label={COPY.addGoal} onPress={() => addGoal($)} />",
+    },
+    {
+        name: "the new goal's Cancel no longer goes back to the overview",
+        file: "hooks/register.tsx",
+        find: "<Button key=\"goal-cancel\" label={COPY.cancel} onPress={() => show($, QUEUE, true)} />",
+        replace: "<Button key=\"goal-cancel\" label={COPY.cancel} onPress={() => undefined} />",
     },
     {
         name: "an epoch events_since refused no longer starts the pane over",
@@ -1454,16 +1479,16 @@ const MUTATIONS = [
         replace: "{ value: metricCost(metrics, basis), label: COPY.metricCost }",
     },
     {
-        name: "More reads its sources one after another, the memory first",
+        name: "System reads the memory again",
         file: "hooks/register.tsx",
-        find: "  await Promise.all([\n    loadBell($),\n    bounded($, 'the memory', () => openMemory($), sentence => update($, memory, (current: PaneMemory): PaneMemory => ({ ...EMPTY_MEMORY, ...current, phase: 'error', sentence }))),\n  ])\n",
-        replace: "  await bounded($, 'the memory', () => openMemory($), sentence => update($, memory, (current: PaneMemory): PaneMemory => ({ ...EMPTY_MEMORY, ...current, phase: 'error', sentence })))\n  await loadBell($)\n",
+        find: "async function loadMore($: EngineInterface): Promise<void> {\n  await loadBell($)\n}\n",
+        replace: "async function loadMore($: EngineInterface): Promise<void> {\n  await Promise.all([loadBell($), openMemory($)])\n}\n",
     },
     {
-        name: "More's memory is no longer bounded",
+        name: "Memory's read is no longer bounded",
         file: "hooks/register.tsx",
-        find: "    bounded($, 'the memory', () => openMemory($), sentence => update($, memory, (current: PaneMemory): PaneMemory => ({ ...EMPTY_MEMORY, ...current, phase: 'error', sentence }))),\n",
-        replace: "    openMemory($),\n",
+        find: "  await bounded($, 'the memory', () => openMemory($), sentence => update($, memory, (current: PaneMemory): PaneMemory => ({ ...EMPTY_MEMORY, ...current, phase: 'error', sentence })))\n",
+        replace: "  await openMemory($)\n",
     },
     {
         name: "the overview's goals no longer follow the poll",
@@ -1490,10 +1515,34 @@ const MUTATIONS = [
         replace: "  await readOverviewFooter($)\n",
     },
     {
-        name: "a button of the overview's head no longer opens More",
+        name: "a button of the overview's head no longer opens System",
         file: "hooks/register.tsx",
-        find: "        {navButton('tab-status', COPY.navSystem, isMemoryWaiting || hasProblem(current, drawingAsked.off), () => openMore($))}\n",
-        replace: "        {navButton('tab-status', COPY.navSystem, isMemoryWaiting || hasProblem(current, drawingAsked.off), () => undefined)}\n",
+        find: "        {navButton('tab-status', COPY.navSystem, hasProblem(current, drawingAsked.off), () => openMore($))}\n",
+        replace: "        {navButton('tab-status', COPY.navSystem, hasProblem(current, drawingAsked.off), () => undefined)}\n",
+    },
+    {
+        name: "a memory proposal lights System again",
+        file: "hooks/register.tsx",
+        find: "        {navButton('tab-status', COPY.navSystem, hasProblem(current, drawingAsked.off), () => openMore($))}\n",
+        replace: "        {navButton('tab-status', COPY.navSystem, isMemoryWaiting || hasProblem(current, drawingAsked.off), () => openMore($))}\n",
+    },
+    {
+        name: "the head's Memory no longer opens the memory",
+        file: "hooks/register.tsx",
+        find: "        {navButton('tab-memory', COPY.navMemory, isMemoryWaiting, () => openMemoryScreen($))}\n",
+        replace: "        {navButton('tab-memory', COPY.navMemory, isMemoryWaiting, () => undefined)}\n",
+    },
+    {
+        name: "the head's Memory no longer lights while a proposal waits",
+        file: "hooks/register.tsx",
+        find: "        {navButton('tab-memory', COPY.navMemory, isMemoryWaiting, () => openMemoryScreen($))}\n",
+        replace: "        {navButton('tab-memory', COPY.navMemory, false, () => openMemoryScreen($))}\n",
+    },
+    {
+        name: "System draws the memory under Health again",
+        file: "hooks/register.tsx",
+        find: "      const healthPart = await healthSection()\n",
+        replace: "      const healthPart = [await healthSection(), await part('memory', memorySection)]\n",
     },
     {
         name: "a goal's screen no longer says What next",

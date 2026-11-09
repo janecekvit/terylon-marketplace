@@ -86,8 +86,8 @@ for (const [surface, props] of GRAPHIC) {
     await ui.press({ key: 'goals-show-closed' })
     expectOpen(await ui.find({ key: 'goals-show-closed' }), 'History 1')
 
-    // SYSTEM'S ABOUT YOU AND TOPICS, the same Button.
-    await pill(ui, 'tab-status')
+    // MEMORY'S ABOUT YOU AND TOPICS, the same Button.
+    await pill(ui, 'tab-memory')
     expectShut(await ui.find({ key: 'fold-memory-owner' }), 'About you 2')
     expectShut(await ui.find({ key: 'fold-memory-topics' }), 'Topics 1')
     await ui.press({ key: 'fold-memory-owner' })
@@ -113,7 +113,7 @@ test('terminal: a fold keeps its lesser form, a plain Button with ▸ shut and �
   await ui.press({ key: 'fold-done' })
   expect((await ui.find({ key: 'fold-done' }))?.text).toBe('▾ Done today 1')
 
-  await pill(ui, 'tab-status')
+  await pill(ui, 'tab-memory')
   expect((await ui.find({ key: 'fold-memory-owner' }))?.text).toBe('▸ About you 2')
   await ui.press({ key: 'fold-memory-owner' })
   expect((await ui.find({ key: 'fold-memory-owner' }))?.text).toBe('▾ About you 2')
@@ -176,13 +176,13 @@ for (const surface of ['desktop', 'terminal'] as const) {
   })
 }
 
-test("System's About you is unchanged: each file its own round-bordered card with its heading, its entries and its acts", async ($, on) => {
+test("Memory's About you is unchanged: each file its own round-bordered card with its heading, its entries and its acts", async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await pill(ui, 'tab-status')
+  await pill(ui, 'tab-memory')
   await ui.press({ key: 'fold-memory-owner' })
 
   const tree = await ui.drawn()
