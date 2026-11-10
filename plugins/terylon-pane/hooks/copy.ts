@@ -113,7 +113,7 @@ export const COPY = {
   statusSince: (time: string) => `since ${time}`,
   statusLastAnswer: (time: string | null) => (time === null ? 'no answer yet' : `last answer at ${time}`),
   statusSlotsLine: (used: number, slots: number) => `${used} of ${slots} running`,
-  statusToday: (running: string, day: string | null) => (day === null ? `${running} today, no daily limit set` : `${running} of the ${day} daily limit today`),
+  statusToday: (running: string, day: string | null) => (day === null ? `${running} today` : `${running} of the ${day} daily limit today`),
   statusProblems: 'Problems',
   howToFix: 'How to fix',
   fixStep: (index: number, text: string) => `${index}. ${text}`,
