@@ -146,7 +146,7 @@ type Reset = { from: number; head: number | null; refused: string | null }
 export const PANE = 'terylon'
 
 // The mod's version, said on Health: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.22.0'
+export const MOD_VERSION = '1.22.1'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000

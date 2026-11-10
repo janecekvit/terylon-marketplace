@@ -267,7 +267,7 @@ test('Health says the machine in one word, in its colour, its times in tabular d
 
     expect(word?.props).toMatchObject({ weight: 'semibold', color: 'success' })
     expect((await ui.find({ type: 'Text', text: /^\s*last answer at / }))?.props.tabular).toBe(true)
-    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.22.0') }))?.props.mono).toBe(true)
+    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.22.1') }))?.props.mono).toBe(true)
     await ui.unmount()
   }
 })
