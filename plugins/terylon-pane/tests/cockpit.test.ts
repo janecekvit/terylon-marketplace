@@ -9,7 +9,7 @@ import { test, expect } from 'claude-code/testing'
 import { goalItems, planItems, storyView } from '../hooks/queue'
 import * as words from '../hooks/words'
 
-import { BASE, BRIEFING, FLIGHT, HOUR, NARROW_PANE_PROPS, PANE_PROPS, SESSION, STORIES, STORY_327, WORLD_NOW, bandProps, chipOf, events, exact, lateOnTheLocalDayOf, storyMoved, world, pill, toOverview, unfold } from './fixtures'
+import { BASE, BRIEFING, FLIGHT, HOUR, NARROW_PANE_PROPS, PANE_PROPS, PLANS, SESSION, STORIES, STORY_327, WORLD_NOW, bandProps, chipOf, events, exact, lateOnTheLocalDayOf, moreWith, storyMoved, world, pill, toOverview, unfold } from './fixtures'
 import { LIVE_GOAL, LIVE_PLAN, LIVE_STORY, REF_BRIEFING, REF_FLIGHT, REF_GOAL_3, REF_PLANS, REF_STORIES, REF_STORY_327, REF_STORY_333, SETUP_BRIEFING, SETUP_FLIGHT, SETUP_STORIES } from './shapes'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon' } as const
@@ -308,6 +308,40 @@ test('with a cost known the catch-up still says it in dollars, and an estimate o
   await ui.press({ key: 'plan-41' })
   expect(wordsOf(await ui.drawn()).filter(word => /~\$0\b/.test(word))).toEqual([])
   expect(await ui.find({ type: 'Text', text: exact('to approve') })).toBeDefined()
+})
+
+test('A TERYLON THAT ESTIMATES NOTHING: a plan and its stories with no estimateUsd draw no "~$" and still wait to approve', async ($, on) => {
+  const terylon = world(on)
+  const withoutEstimate = <T extends object>(item: T): T => Object.fromEntries(Object.entries(item).filter(([key]) => key !== 'estimateUsd')) as T
+  terylon.answers.briefing = { ...BRIEFING, plansWaiting: BRIEFING.plansWaiting.map(withoutEstimate) }
+  terylon.answers.plans_list = { ...PLANS, plans: PLANS.plans.map(plan => ({ ...withoutEstimate(plan), stories: plan.stories.map(withoutEstimate) })) }
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  const ui = await $.ui.mount({ ...PANE, props: PANE_PROPS, surface: 'desktop' })
+  await ui.press({ key: 'plan-41' })
+  expect(wordsOf(await ui.drawn()).filter(word => word.includes('~$'))).toEqual([])
+  expect(await ui.find({ type: 'Text', text: exact('to approve') })).toBeDefined()
+})
+
+test('A TERYLON WITH NO BUDGETS: the status line, a story, System and its Policy say what was spent, never against a limit', async ($, on) => {
+  const terylon = world(on)
+  terylon.answers.policy_get = { slots: 4 }
+  terylon.answers.work_in_flight = { ...FLIGHT, stories: FLIGHT.stories.map(story => Object.fromEntries(Object.entries(story).filter(([key]) => key !== 'budgetUsd'))) }
+  await $.session.start(SESSION)
+  await terylon.clock.settle()
+
+  expect(terylon.statuses[terylon.statuses.length - 1]).toBe('Terylon ● all well · $5.50 today · 2/4 slots')
+
+  const ui = await $.ui.mount({ ...PANE, props: PANE_PROPS, surface: 'desktop' })
+  const limitWords = (drawn: unknown) => wordsOf(drawn).filter(word => /budget|limit|of the story's|of \$\d/i.test(word))
+  await ui.press({ key: 'story-333' })
+  expect(await ui.find({ type: 'Text', text: /^\$2\.10\b/ })).toBeDefined()
+  expect(limitWords(await ui.drawn())).toEqual([])
+
+  await moreWith(ui, 'fold-policy')
+  expect(await ui.find({ key: 'status-policy' })).toBeDefined()
+  expect(limitWords(await ui.drawn())).toEqual([])
 })
 
 // ------------------------------------------------------------------------------------------------- the host proof

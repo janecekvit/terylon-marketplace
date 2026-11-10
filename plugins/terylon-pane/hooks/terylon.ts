@@ -2,14 +2,14 @@
 // The pane reads, adds a task or a goal, answers the leader's question, proposes a memory edit and marks a
 // notice handled, and it takes the owner's acts Terylon PR 228 made owner writes (S27, #27): a plan approved or
 // sent back, a story returned, unblocked, abandoned, stopped or accepted, the leader paused or resumed, a goal
-// dropped, a memory proposal confirmed or dropped, the policy saved. It never merges: merge is the one gate,
-// confirmed by the person's passkey in the console, and the pane links there.
+// dropped, a memory proposal confirmed or dropped, the policy saved. It never merges: merge is the one gate, the
+// person's in the console, and the pane links there.
 
 // The server `terylon` as the terylon-os plugin registers it (measured on 2.1.296), then as a session that
 // added it by hand names it.
 export const SERVER_CANDIDATES = ['plugin:terylon-os:terylon', 'terylon'] as const
 
-// The owner's acts, each taken on its subject's card on the owner's press, in one click and with no passkey: every
+// The owner's acts, each taken on its subject's card on the owner's press, in one click: every
 // former gate but merge, which Terylon PR 228 made an owner write. Copied from Terylon's tool table on main after
 // that PR (McpToolTable.cs), never derived; tests/terylon-pane/tool-table.test.js holds this list to the copy.
 export const OWNER_ACTS: readonly string[] = [
@@ -44,7 +44,6 @@ export const PANE_TOOLS: ReadonlySet<string> = new Set([
   'plans_list',
   'notices_list',
   'leader_status',
-  'metrics',
   'memory_get',
   'tasks_add',
   'goal_add',
@@ -57,8 +56,8 @@ export const PANE_TOOLS: ReadonlySet<string> = new Set([
   ...OWNER_ACTS,
 ])
 
-// The owner's one gate (Terylon main after PR 228, McpGates.cs): never the pane's, whatever it is asked. The person
-// confirms a merge with their passkey in the console; the pane shows "Merge in the console ↗".
+// The owner's one gate: never the pane's, whatever it is asked, and refused by name, so a Terylon that still offers it is
+// refused too. The person merges in the console; the pane shows "Merge in the console ↗".
 export const GATE_TOOLS: readonly string[] = ['story_merge']
 
 // A server the session does not have, in the words $.mcp.call rejects with.

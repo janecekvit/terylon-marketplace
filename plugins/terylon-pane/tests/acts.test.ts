@@ -215,7 +215,7 @@ test('STORY, VERIFIED IN A REPOSITORY: merge is only ever the console\'s link; R
     await openStory($, ui, 327)
     expect((await ui.find({ type: 'Link', text: 'Merge in the console ↗' }))?.props.href).toBe('https://terylon.example.ts.net/?view=merge&story=327')
     expect(await ui.find({ type: 'Button', text: /Merge/ })).toBeUndefined()
-    expect(await ui.find({ type: 'Text', text: exact('Merge is the one gate: your passkey confirms it in the console, at exactly commit 4be21c0. The pane never merges.') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('Merge is the one gate: you make it in the console, on exactly commit 4be21c0. The pane never merges.') })).toBeDefined()
     expect(await ui.find({ key: 'act-story-327-accept' })).toBeUndefined()
     await ui.unmount()
   }

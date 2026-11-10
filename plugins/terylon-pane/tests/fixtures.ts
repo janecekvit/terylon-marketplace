@@ -27,7 +27,7 @@ export function exact(text: string): RegExp {
 }
 
 // The owner's one gate since Terylon PR 228, spelled out here rather than imported, so a mutation of the mod's own
-// list cannot hide it: merge, confirmed with the person's passkey in the console.
+// list cannot hide it: merge, the person's in the console.
 export const GATES = ['story_merge']
 
 // The former gates Terylon PR 228 made owner writes, which the pane takes on its subject's card (S27, #27).
@@ -180,7 +180,6 @@ export const NOTICES = {
   ],
 }
 
-export const METRICS = { since: '2026-09-12T16:39:53Z', stories: 43, opened: 1, merged: 0, acceptanceRate: 0, costPerStoryUsd: 1.1, rows: [] }
 
 export const POLICY = { slots: 4, dayBudgetUsd: 20 }
 
@@ -287,7 +286,6 @@ export function world(on: On, options: { store?: Record<string, unknown> | null;
       plans_list: PLANS,
       notices_list: NOTICES,
       leader_status: { paused: null },
-      metrics: METRICS,
       story_get: (args: Record<string, unknown>) => (args.story === 327 ? STORY_327 : args.story === 333 ? STORY_333 : { id: args.story, goal: 3, title: 'Direct dispatch', state: 'running', pullRequest: { branch: 'feat/direct-dispatch' }, timeline: [] }),
       question_answer: { accepted: true, sentence: 'Answered; the leader takes it from here.', commandId: 'c3', subjectId: 11 },
       goal_add: (args: Record<string, unknown>) => ({ accepted: true, sentence: `Goal 12 is set: ${String(args.title)}`, commandId: 'c4', subjectId: 12 }),

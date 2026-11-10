@@ -20,9 +20,11 @@ const PROMPT_TO_SKILL = {
     "story": "show-story",
 };
 
-// The one gate Terylon's /mcp exposes (Terylon PR 228): over MCP it never applies anything, it answers pending with the
-// console's merge-sheet link, and the owner confirms the exact commit with the passkey in the console.
-const GATE = ["story_merge"];
+// Merge, the one gate, is the console's alone: no text names a merge tool to call, nor a passkey, which Terylon no longer has.
+const MERGE_TOOL = "story_merge";
+
+// How a text says where the merge is made.
+const MERGE_IN_CONSOLE = /merge[sd]?\b[^.;]*\bin (the|Terylon's) console|in the console[^.;]*\bmerge/i;
 
 // The owner's acts: writes that are not gates and show no form, which Claude in a session calls only on the owner's word.
 const OWNER_ACTS = ["plan_approve", "plan_rethink", "story_return", "story_unblock", "story_abandon", "story_stop", "story_accept", "leader_pause", "leader_resume", "goal_drop", "memory_confirm", "memory_drop", "policy_save"];
@@ -36,8 +38,8 @@ const FORM_PATTERN = /\bform\b/i;
 // Splits a text into sentences and clauses, so a gate named in one clause is not read into its neighbour.
 const CLAUSE_SEPARATOR = /(?<=[.;!?])\s+|\n+/;
 
-// The problems in a text that names Terylon's tools: an owner's act called a gate, a form, the gate without its passkey
-// and console, an owner's act without the owner's word. Pure, so the planted texts below can show each one caught.
+// The problems in a text that names Terylon's tools: an owner's act called a gate, a form, a merge tool or a passkey,
+// an owner's act without the owner's word. Pure, so the planted texts below can show each one caught.
 function gateProblemsIn(text)
 {
     const problems = [];
@@ -63,9 +65,14 @@ function gateProblemsIn(text)
         problems.push(`names ${namedActs.join(", ")} without saying it is called only on the owner's word`);
     }
 
-    if (GATE.some(gate => text.includes(gate)) && !/passkey in the console/i.test(text))
+    if (text.includes(MERGE_TOOL))
     {
-        problems.push("names story_merge without the passkey in the console");
+        problems.push("names story_merge, which no text calls: merge is the console's");
+    }
+
+    if (/passkey/i.test(text))
+    {
+        problems.push("names a passkey, which Terylon no longer has");
     }
 
     return problems;
@@ -105,7 +112,7 @@ test("every prompt has exactly one skill, and no skill mirrors a prompt that doe
     }
 });
 
-test("merge is the one gate, confirmed with the passkey in the console; every other act is the owner's, taken only on their word", () =>
+test("merge is the one gate, the console's alone; every other act is the owner's, taken only on their word", () =>
 {
     for (const skill of Object.values(PROMPT_TO_SKILL))
     {
@@ -115,13 +122,13 @@ test("merge is the one gate, confirmed with the passkey in the console; every ot
     assert.deepEqual(gateProblemsIn(fs.readFileSync(path.join(PLUGIN_ROOT, "README.md"), "utf8")), [], "README.md");
 });
 
-test("the merge-gate skill still takes story_merge through the one gate", () =>
+test("the merge-gate skill leaves the merge to the owner in the console", () =>
 {
     const text = readSkill("merge-gate");
 
-    assert.ok(text.includes("story_merge"));
     assert.match(text, /merge is the one gate/i);
-    assert.match(text, /I confirm the exact commit with my passkey in the console/);
+    assert.match(text, MERGE_IN_CONSOLE);
+    assert.match(text, /I merge in the console, on the commit with the green verdict/);
 });
 
 test("teeth: an owner's act called a gate confirmed in Terylon's form is caught", () =>
@@ -134,14 +141,15 @@ test("teeth: an owner's act called a gate confirmed in Terylon's form is caught"
     assert.ok(problems.some(problem => problem.includes("only on the owner's word")), problems.join("; "));
 });
 
-test("teeth: story_merge without the passkey in the console is caught", () =>
+test("teeth: a merge tool to call, or a passkey, is caught", () =>
 {
-    assert.deepEqual(gateProblemsIn("Then call story_merge; the person confirms it."), ["names story_merge without the passkey in the console"]);
+    assert.deepEqual(gateProblemsIn("Then call story_merge; the person confirms it."), ["names story_merge, which no text calls: merge is the console's"]);
+    assert.deepEqual(gateProblemsIn("The owner confirms the merge with the passkey."), ["names a passkey, which Terylon no longer has"]);
 });
 
 test("teeth: a clean text passes", () =>
 {
-    const clean = "Offer `story_unblock`, and call it only on my word; merge is the one gate. `story_merge` answers pending with a link, and I confirm with my passkey in the console.";
+    const clean = "Offer `story_unblock`, and call it only on my word; merge is the one gate, and I merge in the console.";
 
     assert.deepEqual(gateProblemsIn(clean), []);
 });

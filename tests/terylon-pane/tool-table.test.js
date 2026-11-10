@@ -21,7 +21,7 @@ const TABLE = JSON.parse(fs.readFileSync(path.join(__dirname, "mcp-tool-table.js
 // How an allow rule names a tool of the terylon-os plugin's server.
 const PREFIX = "mcp__plugin_terylon-os_terylon__";
 
-// The one gate: the person's passkey confirms it in the console.
+// The one gate: the person merges in the console, and the pane refuses it by name.
 const MERGE = "story_merge";
 
 // A tool name inside a list literal: 'plan_approve'.
@@ -136,6 +136,15 @@ test("the pane's tools are the table's reads and writes it uses, and never a gat
     {
         assert.ok(paneTools.includes(act), `the owner act ${act} is not among the pane's tools`);
     }
+});
+
+test("the pane calls no tool the simplified Terylon removes, so it works against Terylon before and after", () =>
+{
+    const { paneTools } = paneLists();
+    const removed = TABLE.removedBySimplification.tools;
+
+    assert.ok(removed.includes("metrics"), "the copy of the removed tools no longer names metrics");
+    assert.deepEqual(paneTools.filter(tool => removed.includes(tool)), []);
 });
 
 test("the README's allow rules are exactly the pane's tools, merge never among them", () =>

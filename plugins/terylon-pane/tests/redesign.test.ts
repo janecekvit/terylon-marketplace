@@ -253,13 +253,6 @@ test('THE NARROW DOCK, below 44 body columns: rows drop their detail, the tiles 
 
   const drawn = await pictures(ui)
   expect(drawn.map(item => item.alt)).toEqual(['Admitted, Plan, Develop, Review done; Tests now; Pull req., Verified, Merge to come', 'Admitted, Plan, Develop, Review, Tests, Pull req. done; Verified now; Merge to come'])
-
-  // Health stacks its two cards; a wide pane sets them side by side.
-  await pill(ui, 'tab-status')
-  expect(await ui.find({ key: 'status-cards' })).toBeUndefined()
-  await ui.unmount()
-  const wide = await $.ui.mount({ ...PANE, surface: 'desktop', props: { ...(PANE_PROPS as Record<string, unknown>), bodyColumns: 120 } as never })
-  expect(await wide.find({ key: 'status-cards' })).toBeDefined()
 })
 
 test('Health says the machine in one word, in its colour, its times in tabular digits', async ($, on) => {
@@ -274,7 +267,7 @@ test('Health says the machine in one word, in its colour, its times in tabular d
 
     expect(word?.props).toMatchObject({ weight: 'semibold', color: 'success' })
     expect((await ui.find({ type: 'Text', text: /^\s*last answer at / }))?.props.tabular).toBe(true)
-    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.21.1') }))?.props.mono).toBe(true)
+    expect((await ui.find({ type: 'Text', text: exact('terylon-pane 1.22.1') }))?.props.mono).toBe(true)
     await ui.unmount()
   }
 })

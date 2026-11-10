@@ -60,5 +60,19 @@
   ],
   "gates": [
     "story_merge"
-  ]
+  ],
+  "removedBySimplification": {
+    "source": "The tools Terylon Feature 559 (Simplification) removes, as its lead relayed them on 2026-11-10: copied, never derived. The pane calls none of them, so it works against Terylon before and after.",
+    "tools": [
+      "story_merge",
+      "check_run",
+      "check_get",
+      "story_choose_run",
+      "task_run",
+      "task_change",
+      "task_pause",
+      "task_resume",
+      "metrics"
+    ]
+  }
 }

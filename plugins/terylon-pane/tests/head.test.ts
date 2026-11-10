@@ -47,7 +47,7 @@ function waitingWorld(on: Parameters<typeof world>[0], count: number) {
   return terylon
 }
 
-test('the head holds the status line, then Notices, Memory, System and Refresh in that order, each its plain word; the foot the 30 days alone', async ($, on) => {
+test('the head holds the status line, then Notices, Memory, System and Refresh in that order, each its plain word; no 30 days at the foot', async ($, on) => {
   const terylon = waitingWorld(on, 2)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -64,7 +64,8 @@ test('the head holds the status line, then Notices, Memory, System and Refresh i
     expect(buttons.map(button => button.props.label)).toEqual(['Notices', 'Memory', 'System', 'Refresh'])
     expect(buttons.filter(button => /[0-9⚠›🔔]/u.test(`${String(button.props.label)} ${button.text}`))).toEqual([])
     expect(await ui.find({ key: 'pills' })).toBeUndefined()
-    expect((await ui.find({ key: 'overview-foot' }))?.text).toContain('Last 30 days')
+    expect(await ui.find({ key: 'overview-foot' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /Last 30 days|per story/ })).toBeUndefined()
     expect((await ui.findAll({ type: 'Button' })).filter(button => /›$/.test(String(button.props.label)))).toEqual([])
     await ui.unmount()
   }
@@ -334,27 +335,6 @@ test('Waiting for you keeps its purple stroke with nothing waiting', async ($, o
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ key: 'waiting' }))?.props.borderColor).toBe('merged')
-})
-
-test('HEALTH\'S TWO CARDS fill their columns: one width, one height, none at the width of its words', async ($, on) => {
-  const terylon = world(on)
-  await $.session.start(SESSION)
-  await terylon.clock.settle()
-
-  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: WIDE_PROPS })
-  await ui.press({ key: 'tab-status' })
-
-  const row = await ui.find({ key: 'status-cards' }) as unknown as { props: Record<string, unknown>; children: { props: Record<string, unknown> }[] }
-
-  expect(row.props.alignItems).toBe('stretch')
-  expect(row.children).toHaveLength(2)
-
-  for (const column of row.children) {
-    expect(column.props).toMatchObject({ flexDirection: 'column', flexGrow: 1, width: 0 })
-  }
-
-  expect((await ui.find({ key: 'status-machine' }))?.props.flexGrow).toBe(1)
-  expect((await ui.find({ key: 'status-month' }))?.props.flexGrow).toBe(1)
 })
 
 test('SYSTEM IS HEALTH ALONE: no memory, no notice on it, and an alert a line that leads to Notices', async ($, on) => {

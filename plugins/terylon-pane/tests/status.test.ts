@@ -11,7 +11,7 @@ const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon', 
 
 const GATUS = { id: 117, source: 'gatus', title: 'the page is not well', body: 'gatus says it stopped answering; check the container.', key: 'gatus:answering/the-page', link: null, raisedAt: '2026-10-11T07:26:21Z', handledAt: null }
 
-test('well: ok, the slots, the cost today and over 30 days, nothing wrong, the diagnostics', async ($, on) => {
+test('well: ok, the slots, the cost today, no 30 days, nothing wrong, the diagnostics', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
@@ -26,12 +26,11 @@ test('well: ok, the slots, the cost today and over 30 days, nothing wrong, the d
 
     expect(await ui.find({ type: 'Text', text: exact('2 of 4 running') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('$5.50 of the $20 daily limit today') })).toBeDefined()
-    expect(await ui.find({ key: 'status-month' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: exact('43') })).toBeDefined()
+    expect(await ui.find({ key: 'status-month' })).toBeUndefined()
 
     expect(await ui.find({ type: 'Text', text: /^Problems/ })).toBeUndefined()
 
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.21.1') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.22.1') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('TERYLON_URL https://terylon.example.ts.net') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('server plugin:terylon-os:terylon') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Every failure is in claude --debug under terylon-pane:') })).toBeDefined()

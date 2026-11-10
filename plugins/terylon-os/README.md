@@ -1,6 +1,6 @@
 # terylon-os
 
-**Terylon itself, as a plugin** — *Terylon, the agentic OS extension*: the owner's MCP endpoint, `/mcp`, registered as the server `terylon`, and one skill per prompt that endpoint serves. Nothing here holds a rule: merge is the one gate, and the owner confirms it with the passkey in Terylon's console; every other act that decides something is the owner's, and a session takes it only on the owner's word.
+**Terylon itself, as a plugin** — *Terylon, the agentic OS extension*: the owner's MCP endpoint, `/mcp`, registered as the server `terylon`, and one skill per prompt that endpoint serves. Nothing here holds a rule: merge is the one gate, and the owner makes it in Terylon's console; every other act that decides something is the owner's, and a session takes it only on the owner's word.
 
 Where it stands beside the PC's pane and the phone: [One source of truth, reached from two places](../../docs/architecture/one-source-of-truth-reached-from-two-places.md).
 
@@ -55,11 +55,9 @@ Terylon's `/mcp` sorts what a session can call into three kinds, and only the fi
 
 | Kind | Tools | Who takes it, and how | What the tool answers |
 |---|---|---|---|
-| **The gate: merge** | `story_merge` | the owner, confirming the exact commit with the passkey in the console. Over MCP the tool applies nothing; it pushes the merge sheet to the owner's phone | *pending*, with the console's merge-sheet link — passed on, never retried or worked around |
+| **The gate: merge** | none: no tool merges | the owner, in the console, on the story's gate and the commit with the green verdict | — a session gives the console's link, and never works around it |
 | **The owner's acts** | `plan_approve`, `plan_rethink`, `story_return`, `story_unblock`, `story_abandon`, `story_stop`, `story_accept`, `leader_pause`, `leader_resume`, `goal_drop`, `memory_confirm`, `memory_drop`, `policy_save` | the owner, in the console, in the pane, or in a session — where Claude calls one only on the owner's word given in the conversation, never to be helpful. Each applies at once, with no confirmation asked | `{accepted, sentence, commandId, subjectId}`; `accepted: null` means the leader has not decided within 10 s — say so, and do not send the write again: `leader_answer` with the `commandId` reads the decision later; a refusal, `{refused, status?, console?}` or `accepted: false`, carries a sentence to relay |
 | **Writes that decide nothing** | `goal_add`, `tasks_add`, `leader_answer`, `memory_propose`, `notice_handle`, `spec_revise` and the like | anyone in the session, as a skill describes | the leader's answer |
-
-The other gate, removing a passkey, exists only in the console and has no tool.
 
 **A goal's specification** (Terylon S53) is the owner's .md files, each whole, versioned, read by the leader and every run of the goal's stories:
 

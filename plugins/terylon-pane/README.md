@@ -2,7 +2,7 @@
 
 **Terylon Cockpit, the Terylon band and pane in Claude Desktop**: a mod, which is a hooks module (`hooks/register.tsx`) that the engine runs in a session. It draws one row above the prompt, the status line, and **one** pane beside the transcript. Its display name is *Terylon Cockpit* in full; its plugin id stays `terylon-pane`, so installs, settings and the allow rules below keep working.
 
-- **It shows, asks, answers and posts, and takes the owner's acts on their own cards (S27, #27), but it never merges.** Merge is the one gate, confirmed by your passkey in the console.
+- **It shows, asks, answers and posts, and takes the owner's acts on their own cards (S27, #27), but it never merges.** Merge is the one gate, made by you in the console, on the commit with the green verdict.
 - Its content and rules are the approved S15 canvas, page *v2*, the band and the pane (#331, #332 c9); its drawing follows the approved S32 canvas, attached to issue #25, on the mod API of 2.1.304 and later, and the owner's redesign of 1.19.0, which replaced the five tabs with one overview; the owner's acts are the approved S27 canvas, redrawn in S32's styles and kept on #27; it is built and tested on 2.1.308, the engine Claude Desktop 3.6556.2.0 runs.
 - **The interface is English**: the band, the overview, card titles, buttons, hints, empty states, errors and *Reason: …* (the operator's choice of 2026-10-12, on #332, replacing the Czech of S15), in Terylon's glossary since Terylon S68 — see *Terylon Cockpit* below.
 - **The content is in the language Terylon sent it in**, untranslated: story titles, the leader's questions, memory entries, rules.
@@ -71,8 +71,7 @@ This is for the owner of a Terylon, working in a **local** session on the PC: th
        │       │          a repeating task's goal: NO ROAD, its newest run in words
        │       │  folds ─ Done today · Queued · History, EACH OPEN ONE A CARD OF ITS OWN; a running story with no goal
        │       │          found stands open above them
-       │       │  head ─ Notices · Memory · System · Refresh, A WAITING ONE THE PRIMARY BUTTON, REFRESH NEVER;
-       │       │          foot ─ the 30 days
+       │       │  head ─ Notices · Memory · System · Refresh, A WAITING ONE THE PRIMARY BUTTON, REFRESH NEVER
        │       ├──▶ Notices, A SCREEN OF ITS OWN on every surface, ‹ Overview and Refresh at its head:
        │       │      Needs you · n, each its card and Mark handled ─ What the machine did
        │       ├──▶ a goal: its road and What next, its plan's card, stories, specification, Add a task, Drop goal…
@@ -82,7 +81,7 @@ This is for the owner of a Terylon, working in a **local** session on the PC: th
        │       │      proposals confirmed or dropped HERE; an edit is memory_propose; About you, Topics, rules a press away
        │       └──▶ System, HEALTH ALONE, ‹ Overview and Refresh at its head, NO memory_get:
        │              the machine, slots, cost, every problem with How to fix, Pause the leader and Resume,
-       │              the last 30 days, the policy edited and saved (policy_save) and diagnostics a press away
+       │              the policy edited and saved (policy_save) and diagnostics a press away; NO 30 DAYS, NO metrics
        └──▶ the done-signal: $.prompt.submit ONCE per story and verdict commit, and a toast
   session start, away > 2 h ──▶ ONE catch-up summary; the band says it until ✕
   Add ──▶ tasks_add ──▶ a plan that WAITS for the owner under Waiting for you
@@ -131,7 +130,7 @@ This is for the owner of a Terylon, working in a **local** session on the PC: th
 
 Below a gate, a question about the goal or one of its stories says *Asks you a question*, a stuck story *Stuck: look at it* and a blocked one *Blocked: waits for you*. The two gates are purple (`merged`), done green (`success`), running blue (`suggestion`). A goal's stories are `stories_list`'s, named by `goal` or `goalRef`, and a running story with neither is found by the plan it stands in; **a running story no open goal could be found for stands under *Running, goal not found*, a fold that starts open, so nothing running is ever hidden**, and until the goals are read that is every running story. A repeating task's goal has no road: its card says its newest run in words, from `goals_list`'s `repeating`.
 
-**The overview's goals are read on its load**, with the 30 days for its foot and the memory's proposals for its head, **and with the poll while it is drawn**, on a timer of its own so that a read held for good never holds the events path; a read of the poll that fails keeps what was read, and a pane nobody has open reads none of them.
+**The overview's goals are read on its load**, with the memory's proposals for its head, **and with the poll while it is drawn**, on a timer of its own so that a read held for good never holds the events path; a read of the poll that fails keeps what was read, and a pane nobody has open reads none of them.
 
 **How it is drawn** (S32, #25) — the content and the rules above do not change:
 
@@ -163,7 +162,7 @@ Below a gate, a question about the goal or one of its stories says *Asks you a q
 | Drop goal… | `goal_drop` | an open or active goal |
 | Confirm · Drop | `memory_confirm` · `memory_drop` | a memory proposal, on Memory |
 | Edit · Save | `policy_save` | the policy, on Health |
-| **Merge in the console ↗** | **never**: `story_merge` stays behind your passkey | a story verified in a repository |
+| **Merge in the console ↗** | **never**: `story_merge` is refused by name, and the merge is yours in the console | a story verified in a repository |
 
 - **Each act calls its tool only when it is pressed**, never when a card is drawn. A row in *Waiting for you* ends in its own act: *Answer* opens the question, *Approve* and *Accept* are taken on that press as on their cards, a blocked story's *Open* opens it, and *Merge ↗* is a link into the console. A press of the row itself only opens its whole text, with the way to its subject's card. What became of an act taken on a row stands under the card, since the row may have gone.
 - **One press, or a field.** Approve, Accept, Stop, Resume, Confirm and Drop are one press. Rethink and Return need text, and their button stays dim and sends nothing until it says something; Unblock, Abandon and Pause offer a field and send without it. Abandon and Drop goal ask once more, and are drawn red: a plain `Button` with its word in `error`, since one with chrome drew its word grey in Desktop (the owner's walk of 1.5.0, #35). Drop goal… names, from the goal's own data, the waiting plans it withdraws and, by title, every story of it that has not ended, which the drop abandons, a run stopped first (Terylon S35, #388), and says so when either is none.
@@ -188,7 +187,7 @@ Below a gate, a question about the goal or one of its stories says *Asks you a q
 | A specification | one version of a goal's specification, read-only: each file as Markdown under its name and size, or the one file pressed; the latest from `spec_get {goal}`, an older one from `spec_get {goal, version}`; ‹ back to the goal | spec_get |
 | Notices | from the head's *Notices*, **a screen of its own on every surface**, as Memory and System are: *‹ Overview* and *Refresh* at its head, then *In the console ↗*, *Needs you · n* with each notice's card and *Mark handled*, *What the machine did* with its latest three and the rest a press away. Nothing is laid over the overview: Claude Desktop does not draw `position="absolute"` as an overlay | notices_list |
 | Memory | from the head's *Memory*, **a screen of its own**, opened at its top: *‹ Overview* and *Refresh*, then the proposals waiting, each with its old text struck, its new text, *Confirm* and *Drop*; the folds *About you n*, *Topics n* and the rules the machine enforces (each with who enforces it, pressed for its artefact), a card per memory file with *Edit* and *Remove* on each entry. It reads `memory_get` alone, under Desktop's 10 s bound on a press, and one that does not answer ends as its error with *Try again* | memory_get, memory_propose, memory_confirm, memory_drop |
-| System: Health | Health alone, opened at its top by *System* and by *How to fix*; *‹ Overview* and *Refresh*. What it reads is asked for at once, under Desktop's 10 s bound on a press; it does not read `memory_get`. **A notice is never repeated on Health**: a line *1 notice needs you: …* with *Open in Notices ›*; a problem of Terylon's own stays there as its card. Its two cards fill their columns. **Problems**, when there are any, each a card with *Reason: …* and *How to fix* in steps: the allow rules for a refused call, the tailnet and `TERYLON_URL` to check, *Resume* for a pause; an alert a line that names the notice, with *Open in Notices ›*; **Terylon** in one word (*all well*, *not allowed*, *not answering*, *paused*, *N alerts*), since when, the last answer, **Slots**, **Cost**, today against the daily limit, or on the setup token its tokens and *cost not known on the setup token*, and *Pause the leader…*; **Last 30 days** in rows, and the folds **Policy**, read as `policy_get` answers it, *Edit* in place within its `limits` and *Save*, a refused save keeping what was typed, and **Diagnostics**, the mod's version, `TERYLON_URL`, the server that answered, the debug log | everything above, metrics, policy_get, policy_save |
+| System: Health | Health alone, opened at its top by *System* and by *How to fix*; *‹ Overview* and *Refresh*. What it reads is asked for at once, under Desktop's 10 s bound on a press; it does not read `memory_get`. **A notice is never repeated on Health**: a line *1 notice needs you: …* with *Open in Notices ›*; a problem of Terylon's own stays there as its card. **Problems**, when there are any, each a card with *Reason: …* and *How to fix* in steps: the allow rules for a refused call, the tailnet and `TERYLON_URL` to check, *Resume* for a pause; an alert a line that names the notice, with *Open in Notices ›*; **Terylon** in one word (*all well*, *not allowed*, *not answering*, *paused*, *N alerts*), since when, the last answer, **Slots**, **Cost**, today against the daily limit, or on the setup token its tokens and *cost not known on the setup token*, and *Pause the leader…*, and in that card the folds **Policy**, read as `policy_get` answers it, *Edit* in place within its `limits` and *Save*, a refused save keeping what was typed, and **Diagnostics**, the mod's version, `TERYLON_URL`, the server that answered, the debug log | everything above, metrics, policy_get, policy_save |
 | New task | under a goal's fold *Add a task*, a line that opens this form with that goal picked: title (three rows, sent as one line), criteria, goal, after, and for a goal over a repository its *Files*, one path per line, 1 to 30, checked before anything is sent (a goal in Terylon's own list sends `files: []` and draws no field); sent, with the title and criteria handed over said word for word, refused, no answer in 10 s, paused | tasks_add |
 
 **A fold is one Button everywhere**: *Done today*, *Queued*, *History* and *Running, goal not found* on the overview; *About you*, *Topics* and the rules on Memory; *Policy* and *Diagnostics* on System; *N more* under Notices' *What the machine did*; *Your decisions on earlier plans* and *Add a task* on a goal. On a graphic surface it is a Button labelled with the fold's name and, where it has one, its count, *About you 3*, never `plain` and with no `▸` or `▾`: a shut fold's is drawn with `dimColor` and an open one's without, since Desktop draws the Button natively and only `plain`, `dimColor` and `variant` change its look. The terminal's Button shows no state of its own, so there a fold stays the lesser form, `▸ Name n` shut and `▾ Name n` open, as a plain Button. A group's toggles sit side by side in a row that wraps. A fold with nothing in it is drawn or left out as before.
@@ -284,7 +283,6 @@ Either way the call is refused, and only an allow rule lets it through. Add thes
     "mcp__plugin_terylon-os_terylon__plans_list",
     "mcp__plugin_terylon-os_terylon__notices_list",
     "mcp__plugin_terylon-os_terylon__leader_status",
-    "mcp__plugin_terylon-os_terylon__metrics",
     "mcp__plugin_terylon-os_terylon__memory_get",
     "mcp__plugin_terylon-os_terylon__tasks_add",
     "mcp__plugin_terylon-os_terylon__goal_add",
@@ -325,9 +323,9 @@ A rule names a tool, never its arguments: `goals_list {closed: true}`, which rea
 | `spec_revise` | stores a goal's specification as its next version (Terylon S53) | nothing running changes; the goal's next plan reads it, and a re-plan waits for the owner |
 | `goal_replan` | asks the leader to plan a goal again from its latest version (Terylon S53) | the new plan waits for the owner's approval; the pane calls it on the owner's press alone, never on a draw |
 
-**Thirteen of them are the owner's acts**, `OWNER_ACTS` in `hooks/terylon.ts`, each taken on its subject's card in one press and with no passkey (the table above). They were gates until Terylon PR 228 made each of them an owner write and left merge the only gate a tool can reach. Allowing them lets Claude in a session call them too, as it can any tool an allow rule names.
+**Thirteen of them are the owner's acts**, `OWNER_ACTS` in `hooks/terylon.ts`, each taken on its subject's card in one press (the table above). They were gates until Terylon PR 228 made each of them an owner write and left merge the only gate a tool can reach. Allowing them lets Claude in a session call them too, as it can any tool an allow rule names.
 
-**Merge is the one gate, and it is never allowed.** `story_merge` is confirmed by your passkey in the console; the pane shows *Merge in the console ↗*. It is in `GATE_TOOLS`, never in `PANE_TOOLS`, and the guard refuses it by name.
+**Merge is the one gate, and it is never allowed.** You merge in the console, on the commit with the green verdict; the pane shows *Merge in the console ↗*. `story_merge` is in `GATE_TOOLS`, never in `PANE_TOOLS`, and the guard refuses it by name, so a Terylon that still offers it is refused too. **The pane calls no tool the simplified Terylon removes** — `metrics` among them — so it works against Terylon before and after; `tests/terylon-pane/tool-table.test.js` holds that.
 
 **Never allow the server as a whole** (`mcp__plugin_terylon-os_terylon`), nor a wildcard: that would allow `story_merge` too. The list is the pane's own allow-list, `PANE_TOOLS` in `hooks/terylon.ts`. `tests/terylon-pane/tool-table.test.js` holds this block to that list and both to the copy of Terylon's tool table in `tests/terylon-pane/mcp-tool-table.json`, and a planted `story_merge` in either turns the tests red.
 
@@ -347,7 +345,7 @@ A rule names a tool, never its arguments: `goals_list {closed: true}`, which rea
 
 The names are separated by commas or spaces; anything else changes nothing.
 
-**`TERYLON_PANE_STATUS` draws Health in parts**, to find the one Desktop does not draw. In the same `env`, `minimal` draws it as three plain lines, and `no-` and a part's name leaves that part out: `machine`, `gauges` (the last 30 days), `problems` (with `events` and `alerts` inside it), `outcomes`, `policy`, `diagnostics`. Restart Claude Desktop after each change. Unset, the whole section is drawn.
+**`TERYLON_PANE_STATUS` draws Health in parts**, to find the one Desktop does not draw. In the same `env`, `minimal` draws it as three plain lines, and `no-` and a part's name leaves that part out: `machine`, `problems` (with `events` and `alerts` inside it), `outcomes`, `policy`, `diagnostics`. Restart Claude Desktop after each change. Unset, the whole section is drawn.
 
 ```json
 "env": { "TERYLON_PANE_STATUS": "no-gauges, no-policy" }

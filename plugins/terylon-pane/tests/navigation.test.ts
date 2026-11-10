@@ -264,7 +264,7 @@ test('the goals on the overview: a card each, the closed ones a press away, a ne
   expect(await ui.find({ key: 'answer-send' })).toBeDefined()
 })
 
-test('Notices reads the notices and a notice is handled there; More reads the metrics and the leader is paused there', async ($, on) => {
+test('Notices reads the notices and a notice is handled there; System draws no 30 days, never calls metrics, and the leader is paused there', async ($, on) => {
   const terylon = world(on)
   terylon.answers.briefing = { ...BRIEFING, unhandledNotices: 2 }
   await $.session.start(SESSION)
@@ -293,20 +293,16 @@ test('Notices reads the notices and a notice is handled there; More reads the me
   expect((await ui.find({ type: 'Link', text: 'In the console ↗' }))?.props.href).toContain('notices=open')
 
   await pill(ui, 'tab-status')
-  // THE 30 DAYS IN ROWS, and no 30-day chart: metrics reports no per-day series.
-  for (const [label, value] of [['Stories', '43'], ['Per story', '$1.10'], ['Merged', '0'], ['PR opened', '1']]) {
-    expect(await ui.find({ type: 'Text', text: exact(label ?? '') })).toBeDefined()
-    expect((await ui.find({ key: `metric-${(label ?? '').toLowerCase().replace('pr ', 'PR ')}` }))?.text).toContain(value ?? '')
-  }
-
+  // NO 30 DAYS: Terylon measures none, and the pane never asks for metrics, which an old Terylon still offers.
+  expect(await ui.find({ key: 'status-month' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Last 30 days|per story|PRs? opened/i })).toBeUndefined()
   expect(await ui.find({ type: 'Svg' })).toBeUndefined()
   // PAUSE IS ON HEALTH; RESUME STANDS ON THE PAUSED CARD.
   expect(await ui.find({ type: 'Link', text: 'Pause the leader ↗' })).toBeUndefined()
   expect((await ui.find({ key: 'act-leader-pause' }))?.props.label).toBe('Pause the leader…')
 
-  for (const tool of ['notices_list', 'metrics']) {
-    expect(terylon.calls.map(call => call.tool)).toContain(tool)
-  }
+  expect(terylon.calls.map(call => call.tool)).toContain('notices_list')
+  expect(terylon.calls.map(call => call.tool)).not.toContain('metrics')
 })
 
 test('Notices, Memory and System are pages of the one pane: no second pane opens, and ‹ leads back to the overview', async ($, on) => {

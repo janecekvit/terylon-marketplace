@@ -1,6 +1,8 @@
 # The pane takes the owner's acts; merge stays in the console
 
-**Status:** accepted, 2026-10-21, by the operator; built in S27 (#27) on Terylon PR 228. **Supersedes in part** [one source of truth, reached from two places](./one-source-of-truth-reached-from-two-places.md): its rule that *a surface may write only what decides nothing* and that *a decision is a link to the console*. **The owner approves a plan, returns, unblocks, abandons, stops or accepts a story, pauses or resumes the leader, drops a goal, confirms or drops a memory proposal and saves the policy from the pane, each on its subject's card. Merge is the one gate, confirmed by the owner's passkey in the console, and the pane can never reach it.**
+**Status:** accepted, 2026-10-21, by the operator; built in S27 (#27) on Terylon PR 228. **Supersedes in part** [one source of truth, reached from two places](./one-source-of-truth-reached-from-two-places.md): its rule that *a surface may write only what decides nothing* and that *a decision is a link to the console*. **The owner approves a plan, returns, unblocks, abandons, stops or accepts a story, pauses or resumes the leader, drops a goal, confirms or drops a memory proposal and saves the policy from the pane, each on its subject's card. Merge is the one gate, the owner's in the console, and the pane can never reach it.**
+
+**Amended** by Terylon's simplification (its Feature 559): the console's merge needs no passkey any more — one press on the story's gate, on the commit with the green verdict, under the owner check — and `story_merge` leaves `/mcp`. The pane's side does not change: merge stays a link into the console, and `story_merge` stays refused by name for a Terylon that still offers it.
 
 ## Context
 
