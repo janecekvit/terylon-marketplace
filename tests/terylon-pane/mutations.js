@@ -284,12 +284,6 @@ const MUTATIONS = [
         find: ": isAccepted ? COPY.goalAdded(why(answered)) : why(answered),",
         replace: ": why(answered),",
     },
-    {
-        name: "one story is said as stories again",
-        file: "hooks/copy.ts",
-        find: "metricStories: (count: number) => (count === 1 ? 'story' : 'stories'),",
-        replace: "metricStories: (count: number) => ('stories'),",
-    },
     // S32 (#25): the drawing on the 2.1.304 mod API.
     {
         name: "a running row with no progress.stage draws its first phase to come as now",
@@ -1467,16 +1461,10 @@ const MUTATIONS = [
         replace: "null,",
     },
     {
-        name: "the 30-day line says what a story cost with no story",
-        file: "hooks/queue.ts",
-        find: "...(stories === 0 ? [] : [COPY.monthCost(metricCost(metrics, basis))])",
-        replace: "COPY.monthCost(metricCost(metrics, basis))",
-    },
-    {
-        name: "Health says what a story cost with no story",
-        file: "hooks/queue.ts",
-        find: "...((number(metrics.stories) ?? 0) === 0 ? [] : [{ value: metricCost(metrics, basis), label: COPY.metricCost }])",
-        replace: "{ value: metricCost(metrics, basis), label: COPY.metricCost }",
+        name: "the pane allows metrics again, which the simplified Terylon removes",
+        file: "hooks/terylon.ts",
+        find: "  'leader_status',\n  'memory_get',\n",
+        replace: "  'leader_status',\n  'metrics',\n  'memory_get',\n",
     },
     {
         name: "System reads the memory again",

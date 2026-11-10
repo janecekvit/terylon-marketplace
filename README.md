@@ -40,7 +40,7 @@ It also carries **Terylon**, the agentic OS extension: an MCP endpoint and a Cla
 
 You enable **two** plugins for a repository: the **role** you work in, and the **adapter** for where it is hosted (`terylon-ado` or `terylon-github`). Everything else arrives as a dependency.
 
-**You keep the decisions.** A skill that writes to your forge shows you what it will write and waits for your go-ahead, unless you pass `--auto`; `--dry-run` writes nothing. The development pipeline stops at its gates on the main thread, where only you can answer. Terylon Cockpit never merges: a merge is a link to Terylon's console, confirmed there with your passkey. Every other decision, a plan approved, a story returned or a pause, is one you take on its card in the pane, and only when you press it.
+**You keep the decisions.** A skill that writes to your forge shows you what it will write and waits for your go-ahead, unless you pass `--auto`; `--dry-run` writes nothing. The development pipeline stops at its gates on the main thread, where only you can answer. Terylon Cockpit never merges: a merge is a link to Terylon's console, made there by you on the commit with the green verdict. Every other decision, a plan approved, a story returned or a pause, is one you take on its card in the pane, and only when you press it.
 
 ## How a story travels
 

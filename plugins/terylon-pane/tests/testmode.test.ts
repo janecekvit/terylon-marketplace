@@ -316,7 +316,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
     expect((await ui.findAll({ type: 'Link' })).filter(link => new URL(String(link.props.href)).host !== 'test-mode.invalid')).toEqual([])
 
     await ui.press({ key: 'merge-act-204' })
-    expect(await ui.find({ type: 'Text', text: exact('Test mode: nothing was merged. A real merge is confirmed with your passkey in the console.') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('Test mode: nothing was merged. A real merge is made in the console, on the commit with the green verdict.') })).toBeDefined()
     expect(terylon.calls.filter(call => call.tool === 'story_merge')).toEqual([])
 
     // THE SENTENCE STANDS UNTIL THE OWNER MOVES ON.

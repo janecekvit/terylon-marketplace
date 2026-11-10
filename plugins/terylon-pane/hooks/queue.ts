@@ -490,7 +490,7 @@ export function spend(flight: Json, basis: string | null = null): Spent {
   return spentOfAll(list(flight.stories), basis)
 }
 
-// THE BASIS A COST IS SAID ON (Terylon S68): the briefing's costBasis, else work_in_flight's or the metrics'.
+// THE BASIS A COST IS SAID ON (Terylon S68): the briefing's costBasis, else work_in_flight's.
 export function costBasisOf(...answers: (Json | null | undefined)[]): string | null {
   for (const answer of answers) {
     const basis = answer === null || answer === undefined ? null : text(answer.costBasis)
@@ -1125,20 +1125,6 @@ export function planItems(plans: Json, base: string, basis: string | null = null
   })
 }
 
-// WHAT A STORY COST OVER THE 30 DAYS: its dollars, or on the setup token its tokens where metrics says them.
-function metricCost(metrics: Json, basis: string | null): string {
-  const isKnown = metrics.costKnown !== false && basis !== words.SETUP_TOKEN
-  const tokens = number(metrics.tokensPerStory)
-
-  return isKnown ? words.money(metrics.costPerStoryUsd) : tokens === null ? words.COST_NOT_KNOWN_TIGHT : words.tokens(tokens)
-}
-
-// THE OVERVIEW'S 30-DAY LINE: "12 stories · 22 k tokens per story". With no story there is nothing to say a story cost.
-export function monthOf(metrics: Json, basis: string | null = null): string {
-  const stories = number(metrics.stories) ?? 0
-
-  return [COPY.monthStories(stories), ...(stories === 0 ? [] : [COPY.monthCost(metricCost(metrics, basis))])].join(' · ')
-}
 
 function noticeOf(notice: Json, now: number, zone: Zone): PaneNotice {
   const link = text(notice.link)
@@ -1177,17 +1163,8 @@ function lastOfEachKey(notices: Json[]): Json[] {
     })
 }
 
-export function bellView(notices: Json, metrics: Json | null, now: number, zone: Zone = 0, basis: string | null = null): PaneBell {
+export function bellView(notices: Json, now: number, zone: Zone = 0): PaneBell {
   const all = list(notices.notices)
-  const rows: { value: string; label: string }[] = metrics === null
-    ? []
-    : [
-        { value: String(number(metrics.stories) ?? 0), label: COPY.metricStories(number(metrics.stories) ?? 0) },
-        // WITH NO STORY THERE IS NOTHING TO SAY A STORY COST.
-        ...((number(metrics.stories) ?? 0) === 0 ? [] : [{ value: metricCost(metrics, basis), label: COPY.metricCost }]),
-        { value: String(number(metrics.merged) ?? 0), label: COPY.metricMerged },
-        { value: String(number(metrics.opened) ?? 0), label: COPY.metricOpened(number(metrics.opened) ?? 0) },
-      ]
 
   return {
     phase: 'ok',
@@ -1195,7 +1172,6 @@ export function bellView(notices: Json, metrics: Json | null, now: number, zone:
     unhandledCount: number(notices.unhandled) ?? all.filter(notice => notice.handledAt == null).length,
     unhandled: all.filter(notice => notice.handledAt == null).map(notice => noticeOf(notice, now, zone)),
     handled: lastOfEachKey(all.filter(notice => notice.handledAt != null)).slice(0, HANDLED_SHOWN).map(notice => noticeOf(notice, now, zone)),
-    metrics: rows,
     handling: null,
     handleSentence: null,
   }

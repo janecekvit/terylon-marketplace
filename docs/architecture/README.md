@@ -151,7 +151,7 @@ the caller's tailnet identity; no header, no token`"]:::service
         leader["`leader, goals, plans, stories,
 bell, memory`"]:::service
         console["`the console: the one gate
-merge, confirmed by the owner's passkey`"]:::gate
+merge, the owner's, on the green commit`"]:::gate
     end
 
     %% No class: the theme colours the owner, so it stays readable in light and dark mode alike.
@@ -189,7 +189,7 @@ stories_list, events_since`"| server
 | [spend-measured-on-output-tokens](./spend-measured-on-output-tokens.md) | why a run's cost is measured from its own transcripts, weighted, rather than from the harness's figures |
 | [superpowers-left-the-dependency-set](./superpowers-left-the-dependency-set.md) | why a dependency on a foreign marketplace was removed, and what replaced its six skills |
 | [one-source-of-truth-reached-from-two-places](./one-source-of-truth-reached-from-two-places.md) | why Agentic OS on the owner's host is the only source of truth, reached through one `/mcp` from the PC's pane and from the phone through Remote Control, and why the pane holds nothing; superseded in part by the next row |
-| [the-pane-takes-the-owners-acts](./the-pane-takes-the-owners-acts.md) | why the pane approves, returns, unblocks, pauses and the rest on their subject's cards since Terylon PR 228, and why merge, the one gate, stays in the console behind the passkey |
+| [the-pane-takes-the-owners-acts](./the-pane-takes-the-owners-acts.md) | why the pane approves, returns, unblocks, pauses and the rest on their subject's cards since Terylon PR 228, and why merge, the one gate, stays in the console |
 | [diagrams-are-mermaid-blocks](./diagrams-are-mermaid-blocks.md) | why a diagram is a Mermaid block that opens with its keyword and asks for ELK by an init directive, and what D2 and front matter cost before it |
 | [every-rule-has-one-owner](./every-rule-has-one-owner.md) | why a rule is stated once and pointed at everywhere else, what the first sweep found, and why nothing but review enforces it yet |
 

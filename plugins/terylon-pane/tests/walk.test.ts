@@ -110,19 +110,3 @@ test('an answer is sent once while it is being sent, however often Send is press
   expect(sent).toEqual([{ server: 'plugin:terylon-os:terylon', tool: 'question_answer', args: { question: 606, answer: 'vzhled webu na mobilu' } }])
 })
 
-test('one story and one PR opened are said in the singular on the overview and Health', async ($, on) => {
-  const terylon = world(on)
-  terylon.answers.metrics = { stories: 1, opened: 1, merged: 0, costPerStoryUsd: 46.44, rows: [] }
-  await $.session.start(SESSION)
-  await terylon.clock.settle()
-
-  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await toOverview(ui)
-  await terylon.clock.settle()
-  expect(await ui.find({ type: 'Text', text: exact('Last 30 days 1 story · $46.44 per story') })).toBeDefined()
-  await pill(ui, 'tab-status')
-  await terylon.clock.settle()
-  expect(await ui.find({ type: 'Text', text: exact('Story') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: exact('PR opened') })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /1 stories|1 PRs opened|open PR/ })).toBeUndefined()
-})

@@ -87,7 +87,6 @@ import {
   isListStory,
   isRepositoryTarget,
   list,
-  monthOf,
   number,
   pausedOf,
   planItems,
@@ -147,7 +146,7 @@ type Reset = { from: number; head: number | null; refused: string | null }
 export const PANE = 'terylon'
 
 // The mod's version, said on Health: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.21.1'
+export const MOD_VERSION = '1.22.0'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -167,7 +166,7 @@ const MACHINE_SHOWN = 3
 const TIMELINE_SHOWN = 4
 
 // Health's parts in the order it draws them, as its debug line names them.
-const STATUS_DRAWN = ['machine', 'gauges', 'problems', 'events', 'alerts', 'outcomes', 'policy', 'diagnostics'] as const
+const STATUS_DRAWN = ['machine', 'problems', 'events', 'alerts', 'outcomes', 'policy', 'diagnostics'] as const
 
 // HOW LONG A SCREEN'S LOAD MAY TAKE before it is said as its error: under Desktop's own 10 s bound on a press
 // (`ui.press: … did not answer within 10000ms`), so the error is written while the press is still answered.
@@ -257,14 +256,14 @@ const ABSOLUTE_PATH = /^([A-Za-z]:)?[\\/]/
 
 const EMPTY_PICKER: PaneSpecPicker = { folder: '', listedFolder: SESSION_FOLDER, phase: 'idle', sentence: null, listed: [], attached: [] }
 
-const EMPTY_OVERVIEW: PaneOverview = { month: null, memoryPending: null }
+const EMPTY_OVERVIEW: PaneOverview = { memoryPending: null }
 
 const EMPTY_TEST_MODE: PaneTestMode = { isOn: false, note: null }
 
 // Where a console link of a made-up subject leads while test mode is on: nowhere, never the real console.
 const TEST_CONSOLE = 'https://test-mode.invalid'
 
-const EMPTY_BELL: PaneBell = { phase: 'loading', sentence: null, unhandledCount: 0, unhandled: [], handled: [], metrics: [], handling: null, handleSentence: null }
+const EMPTY_BELL: PaneBell = { phase: 'loading', sentence: null, unhandledCount: 0, unhandled: [], handled: [], handling: null, handleSentence: null }
 
 const snapshot = atom({ plugin: 'terylon-pane', key: 'snapshot' } as const, EMPTY_SNAPSHOT)
 const view = atom({ plugin: 'terylon-pane', key: 'view' } as const, { stack: [QUEUE] } as PaneView)
@@ -1718,20 +1717,19 @@ async function load($: EngineInterface, screen: PaneScreen): Promise<void> {
   }
 }
 
-// WHAT THE OVERVIEW NEEDS BESIDE THE POLL: the goals and their plans, and for its footer the 30 days and the memory's
-// proposals. Read at once, each under the bound of a press.
+// WHAT THE OVERVIEW NEEDS BESIDE THE POLL: the goals and their plans, and how many memory proposals wait. Read at once,
+// each under the bound of a press.
 async function loadOverview($: EngineInterface): Promise<void> {
   await Promise.all([loadGoals($), readOverviewFooter($)])
 }
 
 async function readOverviewFooter($: EngineInterface): Promise<void> {
   await bounded($, 'the overview', async () => {
-    const [metrics, memoryAnswer] = await Promise.all([callTerylon($, 'metrics'), callTerylon($, 'memory_get')])
+    const memoryAnswer = await callTerylon($, 'memory_get')
 
     await update($, overview, (current: PaneOverview): PaneOverview => ({
       ...EMPTY_OVERVIEW,
       ...current,
-      month: metrics.kind === 'ok' ? monthOf(metrics.value, costBasis ?? costBasisOf(metrics.value)) : current?.month ?? null,
       memoryPending: memoryAnswer.kind === 'ok' ? list(memoryAnswer.value.proposals).length : current?.memoryPending ?? null,
     }))
   }, async () => undefined)
@@ -2420,7 +2418,7 @@ async function loadBell($: EngineInterface): Promise<void> {
 }
 
 async function readBellFromTerylon($: EngineInterface): Promise<void> {
-  const [notices, metrics] = await Promise.all([callTerylon($, 'notices_list'), callTerylon($, 'metrics')])
+  const notices = await callTerylon($, 'notices_list')
 
   if (notices.kind !== 'ok') {
     await update($, bell, (current: PaneBell): PaneBell => ({ ...current, phase: 'error', sentence: why(notices) }))
@@ -2429,12 +2427,7 @@ async function readBellFromTerylon($: EngineInterface): Promise<void> {
 
   const now = await $.clock.now()
 
-  await update($, bell, (): PaneBell =>
-    bellView(notices.value, metrics.kind === 'ok' ? metrics.value : null, now, zoneOffset, costBasis ?? (metrics.kind === 'ok' ? costBasisOf(metrics.value) : null)))
-
-  if (metrics.kind === 'ok') {
-    await update($, overview, (current: PaneOverview): PaneOverview => ({ ...EMPTY_OVERVIEW, ...current, month: monthOf(metrics.value, costBasis ?? costBasisOf(metrics.value)) }))
-  }
+  await update($, bell, (): PaneBell => bellView(notices.value, now, zoneOffset))
 }
 
 // A notice marked handled on More: notice_handle is a write the owner decided is not a gate, so
@@ -3485,12 +3478,6 @@ export const register: Register = on => {
         {nav}
       </Box>
     )
-    // THE 30 DAYS, ALONE at the overview's foot.
-    const overviewFoot = (
-      <Box key="overview-foot" flexShrink={1} minWidth={0}>
-        {overviewState.month === null ? null : <Text color="subtle" size="footnote" tabular>{COPY.monthLine(overviewState.month)}</Text>}
-      </Box>
-    )
     // A REASON IS ONE CLEAN LINE, whatever it was handed: no control character, no page of text, never an object.
     // Wrapped, not cut: a store's refusal ends in the file that is the fix.
     const reason = (problem: unknown) => (problem === null || problem === undefined ? null : <Text color="subtle" size="footnote">{COPY.reason(plainLine(problem, REASON_WHOLE))}</Text>)
@@ -3560,7 +3547,6 @@ export const register: Register = on => {
       return (
         <Box flexDirection="column" gap={1}>
           {overviewHead}
-          {overviewFoot}
         </Box>
       )
     }
@@ -3964,21 +3950,13 @@ export const register: Register = on => {
             current.connection === 'ok' && current.paused === null && actState('leader').open === 'leader_pause' ? actField('leader', 'leader_pause', null, { label: COPY.whyOptional }) : null,
             current.connection === 'ok' && current.paused === null && actState('leader').open === 'leader_pause' ? <Text color="subtle" size="footnote">{COPY.pauseNote}</Text> : null,
             actBusyNote('leader'),
+            // THE POLICY AND DIAGNOSTICS, a press away.
+            folds('status-folds', [
+              isShown('policy') ? foldButton('fold-policy', COPY.policy, shown.includes('fold-policy')) : null,
+              isShown('diagnostics') ? foldButton('fold-diagnostics', COPY.statusDiagnostics, shown.includes('fold-diagnostics')) : null,
+            ]),
           ], 'plain', true)
         })
-        // THE LAST 30 DAYS, in rows, and the Policy and Diagnostics a press away.
-        const monthCard = cardOf('status-month', COPY.statusMonth, null, [
-          ...(bellState.phase === 'loading' ? [quiet(elements, COPY.loading)] : bellState.metrics.map(metric => (
-            <Box key={`metric-${metric.label}`} flexDirection="row" justifyContent="space-between" gap={1}>
-              <Text>{`${metric.label.slice(0, 1).toUpperCase()}${metric.label.slice(1)}`}</Text>
-              <Text color="inactive" tabular>{metric.value}</Text>
-            </Box>
-          ))),
-          folds('status-folds', [
-            isShown('policy') ? foldButton('fold-policy', COPY.policy, shown.includes('fold-policy')) : null,
-            isShown('diagnostics') ? foldButton('fold-diagnostics', COPY.statusDiagnostics, shown.includes('fold-diagnostics')) : null,
-          ]),
-        ], 'plain', true)
 
         // PLAIN LINES ALONE: no card and no picture, to tell Health's drawing from its data.
         const tree = drawingAsked.isMinimal
@@ -3996,7 +3974,7 @@ export const register: Register = on => {
                 {/* WHAT IS WRONG FIRST, under its heading; with nothing wrong the machine's card says so. */}
                 {isShown('problems') && problems.length > 0 && headingOf(COPY.statusProblems, problems.length, 'error')}
                 {isShown('problems') && problems}
-                {isShown('machine') && isShown('gauges') ? twoColumns('status-cards', machineCard, monthCard) : [isShown('machine') ? machineCard : null, isShown('gauges') ? monthCard : null]}
+                {isShown('machine') && machineCard}
                 {isShown('outcomes') && actOutcome('leader', consoleLink(base, 'work'), COPY.workInConsole)}
                 {isShown('policy') && shown.includes('fold-policy') && policyCard}
                 {isShown('outcomes') && actOutcome('policy', consoleLink(base, 'policy'), COPY.policyInConsole)}
@@ -4079,7 +4057,6 @@ export const register: Register = on => {
         <Box flexDirection="column" gap={1}>
           {overviewHead}
           {problemCard}
-          {overviewFoot}
         </Box>
       )
     }
@@ -5227,7 +5204,6 @@ export const register: Register = on => {
           notes.length === 0 ? quiet(elements, COPY.paneLogEmpty) : null,
           ...notes.map(line => <Text color="subtle" size="footnote" mono>{line}</Text>),
         ])}
-        {overviewFoot}
       </Box>
     )
 

@@ -85,8 +85,8 @@ export function createTestWorld(now: number): TestWorld {
       { id: 5, source: 'production', key: 'test-production', title: 'Production is at b7d95c70', body: '', raisedAt: ago(30), handledAt: ago(30) },
       { id: 6, source: 'backup', key: 'test-backup', title: 'The backup ran', body: '', raisedAt: ago(200), handledAt: ago(200) },
     ],
-    proposals: [{ id: 5, consolidates: null, operations: [{ action: 'add', file: 'owner', text: 'Merge stays behind the passkey.', oldText: null }], suggestsRule: false, action: 'add', file: 'owner', text: 'Merge stays behind the passkey.', oldText: null, why: 'A made-up reason.', judgement: 'story-run', by: 'brain', subject: 'story/204', subjectRef: 'S-TMRG1', at: ago(200) }],
-    entries: ['Writes Czech; code in English.', 'A merge is confirmed with the passkey.'],
+    proposals: [{ id: 5, consolidates: null, operations: [{ action: 'add', file: 'owner', text: 'Merge stays in the console.', oldText: null }], suggestsRule: false, action: 'add', file: 'owner', text: 'Merge stays in the console.', oldText: null, why: 'A made-up reason.', judgement: 'story-run', by: 'brain', subject: 'story/204', subjectRef: 'S-TMRG1', at: ago(200) }],
+    entries: ['Writes Czech; code in English.', 'A merge is made in the console, on the green commit.'],
     policy: { slots: 4, dayBudgetUsd: 20, version: 1, changedAt: null },
     paused: null,
     nextId: 400,
@@ -195,8 +195,6 @@ export function testAnswer(world: TestWorld, tool: string, args: Json, now: numb
       return answer({ unhandled: world.notices.filter(item => item.handledAt === null).length, notices: world.notices })
     case 'leader_status':
       return answer({ paused: world.paused })
-    case 'metrics':
-      return answer({ stories: 12, opened: 2, merged: 3, accepted: 4, costPerStoryUsd: null, costKnown: false, tokensPerStory: 22000, rows: [] })
     case 'policy_get':
       return answer(world.policy)
     case 'memory_get':

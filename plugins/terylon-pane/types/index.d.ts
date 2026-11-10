@@ -416,13 +416,12 @@ export type PaneBell = {
   unhandledCount: number
   unhandled: PaneNotice[]
   handled: PaneNotice[]
-  metrics: { value: string; label: string }[]
   handling: number | null
   handleSentence: string | null
 }
 
-// What the overview's footer says: the last 30 days in a line, and how many memory proposals wait. Null before an answer.
-export type PaneOverview = { month: string | null; memoryPending: number | null }
+// How many memory proposals wait, for the head's Memory button. Null before an answer.
+export type PaneOverview = { memoryPending: number | null }
 
 // TEST MODE, this session's alone: whether it is on, and what the last made-up merge said.
 export type PaneTestMode = { isOn: boolean; note: string | null }

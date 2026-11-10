@@ -5,7 +5,7 @@
 import { test, expect } from 'claude-code/testing'
 
 import { ROAD_NAMES_COLUMNS, SVG_COLOURS, road, roadAlt, roadCells } from '../hooks/drawing'
-import { monthOf, repeatingOf } from '../hooks/queue'
+import { repeatingOf } from '../hooks/queue'
 import { ROAD_STAGES, goalCardsOf, goalSpend, isAcceptGate, phaseSteps, repeatingWords, roadOf, roadPlansOf, roadSteps, roadStoriesOf, stageOf, storyNext } from '../hooks/road'
 import type { PaneGoalItem, PaneRoadStory, PaneRunningItem } from '../types'
 
@@ -199,15 +199,6 @@ test('the plans a road reads: plans_list\'s, and a waiting plan the briefing nam
   ])
   // A SETTLED PLAN IS READ AS SETTLED: it holds no goal on Approve.
   expect(roadPlansOf([{ ...planned, state: 'approved', isProposed: false }], [])[0]?.isProposed).toBe(false)
-})
-
-test('THE 30-DAY LINE: stories and what one cost; with no story, no cost of one', () => {
-  expect(monthOf({ stories: 12, costPerStoryUsd: 1.1 })).toBe('12 stories · $1.10 per story')
-  expect(monthOf({ stories: 1, costPerStoryUsd: 46.44 })).toBe('1 story · $46.44 per story')
-  expect(monthOf({ stories: 12, costKnown: false, tokensPerStory: 22367 })).toBe('12 stories · 22 k tokens per story')
-  expect(monthOf({ stories: 12, costKnown: false })).toBe('12 stories · cost not known per story')
-  expect(monthOf({ stories: 0, costKnown: false })).toBe('0 stories')
-  expect(monthOf({ stories: 0, costPerStoryUsd: 0 })).toBe('0 stories')
 })
 
 test('THE ROAD\'S DRAWING: a segment per step in an equal column, fixed colours, no word; its alt says the whole picture', () => {

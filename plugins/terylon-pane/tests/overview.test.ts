@@ -6,7 +6,7 @@ import { test, expect } from 'claude-code/testing'
 
 import { CARD_FILL, WAITING_TILE_FILL } from '../hooks/drawing'
 
-import { BRIEFING, FLIGHT, GOALS, GOAL_QUESTION, METRICS, NARROW_PANE_PROPS, PANE_PROPS, PLANS, SESSION, STORIES, STORY_327, STORY_333, chipOf, exact, openCockpit, pictures, pill, toOverview, toRoot, unfold, world, foldOf } from './fixtures'
+import { BRIEFING, FLIGHT, GOALS, GOAL_QUESTION, NARROW_PANE_PROPS, PANE_PROPS, PLANS, SESSION, STORIES, STORY_327, STORY_333, chipOf, exact, openCockpit, pictures, pill, toOverview, toRoot, unfold, world, foldOf } from './fixtures'
 
 const PANE = { plugin: 'terylon-pane', component: 'Pane', requestId: 'terylon' } as const
 
@@ -227,22 +227,6 @@ for (const [surface, props, drawnOn] of SURFACES) {
     await ui.unmount()
   })
 
-  test(`${surface}: with no story in the 30 days the line drops what a story cost, on the overview and on Health`, async ($, on) => {
-    const terylon = world(on)
-    terylon.answers.metrics = { ...METRICS, stories: 0, costPerStoryUsd: null, costKnown: false, opened: 0, merged: 0 }
-    await $.session.start(SESSION)
-    await terylon.clock.settle()
-    await openCockpit($)
-
-    const ui = await $.ui.mount({ ...PANE, props, surface: drawnOn })
-    expect(await ui.find({ type: 'Text', text: exact('Last 30 days 0 stories') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /per story/ })).toBeUndefined()
-    await pill(ui, 'tab-status')
-    expect(await ui.find({ type: 'Text', text: exact('Stories') })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /per story|Per story/i })).toBeUndefined()
-    await ui.unmount()
-  })
-
   test(`${surface}: a repeating task's goal has no road: its card says its newest run in words`, async ($, on) => {
     const terylon = world(on)
     terylon.answers.goals_list = { goals: [{ id: 12, ref: 'G-FOREX', title: 'Daily forex statistics', priority: 2, state: 'active', stories: { verified: 1 }, repeating: { approved: { version: 1, title: 'Daily forex statistics', runBudgetUsd: 1, autoAccept: false }, runs: [{ story: 125, state: 'verified', startedAt: '2026-10-11T05:00:00Z', costUsd: 0.2, files: [] }] } }], closedCount: 0 }
@@ -363,17 +347,17 @@ test('THE OVERVIEW READS ITS GOALS ON ITS LOAD AND WITH THE POLL WHILE IT IS DRA
   await openCockpit($)
   expect(callsOf(terylon.calls, 'goals_list').length).toBe(1)
   expect(callsOf(terylon.calls, 'plans_list').length).toBe(1)
-  expect(callsOf(terylon.calls, 'metrics').length).toBe(1)
+  expect(callsOf(terylon.calls, 'metrics')).toEqual([])
   expect(callsOf(terylon.calls, 'memory_get').length).toBe(1)
 
-  // DRAWN, A NEW GOAL COMES WITH THE NEXT POLL, and the 30 days and the memory wait for a load.
+  // DRAWN, A NEW GOAL COMES WITH THE NEXT POLL, and the memory waits for a load.
   const ui = await $.ui.mount({ ...PANE, props: PANE_PROPS, surface: 'desktop' })
   expect(await ui.find({ key: 'goal-3' })).toBeDefined()
   terylon.answers.goals_list = { goals: [...GOALS.goals, { id: 30, title: 'New from the chat', priority: 2, state: 'open', stories: {} }] }
   await terylon.clock.advance(30000)
   await terylon.clock.settle()
   expect((await ui.find({ key: 'goal-30' }))?.text).toBe('New from the chat')
-  expect(callsOf(terylon.calls, 'metrics').length).toBe(1)
+  expect(callsOf(terylon.calls, 'memory_get').length).toBe(1)
 
   // A FAILED READ OF THE POLL KEEPS WHAT WAS READ.
   terylon.denied.set('goals_list', 'fetch failed: connect ETIMEDOUT')
@@ -400,7 +384,8 @@ test('SYSTEM AND MEMORY each read their own sources alone, under the bound of a 
   const beforeSystem = terylon.calls.length
   await ui.press({ key: 'tab-status' })
   await terylon.clock.settle()
-  expect(terylon.calls.slice(beforeSystem).map(call => call.tool)).toEqual(expect.arrayContaining(['notices_list', 'metrics']))
+  expect(terylon.calls.slice(beforeSystem).map(call => call.tool)).toContain('notices_list')
+  expect(terylon.calls.slice(beforeSystem).map(call => call.tool)).not.toContain('metrics')
   expect(terylon.calls.slice(beforeSystem).map(call => call.tool)).not.toContain('memory_get')
   expect(await ui.find({ key: 'status-machine' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('Loading the memory…') })).toBeUndefined()
@@ -432,16 +417,16 @@ test('SYSTEM AND MEMORY each read their own sources alone, under the bound of a 
   expect(await ui.find({ key: 'fold-memory-owner' })).toBeDefined()
 })
 
-test('MORE on a wide pane: Terylon and the last 30 days side by side, as its board draws them', async ($, on) => {
+test('SYSTEM on a wide pane: Terylon\'s one card, its slots and cost, and no 30 days beside it', async ($, on) => {
   const terylon = world(on)
   await $.session.start(SESSION)
   await terylon.clock.settle()
 
   const ui = await $.ui.mount({ ...PANE, props: WIDE_DOCK, surface: 'desktop' })
   await pill(ui, 'tab-status')
-  expect((await ui.find({ key: 'status-cards' }))?.props.flexDirection).toBe('row')
+  expect(await ui.find({ key: 'status-cards' })).toBeUndefined()
   expect(await ui.find({ key: 'status-machine' })).toBeDefined()
-  expect(await ui.find({ key: 'status-month' })).toBeDefined()
+  expect(await ui.find({ key: 'status-month' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: exact('Slots') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('Cost') })).toBeDefined()
 

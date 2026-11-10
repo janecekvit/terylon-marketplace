@@ -37,7 +37,7 @@ test('a card has air: its rows stand apart from its title on every surface, and 
     await pill(ui, 'tab-status')
     const cards = (await ui.findAll({ type: 'Box' })).filter(box => box.props.borderStyle === 'round')
 
-    expect(cards.length).toBeGreaterThanOrEqual(2)
+    expect(cards.length).toBeGreaterThanOrEqual(1)
     expect(cards.every(box => box.props.gap === cardGap && box.props.paddingX === padding)).toBe(true)
 
     // Each card holds its rows in a column of their own, spaced by the surface.
