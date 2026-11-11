@@ -55,7 +55,7 @@ Terylon's `/mcp` sorts what a session can call into three kinds, and only the fi
 
 | Kind | Tools | Who takes it, and how | What the tool answers |
 |---|---|---|---|
-| **The gate: merge** | none: no tool merges | the owner, in the console, on the story's gate and the commit with the green verdict | — a session gives the console's link, and never works around it |
+| **The gate: merge** | none: no tool merges | the owner, in the console: one button merges the commit the story's green verdict was made for | — `briefing` gives each waiting story's console link; a session passes it on, reads the outcome later with `story_get`, and never works around it |
 | **The owner's acts** | `plan_approve`, `plan_rethink`, `story_return`, `story_unblock`, `story_abandon`, `story_stop`, `story_accept`, `leader_pause`, `leader_resume`, `goal_drop`, `memory_confirm`, `memory_drop`, `policy_save` | the owner, in the console, in the pane, or in a session — where Claude calls one only on the owner's word given in the conversation, never to be helpful. Each applies at once, with no confirmation asked | `{accepted, sentence, commandId, subjectId}`; `accepted: null` means the leader has not decided within 10 s — say so, and do not send the write again: `leader_answer` with the `commandId` reads the decision later; a refusal, `{refused, status?, console?}` or `accepted: false`, carries a sentence to relay |
 | **Writes that decide nothing** | `goal_add`, `tasks_add`, `leader_answer`, `memory_propose`, `notice_handle`, `spec_revise` and the like | anyone in the session, as a skill describes | the leader's answer |
 
