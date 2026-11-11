@@ -10,7 +10,7 @@ allowed-tools: mcp__plugin_terylon-os_terylon__* mcp__terylon__*
 
 ## What to do
 
-> Show me story {the story's number}: read it with story_get and work_in_flight — its step n of m, cost against budget, hours, attempts, timeline, pull request and verdicts. If it is blocked, say why and offer story_unblock with an answer; if its run is going nowhere, offer story_stop; if it is stuck or wrong, offer story_return or story_abandon. Do not act before I choose.
+> Show me story {the story's number}: read it with story_get and work_in_flight — its step n of m, cost, hours, attempts, timeline, pull request and verdicts. If it is blocked, say why and offer story_unblock with an answer; if its run is going nowhere, offer story_stop; if it is stuck or wrong, offer story_return or story_abandon. Do not act before I choose.
 
 ## What binds it
 
@@ -26,5 +26,5 @@ allowed-tools: mcp__plugin_terylon-os_terylon__* mcp__terylon__*
   | `story_accept` | `{story}` | the story is kept in Terylon's own list |
 
 - **The answer is `{accepted, sentence, commandId, subjectId}`.** `accepted: null` means the leader has not decided within 10 s: say so, and do not send the write again; `leader_answer` with the `commandId` reads the decision later. A refusal, `{refused, status?, console?}` or `accepted: false`, carries a sentence: relay it.
-- **Merge is the one gate**, and it is not taken here: `merge-gate` walks a verified story's evidence, and the owner merges in the console, on the commit with the green verdict.
+- **Merge is the one gate**, and it is not taken here: `merge-gate` walks a verified story's evidence, and the owner merges with one button in the console, on the commit its green verdict was made for.
 - **This is what the pane's "Shrň mi to v session" asks for**: the `terylon-pane` mod posts the request into the session, and this skill answers it.

@@ -128,7 +128,7 @@ test("the merge-gate skill leaves the merge to the owner in the console", () =>
 
     assert.match(text, /merge is the one gate/i);
     assert.match(text, MERGE_IN_CONSOLE);
-    assert.match(text, /I merge in the console, on the commit with the green verdict/);
+    assert.ok(text.includes("to merge, give me the story's console link from briefing, where I press Merge on the verdict's commit myself"), "merge-gate mirrors the prompt Terylon serves");
 });
 
 test("teeth: an owner's act called a gate confirmed in Terylon's form is caught", () =>

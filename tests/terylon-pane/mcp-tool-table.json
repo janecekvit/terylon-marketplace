@@ -67,7 +67,6 @@
       "story_merge",
       "check_run",
       "check_get",
-      "story_choose_run",
       "task_run",
       "task_change",
       "task_pause",

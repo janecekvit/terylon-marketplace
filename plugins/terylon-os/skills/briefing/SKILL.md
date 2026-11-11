@@ -10,11 +10,11 @@ allowed-tools: mcp__plugin_terylon-os_terylon__* mcp__terylon__*
 
 ## What to do
 
-> Call the terylon briefing tool. Tell me in a few lines what waits on me — plans at the gate (its ref, its goal's ref, stories, estimate), stories verified and waiting for their merge, the leader's open questions, blocked stories, whether the leader is paused — then offer the one next act that matters most. Do not act before I choose.
+> Call the terylon briefing tool. Tell me in a few lines what waits on me — plans at the gate (its ref, its goal's ref, stories), stories verified and waiting for their merge, the leader's open questions, blocked stories, whether the leader is paused — then offer the one next act that matters most. Do not act before I choose.
 
 ## What binds it
 
 - **Read with `briefing` first**; `work_in_flight` and `events_since` only when the owner asks for more.
 - **Never take an owner's act to be helpful.** `plan_approve`, `story_return`, `leader_resume` and the other owner's acts are called only on the owner's word, given in this conversation, and apply at once, with no confirmation asked; offering one is the most this skill does unasked.
-- **Merge is the one gate, and it is the console's alone**: the owner merges there, on the commit with the green verdict, and no tool merges. Give the console's link and stop; `merge-gate` walks the evidence first.
+- **Merge is the one gate, and it is the console's alone: no tool merges.** `briefing` lists the stories verified and waiting for their merge, each with its console link, where one button merges the commit its green verdict was made for: give the person that link and read the outcome later with `story_get`. `merge-gate` walks the evidence first.
 - **The owner's language**: answer in it. Story titles stay as filed.
