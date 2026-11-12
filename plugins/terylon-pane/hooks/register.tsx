@@ -121,20 +121,25 @@ import {
   SIGNALS_KEPT,
   candidatesFromEvents,
   candidatesFromFlight,
+  catchUpClaimKey,
   catchUpSummary,
+  claimKey,
+  claimsOf,
   coalesce,
   deletedGoalsOf,
   goalOfStory,
   heldOf,
+  isClaimedElsewhere,
   isDeletedSentence,
   settleCandidate,
   signalFor,
   signalKey,
   signalsSummary,
   verdictOf,
+  withClaims,
   withoutDeletedGoals,
 } from './signals'
-import type { Candidate, Signal, Verdict } from './signals'
+import type { Candidate, Claims, Signal, Verdict } from './signals'
 import { attach, bytesText, charactersText, markdownFilesOf, pathIn, specFilesOf, specificationOf, specificationProblem } from './specification'
 
 type Json = Record<string, unknown>
@@ -146,7 +151,7 @@ type Reset = { from: number; head: number | null; refused: string | null }
 export const PANE = 'terylon'
 
 // The mod's version, said on Health: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.22.1'
+export const MOD_VERSION = '1.23.0'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -191,6 +196,17 @@ const STORE_HELD = 'held'
 // posts and toasts. Its holder renews it every tick; one not renewed for three ticks has lapsed.
 const STORE_SIGNALLER = 'signaller'
 const LEASE_MILLISECONDS = 3 * POLL_MS
+// TERYLON'S SESSION, as the owner marked it in the pane: while it holds a live lease no other session takes it, typing
+// or not, and it takes the lease from any other. Kept across restarts; a marked session that closed holds nothing.
+const STORE_HOME = 'home'
+// ONE CLAIM PER SIGNAL, beside the lease: two sessions that both read a signal write their claims, and only the one
+// whose claim is read back after the signal is read again posts it. Keyed `story:kind:seq`, and `catch-up:<lastSeq>`.
+const STORE_CLAIMS = 'claims'
+// A claim whose session never posted, closed meanwhile, lapses after this; the signal is then told by another session.
+const CLAIM_LAPSE_MILLISECONDS = 10 * 60 * 1000
+// How long a claim is kept at all, and how many: the events behind an older one have long been read past.
+const CLAIMS_KEPT_MILLISECONDS = 24 * 60 * 60 * 1000
+const CLAIMS_MOST = 300
 
 // HOW LONG ONE $.store CALL MAY TAKE before the pane goes on with what it keeps in memory: a store that never answers
 // must not hold the poll, which waits for its last tick to end.
@@ -227,6 +243,8 @@ const EMPTY_SNAPSHOT: PaneSnapshot = {
   signallerMissingSince: null,
   signallerHolder: null,
   sessionIdSource: 'fallback',
+  home: 'none',
+  homeHolder: null,
   costKnown: true,
   runningTokens: null,
   costBasis: null,
@@ -728,6 +746,8 @@ async function refresh($: EngineInterface): Promise<boolean> {
     signallerMissingSince: current.signallerMissingSince ?? null,
     signallerHolder: current.signallerHolder ?? null,
     sessionIdSource: current.sessionIdSource ?? 'fallback',
+    home: current.home ?? 'none',
+    homeHolder: current.homeHolder ?? null,
     questions: questionItems(lastBriefing),
   }))
   await showHealth($)
@@ -1113,7 +1133,19 @@ async function postSignals($: EngineInterface, candidates: Candidate[]): Promise
 
   const toasted = heldToasted.splice(0)
   const read_ = [...held.splice(0), ...candidates]
-  const signals = await settleSignals($, read_, done)
+  // CLAIMED BEFORE THEY ARE READ AGAIN, read back after: another session's claim written meanwhile wins, and a signal
+  // another session holds waits here, unposted, until it is told there or its claim lapses.
+  const mine = new Set(await claim($, read_.map(claimKey)))
+  const settledSignals = await settleSignals($, read_.filter(candidate => mine.has(claimKey(candidate))), done)
+  const still = await stillClaimed($, [...mine])
+  const elsewhere = read_.filter((candidate, index) => !still.has(claimKey(candidate)) && read_.findIndex(other => claimKey(other) === claimKey(candidate)) === index)
+  const elsewhereStories = new Set(elsewhere.map(candidate => candidate.story))
+  const signals = settledSignals.filter(signal => !elsewhereStories.has(signal.story))
+  held.push(...elsewhere)
+
+  if (elsewhere.length > 0) {
+    debug($, `not posting ${elsewhere.map(claimKey).join(', ')}: another session claimed it`)
+  }
 
   if (signals.length === 0) {
     if (read_.length > 0) {
@@ -1130,7 +1162,7 @@ async function postSignals($: EngineInterface, candidates: Candidate[]): Promise
 
   // A KEY IS RECORDED ONLY ONCE ITS PROMPT ENTERED: one dropped or refused is held, read again and posted next time.
   if (entered !== true) {
-    held.push(...read_)
+    held.push(...read_.filter(candidate => !elsewhere.includes(candidate)))
     await keepHeld($)
     debug($, `the done-signal ${keys} did not enter the session (${entered}); it is told on the next read`)
 
@@ -1176,6 +1208,16 @@ async function flushHeld($: EngineInterface): Promise<void> {
     return
   }
 
+  // A SESSION THE LEASE MOVED AWAY FROM during its turn posts nothing: what it held is in the shared store, and the
+  // holder tells it.
+  if (!(await holdsLease($))) {
+    debug($, `the lease moved to another session during this turn; ${held.length} held signals are left to it`)
+    held.splice(0)
+    heldToasted.splice(0)
+
+    return
+  }
+
   isPolling = true
 
   try {
@@ -1197,7 +1239,91 @@ async function markSignalled($: EngineInterface, candidates: Candidate[]): Promi
   await keep($, STORE_SIGNALLED, done.slice(-SIGNALS_KEPT))
 }
 
+const CLAIM_OPTIONS = { lapseMs: CLAIM_LAPSE_MILLISECONDS, keptMs: CLAIMS_KEPT_MILLISECONDS, most: CLAIMS_MOST }
+
+// THIS SESSION'S CLAIMS, written into the shared store for the keys no other session holds: the keys it took.
+async function claim($: EngineInterface, keys: string[]): Promise<string[]> {
+  if (keys.length === 0) {
+    return []
+  }
+
+  const now = await $.clock.now()
+  const written = withClaims(claimsOf(await kept($, STORE_CLAIMS)), keys, sessionId, now, CLAIM_OPTIONS)
+
+  if (written.mine.length > 0) {
+    await keep($, STORE_CLAIMS, written.claims)
+  }
+
+  return written.mine
+}
+
+// The keys still this session's when the store is read back.
+async function stillClaimed($: EngineInterface, keys: string[]): Promise<Set<string>> {
+  if (keys.length === 0) {
+    return new Set()
+  }
+
+  const claims: Claims = claimsOf(await kept($, STORE_CLAIMS))
+  const now = await $.clock.now()
+
+  return new Set(keys.filter(key => !isClaimedElsewhere(claims, key, sessionId, now, CLAIM_LAPSE_MILLISECONDS)))
+}
+
 type Lease = { session: string; since: number; until: number; seen: boolean }
+
+type Home = { session: string; since: number }
+
+function homeValueOf(value: unknown): Home | null {
+  const home = value as Partial<Home> | null
+
+  return home !== null && typeof home === 'object' && typeof home.session === 'string' && home.session !== '' && typeof home.since === 'number' ? { session: home.session, since: home.since } : null
+}
+
+// The session the owner marked as Terylon's, as the shared store keeps it; none where the store does not answer.
+async function homeOf($: EngineInterface): Promise<Home | null> {
+  const answered = await storeCall($, () => $.store.get(STORE_HOME))
+
+  return 'error' in answered ? null : homeValueOf(answered.value)
+}
+
+async function showHome($: EngineInterface, home: Home | null): Promise<void> {
+  const which: NonNullable<PaneSnapshot['home']> = home === null ? 'none' : home.session === sessionId ? 'this' : 'another'
+  const holder = which === 'another' && home !== null ? shortId(home.session) : null
+
+  await update($, snapshot, (current: PaneSnapshot): PaneSnapshot => (current.home === which && (current.homeHolder ?? null) === holder ? current : { ...EMPTY_SNAPSHOT, ...current, home: which, homeHolder: holder }))
+}
+
+// THE OWNER MARKS THIS SESSION AS TERYLON'S, or takes the mark back; a mark naming another session is left to it.
+async function markHome($: EngineInterface, isMarked: boolean): Promise<void> {
+  if (isMarked) {
+    const home = { session: sessionId, since: await $.clock.now() }
+    await keep($, STORE_HOME, home)
+    await showHome($, home)
+    debug($, 'the owner marked this session as Terylon\'s')
+
+    return
+  }
+
+  const home = await homeOf($)
+
+  if (home !== null && home.session === sessionId) {
+    await forget($, STORE_HOME)
+    await showHome($, null)
+    debug($, 'the owner took back the mark of this session as Terylon\'s')
+
+    return
+  }
+
+  await showHome($, home)
+}
+
+// WHETHER THE LEASE STILL NAMES THIS SESSION, read, never taken: a store that does not answer, or no lease, says yes.
+async function holdsLease($: EngineInterface): Promise<boolean> {
+  const answered = await storeCall($, () => $.store.get(STORE_SIGNALLER))
+  const lease = 'error' in answered ? null : leaseOf(answered.value)
+
+  return lease === null || lease.session === sessionId
+}
 
 function leaseOf(value: unknown): Lease | null {
   if (value === null || typeof value !== 'object') {
@@ -1244,10 +1370,13 @@ async function isSignaller($: EngineInterface, now: number): Promise<boolean> {
 
   const lease = leaseOf(answered.value)
   const isMine = lease !== null && lease.session === sessionId
+  const home = await homeOf($)
+  const isHome = home !== null && home.session === sessionId
+  await showHome($, home)
 
   // A SESSION TAKEN FOR UNATTENDED takes no lease, but renews its own: a module reloaded in place may hear a
   // session.start that says nobody is at the session that held it.
-  if (isUnattended && !isOwners && !isMine) {
+  if (isUnattended && !isOwners && !isMine && !isHome) {
     await showSignaller($, 'none', null)
 
     return false
@@ -1255,7 +1384,10 @@ async function isSignaller($: EngineInterface, now: number): Promise<boolean> {
 
   const isLive = lease !== null && lease.until > now
   const isTyped = typedAt !== null && lease !== null && typedAt > lease.since
-  const mayTake = isMine || !isLive || isTyped || (isOwners && lease !== null && !lease.seen)
+  // THE SESSION THE OWNER MARKED takes the lease from any other, and keeps it while it lives: typing elsewhere moves
+  // nothing. A marked session that closed lets its lease lapse, and the ordinary rules choose.
+  const isHomeElsewhere = home !== null && !isHome && lease !== null && isLive && lease.session === home.session
+  const mayTake = isHome || isMine || (!isHomeElsewhere && (!isLive || isTyped || (isOwners && lease !== null && !lease.seen)))
 
   if (!mayTake && lease !== null) {
     await showSignaller($, 'another', lease.since, lease.session)
@@ -1520,10 +1652,18 @@ async function readMoved($: EngineInterface, isStart: boolean, now: number): Pro
   } else if (isCatchUp) {
     // Back after a long time away: ONE summary, the gap's signals inside it.
     const summary = catchUpSummary({ awayMs, events, briefing: lastBriefing, flight: lastFlight, policy, basis: costBasis })
+    // ONE SESSION POSTS IT: claimed before the signals are marked, read back after.
+    const key = catchUpClaimKey(lastSeq)
+    const isClaimed = (await claim($, [key])).length > 0
     await markSignalled($, candidates)
-    debug($, `posting the catch-up summary of ${read_.events.length} events`)
-    await $.prompt.submit({ text: summary.prompt })
-    await update($, band, (): PaneBand => ({ text: summary.band, link: consoleLink(base, 'waiting'), isAlert: false }))
+
+    if (isClaimed && (await stillClaimed($, [key])).has(key)) {
+      debug($, `posting the catch-up summary of ${read_.events.length} events`)
+      await $.prompt.submit({ text: summary.prompt })
+      await update($, band, (): PaneBand => ({ text: summary.band, link: consoleLink(base, 'waiting'), isAlert: false }))
+    } else {
+      debug($, `not posting the catch-up summary from ${lastSeq}: another session claimed it`)
+    }
   } else {
     await postSignals($, candidates)
   }
@@ -1600,6 +1740,8 @@ function snapshotOf(value: unknown): PaneSnapshot {
     signallerMissingSince: time(kept.signallerMissingSince),
     signallerHolder: typeof kept.signallerHolder === 'string' ? kept.signallerHolder : null,
     sessionIdSource: kept.sessionIdSource === 'session.id' ? 'session.id' : 'fallback',
+    home: kept.home === 'this' || kept.home === 'another' ? kept.home : 'none',
+    homeHolder: typeof kept.homeHolder === 'string' ? kept.homeHolder : null,
   }
 }
 
@@ -3130,6 +3272,12 @@ export const register: Register = on => {
       return { text: asked === 'test' ? COPY.testOn : COPY.testOff }
     }
 
+    if (asked === 'here' || asked === 'here off') {
+      await markHome($, asked === 'here')
+
+      return { text: asked === 'here' ? COPY.homeOn : COPY.homeOff }
+    }
+
     await openPane($, QUEUE)
 
     return { text: 'Terylon Cockpit is open.' }
@@ -3876,6 +4024,7 @@ export const register: Register = on => {
           COPY.diagnosticsEvents('silentSince', typedLine(raw.eventsSilentSince)),
           COPY.diagnosticsEvents('store refusals', String(storeRefusals)),
           COPY.diagnosticsEvents('signaller', current.signaller === 'this' ? COPY.signallerThis(current.signallerHolder ?? shortId(sessionId), current.sessionIdSource) : current.signaller === 'another' ? COPY.signallerAnother(current.signallerHolder ?? '?', at(current.signallerSince)) : COPY.signallerNone),
+          COPY.diagnosticsEvents('home', current.home === 'this' ? COPY.homeThis : current.home === 'another' ? COPY.homeAnother(current.homeHolder ?? '?') : COPY.signallerNone),
         ]
         note($, `terylon-pane: Health's done-signal: ${eventsDiagnostics.join('; ')}`)
         const problems = [problemCard, rulesCard, isShown('events') ? eventsCard : null, isShown('events') ? signallerCard : null, pausedCard].filter(item => item !== null)
@@ -3950,6 +4099,13 @@ export const register: Register = on => {
             current.connection === 'ok' && current.paused === null && actState('leader').open === 'leader_pause' ? actField('leader', 'leader_pause', null, { label: COPY.whyOptional }) : null,
             current.connection === 'ok' && current.paused === null && actState('leader').open === 'leader_pause' ? <Text color="subtle" size="footnote">{COPY.pauseNote}</Text> : null,
             actBusyNote('leader'),
+            // TERYLON'S SESSION: where a story's done-signal and the catch-up summary are posted, chosen by the owner.
+            <Box key="status-home" flexDirection="row" justifyContent="space-between" alignItems="center" gap={1} flexWrap="wrap">
+              <Box flexShrink={1} minWidth={0}><Text color="inactive">{current.home === 'this' ? COPY.homeHere : current.home === 'another' ? COPY.homeElsewhere : COPY.homeNone}</Text></Box>
+              {current.home === 'this'
+                ? <Button key="home-unmark" label={COPY.homeUnmark} onPress={() => markHome($, false)} />
+                : <Button key="home-mark" label={COPY.homeMark} onPress={() => markHome($, true)} />}
+            </Box>,
             // THE POLICY AND DIAGNOSTICS, a press away.
             folds('status-folds', [
               isShown('policy') ? foldButton('fold-policy', COPY.policy, shown.includes('fold-policy')) : null,

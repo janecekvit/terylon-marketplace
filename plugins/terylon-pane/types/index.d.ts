@@ -145,6 +145,10 @@ export type PaneSnapshot = {
   // The holder's id, shortened, and where this session's own id came from: the engine's session.id, or made here.
   signallerHolder: string | null
   sessionIdSource: 'session.id' | 'fallback'
+  // TERYLON'S SESSION, as the owner marked it: this one, another (its id shortened), or none marked. Optional: a
+  // snapshot an earlier version kept has neither field.
+  home?: 'this' | 'another' | 'none'
+  homeHolder?: string | null
   // TODAY'S COST, KNOWN OR NOT (Terylon S68): on the setup token, or where a story says its cost is not known, only the
   // tokens are said, never a $ figure. The basis is the briefing's costBasis, 'api' or 'setup-token'.
   costKnown?: boolean

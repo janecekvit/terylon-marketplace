@@ -14,7 +14,7 @@ const MUTATIONS = [
     {
         name: "the catch-up summary is removed",
         file: "hooks/register.tsx",
-        find: "    await $.prompt.submit({ text: summary.prompt })\n",
+        find: "      await $.prompt.submit({ text: summary.prompt })\n",
         replace: "",
     },
     {
@@ -1020,7 +1020,7 @@ const MUTATIONS = [
     {
         name: "a session no person is at posts the done-signal",
         file: "hooks/register.tsx",
-        find: "  if (isUnattended && !isOwners && !isMine) {\n",
+        find: "  if (isUnattended && !isOwners && !isMine && !isHome) {\n",
         replace: "  if (false) {\n",
     },
     {
@@ -1038,14 +1038,14 @@ const MUTATIONS = [
     {
         name: "taking an empty lease requires a typed turn again",
         file: "hooks/register.tsx",
-        find: "  const mayTake = isMine || !isLive || isTyped",
-        replace: "  const mayTake = isMine || (!isLive && typedAt !== null) || isTyped",
+        find: "(!isHomeElsewhere && (!isLive || isTyped",
+        replace: "(!isHomeElsewhere && ((!isLive && typedAt !== null) || isTyped",
     },
     {
         name: "an empty or lapsed lease is no longer taken",
         file: "hooks/register.tsx",
-        find: "  const mayTake = isMine || !isLive || isTyped",
-        replace: "  const mayTake = isMine || isTyped",
+        find: "(!isHomeElsewhere && (!isLive || isTyped",
+        replace: "(!isHomeElsewhere && (isTyped",
     },
     {
         name: "no session posting the done-signal is hidden from the Status tab",
@@ -1200,8 +1200,8 @@ const MUTATIONS = [
     {
         name: "a session taken for unattended no longer renews a lease that names it",
         file: "hooks/register.tsx",
-        find: "  if (isUnattended && !isOwners && !isMine) {\n",
-        replace: "  if (isUnattended && !isOwners) {\n",
+        find: "  if (isUnattended && !isOwners && !isMine && !isHome) {\n",
+        replace: "  if (isUnattended && !isOwners && !isHome) {\n",
     },
     {
         name: "a session that takes the lease no longer reads back what the last holder held",
@@ -1597,6 +1597,42 @@ const MUTATIONS = [
         file: "hooks/register.tsx",
         find: "      return isWaiting ? <Button key={key} label={name} variant=\"primary\" onPress={onPress} /> : <Button key={key} label={name} onPress={onPress} />\n",
         replace: "      return <Button key={key} label={name} variant=\"primary\" onPress={onPress} />\n",
+    },
+    {
+        name: "a claim another session wrote over is not read back, and both sessions post",
+        file: "hooks/register.tsx",
+        find: "!still.has(claimKey(candidate)) && read_",
+        replace: "!mine.has(claimKey(candidate)) && read_",
+    },
+    {
+        name: "a signal another session claimed is claimed and posted here too",
+        file: "hooks/signals.ts",
+        find: "  const mine = keys.filter(key => !isClaimedElsewhere(claims, key, session, now, options.lapseMs))\n",
+        replace: "  const mine = [...keys]\n",
+    },
+    {
+        name: "a session the lease moved away from posts what it held at its turn's end",
+        file: "hooks/register.tsx",
+        find: "  if (!(await holdsLease($))) {\n",
+        replace: "  if (false) {\n",
+    },
+    {
+        name: "typing in another session takes the lease from the session marked as Terylon's",
+        file: "hooks/register.tsx",
+        find: "(!isHomeElsewhere && (",
+        replace: "((",
+    },
+    {
+        name: "the session marked as Terylon's no longer takes the lease from a live holder",
+        file: "hooks/register.tsx",
+        find: "  const mayTake = isHome || isMine || ",
+        replace: "  const mayTake = isMine || ",
+    },
+    {
+        name: "the catch-up summary is posted though another session claimed it",
+        file: "hooks/register.tsx",
+        find: "    if (isClaimed && (await stillClaimed($, [key])).has(key)) {\n",
+        replace: "    if (true) {\n",
     },
 ];
 

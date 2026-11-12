@@ -165,6 +165,67 @@ export function heldOf(value: unknown, into: readonly Candidate[] = []): Candida
   return read
 }
 
+// ONE CLAIM PER SIGNAL in the store every session shares: which session took it, and when.
+export type Claim = { session: string; at: number }
+export type Claims = Record<string, Claim>
+
+// A candidate as every session reads it from the same event: its story, its move and its sequence.
+export function claimKey(candidate: Candidate): string {
+  return `${candidate.story}:${candidate.kind}:${candidate.seq}`
+}
+
+export function catchUpClaimKey(lastSeq: number): string {
+  return `catch-up:${lastSeq}`
+}
+
+// The claims as the store kept them, read by their types: what is not a claim is dropped.
+export function claimsOf(value: unknown): Claims {
+  const read: Claims = {}
+
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return read
+  }
+
+  for (const [key, claim] of Object.entries(value as Json)) {
+    const session = (claim as Json | null)?.session
+    const at = (claim as Json | null)?.at
+
+    if (typeof session === 'string' && typeof at === 'number' && Number.isFinite(at)) {
+      read[key] = { session, at }
+    }
+  }
+
+  return read
+}
+
+// WHETHER ANOTHER SESSION HOLDS A KEY: its claim, not yet lapsed. This session's own claim never stands in its way.
+export function isClaimedElsewhere(claims: Claims, key: string, session: string, now: number, lapseMs: number): boolean {
+  const claim = claims[key]
+
+  return claim !== undefined && claim.session !== session && now - claim.at < lapseMs
+}
+
+// THE CLAIMS WITH THIS SESSION'S WRITTEN IN, for the keys no other session holds; older claims and the oldest past
+// `most` are dropped, so the store stays bounded.
+export function withClaims(claims: Claims, keys: readonly string[], session: string, now: number, options: { lapseMs: number; keptMs: number; most: number }): { claims: Claims; mine: string[] } {
+  const mine = keys.filter(key => !isClaimedElsewhere(claims, key, session, now, options.lapseMs))
+  const next: Claims = {}
+
+  for (const [key, claim] of Object.entries(claims)) {
+    if (now - claim.at < options.keptMs) {
+      next[key] = claim
+    }
+  }
+
+  for (const key of mine) {
+    next[key] = { session, at: now }
+  }
+
+  const ordered = Object.entries(next).sort((left, right) => left[1].at - right[1].at).slice(-options.most)
+
+  return { claims: Object.fromEntries(ordered), mine }
+}
+
 export function signalKey(candidate: Candidate, verdict: Verdict | null): string {
   const which = candidate.kind === 'verified' && verdict?.commit != null ? verdict.commit : String(candidate.seq)
 

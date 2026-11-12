@@ -30,7 +30,7 @@ test('well: ok, the slots, the cost today, no 30 days, nothing wrong, the diagno
 
     expect(await ui.find({ type: 'Text', text: /^Problems/ })).toBeUndefined()
 
-    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.22.1') })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: exact('terylon-pane 1.23.0') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('TERYLON_URL https://terylon.example.ts.net') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('server plugin:terylon-os:terylon') })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: exact('Every failure is in claude --debug under terylon-pane:') })).toBeDefined()
