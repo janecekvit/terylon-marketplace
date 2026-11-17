@@ -125,7 +125,8 @@ flowchart TD
             server["server terylon at ${TERYLON_URL}/mcp"]:::terylon
             skills["`one skill per prompt it serves
 briefing, hand-over, merge-gate,
-add-goal, review-plan, show-story`"]:::terylon
+add-goal, review-plan, show-story;
+and lead, the plugin's own`"]:::terylon
         end
 
         subgraph pane ["terylon-pane mod: shows, asks, answers, posts, takes the owner's acts; never merges"]

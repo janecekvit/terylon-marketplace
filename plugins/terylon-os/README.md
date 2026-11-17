@@ -1,6 +1,6 @@
 # terylon-os
 
-**Terylon itself, as a plugin** — *Terylon, the agentic OS extension*: the owner's MCP endpoint, `/mcp`, registered as the server `terylon`, and one skill per prompt that endpoint serves. Nothing here holds a rule: merge is the one gate, and the owner makes it in Terylon's console; every other act that decides something is the owner's, and a session takes it only on the owner's word.
+**Terylon itself, as a plugin** — *Terylon, the agentic OS extension*: the owner's MCP endpoint, `/mcp`, registered as the server `terylon`, one skill per prompt that endpoint serves, and `lead`, the way of working for the chat that leads Terylon. Nothing here holds a rule: merge is the one gate, and the owner makes it in Terylon's console; every other act that decides something is the owner's, and a session takes it only on the owner's word.
 
 Where it stands beside the PC's pane and the phone: [One source of truth, reached from two places](../../docs/architecture/one-source-of-truth-reached-from-two-places.md).
 
@@ -22,6 +22,17 @@ The owner of a Terylon, in any Claude Code session that can reach it over the ta
 | `add-goal` | `goal` | a goal in one sentence — a general direction, a concrete ask steered to a task under a goal — to `goal_add`, a short title, the request whole as `ask`, and the .md files named or written as `specification` |
 | `review-plan` | `plan-review` | a plan at the plan gate |
 | `show-story` | `story` | one story in flight |
+
+**`lead` is the plugin's own skill and mirrors no prompt.** It is the way of working for the chat that leads Terylon for its owner, the cockpit: it applies when the session is Terylon's cockpit, when the owner asks Claude to lead or watch Terylon, and when a `terylon-pane` signal arrives in the chat. It says what to read first, which read settles a signal most cheaply, how a story's question is put to the owner, where a lesson is kept and whose the acts are. Beside `briefing`, `story_get`, `memory_propose` and `leader_answer`, it names these tools:
+
+| Tool | Kind | `lead` uses it to |
+|---|---|---|
+| `memory_list_recent` | read | start from what the owner already told Terylon, before the first answer |
+| `stories_list` | read | read the stories of one state, each with its `blockedReason` and its order, before any `story_get` |
+| `knowledge_search` | read | look for a note with the words of an error, before working around it |
+| `question_answer` | write that decides nothing, `{question, answer}` | send the owner's own answer to a story's question |
+| `knowledge_propose` | write that decides nothing | propose a lesson or a gotcha; like `memory_propose`, it waits for the owner's confirmation in the console |
+| `story_order` | write that decides nothing | change the order a story waits in, once the files of the stories that would run together are compared |
 
 **What it does not contain: the pane.** The Desktop pane is the mod `terylon-pane`, a separate plugin, because a mod draws only where a surface can and the skills and tools must work everywhere — an SSH session and a Remote Control session have the plugin alone.
 
@@ -58,6 +69,8 @@ Terylon's `/mcp` sorts what a session can call into three kinds, and only the fi
 | **The gate: merge** | none: no tool merges | the owner, in the console: one button merges the commit the story's green verdict was made for | — `briefing` gives each waiting story's console link; a session passes it on, reads the outcome later with `story_get`, and never works around it |
 | **The owner's acts** | `plan_approve`, `plan_rethink`, `story_return`, `story_unblock`, `story_abandon`, `story_stop`, `story_accept`, `leader_pause`, `leader_resume`, `goal_drop`, `memory_confirm`, `memory_drop`, `policy_save` | the owner, in the console, in the pane, or in a session — where Claude calls one only on the owner's word given in the conversation, never to be helpful. Each applies at once, with no confirmation asked | `{accepted, sentence, commandId, subjectId}`; `accepted: null` means the leader has not decided within 10 s — say so, and do not send the write again: `leader_answer` with the `commandId` reads the decision later; a refusal, `{refused, status?, console?}` or `accepted: false`, carries a sentence to relay |
 | **Writes that decide nothing** | `goal_add`, `tasks_add`, `leader_answer`, `memory_propose`, `notice_handle`, `spec_revise` and the like | anyone in the session, as a skill describes | the leader's answer |
+
+**The owner's word may be a standing one.** An owner who hands Claude the lead in the conversation ("decide yourself") has given it for the owner's writes Claude then judges right, each reported in one line so the owner can overrule it. An act that cannot be overruled afterwards, `goal_drop`, `story_abandon` or `memory_drop`, is still put to the owner first, and the merge is never taken. `lead` says how far a handed-over lead reaches.
 
 **A goal's specification** (Terylon S53) is the owner's .md files, each whole, versioned, read by the leader and every run of the goal's stories:
 

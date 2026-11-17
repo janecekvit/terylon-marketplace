@@ -1634,6 +1634,18 @@ const MUTATIONS = [
         find: "    if (isClaimed && (await stillClaimed($, [key])).has(key)) {\n",
         replace: "    if (true) {\n",
     },
+    {
+        name: "a blocked story's signal no longer takes its reason from story_get",
+        file: "hooks/signals.ts",
+        find: "{ ...candidate, reason: text(story.blockedReason) ?? candidate.reason }",
+        replace: "candidate",
+    },
+    {
+        name: "a blocked story's signal that names its reason still asks why",
+        file: "hooks/signals.ts",
+        find: "candidate.reason === null ? 'Shrň mi proč a co potřebuje ode mě.' : 'Shrň mi, co potřebuje ode mě.'",
+        replace: "'Shrň mi proč a co potřebuje ode mě.'",
+    },
 ];
 
 module.exports = { MUTATIONS };

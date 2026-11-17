@@ -1,5 +1,5 @@
-// The terylon-os plugin (#332; `terylon` until 2026-10-12): its one server is Terylon's /mcp, reached by the owner's tailnet identity
-// with no header or token, and every prompt that endpoint serves has exactly one skill mirroring it.
+// The terylon-os plugin: its one server is Terylon's /mcp, reached by the owner's tailnet identity with no header or
+// token; every prompt that endpoint serves has exactly one skill mirroring it, and the plugin's own skill mirrors none.
 "use strict";
 
 const test = require("node:test");
@@ -19,6 +19,33 @@ const PROMPT_TO_SKILL = {
     "plan-review": "review-plan",
     "story": "show-story",
 };
+
+// The skills that are the plugin's own: each mirrors no prompt, and says so.
+const OWN_SKILLS = ["lead"];
+
+// Every skill the plugin ships.
+const ALL_SKILLS = [...Object.values(PROMPT_TO_SKILL), ...OWN_SKILLS];
+
+// The copy of Terylon's tool table the pane's tests keep: what /mcp serves, and what its simplification removes.
+const TOOL_TABLE = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "terylon-pane", "mcp-tool-table.json"), "utf8"));
+
+// A tool as a text names it: a backticked snake_case word, or `briefing`, the one tool of a single word.
+const NAMED_TOOL = /`([a-z]+(?:_[a-z]+)+|briefing)`/g;
+
+// The tools a text names, each once.
+function toolsNamedIn(text)
+{
+    return [...new Set([...text.matchAll(NAMED_TOOL)].map(match => match[1]))];
+}
+
+// The tools a text names that Terylon's /mcp does not serve: absent from the table, or removed by its simplification.
+function unservedToolsIn(text)
+{
+    const served = new Set([...TOOL_TABLE.reads, ...TOOL_TABLE.writes, ...TOOL_TABLE.ownerWritesThatWereGates]);
+    const removed = new Set(TOOL_TABLE.removedBySimplification.tools);
+
+    return toolsNamedIn(text).filter(tool => !served.has(tool) || removed.has(tool));
+}
 
 // Merge, the one gate, is the console's alone: no text names a merge tool to call, nor a passkey, which Terylon no longer has.
 const MERGE_TOOL = "story_merge";
@@ -99,7 +126,7 @@ test("every prompt has exactly one skill, and no skill mirrors a prompt that doe
 {
     const skills = fs.readdirSync(path.join(PLUGIN_ROOT, "skills")).sort();
 
-    assert.deepEqual(skills, Object.values(PROMPT_TO_SKILL).sort());
+    assert.deepEqual(skills, [...ALL_SKILLS].sort());
 
     for (const [prompt, skill] of Object.entries(PROMPT_TO_SKILL))
     {
@@ -112,9 +139,43 @@ test("every prompt has exactly one skill, and no skill mirrors a prompt that doe
     }
 });
 
+test("lead is the plugin's own: it mirrors no prompt, carries its siblings' frontmatter and says when it applies", () =>
+{
+    const text = readSkill("lead");
+    const description = /^description: "(.*)"$/m.exec(text)?.[1] ?? "";
+
+    assert.match(text, /^name: lead$/m);
+    assert.match(text, /^description: "Use when /m);
+    assert.match(text, /^allowed-tools: .*mcp__plugin_terylon-os_terylon__\*.*mcp__terylon__\*/m);
+    assert.ok(!text.includes("**Mirrors the MCP prompt"), "lead claims to mirror a prompt");
+    assert.match(text, /it mirrors no MCP prompt/);
+    assert.match(description, /Terylon's cockpit/, "the description names the cockpit session");
+    assert.match(description, /lead or watch Terylon/, "the description names the owner asking Claude to lead or watch");
+    assert.match(description, /`terylon-pane` signal/, "the description names a signal from the pane");
+});
+
+test("every tool lead names is one Terylon's /mcp serves, and the plugin's README documents it", () =>
+{
+    const text = readSkill("lead");
+    const readme = fs.readFileSync(path.join(PLUGIN_ROOT, "README.md"), "utf8");
+
+    assert.ok(toolsNamedIn(text).length > 0, "lead names no tool at all");
+    assert.deepEqual(unservedToolsIn(text), []);
+
+    for (const tool of toolsNamedIn(text))
+    {
+        assert.ok(readme.includes(`\`${tool}\``), `README.md does not document ${tool}`);
+    }
+});
+
+test("teeth: a tool Terylon does not serve, or one its simplification removes, is caught", () =>
+{
+    assert.deepEqual(unservedToolsIn("Call `story_teleport`, then `check_run`, then `story_merge`; read with `story_get`."), ["story_teleport", "check_run", "story_merge"]);
+});
+
 test("merge is the one gate, the console's alone; every other act is the owner's, taken only on their word", () =>
 {
-    for (const skill of Object.values(PROMPT_TO_SKILL))
+    for (const skill of ALL_SKILLS)
     {
         assert.deepEqual(gateProblemsIn(readSkill(skill)), [], skill);
     }
@@ -175,7 +236,7 @@ function pendingProblemsIn(text)
 
 test("every text that says accepted: null says not to send the write again, and to read the decision with leader_answer", () =>
 {
-    for (const skill of Object.values(PROMPT_TO_SKILL))
+    for (const skill of ALL_SKILLS)
     {
         assert.deepEqual(pendingProblemsIn(readSkill(skill)), [], skill);
     }

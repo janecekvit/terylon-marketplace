@@ -11,7 +11,7 @@
       "source": "./plugins/terylon-os",
       "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-os",
       "repository": "https://github.com/janecekvit/terylon-marketplace",
-      "description": "Terylon itself — the owner's MCP endpoint (/mcp) as a server, and one skill per prompt it serves: briefing, hand-over, merge-gate, add-goal, review-plan, show-story. Works in any session, the terminal, SSH and Remote Control alike. Requires the TERYLON_URL environment variable; there is no default address.",
+      "description": "Terylon itself — the owner's MCP endpoint (/mcp) as a server, and one skill per prompt it serves: briefing, hand-over, merge-gate, add-goal, review-plan, show-story; and lead, the way of working for the chat that leads Terylon. Works in any session, the terminal, SSH and Remote Control alike. Requires the TERYLON_URL environment variable; there is no default address.",
       "category": "general",
       "keywords": [
         "terylon",
