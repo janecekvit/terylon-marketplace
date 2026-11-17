@@ -177,7 +177,7 @@ The plugin graph is drawn here and only here, from every `plugin.json#dependenci
 | `terylon-product` | the product owner or PM | `create-user-story`, `create-feature` | — |
 | `terylon-dev` | developers | `develop`, `brainstorm`, `write-plan`, `run-build-loop`, `background-run` | `leader`, `planner`, `developer`, `debugger`, `refactorer`, `security-reviewer`, `performance-reviewer`, `architecture-reviewer`, `edge-case-reviewer` |
 | `terylon-test` | anyone holding a checklist that decides something | `test`, `verify-test-plan`, `run-build-and-tests`, `run-ui-flows` | `tester` |
-| `terylon-os` | the owner of a Terylon, in any session: terminal, Desktop, SSH, Remote Control | `briefing`, `add-goal`, `review-plan`, `show-story`, `merge-gate`, `hand-over` | — |
+| `terylon-os` | the owner of a Terylon, in any session: terminal, Desktop, SSH, Remote Control | `briefing`, `add-goal`, `review-plan`, `show-story`, `merge-gate`, `hand-over`, `lead` | — |
 | `terylon-pane` | the owner of a Terylon, in Claude Desktop | — (a mod, Terylon Cockpit: `/terylon-cockpit`) | — |
 
 **`terylon-forge` is a port and ships no adapter, on purpose.** Declaring one would install an Azure DevOps MCP server in every GitHub repository. That is why you enable two keys, and why the adapters are siblings of the role plugins rather than layers under them. The reasoning is in [`docs/architecture/port-and-adapter-split.md`](./docs/architecture/port-and-adapter-split.md).
@@ -233,7 +233,7 @@ Terylon runs on your own machine and holds your goals. Its leader breaks each go
 
 | Plugin | Gives you |
 |---|---|
-| `terylon-os` | Terylon's `/mcp` server in any Claude Code session, with one skill per prompt it serves: the morning briefing, adding a goal, reviewing a plan, a story's state, the merge gate, a hand-over. Set `TERYLON_URL`; there is no default address and no token |
+| `terylon-os` | Terylon's `/mcp` server in any Claude Code session, with one skill per prompt it serves: the morning briefing, adding a goal, reviewing a plan, a story's state, the merge gate, a hand-over; and `lead`, the way of working for a chat that leads Terylon for you. Set `TERYLON_URL`; there is no default address and no token |
 | `terylon-pane` | *Terylon Cockpit*, opened by `/terylon-cockpit`: in Claude Desktop, three things: a band above the prompt saying what waits for you; a status line with the machine's health and today's cost, on the setup token its tokens and *cost not known on the setup token*; and a pane with five tabs (*Waiting*, *Goals*, *Notices*, *Memory*, *Health*), every subject by its ref. The pane answers the leader's questions, adds tasks and goals, follows a running story's stage, agent and tokens, and marks notices handled. It takes your acts on their cards (approve a plan, return, unblock, stop or accept a story, pause the leader, drop a goal, confirm a memory proposal, save the policy) and never merges |
 
 Agentic OS is the only source of truth, and the PC's pane and the phone through Remote Control both reach it through the same `/mcp`. See [one source of truth, reached from two places](./docs/architecture/one-source-of-truth-reached-from-two-places.md), and the READMEs of [`terylon-os`](./plugins/terylon-os/README.md) and [`terylon-pane`](./plugins/terylon-pane/README.md) for setup.

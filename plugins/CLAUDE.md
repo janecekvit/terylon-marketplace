@@ -335,7 +335,7 @@ terylon-core (root — no dependencies)
                   ├── terylon-dev      [terylon-git, terylon-forge, terylon-core]
                   └── terylon-test     [terylon-forge, terylon-core]
 
-terylon-os (no dependencies)                       Terylon itself: /mcp + a skill per prompt
+terylon-os (no dependencies)                       Terylon itself: /mcp + a skill per prompt + lead
     ▲
     └── terylon-pane  [terylon-os]                 a mod: the Desktop pane over that server
 ```
@@ -350,7 +350,7 @@ terylon-os (no dependencies)                       Terylon itself: /mcp + a skil
 | `terylon-product` | product owner / PM | `terylon-forge` |
 | `terylon-dev` | developers | `terylon-git`, `terylon-forge`, `terylon-core` |
 | `terylon-test` | anyone holding a checklist that decides something | `terylon-forge`, `terylon-core` |
-| `terylon-os` | the owner of a Terylon — its `/mcp` server and the skills mirroring its prompts | none |
+| `terylon-os` | the owner of a Terylon — its `/mcp` server, the skills mirroring its prompts, and `lead` for the chat that leads it | none |
 | `terylon-pane` | the owner of a Terylon, in Desktop — a mod drawing the pane | `terylon-os` |
 
 `terylon-product` reaches everything below it transitively. `terylon-dev` and `terylon-test` declare `terylon-core` **directly** as well: both load `measure-token-spend` whether or not git or a forge is in play, and `terylon-dev` additionally declares `terylon-git`, because `leader` dispatches `code-reviewer` whether or not a forge is.

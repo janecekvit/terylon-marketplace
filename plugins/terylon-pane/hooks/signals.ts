@@ -232,6 +232,20 @@ export function signalKey(candidate: Candidate, verdict: Verdict | null): string
   return `${candidate.story}:${candidate.kind}:${which}`
 }
 
+// How a sentence may already end, so a reason that ends one gets no second full stop.
+const SENTENCE_END = /[.!?…]$/
+
+// A REASON CLOSING ITS SENTENCE: after a colon, on one line, ending as it ends; a full stop alone where there is none.
+function reasonClause(reason: string | null): string {
+  const stated = (reason ?? '').replace(/\s+/g, ' ').trim()
+
+  if (stated === '') {
+    return '.'
+  }
+
+  return `: ${stated}${SENTENCE_END.test(stated) ? '' : '.'}`
+}
+
 export function signalFor(candidate: Candidate, verdict: Verdict | null): Signal {
   const story = candidate.story
   // THE STORY BY ITS REF, in the prompt and the toast alike; "#id" only from a Terylon older than refs.
@@ -268,11 +282,12 @@ export function signalFor(candidate: Candidate, verdict: Verdict | null): Signal
       toast = `Terylon: ${label} abandoned`
       break
     case 'blocked':
-      prompt = `${named} je zablokovaná. Shrň mi proč a co potřebuje ode mě.`
+      // WITH ITS REASON SAID, the ask is only what the story needs; without one, why it is blocked as well.
+      prompt = `${named} je zablokovaná${reasonClause(candidate.reason)} ${candidate.reason === null ? 'Shrň mi proč a co potřebuje ode mě.' : 'Shrň mi, co potřebuje ode mě.'}`
       toast = `Terylon: ${label} blocked`
       break
     case 'stuck':
-      prompt = `${named} se zasekla${candidate.reason === null ? '' : `: ${candidate.reason}`}. Shrň mi, co potřebuje.`
+      prompt = `${named} se zasekla${reasonClause(candidate.reason)} Shrň mi, co potřebuje.`
       toast = `Terylon: ${label} stuck`
       break
   }
@@ -313,7 +328,8 @@ const GOAL_ENDED = ['dropped', 'abandoned', 'closed']
 
 // WHAT A SIGNAL STILL MEANS, read against the story as story_get answers it right before the post: a verified story
 // merged or accepted since asks for no Accept, a blocked one unblocked or abandoned is not blocked, and nothing under a
-// dropped goal asks anything. An answer about another story, or none, leaves the signal as it was read.
+// dropped goal asks anything. A story still blocked takes its reason from that answer. An answer about another story,
+// or none, leaves the signal as it was read.
 export function settleCandidate(candidate: Candidate, story: Json | null): Candidate | null {
   if (story === null || number(story.id) !== candidate.story) {
     return candidate
@@ -332,7 +348,8 @@ export function settleCandidate(candidate: Candidate, story: Json | null): Candi
     case 'verified':
       return state === null || state === 'verified' ? candidate : null
     case 'blocked':
-      return state === null || state === 'blocked' ? candidate : null
+      // A BLOCKED STORY'S REASON is story_get's blockedReason, read now; the feed's event carries none.
+      return state === null || state === 'blocked' ? { ...candidate, reason: text(story.blockedReason) ?? candidate.reason } : null
     case 'stuck':
       return state !== null && (ENDED.includes(state) || state === 'verified') ? null : candidate
     default:
