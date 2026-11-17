@@ -16,8 +16,9 @@ allowed-tools: mcp__plugin_terylon-os_terylon__* mcp__terylon__*
 | a story asks a question | 4, 5 |
 | the owner states a rule, or something cost time | 6 |
 | stories are about to run together | 7 |
-| an act would decide something | 8 |
-| a report ends | 9 |
+| a story is blocked for red verdicts | 8 |
+| an act would decide something | 9 |
+| a report ends | 10 |
 
 ## What to do
 
@@ -52,7 +53,16 @@ allowed-tools: mcp__plugin_terylon-os_terylon__* mcp__terylon__*
 
 7. **Mind the shared limits before starting work in parallel.** Before clearing a story's order with `story_order`, compare the files the stories that would run together declare, and the shared files such stories usually touch without declaring. Every run shares one usage limit.
 
-8. **Know whose act it is.**
+8. **Return a story whose own work is red; unblock one the platform held.**
+
+   | The block | Act | What it does |
+   |---|---|---|
+   | a red suite, or a red criterion of the story's own | `story_return` with a note that names the fix | wakes the run with the note as a new attempt; accepted only for a blocked or verified story |
+   | reds that are only the platform's, or a block on a file shared with another story | `story_unblock` | puts the story back in the state it left: one blocked from verifying is verified again on the same commit, and its run is not woken |
+
+   Both are the owner's acts, taken as step 9 says.
+
+9. **Know whose act it is.**
 
    | The owner has | Claude |
    |---|---|
@@ -62,7 +72,7 @@ allowed-tools: mcp__plugin_terylon-os_terylon__* mcp__terylon__*
 
    A handed-over lead holds for this conversation and for what the owner named. An act that cannot be overruled afterwards, `goal_drop`, `story_abandon` or `memory_drop`, is still put to the owner first.
 
-9. **End every report with what waits on the owner**, or say that nothing does.
+10. **End every report with what waits on the owner**, or say that nothing does.
 
 ## What binds it
 
