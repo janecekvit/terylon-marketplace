@@ -12,6 +12,14 @@ const hook = require("./prompt-knowledge-search.js");
 const HOOK_PATH = path.join(__dirname, "prompt-knowledge-search.js");
 const HOOKS_JSON_PATH = path.join(__dirname, "hooks.json");
 
+// The four proposal tools, as a story's run and a chat with the terylon-os plugin know them.
+const PROPOSE_TOOLS = [
+    "mcp__terylon__knowledge_propose",
+    "mcp__terylon__memory_propose",
+    "mcp__plugin_terylon-os_terylon__knowledge_propose",
+    "mcp__plugin_terylon-os_terylon__memory_propose",
+];
+
 // The start context is read by every run and chat; it stays short so it costs little.
 const START_CONTEXT_LIMIT = 600;
 
@@ -305,11 +313,11 @@ test("sends nothing anywhere: no network module is loaded and no connection is a
     assert.ok(!/\bfetch\s*\(/.test(source), "the hook calls fetch");
 });
 
-test("hooks.json registers the hook for SessionStart and PostToolUseFailure, beside SubagentStop", () =>
+test("hooks.json registers the hook for SessionStart, PostToolUseFailure, PostToolUse and Stop, beside SubagentStop", () =>
 {
     const registered = JSON.parse(fileSystem.readFileSync(HOOKS_JSON_PATH, "utf8")).hooks;
 
-    for (const eventName of ["SessionStart", "PostToolUseFailure"])
+    for (const eventName of ["SessionStart", "PostToolUseFailure", "PostToolUse", "Stop"])
     {
         const commands = registered[eventName].flatMap((matcher) => matcher.hooks.map((entry) => entry.command));
 
@@ -317,4 +325,257 @@ test("hooks.json registers the hook for SessionStart and PostToolUseFailure, bes
     }
 
     assert.ok(registered.SubagentStop, "the spend hook is still registered");
+});
+
+test("hooks.json's PostToolUse matcher is the script's propose pattern: it catches every proposal and nothing else", () =>
+{
+    const registered = JSON.parse(fileSystem.readFileSync(HOOKS_JSON_PATH, "utf8")).hooks;
+    const matcherText = registered.PostToolUse[0].matcher;
+
+    // Claude Code reads a matcher with any character beyond letters, digits, "_", "-", spaces, "," and "|" as a regular expression.
+    assert.match(matcherText, /[^A-Za-z0-9_\- ,|]/);
+    assert.strictEqual(matcherText, hook.PROPOSE_TOOL.source);
+
+    const matcher = new RegExp(matcherText);
+
+    for (const toolName of [...PROPOSE_TOOLS, "mcp__plugin_terylon-os_renamed-terylon__knowledge_propose"])
+    {
+        assert.ok(matcher.test(toolName), toolName);
+    }
+
+    for (const toolName of ["mcp__terylon__knowledge_search", "mcp__terylon__memory_proposed", "mcp__other__knowledge_propose", "Bash"])
+    {
+        assert.ok(!matcher.test(toolName), toolName);
+    }
+});
+
+function stopPayload(overrides)
+{
+    return Object.assign(
+    {
+        session_id: "session-a",
+        hook_event_name: "Stop",
+        stop_hook_active: false,
+        last_assistant_message: "Done.",
+    }, overrides);
+}
+
+function proposalPayload(toolName)
+{
+    return {
+        session_id: "session-a",
+        hook_event_name: "PostToolUse",
+        tool_name: toolName,
+        tool_input: { title: "A note" },
+        tool_response: { accepted: true },
+    };
+}
+
+function stateOf(setting, sessionId)
+{
+    return JSON.parse(fileSystem.readFileSync(hook.statePath(sessionId || "session-a", setting.stateDirectory), "utf8"));
+}
+
+test("a session that was reminded of a failure and proposed nothing is stopped once and asked for one note", () =>
+{
+    for (const [kind, proposeTool] of [["chat", "mcp__plugin_terylon-os_terylon__knowledge_propose"], ["run", "mcp__terylon__knowledge_propose"]])
+    {
+        const setting = world();
+        const environment = kind === "run" ? setting.run() : setting.chat;
+
+        runHook(JSON.stringify(failurePayload()), environment, setting.stateDirectory);
+
+        const result = runHook(JSON.stringify(stopPayload()), environment, setting.stateDirectory);
+        const parsed = JSON.parse(result.stdout);
+
+        assert.strictEqual(result.status, 0);
+        assert.strictEqual(parsed.decision, "block");
+        assert.ok(parsed.reason.includes(`\`${proposeTool}\``), parsed.reason);
+        assert.match(parsed.reason, /Propose ONE note .* for what cost real time in this session: what failed, why, and what worked/);
+        assert.match(parsed.reason, /If nothing is worth keeping, say so in one line and stop/);
+        assert.ok(!parsed.reason.includes("\n"), "the reason is one line");
+        assert.strictEqual(stateOf(setting).asked, true);
+    }
+});
+
+test("asked only once: a second stop is silent even when the payload does not say a stop hook is active", () =>
+{
+    const setting = world();
+
+    hook.respond(failurePayload(), setting.chat, setting.stateDirectory);
+    assert.notStrictEqual(hook.respond(stopPayload(), setting.chat, setting.stateDirectory), null);
+    assert.strictEqual(hook.respond(stopPayload(), setting.chat, setting.stateDirectory), null);
+
+    // Another failure after the ask does not earn a second one.
+    hook.respond(failurePayload({ error: "Error: another failure" }), setting.chat, setting.stateDirectory);
+    assert.strictEqual(hook.respond(stopPayload(), setting.chat, setting.stateDirectory), null);
+});
+
+test("never loops: a stop that continues a blocked stop is silent and records nothing", () =>
+{
+    const setting = world();
+
+    hook.respond(failurePayload(), setting.chat, setting.stateDirectory);
+
+    const result = runHook(JSON.stringify(stopPayload({ stop_hook_active: true })), setting.chat, setting.stateDirectory);
+
+    assert.strictEqual(result.status, 0);
+    assert.strictEqual(result.stdout, "");
+    assert.strictEqual(stateOf(setting).asked, undefined);
+});
+
+test("a proposal by any of the four tools is recorded, prints nothing, and the stop is silent", () =>
+{
+    for (const toolName of PROPOSE_TOOLS)
+    {
+        const setting = world();
+
+        hook.respond(failurePayload(), setting.chat, setting.stateDirectory);
+
+        const recorded = runHook(JSON.stringify(proposalPayload(toolName)), setting.chat, setting.stateDirectory);
+
+        assert.strictEqual(recorded.status, 0, toolName);
+        assert.strictEqual(recorded.stdout, "", toolName);
+        assert.strictEqual(stateOf(setting).proposed, true, toolName);
+        assert.strictEqual(stateOf(setting).reminded.length, 1, toolName);
+        assert.strictEqual(hook.respond(stopPayload(), setting.chat, setting.stateDirectory), null, toolName);
+    }
+});
+
+test("a proposal made before the first failure still counts", () =>
+{
+    const setting = world();
+
+    hook.respond(proposalPayload("mcp__terylon__memory_propose"), setting.chat, setting.stateDirectory);
+    hook.respond(failurePayload(), setting.chat, setting.stateDirectory);
+
+    assert.strictEqual(hook.respond(stopPayload(), setting.chat, setting.stateDirectory), null);
+});
+
+test("a call of another tool is not a proposal", () =>
+{
+    const setting = world();
+
+    hook.respond(failurePayload(), setting.chat, setting.stateDirectory);
+
+    for (const toolName of ["mcp__terylon__knowledge_search", "mcp__plugin_terylon-os_terylon__memory_get", "Bash"])
+    {
+        assert.strictEqual(hook.respond(proposalPayload(toolName), setting.chat, setting.stateDirectory), null, toolName);
+    }
+
+    assert.notStrictEqual(hook.respond(stopPayload(), setting.chat, setting.stateDirectory), null);
+});
+
+test("no failure reminder, no ask: a session whose failures were all silent stops freely", () =>
+{
+    const setting = world();
+
+    assert.strictEqual(hook.respond(stopPayload(), setting.chat, setting.stateDirectory), null);
+
+    // An aborted call and a failed knowledge tool are not reminded, so they are not obstacles either.
+    hook.respond(failurePayload({ is_interrupt: true }), setting.chat, setting.stateDirectory);
+    hook.respond(failurePayload({ tool_name: "mcp__terylon__knowledge_search" }), setting.chat, setting.stateDirectory);
+    assert.strictEqual(hook.respond(stopPayload(), setting.chat, setting.stateDirectory), null);
+});
+
+test("without Terylon's knowledge tools a proposal and a stop print nothing and write nothing", () =>
+{
+    const setting = world();
+
+    for (const payload of [proposalPayload("mcp__terylon__knowledge_propose"), stopPayload()])
+    {
+        const result = runHook(JSON.stringify(payload), setting.none, setting.stateDirectory);
+
+        assert.strictEqual(result.status, 0);
+        assert.strictEqual(result.stdout, "");
+    }
+
+    assert.deepStrictEqual(fileSystem.readdirSync(setting.stateDirectory), []);
+});
+
+test("a state file written by the previous version, with only reminded, is read: the ask follows", () =>
+{
+    const setting = world();
+
+    fileSystem.writeFileSync(hook.statePath("session-a", setting.stateDirectory), JSON.stringify({ reminded: ["0".repeat(64)] }) + "\n", "utf8");
+
+    assert.notStrictEqual(hook.respond(stopPayload(), setting.chat, setting.stateDirectory), null);
+    assert.deepStrictEqual(stateOf(setting), { reminded: ["0".repeat(64)], asked: true });
+});
+
+test("a failure reminder after a proposal keeps the proposal", () =>
+{
+    const setting = world();
+
+    hook.respond(proposalPayload("mcp__terylon__knowledge_propose"), setting.chat, setting.stateDirectory);
+    hook.respond(failurePayload(), setting.chat, setting.stateDirectory);
+
+    assert.strictEqual(stateOf(setting).proposed, true);
+    assert.strictEqual(stateOf(setting).reminded.length, 1);
+});
+
+test("fails open at the stop: malformed input, no session, a corrupt or unwritable state never block", () =>
+{
+    const setting = world();
+    const inputs = [
+        "{ this is not json",
+        "",
+        JSON.stringify(stopPayload({ session_id: undefined })),
+        JSON.stringify(stopPayload({ session_id: 7 })),
+        JSON.stringify({ hook_event_name: "StopFailure", session_id: "session-a" }),
+    ];
+
+    hook.respond(failurePayload(), setting.chat, setting.stateDirectory);
+
+    for (const input of inputs)
+    {
+        const result = runHook(input, setting.chat, setting.stateDirectory);
+
+        assert.strictEqual(result.status, 0, input);
+        assert.strictEqual(result.stdout, "", input);
+    }
+
+    // A corrupt state reads as no reminder, so nothing is asked.
+    fileSystem.writeFileSync(hook.statePath("session-d", setting.stateDirectory), "not json", "utf8");
+    assert.strictEqual(hook.respond(stopPayload({ session_id: "session-d" }), setting.chat, setting.stateDirectory), null);
+
+    // A state that can be read but not written gets no ask, since the ask could not be held to once.
+    const readOnlyDirectory = temporaryDirectory();
+    const readOnlyState = hook.statePath("session-a", readOnlyDirectory);
+
+    fileSystem.writeFileSync(readOnlyState, JSON.stringify({ reminded: ["0".repeat(64)] }) + "\n", "utf8");
+    fileSystem.chmodSync(readOnlyState, 0o444);
+
+    try
+    {
+        let writable = true;
+
+        try
+        {
+            fileSystem.writeFileSync(readOnlyState, JSON.stringify({ reminded: ["0".repeat(64)] }) + "\n", "utf8");
+        }
+        catch
+        {
+            writable = false;
+        }
+
+        if (!writable)
+        {
+            assert.strictEqual(hook.respond(stopPayload(), setting.chat, readOnlyDirectory), null);
+        }
+    }
+    finally
+    {
+        fileSystem.chmodSync(readOnlyState, 0o644);
+    }
+
+    const missingDirectory = path.join(setting.stateDirectory, "does-not-exist");
+
+    for (const payload of [proposalPayload("mcp__terylon__knowledge_propose"), stopPayload()])
+    {
+        const result = runHook(JSON.stringify(payload), setting.chat, missingDirectory);
+
+        assert.strictEqual(result.status, 0);
+        assert.strictEqual(result.stdout, "");
+    }
 });

@@ -50,7 +50,7 @@ Measurement that has to be remembered is measurement that stops happening, so no
 
 ## The knowledge-base hook
 
-The plugin registers a **`SessionStart`** and a **`PostToolUseFailure`** hook (`hooks/prompt-knowledge-search.js`) for sessions that can search Terylon's knowledge base, and only for them:
+The plugin registers one script (`hooks/prompt-knowledge-search.js`) for **`SessionStart`**, **`PostToolUseFailure`**, **`PostToolUse`** and **`Stop`**, for sessions that can search Terylon's knowledge base, and only for them:
 
 | Session | Known by | Tools it is told to use |
 |---|---|---|
@@ -58,10 +58,12 @@ The plugin registers a **`SessionStart`** and a **`PostToolUseFailure`** hook (`
 | a chat with the `terylon-os` plugin | `TERYLON_URL` is set | `mcp__plugin_terylon-os_terylon__knowledge_search`, `…__knowledge_propose` |
 | any other | — | none: the hook prints nothing and writes nothing |
 
-- **At the session's start** it adds a short context: search with the task's words before starting and with an error's words before working around a failure, and propose one note at the end for what cost real time, since a proposal waits for the owner's confirmation.
-- **After a failed tool call** it adds one line: search with the words of the error before working around it. Once per distinct failure (the tool and the first line of the error that is not a bare `Exit code N`), at most three per session, and never for a failed knowledge or memory tool or an aborted call. The throttle's state is a file of hashes under the OS temp directory, keyed by a hash of the session id.
+- **At the session's start** it adds a short context: search with the task's words before starting and with an error's words before working around a failure, and propose one note at the end for what cost real time, since a proposal waits for the owner's confirmation; and that a session that hit obstacles is asked once at its end.
+- **After a failed tool call** it adds one line: search with the words of the error before working around it. Once per distinct failure (the tool and the first line of the error that is not a bare `Exit code N`), at most three per session, and never for a failed knowledge or memory tool or an aborted call.
+- **After a proposal** — a successful `…__knowledge_propose` or `…__memory_propose` of a Terylon server, matched by the pattern `^mcp__.*terylon.*__(knowledge|memory)_propose$` so both kinds of session count — it records that the session proposed, and prints nothing.
+- **At the session's end** it stops the session once, if it heard at least one failure reminder and proposed nothing: the reason asks for one note with the session's own propose tool for what cost real time (what failed, why, what worked), or one line saying nothing is worth keeping. It asks at most once, and never when the stop already continues a blocked stop (`stop_hook_active`).
 
-It only adds context: the search is the session's own tool call, and the hook makes no network call. It fails open: malformed input, an unknown event or a state it cannot write exit 0 with no output.
+The state is one file of hashes and two flags under the OS temp directory, keyed by a hash of the session id. It only adds context or asks: the search and the proposal are the session's own tool calls, and the hook makes no network call. It fails open: malformed input, an unknown event or a state it cannot read or write exit 0 with no output, and never block a stop.
 
 ## OET — output-equivalent tokens
 

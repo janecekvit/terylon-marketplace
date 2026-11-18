@@ -56,7 +56,7 @@
       "source": "./plugins/terylon-core",
       "homepage": "https://github.com/janecekvit/terylon-marketplace/tree/main/plugins/terylon-core",
       "repository": "https://github.com/janecekvit/terylon-marketplace",
-      "description": "The marketplace's root — the conventions every persona shares and per-agent token-spend measurement read from a session's own transcripts, and a hook that points a session with Terylon's knowledge base at it. No git, forge, or MCP dependency. Successor to terylon-metrics.",
+      "description": "The marketplace's root — the conventions every persona shares and per-agent token-spend measurement read from a session's own transcripts, and a hook that points a session with Terylon's knowledge base at it and asks a session that hit obstacles, once at its end, for a note. No git, forge, or MCP dependency. Successor to terylon-metrics.",
       "category": "general",
       "keywords": [
         "claude-code",
