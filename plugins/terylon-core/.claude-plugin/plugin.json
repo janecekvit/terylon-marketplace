@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "terylon-core",
-  "version": "1.6.0",
-  "description": "The marketplace's root — the conventions every persona shares and per-agent token-spend measurement read from a session's own transcripts. No git, forge, or MCP dependency. Successor to terylon-metrics.",
+  "version": "1.7.0",
+  "description": "The marketplace's root — the conventions every persona shares and per-agent token-spend measurement read from a session's own transcripts, and a hook that points a session with Terylon's knowledge base at it. No git, forge, or MCP dependency. Successor to terylon-metrics.",
   "author": {
     "name": "Vít Janeček"
   },

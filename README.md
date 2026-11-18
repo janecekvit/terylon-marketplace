@@ -169,7 +169,7 @@ The plugin graph is drawn here and only here, from every `plugin.json#dependenci
 
 | Plugin | For | Skills | Agents |
 |---|---|---|---|
-| `terylon-core` | every repository: the conventions every persona shares, and token-spend measurement | `delegate-to-repo-agents`, `measure-token-spend` | — |
+| `terylon-core` | every repository: the conventions every persona shares, token-spend measurement, and a prompt to search Terylon's knowledge base where a session has it | `delegate-to-repo-agents`, `measure-token-spend` | — |
 | `terylon-git` | any git repository: worktree isolation and the review engine | `code-review`, `create-workspace`, `finish-branch` | `code-reviewer` |
 | `terylon-forge` | everyone working through pull requests, on either forge | `create-pr`, `write-pr-description`, `review-pr`, `address-pr-comments`, `update-pr-checklist`, `update-work-item-checklist`, `resolve-forge` | `pr-reviewer` |
 | `terylon-ado` | repositories on Azure DevOps, over Microsoft's remote Azure DevOps MCP server | `forge-ops`, `connect`, `check-access` | — |

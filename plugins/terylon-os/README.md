@@ -23,7 +23,7 @@ The owner of a Terylon, in any Claude Code session that can reach it over the ta
 | `review-plan` | `plan-review` | a plan at the plan gate |
 | `show-story` | `story` | one story in flight |
 
-**`lead` is the plugin's own skill and mirrors no prompt.** It is the way of working for the chat that leads Terylon for its owner, the cockpit: it applies when the session is Terylon's cockpit, when the owner asks Claude to lead or watch Terylon, and when a `terylon-pane` signal arrives in the chat. It says what to read first, which read settles a signal most cheaply, how a story's question is put to the owner, where a lesson is kept and whose the acts are. Beside `briefing`, `story_get`, `memory_propose` and `leader_answer`, it names these tools:
+**`lead` is the plugin's own skill and mirrors no prompt.** It is the way of working for the chat that leads Terylon for its owner, the cockpit: it applies when the session is Terylon's cockpit, when the owner asks Claude to lead or watch Terylon, and when a `terylon-pane` signal arrives in the chat. It says what to read first, which read settles a signal most cheaply, how a story's question is put to the owner, which of return and unblock fits a story blocked for red verdicts, where a lesson is kept and whose the acts are. Beside `briefing`, `story_get`, `memory_propose` and `leader_answer`, it names these tools:
 
 | Tool | Kind | `lead` uses it to |
 |---|---|---|
@@ -33,6 +33,8 @@ The owner of a Terylon, in any Claude Code session that can reach it over the ta
 | `question_answer` | write that decides nothing, `{question, answer}` | send the owner's own answer to a story's question |
 | `knowledge_propose` | write that decides nothing | propose a lesson or a gotcha; like `memory_propose`, it waits for the owner's confirmation in the console |
 | `story_order` | write that decides nothing | change the order a story waits in, once the files of the stories that would run together are compared |
+| `story_return` | the owner's act | send a story blocked by a red suite or a red criterion of its own back to its run, with a note naming the fix, as a new attempt |
+| `story_unblock` | the owner's act | put a story blocked only by the platform's reds, or by a file shared with another story, back in the state it left, without waking its run |
 
 **What it does not contain: the pane.** The Desktop pane is the mod `terylon-pane`, a separate plugin, because a mod draws only where a surface can and the skills and tools must work everywhere — an SSH session and a Remote Control session have the plugin alone.
 
