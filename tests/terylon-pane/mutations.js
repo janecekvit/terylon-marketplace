@@ -693,8 +693,8 @@ const MUTATIONS = [
     {
         name: "the closed goals are read on every read of the goals",
         file: "hooks/register.tsx",
-        find: "  const [goalsAnswer, plansAnswer] = await Promise.all([callTerylon($, 'goals_list'), callTerylon($, 'plans_list')])\n",
-        replace: "  const [goalsAnswer, plansAnswer] = await Promise.all([callTerylon($, 'goals_list'), callTerylon($, 'plans_list')])\n  await callTerylon($, 'goals_list', { closed: true })\n",
+        find: "  const [goalsAnswer, plansAnswer] = await Promise.all([callWholeList($, 'goals_list'), callWholeList($, 'plans_list')])\n",
+        replace: "  const [goalsAnswer, plansAnswer] = await Promise.all([callWholeList($, 'goals_list'), callWholeList($, 'plans_list')])\n  await callTerylon($, 'goals_list', { closed: true })\n",
     },
     {
         name: "closedCount is ignored",
@@ -1645,6 +1645,18 @@ const MUTATIONS = [
         file: "hooks/signals.ts",
         find: "candidate.reason === null ? 'Shrň mi proč a co potřebuje ode mě.' : 'Shrň mi, co potřebuje ode mě.'",
         replace: "'Shrň mi proč a co potřebuje ode mě.'",
+    },
+    {
+        name: "a paged list is read one page alone",
+        file: "hooks/terylon.ts",
+        find: "export const MOST_PAGES = 20\n",
+        replace: "export const MOST_PAGES = 1\n",
+    },
+    {
+        name: "a goal is read compact",
+        file: "hooks/register.tsx",
+        find: "callTerylon($, 'goal_get', { goal: id, whole: true })",
+        replace: "callTerylon($, 'goal_get', { goal: id })",
     },
 ];
 

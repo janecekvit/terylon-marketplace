@@ -256,7 +256,7 @@ export function hostName(base: string): string {
   return match?.[1] ?? base
 }
 
-// "goal G-SRQ1A", or "goal 11" from a Terylon older than refs: what a question or an event is about.
+// "goal G-7", or "goal 11" from a Terylon older than refs: what a question or an event is about.
 export function subjectLabel(subject: string, ref: string | null = null): string {
   const match = /^(goal|story|plan)\/(\d+)$/.exec(subject)
 

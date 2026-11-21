@@ -201,10 +201,10 @@ test('the catch-up names every subject by its ref', async ($, on) => {
 })
 
 test('the live shapes of a Terylon with refs: a story, its plan and its goal, each read by the ref it carries', () => {
-  // THE PORTED REF IS TERYLON'S OWN: the GUID's last 25 bits give the very ref the answer carries.
-  expect(words.ref('story', LIVE_STORY.guid)).toBe(LIVE_STORY.ref)
-  expect(words.ref('plan', LIVE_PLAN.guid)).toBe(LIVE_PLAN.ref)
-  expect(words.ref('goal', LIVE_GOAL.guid)).toBe(LIVE_GOAL.ref)
+  // THE PORTED OLD REF IS TERYLON'S OWN: the GUID's last 25 bits give the very ref an answer of then carries.
+  expect(words.oldRef('story', LIVE_STORY.guid)).toBe(LIVE_STORY.ref)
+  expect(words.oldRef('plan', LIVE_PLAN.guid)).toBe(LIVE_PLAN.ref)
+  expect(words.oldRef('goal', LIVE_GOAL.guid)).toBe(LIVE_GOAL.ref)
 
   const card = storyView(120, LIVE_STORY, {}, null, Date.parse('2026-11-02T04:00:00Z'), 0, null)
   expect(card.title).toBe('S-761RY one word')

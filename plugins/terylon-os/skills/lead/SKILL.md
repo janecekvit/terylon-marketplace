@@ -29,7 +29,7 @@ allowed-tools: mcp__plugin_terylon-os_terylon__* mcp__terylon__*
    | To know | Read |
    |---|---|
    | what waits, and which stories are blocked and why | `briefing` |
-   | the stories of one state: each one's `blockedReason`, its order (`after`) and the spans it was blocked for | `stories_list` with a state |
+   | the stories of one state: each one's `blockedReason`, its order (`after`) and the spans it was blocked for | `stories_list` with a state and `whole: true`, following `next` as `cursor` while `more` is true |
    | one story in detail | `story_get`, only when the two above do not settle it |
 
    A signal that names its reason needs no read to say why. **When a tool result is too large and is saved to a file, read named fields out of it with a script, never the whole file**: the state, `blockedReason`, the last verdict's checks by name and result, the overrun, `pullRequest`, the steps it kept.

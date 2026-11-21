@@ -59,8 +59,8 @@ function run(item: Case): unknown {
 
 const TABLE = CASES as unknown as { version: number; cases: Case[] }
 
-test('the vendored table is version 1 and holds the cases the console holds', () => {
-  expect(TABLE.version).toBe(1)
+test('the vendored table is version 2 and holds the cases the console holds', () => {
+  expect(TABLE.version).toBe(2)
   expect(TABLE.cases.length).toBeGreaterThan(150)
 })
 
@@ -92,8 +92,16 @@ test('the formats the pane draws: "48 k tokens", "29 Oct 16:10", "1 h 9 min", an
 })
 
 test("the pane's own: a ref where Terylon sends one, #id where it does not, and Czech tokens", () => {
+  expect(words.refOr({ ref: 'S-45' }, 110)).toBe('S-45')
   expect(words.refOr({ ref: 'S-TWK6D' }, 110)).toBe('S-TWK6D')
   expect(words.refOr({}, 110)).toBe('#110')
+  expect(words.budget(100)).toBe('$100')
+  expect(words.budget(2.5)).toBe('$2.50')
+  expect(words.budget(150.5)).toBe('$151')
+  expect(words.estimate(0.3)).toBe('~$0.30')
+  expect(words.estimate(11.2)).toBe('~$11')
+  expect(words.estimate(0.004)).toBe('under $0.01')
+  expect(words.estimate(0)).toBe('no estimate')
   expect(words.refOr({ ref: '' }, 110)).toBe('#110')
   expect(words.tokensCzech(66000)).toBe('66 k tokenů')
   expect(words.tokensCzech(1)).toBe('1 token')

@@ -61,7 +61,7 @@ import { CARD_FILL, CHIP_BACKGROUND, CHIP_DOT, CHIP_WORD, NARROW_COLUMNS, ROAD_C
 import type { Picture, Proofs } from './drawing'
 import { REASON_WHOLE, alertCount, checkTree, healthLine, plainLine, stateWord, statusDrawingOf, storeFileOf, todayCost, treeLine, typedLine } from './health'
 import type { Health, StatusPart } from './health'
-import { MISSING_SERVER, NEEDS_TEXT, NOT_ALLOWED, SERVER_CANDIDATES, TEXT_LIMITS, actArguments, allowRules, assertPaneTool, isSendable, readResult } from './terylon'
+import { MEMORY_SECTIONS, MISSING_SERVER, MOST_PAGES, NEEDS_TEXT, NOT_ALLOWED, PAGED_LISTS, SERVER_CANDIDATES, TEXT_LIMITS, WHOLE_PAGE, actArguments, allowRules, assertPaneTool, isSendable, joinPages, nextCursor, readResult } from './terylon'
 import type { TerylonAnswer } from './terylon'
 import { createTestWorld, testAnswer } from './testmode'
 import type { TestWorld } from './testmode'
@@ -151,7 +151,7 @@ type Reset = { from: number; head: number | null; refused: string | null }
 export const PANE = 'terylon'
 
 // The mod's version, said on Health: a node test holds it to plugin.json.
-export const MOD_VERSION = '1.24.1'
+export const MOD_VERSION = '1.25.0'
 
 // How often the pane asks Terylon, and how often it retries while Terylon does not answer.
 export const POLL_MS = 30000
@@ -323,7 +323,7 @@ let costBasis: string | null = null
 // A HOST PROOF'S STORIES, as Terylon's answers name them by `source`: none reaches a prompt, the band or the catch-up.
 const hostProofStories = new Set<number>()
 
-// TERYLON'S SHORT IDS, by kind and number ("story-333" → "S-BD6XS"), from every answer the pane reads: the label a
+// TERYLON'S REFS, by kind and number ("story-333" → "S-45"), from every answer the pane reads: the label a
 // screen names its subject by where it holds only the number. Lost on a reload, refilled by the next read.
 const refs = new Map<string, string>()
 
@@ -547,6 +547,37 @@ async function callTerylon($: EngineInterface, tool: string, args: Record<string
   return missing === SERVER_CANDIDATES.length ? { kind: 'no-server' } : { kind: 'unreachable', reason }
 }
 
+// A paged list read whole (hooks/terylon.ts, PAGED_LISTS): every item whole, page after page while `more` is true.
+// A page that fails fails the read, so no answer is ever a list cut short.
+async function callWholeList($: EngineInterface, tool: string, args: Record<string, unknown> = {}): Promise<TerylonAnswer> {
+  const field = PAGED_LISTS[tool] ?? tool
+  const first = await callTerylon($, tool, { ...args, ...WHOLE_PAGE })
+
+  if (first.kind !== 'ok') {
+    return first
+  }
+
+  let read = first.value
+
+  for (let pages = 1; pages < MOST_PAGES; pages += 1) {
+    const cursor = nextCursor(read)
+
+    if (cursor === null) {
+      break
+    }
+
+    const page = await callTerylon($, tool, { ...args, ...WHOLE_PAGE, cursor })
+
+    if (page.kind !== 'ok') {
+      return page
+    }
+
+    read = joinPages(read, page.value, field)
+  }
+
+  return { kind: 'ok', value: read }
+}
+
 // What a failed call says, in one line: the leader's sentence, Terylon's refusal, or the engine's words.
 function why(answered: TerylonAnswer): string {
   switch (answered.kind) {
@@ -668,7 +699,7 @@ async function refresh($: EngineInterface): Promise<boolean> {
     return false
   }
 
-  const stories = await callTerylon($, 'stories_list')
+  const stories = await callWholeList($, 'stories_list')
 
   if (stories.kind !== 'ok') {
     await failed($, stories, 'stories_list', now)
@@ -676,7 +707,7 @@ async function refresh($: EngineInterface): Promise<boolean> {
   }
 
   // The bell, for the alerts the status line counts; a bell that does not answer keeps the last count.
-  const notices = await callTerylon($, 'notices_list')
+  const notices = await callWholeList($, 'notices_list')
   const previous = await readSnapshot($)
   const alerts = notices.kind === 'ok' ? alertCount(notices.value) : previous.alerts
   const alertNotices = notices.kind === 'ok' ? alertItems(notices.value, now, zoneOffset) : previous.alertNotices
@@ -1867,7 +1898,7 @@ async function loadOverview($: EngineInterface): Promise<void> {
 
 async function readOverviewFooter($: EngineInterface): Promise<void> {
   await bounded($, 'the overview', async () => {
-    const memoryAnswer = await callTerylon($, 'memory_get')
+    const memoryAnswer = await callTerylon($, 'memory_get', MEMORY_SECTIONS)
 
     await update($, overview, (current: PaneOverview): PaneOverview => ({
       ...EMPTY_OVERVIEW,
@@ -2146,7 +2177,7 @@ async function openNewGoal($: EngineInterface): Promise<void> {
 
 // `isQuiet`: a read of the poll's. One that fails keeps what was read; the next load, or the band, says why.
 async function readGoalsFromTerylon($: EngineInterface, isQuiet = false): Promise<void> {
-  const [goalsAnswer, plansAnswer] = await Promise.all([callTerylon($, 'goals_list'), callTerylon($, 'plans_list')])
+  const [goalsAnswer, plansAnswer] = await Promise.all([callWholeList($, 'goals_list'), callWholeList($, 'plans_list')])
   const base = await baseUrl($)
   const questions = (await readSnapshot($)).questions
 
@@ -2246,7 +2277,7 @@ async function showGoals($: EngineInterface, showing: 'open' | 'closed'): Promis
 }
 
 async function readClosedGoals($: EngineInterface): Promise<void> {
-  const answered = await callTerylon($, 'goals_list', { closed: true })
+  const answered = await callWholeList($, 'goals_list', { closed: true })
 
   if (answered.kind !== 'ok') {
     await update($, goals, (current: PaneGoals): PaneGoals => ({ ...current, closedPhase: 'error', closedSentence: why(answered) }))
@@ -2498,7 +2529,7 @@ async function saveRevise($: EngineInterface): Promise<void> {
 async function openGoal($: EngineInterface, id: number): Promise<void> {
   await update($, goal, (): PaneGoal | null => ({ goal: id, phase: 'loading', sentence: null, title: '', meta: '', stories: [], isOpen: false, openStories: [], repeating: null }))
 
-  const answered = await callTerylon($, 'goal_get', { goal: id })
+  const answered = await callTerylon($, 'goal_get', { goal: id, whole: true })
 
   // A GOAL DELETED FOR GOOD: Terylon's sentence, quietly, and the goal gone from every list.
   if (answered.kind === 'refused' && isDeletedSentence(answered.sentence)) {
@@ -2560,7 +2591,7 @@ async function loadBell($: EngineInterface): Promise<void> {
 }
 
 async function readBellFromTerylon($: EngineInterface): Promise<void> {
-  const notices = await callTerylon($, 'notices_list')
+  const notices = await callWholeList($, 'notices_list')
 
   if (notices.kind !== 'ok') {
     await update($, bell, (current: PaneBell): PaneBell => ({ ...current, phase: 'error', sentence: why(notices) }))
@@ -2786,7 +2817,7 @@ async function savePolicy($: EngineInterface): Promise<void> {
 
 // `goal`: the goal it was opened from, picked first.
 async function openAdd($: EngineInterface, title: string, goal?: number): Promise<void> {
-  const goalsAnswer = await callTerylon($, 'goals_list')
+  const goalsAnswer = await callWholeList($, 'goals_list')
   const openGoals = goalsAnswer.kind === 'ok'
     ? list(goalsAnswer.value.goals).filter(item => !['done', 'closed', 'abandoned', 'dropped'].includes(String(item.state)))
     : []
@@ -2865,7 +2896,7 @@ async function sendTask($: EngineInterface): Promise<void> {
 async function openMemory($: EngineInterface): Promise<void> {
   await update($, memory, (current: PaneMemory): PaneMemory => ({ ...EMPTY_MEMORY, proposed: current.proposed ?? [] }))
 
-  const answered = await callTerylon($, 'memory_get')
+  const answered = await callTerylon($, 'memory_get', MEMORY_SECTIONS)
 
   if (answered.kind !== 'ok') {
     await update($, memory, (current: PaneMemory): PaneMemory => ({ ...current, phase: 'error', sentence: why(answered) }))

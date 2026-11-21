@@ -56,6 +56,36 @@ export const PANE_TOOLS: ReadonlySet<string> = new Set([
   ...OWNER_ACTS,
 ])
 
+// THE LISTS TERYLON ANSWERS A PAGE AT A TIME, each by the field that holds its items. A page holds 50 compact items
+// unless the call says otherwise, and `more` with `next` say what is left. The pane reads every item whole, the
+// largest page there is, and follows `next` as `cursor` while `more` is true; a server that pages nothing answers
+// no `more`, and its one answer is the whole list.
+export const PAGED_LISTS: Readonly<Record<string, string>> = { stories_list: 'stories', goals_list: 'goals', notices_list: 'notices', plans_list: 'plans' }
+
+export const WHOLE_PAGE = { whole: true, limit: 500 } as const
+
+// The most pages one list is read in: 10,000 items at 500 a page, and an end where a server keeps saying `more`.
+export const MOST_PAGES = 20
+
+// WHAT memory_get IS ASKED FOR: the files and the proposals the pane draws, never counted in their place where the
+// whole memory would pass the bound an answer keeps. Its logs (history, dreams, …) the pane never reads.
+export const MEMORY_SECTIONS = { sections: ['files', 'proposals'] } as const
+
+// The cursor that reads the rest of a list, or null when the page is its last.
+export function nextCursor(page: Record<string, unknown>): string | number | null {
+  const next = page.next
+
+  return page.more === true && (typeof next === 'string' || typeof next === 'number') && next !== '' ? next : null
+}
+
+// Two pages of one list as one answer: the first page's fields, every item of both, and the later page's `more`
+// and `next`.
+export function joinPages(read: Record<string, unknown>, page: Record<string, unknown>, field: string): Record<string, unknown> {
+  const items = (value: unknown): unknown[] => (Array.isArray(value) ? value : [])
+
+  return { ...read, [field]: [...items(read[field]), ...items(page[field])], more: page.more, next: page.next }
+}
+
 // The owner's one gate: never the pane's, whatever it is asked, and refused by name, so a Terylon that still offers it is
 // refused too. The person merges in the console; the pane shows "Merge in the console ↗".
 export const GATE_TOOLS: readonly string[] = ['story_merge']

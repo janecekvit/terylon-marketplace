@@ -27,6 +27,6 @@ test("the vendored table parses and names its cases", () =>
 {
     const table = JSON.parse(fs.readFileSync(path.join(TESTS_ROOT, "words-cases.json"), "utf8"));
 
-    assert.equal(table.version, 1);
+    assert.equal(table.version, 2);
     assert.ok(Array.isArray(table.cases) && table.cases.length > 150);
 });

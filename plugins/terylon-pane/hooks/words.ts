@@ -23,12 +23,13 @@ export const COST_NOT_KNOWN = 'cost not known on the setup token'
 export const COST_NOT_KNOWN_TIGHT = 'cost not known'
 export const SETUP_TOKEN = 'setup-token'
 
-// THE SHORT REF: a kind letter, a hyphen and five Crockford base-32 characters, the GUID's last 25 bits.
+// THE REF: a kind letter, a hyphen and a sequential number of that kind, S-45. The OLD REF, five Crockford base-32
+// characters of the GUID's last 25 bits, is still read as input.
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 const REF_CHARACTERS = 5
 const REF_BITS_PER_CHARACTER = 5
 const KIND_LETTERS: Record<string, string> = { story: 'S', goal: 'G', plan: 'P', run: 'R' }
-const REF_PATTERN = /^([SGPR])-([0-9A-Z]{5})$/
+const REF_PATTERN = /^([SGPR])-([0-9A-Z]{5}|[0-9]{1,15})$/
 
 // A typed ref is read the way Crockford says: I and L are 1, O is 0, and U is no character at all.
 const CROCKFORD_READS: Record<string, string> = { I: '1', L: '1', O: '0' }
@@ -123,33 +124,11 @@ export function money(value: unknown): string {
   return amount >= 10000 ? `$${count(Math.round(amount / 100))}` : `$${centsWords(amount)}`
 }
 
-// "$100", "$2", "$2.50": a budget is whole when it is whole.
-export function budget(value: unknown): string {
-  const amount = cents(value)
-
-  return amount % 100 === 0 || amount >= 10000 ? `$${count(Math.round(amount / 100))}` : `$${centsWords(amount)}`
-}
-
-// "~$0.30", "~$11", "under $0.01", or "no estimate": never "~$0".
-export function estimate(value: unknown): string {
-  if (!isNumber(value) || value <= 0) {
-    return 'no estimate'
-  }
-
-  const amount = cents(value)
-
-  if (amount < 1) {
-    return 'under $0.01'
-  }
-
-  return amount < 100 ? `~$${centsWords(amount)}` : `~$${count(Math.round(amount / 100))}`
-}
-
 export type CostItem = { costKnown?: unknown; costUsd?: unknown; tokens?: unknown } | null | undefined
 
-export type CostOptions = { basis?: string | null; budget?: number | null; tight?: boolean }
+export type CostOptions = { basis?: string | null; tight?: boolean }
 
-// WHAT SOMETHING COST: "$1.25 of $25", or its tokens and that the cost is not known, on the setup token or where the
+// WHAT SOMETHING COST: "$1.25", or its tokens and that the cost is not known, on the setup token or where the
 // item says it is not known. The basis wins: a sum on the setup token is not known whatever it summed.
 export function cost(item: CostItem, options: CostOptions = {}): string {
   const known = item !== null && item !== undefined && item.costKnown !== false && options.basis !== SETUP_TOKEN
@@ -161,12 +140,7 @@ export function cost(item: CostItem, options: CostOptions = {}): string {
     return `${spent}${phrase}`
   }
 
-  return `${money(item?.costUsd)}${isNumber(options.budget) && options.budget > 0 ? ` of ${budget(options.budget)}` : ''}`
-}
-
-// "$100 a day", and on the setup token that it is not applied.
-export function dailyBudget(value: unknown, basis: string | null): string {
-  return `${budget(value)} a day${basis === SETUP_TOKEN ? ' · not applied on the setup token' : ''}`
+  return money(item?.costUsd)
 }
 
 // "6 h a story": the leader's limit on the setup token is its hours.
@@ -179,11 +153,9 @@ export function slots(free: number, capacity: number): string {
   return `${count(free)} of ${count(capacity)} ${plural(capacity, 'slot', 'slots')}`
 }
 
-// "4 stories at once", and the host's own number beside it when it holds fewer.
-export function storiesAtOnce(policy: number, capacity: number | null): string {
-  const said = `${count(policy)} ${plural(policy, 'story', 'stories')} at once`
-
-  return isNumber(capacity) && capacity < policy ? `${said} · ${count(capacity)} ${plural(capacity, 'slot', 'slots')} on this host` : said
+// STORIES AT ONCE where the executor declares no slots: "2 at once", the machine's free memory is what holds them.
+export function atOnce(running: unknown): string {
+  return `${count(running)} at once`
 }
 
 // ---------------------------------------------------------------------------------------------------------- time
@@ -365,8 +337,15 @@ export function expires(at: unknown, now: unknown, zone?: Zone): string {
 
 // ----------------------------------------------------------------------------------------------------------- ids
 
-// "S-BD6XS" from a subject's kind and GUID.
-export function ref(kind: string, guid: unknown): string | null {
+// "S-45" from a subject's kind and its sequential number of that kind.
+export function ref(kind: string, number: unknown): string | null {
+  const letter = KIND_LETTERS[kind]
+
+  return letter !== undefined && Number.isInteger(number) && (number as number) > 0 ? `${letter}-${String(number)}` : null
+}
+
+// "S-BD6XS", the form a subject was read by before its number, from its kind and GUID: read as input, never said.
+export function oldRef(kind: string, guid: unknown): string | null {
   const letter = KIND_LETTERS[kind]
   const hex = String(guid ?? '').replace(/-/g, '')
 
@@ -385,7 +364,7 @@ export function ref(kind: string, guid: unknown): string | null {
   return `${letter}-${characters}`
 }
 
-// A ref as someone typed it, in any case, read the Crockford way; null when it is not one.
+// A ref as someone typed it, in any case: "s-45", or an old "S-BD6XS" read the Crockford way; null when it is not one.
 export function parseRef(typed: unknown): string | null {
   const read = String(typed ?? '').trim().toUpperCase().replace(/[ILO]/g, character => CROCKFORD_READS[character] ?? character)
   const match = REF_PATTERN.exec(read)
@@ -531,6 +510,29 @@ export function machine(state: MachineFacts | null | undefined, zone?: Zone): st
 // A SUBJECT'S NAME WHERE THE PANE SHOWS ITS NUMBER TODAY: its ref, or a hash and its number from a Terylon older than refs.
 export function refOr(item: Json | null | undefined, id: unknown): string {
   return item !== null && item !== undefined && typeof item.ref === 'string' && item.ref.trim() !== '' ? item.ref : `#${String(id ?? '')}`
+}
+
+// "$100", "$2", "$2.50": a budget is whole when it is whole. The glossary no longer holds it; the pane still says the
+// budgets Terylon sends.
+export function budget(value: unknown): string {
+  const amount = cents(value)
+
+  return amount % 100 === 0 || amount >= 10000 ? `$${count(Math.round(amount / 100))}` : `$${centsWords(amount)}`
+}
+
+// "~$0.30", "~$11", "under $0.01", or "no estimate": never "~$0". The glossary no longer holds it either.
+export function estimate(value: unknown): string {
+  if (!isNumber(value) || value <= 0) {
+    return 'no estimate'
+  }
+
+  const amount = cents(value)
+
+  if (amount < 1) {
+    return 'under $0.01'
+  }
+
+  return amount < 100 ? `~$${centsWords(amount)}` : `~$${count(Math.round(amount / 100))}`
 }
 
 // A Czech prompt's tokens: "66 k tokenů", "1 token", "3 tokeny".
