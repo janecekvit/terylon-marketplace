@@ -10,7 +10,7 @@ allowed-tools: mcp__plugin_terylon-os_terylon__* mcp__terylon__*
 
 ## What to do
 
-> Review plan {the plan's number; the oldest proposed one when none is given} at the plan gate. Read it with plans_list, the leader's policy with policy_get and the memory with memory_get. For each story list its criteria, declared files, size, the stories it runs after, and anything that collides or looks under-specified. Recommend approve all, approve some, edit criteria or rethink, and wait for my choice. Then call plan_approve or plan_rethink only on my word: they apply at once, with no confirmation asked.
+> Review plan {the plan's number; the oldest proposed one when none is given} at the plan gate. Read it with plans_list, the leader's policy with policy_get and the memory with memory_get {sections: ["files", "proposals"]}. For each story list its criteria, declared files, size, the stories it runs after, and anything that collides or looks under-specified. Recommend approve all, approve some, edit criteria or rethink, and wait for my choice. Then call plan_approve or plan_rethink only on my word: they apply at once, with no confirmation asked.
 
 ## What binds it
 

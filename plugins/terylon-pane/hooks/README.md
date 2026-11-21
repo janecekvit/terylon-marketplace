@@ -4,14 +4,14 @@
 
 | What | Where it came from | Held by |
 |---|---|---|
-| `words.ts` | Terylon `src/Terylon.Web.Host/wwwroot/design/words.js` at commit `91d49df`, on `feature/480-design-unification` | `tests/words.test.ts` |
-| `../tests/words-cases.json` | Terylon `src/Terylon.Web.Host/wwwroot/design/words-cases.json` at the same commit, byte for byte | `tests/terylon-pane/words-cases.test.js` |
+| `words.ts` | Terylon `src/Web/Terylon.Web.Host/wwwroot/design/words.js` at commit `a0b5387`, on `feat/1111-sequential-subject-numbers` | `tests/words.test.ts` |
+| `../tests/words-cases.json` | Terylon `src/Web/Terylon.Web.Host/wwwroot/design/words-cases.json` at the same commit, byte for byte | `tests/terylon-pane/words-cases.test.js` |
 | `../tests/words-cases.ts` | the same table as a module, since a mod's test imports code alone, never a `.json` | `tests/terylon-pane/words-cases.test.js` |
 
 ```
-                                                                        as of Terylon S68
+                                                              as of Terylon a0b5387, table version 2
 
-  Terylon 91d49df  design/words.js ────── PORTED ──────▶ hooks/words.ts
+  Terylon a0b5387  design/words.js ────── PORTED ──────▶ hooks/words.ts
                    design/words-cases.json ── COPIED ──▶ tests/words-cases.json ──▶ tests/words-cases.ts
                                                                         │
                                           tests/words.test.ts ◀─────────┘  EVERY CASE, ITS EXACT TEXT
@@ -21,4 +21,4 @@
 
 **When Terylon changes the glossary**, it changes `words-cases.json` first and hands the diff on: copy the new table here whole, write `words-cases.ts` from it again (its one export line, then the table), port what changed in `words.js`, run the cases, and name the new commit in the table above. A case that fails is a word the pane says differently from the console, and is fixed here, never in the table.
 
-The pane's own uses sit at the end of `words.ts`, apart from the port: `refOr`, a subject's ref or `#352` from a Terylon older than refs, and `tokensCzech`, the tokens as the catch-up says them in Czech.
+The pane's own uses sit at the end of `words.ts`, apart from the port: `refOr`, a subject's ref or `#352` from a Terylon older than refs; `budget` and `estimate`, which the table no longer holds and the pane still says beside the figures Terylon sends; and `tokensCzech`, the tokens as the catch-up says them in Czech.

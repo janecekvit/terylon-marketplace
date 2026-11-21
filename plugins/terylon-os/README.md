@@ -28,7 +28,7 @@ The owner of a Terylon, in any Claude Code session that can reach it over the ta
 | Tool | Kind | `lead` uses it to |
 |---|---|---|
 | `memory_list_recent` | read | start from what the owner already told Terylon, before the first answer |
-| `stories_list` | read | read the stories of one state, each with its `blockedReason` and its order, before any `story_get` |
+| `stories_list` | read | read the stories of one state whole (`whole: true`, `next` as `cursor` while `more` is true), each with its `blockedReason` and its order, before any `story_get` |
 | `knowledge_search` | read | look for a note with the words of an error, before working around it |
 | `question_answer` | write that decides nothing, `{question, answer}` | send the owner's own answer to a story's question |
 | `knowledge_propose` | write that decides nothing | propose a lesson or a gotcha; like `memory_propose`, it waits for the owner's confirmation in the console |

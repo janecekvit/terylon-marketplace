@@ -120,7 +120,7 @@ test('a goal opens whole from the overview, its stories open, and ‹ comes back
   await toOverview(ui)
   await ui.press({ key: 'goal-3' })
 
-  expect(terylon.calls.filter(call => call.tool === 'goal_get').map(call => call.args)).toEqual([{ goal: 3 }])
+  expect(terylon.calls.filter(call => call.tool === 'goal_get').map(call => call.args)).toEqual([{ goal: 3, whole: true }])
   expect(await ui.find({ type: 'Text', text: exact('P1 · Agentic OS') })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: exact('P1 · open') })).toBeDefined()
   expect((await ui.find({ key: 'back' }))?.props.label).toBe('‹ Overview')

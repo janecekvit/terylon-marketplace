@@ -21,7 +21,9 @@ export const CATCH_UP_AFTER_MS = 2 * 60 * 60 * 1000
 // More events than this since the last look and a summary would not be whole; the console says it instead.
 export const CATCH_UP_MOST_EVENTS = 2000
 
-// The most events one events_since page answers (Terylon, LeaderEventsEndpoints).
+// The most events one events_since page answers (Terylon, LeaderEventsEndpoints), asked for by name: unasked, a page
+// holds 50. A page may end sooner, where its answer would pass Terylon's bound, with `more` true and `last` the final
+// event it holds; the pane reads on from `last` while `more` is true.
 export const EVENTS_PAGE = 500
 
 // How many signal keys the store keeps; older ones cannot come again, their stories have moved on.
