@@ -1,7 +1,7 @@
 ---
 name: refactorer
 description: "Use after a task's tests are green to simplify the diff: remove duplication, reuse what already exists, align with surrounding conventions. May edit, but only while the tests stay green. Reports SIMPLIFIED or NO_CHANGE."
-model: opus
+model: inherit
 color: cyan
 tools: [Read, Grep, Glob, Edit, Bash, Agent]
 skills: [delegate-to-repo-agents]

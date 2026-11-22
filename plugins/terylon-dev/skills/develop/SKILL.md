@@ -4,7 +4,7 @@ description: >-
   Use when implementing one or more user stories end-to-end — give work-item or issue URLs from either forge, a prose
   description, or several prose items separated by --- on its own line. Several items fan out into
   concurrent leaders, one workspace each. Hosts the human gates and dispatches the leader agent, which
-  owns the plan → build (TDD) → finish loop. Optional flags --auto, --dry-run, and --here.
+  owns the plan → build (TDD) → finish loop. Optional flags --auto, --dry-run, --here and --no-finish.
 allowed-tools: Bash(git *) Bash(node *) Bash(gh *) Read Grep Glob Write Agent AskUserQuestion mcp__ado__*
 ---
 
@@ -17,7 +17,7 @@ It is a **skill and not an agent** for two reasons: it carries the slash command
 ## Usage
 
 ```
-/terylon-dev:develop <item> [<item> …] [--auto | --dry-run] [--here] [--no-brainstorm]
+/terylon-dev:develop <item> [<item> …] [--auto | --dry-run] [--here] [--no-finish] [--no-brainstorm]
 ```
 
 An `<item>` is an **item URL from either forge** — an Azure DevOps work item (`dev.azure.com/{org}/{project}/_workitems/edit/<id>`) or a GitHub issue (`github.com/{owner}/{repo}/issues/<n>`) — which is fetched and turned into a seed-spec; a **path to a seed-spec** that `brainstorm` already wrote, which is read as-is; or a **prose description**, which becomes the seed directly.
@@ -27,12 +27,13 @@ An `<item>` is an **item URL from either forge** — an Azure DevOps work item (
 - `--dry-run` — stop after Gate 1 (plan only, no code).
 - `--auto` — skip the *pauses* at the gates; `leader` runs the loop on its own. The git rules still hold. It does **not** skip `CONTINUE`: that status pauses for nobody, and suppressing it is what made an unattended build carry one leader's context from the first task to the last.
 - `--here` — stay in the current checkout instead of an isolated worktree. Use only when you are already on the intended feature branch.
+- `--no-finish` — end at `BUILD_COMPLETE`, skip Gate 3: [`references/hosted-run.md`](references/hosted-run.md).
 - `--no-brainstorm` — skip the Gate 0 triage and run the ordinary intake, however vague the item looks.
 
 ## Prerequisites
 
 - **`terylon-forge`** — a hard dependency, installed automatically. It provides `resolve-forge` and `create-pr`, which opens the pull request at Gate 3 and calls `write-pr-description` itself.
-- **An adapter** — `terylon-ado` or `terylon-github`, enabled by the consumer rather than declared here. It supplies the `forge-ops` engine (**load it by name**, plugin-qualified once `resolve-forge` has answered) and, on Azure DevOps, the `ado` MCP server. With none enabled, say so and stop.
+- **An adapter** — `terylon-ado` or `terylon-github`, enabled by the consumer rather than declared here. It supplies the `forge-ops` engine (**load it by name**, plugin-qualified once `resolve-forge` has answered) and, on Azure DevOps, the `ado` MCP server. With none enabled, say so and stop, unless `--no-finish` allows it.
 - **`terylon-git`** — a direct hard dependency (also reachable through `terylon-forge`), so it is installed automatically. It provides `create-workspace` and the `code-review` engine — **load both by name**.
 - **`terylon-core`** — a hard dependency, installed automatically. It provides `measure-token-spend`, and `delegate-to-repo-agents` for the personas that dispatch a repo-local specialist. It also ships the `SubagentStop` hook that records the run's spend continuously. `run-build-loop`, `write-plan` and `brainstorm` are **this plugin's own** — `leader` and `planner` load the first two from here, and Gate 0 loads the third.
 - Run from the repo root. All work happens on a feature branch.
@@ -245,7 +246,7 @@ The branch has already been through `code-reviewer` in phase 3. Where the change
 | Last change before a release | yes |
 | Small, well-covered change already clean through phase 3 | no — say nothing |
 
-Offer it once, in one line, and move on. It is an escalation of the review that already ran, not a replacement for it, so a clean phase 3 is not a reason to skip it on a risky diff nor a reason to suggest it on a trivial one.
+Offer it once, in one line, and move on: it escalates the review that already ran, and never replaces it.
 
 ## Fan-out — several work items
 

@@ -1,7 +1,7 @@
 ---
 name: planner
 description: "Use to turn an approved seed-spec into a design + bite-sized TDD plan for a Terylon dev task. Grounds in the codebase via the Explore agent, drafts the architecture via the built-in Plan agent, and emits the artifacts in the write-plan format. Returns READY_FOR_BUILD or NEEDS_CLARIFICATION; never guesses on ambiguity."
-model: opus
+model: inherit
 color: blue
 tools: [Read, Grep, Glob, Write, Agent, Bash(gh *), Bash(git *), Bash(node *), mcp__ado__*]
 disallowedTools: [Edit]
