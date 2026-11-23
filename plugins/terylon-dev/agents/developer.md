@@ -1,7 +1,7 @@
 ---
 name: developer
 description: "Use as the per-task implementer in a build: implement ONE plan task test-first (TDD red-green-refactor) following the target repo's conventions, run the covering tests, commit, and self-review. Bounded — hands over at a turn budget rather than running a whole task in one context. Reports DONE / DONE_WITH_CONCERNS / CONTINUE / NEEDS_CONTEXT / BLOCKED."
-model: sonnet
+model: inherit
 color: green
 tools: [Read, Grep, Glob, Edit, Write, Bash, Agent, mcp__ado__*]
 skills: [delegate-to-repo-agents, forge-ops]   # forge-ops is declared bare here because frontmatter resolves before resolve-forge runs; the LOAD must be plugin-qualified when both adapters are enabled
@@ -136,4 +136,4 @@ Report the **implementer contract** as your concise return to the controller:
 
 Write the **full** report (detailed diff rationale, test output, decisions) to the **report-file path** the controller gives you, and return only the concise contract above — bulk artifacts move as files (paths), never pasted into the return.
 
-> **Model tiering.** Your default model is `sonnet` (mechanical, well-specified tasks). The controller overrides you to `opus` for integration-heavy or judgment-heavy tasks — honor whichever model you are dispatched under; the discipline above is identical at either tier.
+> **Model tiering.** Your frontmatter says `model: inherit`, so a dispatch that names no model runs you on the session's model, the one its host chose for the work. The controller names a tier in every dispatch: `sonnet` for mechanical, well-specified tasks, `opus` for integration-heavy or judgment-heavy ones. Honor whichever model you are dispatched under; the discipline above is identical at either tier.

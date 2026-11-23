@@ -1,7 +1,7 @@
 ---
 name: edge-case-reviewer
 description: "Use after a task's tests are green to harden coverage: find untested edge/negative/error paths and propose the missing test cases for the developer to add (still test-first). Read-only — proposes tests, never edits code."
-model: opus
+model: inherit
 color: red
 tools: [Read, Grep, Glob, Agent]
 disallowedTools: [Edit, Write]

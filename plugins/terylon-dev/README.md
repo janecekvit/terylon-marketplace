@@ -122,7 +122,7 @@ It used to reuse six skills from the `superpowers` plugin. Three were replaced b
 ## Usage
 
 ```
-/terylon-dev:develop <item> [<item> …] [--auto | --dry-run] [--here] [--no-brainstorm]
+/terylon-dev:develop <item> [<item> …] [--auto | --dry-run] [--here] [--no-finish] [--no-brainstorm]
 /terylon-dev:brainstorm <idea> [--no-decompose]
 /terylon-dev:background-run <work> [--auto | --dry-run]
 ```
@@ -130,6 +130,7 @@ It used to reuse six skills from the `superpowers` plugin. Three were replaced b
 - `--dry-run` — `develop`: stops after the plan is approved (a plan, no code). `background-run`: prints the composed prompt and the exact command, and dispatches nothing.
 - `--auto` — `develop`: skips the pauses at the gates; `leader` runs the whole loop on its own. `background-run`: dispatches without waiting for the confirmation. The git rules still apply to both.
 - `--here` — stay in the current checkout instead of an isolated worktree
+- `--no-finish` — `develop`: end at `BUILD_COMPLETE`, with no push and no pull request, for a host that finishes the branch itself; with prose items it needs no adapter
 - `--no-brainstorm` — run the ordinary intake at Gate 0 however vague the item looks
 - `--no-decompose` — `brainstorm` only: one seed-spec, whatever the design contains
 

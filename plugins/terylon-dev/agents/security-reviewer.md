@@ -1,7 +1,7 @@
 ---
 name: security-reviewer
 description: "Use after a task's tests are green to review the diff through a security lens: injection, authn/authz, data exposure, input validation, secret handling. Read-only — reports findings, never edits."
-model: opus
+model: inherit
 color: red
 tools: [Read, Grep, Glob, Agent]
 disallowedTools: [Edit, Write]
