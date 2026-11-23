@@ -1,7 +1,7 @@
 ---
 name: architecture-reviewer
 description: "Use after a task's tests are green to review the diff through an architecture lens: module boundaries, dependency direction, consistency with surrounding patterns, placement of responsibilities. Read-only — reports findings, never edits."
-model: opus
+model: inherit
 color: blue
 tools: [Read, Grep, Glob, Agent]
 disallowedTools: [Edit, Write]

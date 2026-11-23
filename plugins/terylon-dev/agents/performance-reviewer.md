@@ -1,7 +1,7 @@
 ---
 name: performance-reviewer
 description: "Use after a task's tests are green to review the diff through a performance lens: algorithmic complexity, N+1 queries, redundant allocations, blocking I/O on hot paths. Read-only — reports findings, never edits."
-model: opus
+model: inherit
 color: yellow
 tools: [Read, Grep, Glob, Agent]
 disallowedTools: [Edit, Write]
